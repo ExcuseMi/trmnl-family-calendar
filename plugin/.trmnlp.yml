@@ -23,7 +23,16 @@ variables:
         hours: '7-21'
   data:
     header_pct: 15
-    rss_headline: 'NEWS  »  What Will Happen to Lindsay Clancy in the Long Term?   •   Gallup Polls Show Democrats Outnumber Republicans Ahead of 2026 Midterm Elections   •   Looking Back on the Summer of High MAGA'
+    alerts_pct: 5
+    calendar_alerts:
+    - Family
+    - School
+    rss_headline:
+      label: NEWS
+      titles:
+      - What Will Happen to Lindsay Clancy in the Long Term?
+      - Gallup Polls Show Democrats Outnumber Republicans Ahead of 2026 Midterm Elections
+      - Looking Back on the Summer of High MAGA
     allday_pct: 24
     allday_row_pct: 12
     allday_max_rows: 2
@@ -52,7 +61,7 @@ variables:
       row: 1
       continues_before: false
       continues_after: false
-    grid_pct: 54
+    grid_pct: 49
     footer_pct: 7
     people:
     - text: M

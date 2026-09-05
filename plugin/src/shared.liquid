@@ -123,8 +123,8 @@
             <span class="title {{ head_title_cls }} block w--min-0{% if shown_days_n == 1 %} no-shrink{% endif %}{% if data.rss_headline and shown_days_n != 1 %} {% if day.is_today %}cal-day-underline--today{% else %}cal-day-underline{% endif %}{% endif %}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;"><span class="text--gray-50">{{ day.label_short_weekday }}</span> <span class="text--white font--bold">{{ day.label_short_rest }}</span></span>
             {% if data.rss_headline and day.icon %}
               <span class="flex flex--row flex--center-y gap--xsmall no-shrink">
-                <img class="{% if view == 1 %} w--5 h--5 lg:w--6 lg:h--6 {% else %} w--3 h--3 {% endif %} no-shrink" style="filter:invert(1);" src="{{ day.icon }}">
-                <span class="label {% if view == 1 %}label--base{% else %}label--small{% endif %} text--white w--min-0">
+                <img class="{% if view == 1 %} w--5 h--5 lg:w--6 lg:h--6 {% else %} w--3 h--3 {% endif %} no-shrink" style="filter:invert(1){% if data.weather_stale %} brightness(0.65){% endif %};" src="{{ day.icon }}">
+                <span class="label {% if view == 1 %}label--base{% else %}label--small{% endif %} {% if data.weather_stale %}text--gray-50{% else %}text--white{% endif %} w--min-0">
                 <svg viewBox="0 0 10 10" class="{% if view == 1 %} w--3 h--3 {% else %} w--2 h--2 {% endif %} mr--0.5 no-shrink" fill="#999"><polygon points="5,1 9,8 1,8"/></svg>
                 <span class="mr--1">{{ day.temp.high }}°{{ data.temp_unit }}</span>
                 <svg viewBox="0 0 10 10" class="{% if view == 1 %} w--3 h--3 {% else %} w--2 h--2 {% endif %} mr--0.5 no-shrink" fill="#999"><polygon points="5,9 1,2 9,2"/></svg>
@@ -248,17 +248,17 @@
           <div class="h--full  col--span-{{ day_span }} flex flex--row flex--center-x flex--center-y gap--xsmall border--v-1" style="overflow:hidden;">
             {% if day.icon %}
 
-              <img class="{{ chip_title_cls }} no-shrink  {% if view == 1 %} w--6 h--6  lg:w--10 lg:h--10 {% else %} w--4 h--4  {% endif %}" style="filter:invert(1);" src="{{ day.icon }}">
+              <img class="{{ chip_title_cls }} no-shrink  {% if view == 1 %} w--6 h--6  lg:w--10 lg:h--10 {% else %} w--4 h--4  {% endif %}" style="filter:invert(1){% if data.weather_stale %} brightness(0.65){% endif %};" src="{{ day.icon }}">
 
               {%- if view <= 4 -%}
 
-                <span class="label {{ chip_title_cls }} bg--black text--white w--min-0">
+                <span class="label {{ chip_title_cls }} bg--black {% if data.weather_stale %}text--gray-50{% else %}text--white{% endif %} w--min-0">
                 <svg viewBox="0 0 10 10" class="w--2 h--2 lg:w--4 lg:h--4 mr--0.5 lg:mr--1 no-shrink" fill="#999"><polygon points="5,1 9,8 1,8"/></svg>
                 <span class="mr--1">{{ day.temp.high }}°{{ data.temp_unit }}</span>
                 <svg viewBox="0 0 10 10" class="w--2 h--2 lg:w--4 lg:h--4 mr--0.5 lg:mr--1 no-shrink" fill="#999"><polygon points="5,9 1,2 9,2"/></svg>
                 <span>{{ day.temp.low }}°{{ data.temp_unit }}</span></span>
               {%- else -%}
-                <span class="label {{ chip_title_cls }} bg--black text--white w--min-0">{{ day.temp.high }}° / {{ day.temp.low }}°</span>
+                <span class="label {{ chip_title_cls }} bg--black {% if data.weather_stale %}text--gray-50{% else %}text--white{% endif %} w--min-0">{{ day.temp.high }}° / {{ day.temp.low }}°</span>
               {%- endif -%}
             {% endif %}
           </div>
@@ -371,12 +371,24 @@
       fit(titles[i]);
     }
 
+    // Below this box height, no font size fit() would pick is actually legible — a
+    // compressed-hour row this short (quadrant with a wide visible-hours range is the usual
+    // case) shows no number at all rather than an illegible sliver, and — just as important —
+    // is excluded from this group's shared minSize below, so ONE impossibly short row doesn't
+    // also drag every other (genuinely legible) row in the same group down to match it.
+    var MIN_LEGIBLE_AXIS_BOX_PX = 10;
+
     function fitAxisGroup(selector, maxOverride) {
       var all = root.querySelectorAll(selector);
       var els = [];
       for (var i = 0; i < all.length; i++) {
         var box = all[i].closest('.cal-fit-box');
-        if (box && box.clientHeight > 0) els.push(all[i]);
+        if (!box || box.clientHeight <= 0) continue;
+        if (box.clientHeight < MIN_LEGIBLE_AXIS_BOX_PX) {
+          all[i].style.visibility = 'hidden';
+          continue;
+        }
+        els.push(all[i]);
       }
       var minSize = null;
       for (var j = 0; j < els.length; j++) {

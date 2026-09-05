@@ -38,23 +38,31 @@ custom_fields:
   github_url: https://github.com/ExcuseMi/trmnl-family-calendar
   category: calendar
   help_text: TRMNL X Ready
+- keyname: calendars_simple
+  field_type: text
+  name: Easy ICS (start here)
+  description: Your calendar links, one per line. That's it — no JSON needed. Each calendar's name is read automatically from the feed itself, and colors auto-assign. Combine with Advanced Configuration below only if you need per-calendar colors, filtering, or people.
+  placeholder: |-
+    https://cloud.example.com/family.ics
+    https://cloud.example.com/school.ics
+  optional: true
 - keyname: calendars
   field_type: code
-  name: Calendar Configuration
-  description: Your calendars (ICS links) and optionally people, as JSON.<br /><br />Build it with <a href="https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html" target="_blank">the Configuration Editor</a> — paste the result here. Reference docs — <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/CONFIG.md" target="_blank">CONFIG.md</a> (or <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/LLM.md" target="_blank">LLM.md</a> for an LLM to read).
+  name: Advanced Configuration (optional)
+  description: For per-calendar names/colors, filtering, or attaching people — as JSON. Adds to (doesn't replace) Easy ICS above.<br /><br />Build it with <a href="https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html" target="_blank">the Configuration Editor</a> — paste the result here. Reference docs — <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/CONFIG.md" target="_blank">CONFIG.md</a> (or <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/LLM.md" target="_blank">LLM.md</a> for an LLM to read).
   placeholder: |-
     {
       "calendars": [
-        { "id": "Alex", "url": "https://cloud.example.com/alex.ics", "defaultPerson": "Alex" },
+        { "name": "Alex", "url": "https://cloud.example.com/alex.ics", "defaultPerson": "Alex" },
         {
-          "id": "School", "url": "https://cloud.example.com/school.ics",
-          "exclude": ["\\bL[1345]\\b", "\\bK[123]\\b"],
+          "name": "School", "url": "https://cloud.example.com/school.ics",
+          "exclude": [{ "type": "regex", "value": "\\bL[1345]\\b" }, { "type": "regex", "value": "\\bK[123]\\b" }],
           "personRules": [
-            { "match": "\\bL6\\b", "person": "Alex" }
+            { "match": { "type": "word", "value": "L6" }, "person": "Alex" }
           ]
         },
         {
-          "id": "Holidays",
+          "name": "Holidays",
           "url": "https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics",
           "color": "red"
         }
@@ -63,6 +71,7 @@ custom_fields:
         { "name": "Alex", "color": "pink", "badge": "K" }
       ]
     }
+  optional: true
 - keyname: view_days
   field_type: select
   name: Days to Show

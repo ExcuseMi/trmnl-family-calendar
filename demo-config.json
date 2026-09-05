@@ -3,42 +3,42 @@
   "timeZone": "America/New_York",
   "calendars": [
     {
-      "id": "Family",
+      "name": "Family",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/family.ics",
       "color": "gray-25"
     },
     {
-      "id": "Alex",
+      "name": "Alex",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/alex.ics",
       "defaultPerson": "Alex"
     },
     {
-      "id": "Jordan",
+      "name": "Jordan",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/jordan.ics",
       "defaultPerson": "Jordan"
     },
     {
-      "id": "Mia",
+      "name": "Mia",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/mia.ics",
       "defaultPerson": "Mia"
     },
     {
-      "id": "Leo",
+      "name": "Leo",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/leo.ics",
       "defaultPerson": "Leo"
     },
     {
-      "id": "School",
+      "name": "School",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/school.ics",
       "color": "gray-70",
-      "exclude": "(?=.*\\b(?:L[1345]|K[123])\\b)(?!.*\\b(?:L2|L6)\\b)",
+      "exclude": [{ "type": "regex", "value": "(?=.*\\b(?:L[1345]|K[123])\\b)(?!.*\\b(?:L2|L6)\\b)" }],
       "personRules": [
-        { "match": "\\bL2\\b", "person": "Mia" },
-        { "match": "\\bL6\\b", "person": "Leo" }
+        { "match": { "type": "word", "value": "L2" }, "person": "Mia" },
+        { "match": { "type": "word", "value": "L6" }, "person": "Leo" }
       ]
     },
     {
-      "id": "Holidays",
+      "name": "Holidays",
       "url": "https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics",
       "color": "gray-45"
     }

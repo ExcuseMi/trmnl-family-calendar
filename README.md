@@ -50,6 +50,11 @@ the plugin depends on at render time.
 - Language (day/month names, abbreviated on narrower layouts) auto-detected from your TRMNL
   account locale — any locale `Intl` supports, not a fixed list — with 24h/12h time format as
   a setting.
+- **Resilient to transient outages**: weather and the news ticker keep showing their last
+  successfully-fetched data for one refresh cycle if the live fetch fails, instead of blanking
+  out. A calendar feed that's been unreachable for a couple of hours gets a small banner
+  ("⚠ Unavailable for a while: …") rather than silently and permanently dropping its events with
+  no indication anything's wrong.
 - Per-calendar **Exclude** regex to hide events matching a pattern (e.g. only show your kid's
   class among a whole school calendar's events).
 - Graceful states: an `error` banner if every feed fails to fetch.
@@ -59,9 +64,13 @@ the plugin depends on at render time.
 1. In TRMNL: **Plugins → Private Plugins → New**, name it, **Save**.
 2. Push this repo with `trmnlp push` (see below); it uploads `settings.yml`, the `.liquid`
    templates, and `transform.js` in one go.
-3. Build your **Calendar Configuration** with the [Configuration Editor](#configuration-editor)
-   (or hand-write the JSON — see its shape there) and paste it into that field. Then fill in the
-   plugin's remaining custom fields:
+3. Paste your calendar link(s) into **Easy ICS** — one per line, nothing else needed. Each
+   calendar's name is read automatically from the feed itself, and colors auto-assign. If you
+   want per-calendar colors, filtering, or to attach specific people to specific events, build
+   that with the [Configuration Editor](#configuration-editor) instead (or hand-write the JSON —
+   see its shape there) and paste it into **Advanced Configuration** — it adds to Easy ICS, it
+   doesn't replace it, so you can mix a few simple calendars with one that needs the extra setup.
+   Then fill in the plugin's remaining custom fields:
    - **Time Zone**: leave blank to use your TRMNL account's own time zone, or set one explicitly.
    - **Time Format**: 24-hour or 12-hour (AM/PM).
    - **Location**: search a place or enter coordinates, for sunrise/sunset and daily weather.
@@ -75,13 +84,15 @@ the plugin depends on at render time.
      `7-21`. Only ever a starting point — real events, sunrise/sunset, and the current hour
      always widen it further; hours outside your configured range but inside that wider window
      render compressed instead of disappearing or diluting the rest of the grid.
+   - **News Feed** (Advanced): off by default — flip it on to reveal the feed URL and an optional
+     label field underneath.
 
 ## Try it with the demo calendar
 
 No calendar of your own handy, or just want to see a genuinely busy grid (overlapping events,
 multi-day banners, recurring classes, a couple of kids each with their own color) before wiring
 up your real one? Paste [`demo-config.json`](demo-config.json) straight into the plugin's
-Calendar Configuration field as-is — it's a complete, working config, not a fragment to edit
+**Advanced Configuration** field as-is — it's a complete, working config, not a fragment to edit
 first. It points at a small fictional family (parents Alex/Jordan, kids Mia/Leo — nobody real)
 spread across a few ICS feeds this repo hosts directly at
 [`demo/*.ics`](demo/) (via raw.githubusercontent.com — plain static files, no backend
@@ -106,8 +117,11 @@ form, add a public holiday calendar for your country in one click, test against 
 `/ics-proxy` — which fetches server-side, where CORS doesn't apply, same as TRMNL's own render
 pipeline already does — and only then to pasting the `.ics` text by hand; a private calendar URL
 is never routed through any *third-party* proxy), and preview the actual colors using TRMNL's
-real CSS classes. Copy the generated JSON into the plugin's Calendar Configuration field when
-you're happy with it.
+real CSS classes. Copy the generated JSON into the plugin's **Advanced Configuration** field when
+you're happy with it. (Calendar *names* don't need to be
+filled in here or in the JSON at all — the plugin reads them from the feed itself at render time,
+where there's no CORS to work around; only set one by hand if you want to override what the feed
+calls itself.)
 
 For the full field-by-field reference see [CONFIG.md](CONFIG.md); having an LLM write the JSON
 for you instead works too — point it at [LLM.md](LLM.md), a compact version of the same schema
@@ -194,19 +208,36 @@ Mock data lives in `plugin/.trmnlp.yml` and mirrors the shape `layoutNative()` r
 exercise `run()`/`transform.js` itself against real data, use the
 [Configuration Editor](#configuration-editor) instead — it loads and runs the exact same file.
 
+## Tests
+
+`test/transform/` is a small regression suite for `transform.js` — word/regex matchers, calendar
+name auto-detection and de-duplication, the saved-state fallbacks (weather, news, a calendar
+that's been down a while), the shared serverless-deadline fetch budget, and the all-day
+"+N more" overflow. It mocks `fetch()` per test rather than replaying static fixtures, since
+`run()` does its own fetching (unlike a typical polling-strategy plugin).
+
+```bash
+cd test/transform
+npm test
+```
+
+No Docker needed for that; `docker compose -f docker-compose.test.yml run --rm test-transform`
+also works, exercising the exact same `transform.js` mounted read-only, for CI parity.
+
 ## Files
 
 | Path | Purpose |
 |------|---------|
 | `plugin/src/transform.js` | Serverless code: fetch ICS, expand recurrences, compute layout, fetch sun times. Runs on TRMNL (Node) and in `tools/config-editor.html` (browser) unmodified. |
 | `plugin/src/shared.liquid` | The `main` template for all four view sizes (`full`/`half_*`/`quadrant`) |
-| `plugin/src/settings.yml` | Custom fields (Calendar Configuration, days to show, location, temperature unit, time format, visible hours, time zone, news feed) |
+| `plugin/src/settings.yml` | Custom fields (Easy ICS, Advanced Configuration, days to show, location, temperature unit, time format, visible hours, time zone, news feed) |
 | `plugin/.trmnlp.yml` | Local mock data for `trmnlp serve` |
 | `tools/config-editor.html` | Standalone config builder + real-data tester — see above; served as a static page by GitHub Pages |
 | `demo/*.ics` | Demo calendars — see "Try it with the demo calendar" above; served as static files via raw.githubusercontent.com |
 | `demo-config.json` | The complete Calendar Configuration paired with the demo calendars above — paste as-is to try the plugin |
 | `assets/weather/*.svg` | Source SVGs for the rain/storm/snow/fog hour-background patterns (tiled as a CSS background in the grid) |
 | `backend/` | CORS-free ICS test proxy only — see [Backend](#backend) |
+| `test/transform/` | Regression tests for `transform.js` — see [Tests](#tests) |
 
 ## Notes & limits
 

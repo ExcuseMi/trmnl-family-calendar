@@ -1,10 +1,18 @@
 # Calendar Configuration reference
 
-This document explains, field by field, the JSON you paste into the plugin's **Calendar
-Configuration** setting in TRMNL. It's the same JSON the
+**Just want your calendars showing up?** You don't need any of this — paste your ICS link(s),
+one per line, into the plugin's **Easy ICS** setting and you're done. Names are read
+automatically from each feed and colors auto-assign. Nothing below applies until you need more
+than that.
+
+This document explains, field by field, the JSON you paste into the plugin's **Advanced
+Configuration** setting instead — for per-calendar colors, filtering, or attaching specific
+people to specific events. It's the same JSON the
 [Configuration Editor](tools/config-editor.html) generates for you — you don't need to read this
 to use the plugin. It's here for when you want to hand-edit the JSON, understand exactly what a
-setting does, or troubleshoot why an event isn't showing the color you expected.
+setting does, or troubleshoot why an event isn't showing the color you expected. Advanced
+Configuration adds to Easy ICS, it doesn't replace it — mix a few simple calendars in Easy ICS
+with one that needs the extra setup here.
 
 If you just want to get set up, use the
 **[Configuration Editor](https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html)**
@@ -20,7 +28,7 @@ calendars before you save anything.
 - [`locale` / `timeZone`](#locale--timezone)
 - [`calendars[]`](#calendars)
 - [`people[]`](#people)
-- [A quick primer on regex](#a-quick-primer-on-regex)
+- [Matchers: word vs. regex](#matchers-word-vs-regex)
 - [How a color gets decided](#how-a-color-gets-decided)
 - [Full example](#full-example)
 - [Common mistakes](#common-mistakes)
@@ -110,13 +118,13 @@ at least one calendar, the plugin has nothing to display.
 "calendars": [
   {
     "url": "https://cloud.example.com/family.ics",
-    "id": "Family",
+    "name": "Family",
     "color": "pink"
   }
 ]
 ```
 
-**Simple mode:** if you don't need an `id`, a pinned `color`, or any of the advanced fields below,
+**Simple mode:** if you don't need a `name`, a pinned `color`, or any of the advanced fields below,
 a calendar entry can just be the URL itself — a plain string instead of an object. Each one gets a
 color auto-assigned (cycling through the same palette a calendar with no `color` set would use),
 same as leaving `color` out of the full object form:
@@ -129,7 +137,7 @@ same as leaving `color` out of the full object form:
 ```
 
 The two forms mix freely in the same list — use the plain string for a quick add, and the full
-object wherever you actually need `id`/`color`/`exclude`/`defaultPerson`/`personRules`.
+object wherever you actually need `name`/`color`/`exclude`/`defaultPerson`/`personRules`.
 
 **Freetext mode:** if you don't need JSON at all, the whole Calendar Configuration field also
 accepts **plain text — one ICS URL per line, nothing else**:
@@ -147,9 +155,9 @@ a URL (a color, `exclude`, a person), switch to the JSON object form above for t
 | Field | Type | Required | Default | Notes |
 |---|---|---|---|---|
 | `url` | text | **yes** | — | The ICS feed's address. `webcal://` links are converted to `https://` automatically. |
-| `id` | text | no | — | A short label for your own reference. Doesn't affect rendering. |
+| `name` | text | no | the feed's own name (read from its `X-WR-CALNAME`), else `"Calendar 1"`, `"Calendar 2"`, ... | Identifies this calendar — shown, for example, in the "unavailable for a while" banner if its feed stops responding. Set it explicitly only to override what the feed calls itself. Must be unique; a duplicate gets " (2)", " (3)", etc. appended automatically. |
 | `color` | [color name](#colors) | no | auto-assigned | Pins this calendar's color. Without it, calendars are colored in the order they appear, cycling through 10 colors. |
-| `exclude` | regex, or list of regex | no | — | Any event whose title matches **hides it entirely**, only from this calendar. See [regex primer](#a-quick-primer-on-regex). |
+| `exclude` | [matcher](#matchers-word-vs-regex), or list of matchers | no | — | Any event whose title matches **hides it entirely**, only from this calendar. |
 | `personRules` | list (see below) | no | — | Rules for attaching a [person](#people) to specific events on this calendar. |
 | `defaultPerson` | text, or list of text | no | — | Person name(s) to attach to every event on this calendar that no `personRules` entry matched. One name, or a list for a calendar that's already shared between people. |
 
@@ -168,15 +176,15 @@ their title:
 
 ```json
 "personRules": [
-  { "match": "\\bL6\\b", "person": "Alex" },
-  { "match": "\\bL6\\b", "person": "Alex", "rename": false },
-  { "match": "family trip", "person": ["Alex", "Jordan"] }
+  { "match": { "type": "word", "value": "L6" }, "person": "Alex" },
+  { "match": { "type": "word", "value": "L6" }, "person": "Alex", "rename": false },
+  { "match": { "type": "word", "value": "family trip" }, "person": ["Alex", "Jordan"] }
 ]
 ```
 
 | Field | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| `match` | regex | **yes** | — | Tested against every event's title on this calendar. |
+| `match` | [matcher](#matchers-word-vs-regex) | **yes** | — | Tested against every event's title on this calendar. |
 | `person` | text, or list of text | **yes** | — | The person's name (see [`people[]`](#people)) — one name, or a list of them for a shared event (e.g. `["Alex", "Jordan"]`). Doesn't have to already be declared there — but only a *declared* person contributes a badge; an undeclared name still renames, just with no styling. |
 | `rename` | true/false | no | `true` | Whether the matched text gets replaced with `person`'s name(s) — joined with " & " when there's more than one. Set `false` to attach the person's color/badge *without* changing the title — e.g. tagging "L6" events as Alex's without rewriting "L6" to "Alex" on screen. |
 
@@ -217,25 +225,44 @@ carry one.
 
 ---
 
-## A quick primer on regex
+## Matchers: word vs. regex
 
-Several fields (`exclude`, `personRules[].match`) use **regular expressions** — a pattern
-language for matching text, not just an exact phrase. A few things that cover almost every real
-case:
+`exclude` and `personRules[].match` both take a **matcher** — something tested against an
+event's title. A matcher is always an explicit object with two fields, `type` and `value` —
+never a bare string, so it's unambiguous at a glance which kind you're looking at:
 
-| Pattern | Matches | Example |
-|---|---|---|
-| `Birthday` | that word anywhere in the title (case doesn't matter) | matches "Birthday", "birthday", "Sam's Birthday Party" |
-| `a\|b\|c` | any one of several words | `birthday\|verjaardag` matches either English or Dutch |
-| `\bL6\b` | a whole word only, not part of another word | `\bL6\b` matches "L6" but not "L60" or "XL6" |
+**Word (the default, and normally all you need):** `type: "word"`. `value` is matched
+case-insensitively, on whole-word boundaries, so `"L1"` matches "L1 Field Trip" but not "L10
+Field Trip" or "XL1" — no regex knowledge, no escaping, needed:
 
-That's genuinely enough for most people — `word1|word2|word3` and `\bWORD\b` cover the vast
-majority of real configurations. If you want to go further, any general regex reference (search
-"regex cheat sheet") applies here directly — this uses standard JavaScript-flavored regex.
+```json
+{ "match": { "type": "word", "value": "L6" }, "person": "Alex" }
+```
 
-One JSON detail to know: inside a JSON string, a backslash has to be written **twice**
-(`\\b`, not `\b`) — that's a JSON escaping rule, not a regex one. The Configuration Editor's
-form fields handle this for you automatically; only matters if you're hand-typing the JSON.
+**Regex (the expert option):** `type: "regex"`. For anything a plain word can't express —
+matching several alternatives at once, a character class, excluding one word while requiring
+another. `value` is used as-is, standard JavaScript-flavored regex:
+
+```json
+{ "match": { "type": "regex", "value": "\\bL[1345]\\b" }, "person": "Alex" },
+"exclude": [{ "type": "regex", "value": "birthday|verjaardag" }]
+```
+
+Any general regex reference ("regex cheat sheet") applies directly. One JSON detail to know:
+inside a JSON string, a backslash has to be written **twice** (`\\b`, not `\b`) — a JSON
+escaping rule, not a regex one. The [Configuration Editor](tools/config-editor.html)'s Word/Regex
+toggle (with a live "test against a sample title" box) handles both of these for you — only
+matters if you're hand-typing the JSON.
+
+A list mixes both freely:
+
+```json
+"exclude": [
+  { "type": "word", "value": "L1" },
+  { "type": "word", "value": "K2" },
+  { "type": "regex", "value": "\\bL[45]\\b" }
+]
+```
 
 ---
 
@@ -254,7 +281,7 @@ specific:
 ```json
 {
   "calendars": [
-    { "url": ".../school.ics", "color": "blue", "personRules": [{ "match": "\\bL6\\b", "person": "Alex" }] }
+    { "url": ".../school.ics", "color": "blue", "personRules": [{ "match": { "type": "word", "value": "L6" }, "person": "Alex" }] }
   ],
   "people": [
     { "name": "Alex", "color": "pink", "badge": "K" }
@@ -280,18 +307,23 @@ country, and it fills in a real calendar entry like the one below):
   "locale": "en",
   "timeZone": "Europe/Brussels",
   "calendars": [
-    { "id": "Alex", "url": "https://cloud.example.com/alex.ics", "defaultPerson": "Alex" },
+    { "name": "Alex", "url": "https://cloud.example.com/alex.ics", "defaultPerson": "Alex" },
     {
-      "id": "School",
+      "name": "School",
       "url": "https://cloud.example.com/school.ics",
       "color": "blue",
-      "exclude": ["\\bL[1345]\\b", "\\bK[123]\\b"],
+      "exclude": [
+        { "type": "word", "value": "L1" }, { "type": "word", "value": "L3" },
+        { "type": "word", "value": "L4" }, { "type": "word", "value": "L5" },
+        { "type": "word", "value": "K1" }, { "type": "word", "value": "K2" },
+        { "type": "word", "value": "K3" }
+      ],
       "personRules": [
-        { "match": "\\bL6\\b", "person": "Alex" }
+        { "match": { "type": "word", "value": "L6" }, "person": "Alex" }
       ]
     },
     {
-      "id": "Holidays",
+      "name": "Holidays",
       "url": "https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics",
       "color": "red"
     }
@@ -321,9 +353,14 @@ reads.
 - **A single backslash in a regex.** `\bL6\b` in raw JSON is invalid — it needs to be `\\bL6\\b`.
   If your pattern silently doesn't match anything, this is the first thing to check. (The
   Configuration Editor's form fields avoid this entirely — only matters if hand-editing JSON.)
-- **Expecting `id` to rename or match events on its own.** It doesn't — renaming/matching always
-  happens through `personRules`/`defaultPerson`, never `id` directly; `id` is purely a label for
-  your own reference.
+- **Writing a bare string for `match`/`exclude` instead of a `{ "type", "value" }` object.** A
+  matcher is never a bare string — `"match": "L6"` is invalid (silently ignored, so the rule just
+  never matches). Write `{ "match": { "type": "word", "value": "L6" } }` instead — or, if "L6"
+  was meant as a regex, `{ "type": "regex", "value": "\\bL6\\b" }` (though plain `"word"`/`"L6"`
+  already means the same thing here, with none of the escaping).
+- **Expecting `name` to rename or match events on its own.** It doesn't — renaming/matching always
+  happens through `personRules`/`defaultPerson`, never `name` directly; `name` only identifies the
+  calendar (e.g. in the "unavailable for a while" banner).
 - **A person with no color pinned still needing to look different.** If you want Alex's events
   to visually stand out, `people[].color` has to actually be set — otherwise their events just
   keep whatever color the calendar itself uses, with only the header's own badge to tell them

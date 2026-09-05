@@ -1,4 +1,7 @@
 
+const SERVERLESS_DEADLINE_MS = 4200;
+const CALENDAR_DOWN_THRESHOLD_MS = 2 * 60 * 60 * 1000;
+const WEATHER_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_DAYS = 3;
 const DEFAULT_HOURS = { start: 7, end: 21 };
 const WD_MAP = { MO: 0, TU: 1, WE: 2, TH: 3, FR: 4, SA: 5, SU: 6 };
@@ -26,7 +29,8 @@ function foregroundFor(color) {
 }
 
 async function run(input) {
-  const cfg = parseConfig(cf(input, "calendars"));
+  const simpleUrls = cf(input, "calendars_simple").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const cfg = parseConfig(cf(input, "calendars"), simpleUrls);
   const calendars = cfg.calendars;
   const people = cfg.people;
   const calendarColors = calendars.map((c) => c.color);
@@ -35,7 +39,8 @@ async function run(input) {
   const is12h = cf(input, "time_format").trim().toLowerCase() === "12h";
   const location = cf(input, "lat_lon");
   const fahrenheit = cf(input, "temperature_unit").trim().toLowerCase() === "fahrenheit";
-  const rssUrl = cf(input, "rss_url").trim();
+  const newsFeedEnabled = cf(input, "news_feed_enabled").trim().toLowerCase() === "yes";
+  const rssUrl = newsFeedEnabled ? cf(input, "rss_url").trim() : "";
   const rssLabel = cf(input, "rss_label").trim() || "NEWS";
   const daysN = toInt(cf(input, "view_days"), DEFAULT_DAYS, 1, 3);
 
@@ -45,6 +50,10 @@ async function run(input) {
     return emptyResult(tzname, tz, locale, daysN, is12h, "No ICS URL configured");
   }
 
+  const prevState = (input && input.trmnl && input.trmnl.state) || {};
+  const prevCalendarDown = (prevState.calendarDown && typeof prevState.calendarDown === "object") ? prevState.calendarDown : {};
+  const prevCalendarNames = (prevState.calendarNames && typeof prevState.calendarNames === "object") ? prevState.calendarNames : {};
+
   const nowEpoch = Date.now();
   const nowCivil = fromEpoch(nowEpoch, tz);
   const winSCivil = { y: nowCivil.y, mo: nowCivil.mo, d: nowCivil.d };
@@ -52,23 +61,103 @@ async function run(input) {
   const winEDate = addCivilDays({ ...winSCivil, h: 0, mi: 0, s: 0 }, daysN);
   const winEEpoch = zonedTimeToUtc(winEDate.y, winEDate.mo, winEDate.d, 0, 0, 0, tz);
 
-  const occ = [];
+  // TRMNL serverless hard-kills run() at 5s wall-clock — every fetch below shares this one
+  // deadline instead of its own fixed timeout, and all of them (every calendar, weather, the
+  // news feed) race in parallel, so a slow calendar can't eat the budget the others need.
+  const deadline = Date.now() + SERVERLESS_DEADLINE_MS;
+
   const errors = [];
-  for (let calIdx = 0; calIdx < calendars.length; calIdx++) {
-    let url = calendars[calIdx].url;
+  const calendarFetches = calendars.map(async (cal, calIdx) => {
+    let url = cal.url;
     if (url.startsWith("webcal://")) url = "https://" + url.slice("webcal://".length);
     try {
-      const resp = await fetchWithTimeout(url, 4000, { headers: { "User-Agent": "TRMNL-ICS-Calendar" } });
+      const budget = msUntil(deadline);
+      if (budget <= 0) throw new Error("timed out");
+      const resp = await fetchWithTimeout(url, Math.min(budget, 4000), { headers: { "User-Agent": "TRMNL-ICS-Calendar" } });
       if (!resp.ok) throw new Error("HTTP " + resp.status);
-      const text = await resp.text();
-      collectIcs(text, tz, winSEpoch, winEEpoch, occ, calIdx);
+      return { calIdx, url: cal.url, text: await resp.text(), ok: true };
     } catch (exc) {
       errors.push(String((exc && exc.message) || exc));
+      return { calIdx, url: cal.url, text: null, ok: false };
     }
+  });
+
+  const [calendarResults, sky, rssResult] = await Promise.all([
+    Promise.all(calendarFetches),
+    fetchSky(location, daysN, fahrenheit, deadline),
+    fetchRssHeadline(rssUrl, rssLabel, deadline),
+  ]);
+  let rssHeadline = rssResult;
+
+  const occ = [];
+  for (const r of calendarResults) {
+    if (r.text !== null) collectIcs(r.text, tz, winSEpoch, winEEpoch, occ, r.calIdx);
   }
 
   let err = null;
   if (errors.length && !occ.length) err = "Fetch/parse failed: " + errors[0];
+
+  // Calendars with no explicit name (the common case for Easy ICS URLs, and Advanced entries
+  // that skipped it) get one now: the feed's own X-WR-CALNAME if the fetch succeeded and it set
+  // one, else the last one seen for this URL (saved state — so a calendar that's currently down
+  // still shows its real name, not "Calendar N", as long as it worked at least once before),
+  // else "Calendar N" as the final fallback. Never blocks on network the way trying this in the
+  // browser-side Configuration Editor would (CORS) — this fetch already happened server-side,
+  // no such restriction there. Uniqueness (used verbatim elsewhere, e.g. the down-alert banner)
+  // can only be resolved now that every calendar's final name is known.
+  const calendarNames = {};
+  const seenNames = new Set();
+  calendars.forEach((cal, i) => {
+    if (!cal.name) {
+      const r = calendarResults[i];
+      const fetched = r && r.ok ? extractCalName(r.text) : null;
+      cal.name = fetched || prevCalendarNames[r.url] || "Calendar " + (i + 1);
+    }
+    let unique = cal.name;
+    let dupe = 2;
+    while (seenNames.has(unique.toLowerCase())) {
+      unique = cal.name + " (" + dupe + ")";
+      dupe++;
+    }
+    seenNames.add(unique.toLowerCase());
+    cal.name = unique;
+    calendarNames[calendarResults[i].url] = unique;
+  });
+
+  // A calendar that's merely blipping (one bad refresh) shouldn't alarm anyone — only surface
+  // it once it's been failing continuously for CALENDAR_DOWN_THRESHOLD_MS, tracked via saved
+  // state ("downSince" per URL); a single good response anywhere clears its entry entirely.
+  const calendarDown = {};
+  const calendarAlerts = [];
+  for (const r of calendarResults) {
+    if (r.ok) continue;
+    const downSince = prevCalendarDown[r.url] || nowEpoch;
+    calendarDown[r.url] = downSince;
+    if (nowEpoch - downSince >= CALENDAR_DOWN_THRESHOLD_MS) {
+      calendarAlerts.push(calendars[r.calIdx].name);
+    }
+  }
+
+  // Weather fetch failures are usually transient — fall back to the last successfully-fetched
+  // forecast (saved state) rather than blanking sun times/icons/temps for one refresh cycle.
+  // Unlike the calendar-down banner (which only ever appears), a stale forecast fails silently
+  // by design for a SHORT outage — but if it's been stale long enough to actually be misleading
+  // (WEATHER_STALE_THRESHOLD_MS), weatherStale below flags it for a small on-screen indicator.
+  const prevWeatherFetchedAt = typeof prevState.weatherFetchedAt === "number" ? prevState.weatherFetchedAt : null;
+  let weatherFetchedAt = nowEpoch;
+  let weatherStale = false;
+  if (sky.error && prevState.weather) {
+    sky.sunMarks = prevState.weather.sunMarks;
+    sky.hourlyWeather = prevState.weather.hourlyWeather;
+    sky.dailyTemps = prevState.weather.dailyTemps;
+    weatherFetchedAt = prevWeatherFetchedAt || nowEpoch;
+    weatherStale = !!prevWeatherFetchedAt && nowEpoch - prevWeatherFetchedAt >= WEATHER_STALE_THRESHOLD_MS;
+  }
+
+  // Same idea for the news ticker: a failed fetch keeps the last headlines on screen instead of
+  // the layout flipping back to per-day weather for one refresh. Only applies while the feature
+  // is actually turned on — disabling it should not resurrect old cached headlines.
+  if (rssUrl && !rssHeadline && prevState.news) rssHeadline = prevState.news;
 
   const filtered = occ.filter((e) => {
     const cal = calendars[e.calIdx];
@@ -135,18 +224,38 @@ async function run(input) {
     });
   }
   alldaySpans.sort((a, b) => a.startCol - b.startCol || b.span - a.span);
+  // First pack with no cap at all, so we know how many rows this day range genuinely needs.
+  // Only THEN decide the visible cap: 3 rows fit as-is, but anything taller loses its last row
+  // to a per-day "+N more" summary instead — same total height either way, no event silently
+  // vanishes with no indication something didn't fit.
   const rowEnds = [];
   for (const s of alldaySpans) {
     const endCol = s.startCol + s.span - 1;
     let row = 0;
     while (row < rowEnds.length && rowEnds[row] >= s.startCol) row++;
-    if (row >= 3) { s.row = -1; continue; }
     s.row = row;
     rowEnds[row] = endCol;
   }
-  const alldayBars = alldaySpans.filter((s) => s.row !== -1).map((s) => ({
+  const neededRows = rowEnds.length;
+  const visibleCap = neededRows <= 3 ? 3 : 2;
+  if (neededRows > visibleCap) {
+    const overflowCount = new Array(daysN).fill(0);
+    for (const s of alldaySpans) {
+      if (s.row < visibleCap) continue;
+      for (let d = s.startCol; d <= s.startCol + s.span - 1 && d < daysN; d++) overflowCount[d]++;
+    }
+    for (let d = 0; d < daysN; d++) {
+      if (!overflowCount[d]) continue;
+      alldaySpans.push({
+        e: { title: "+" + overflowCount[d] + " more", hueOverride: null, calIdx: -1, personBadges: null },
+        startCol: d, span: 1, row: visibleCap,
+        continuesBefore: false, continuesAfter: false, isOverflow: true,
+      });
+    }
+  }
+  const alldayBars = alldaySpans.filter((s) => s.row < visibleCap || s.isOverflow).map((s) => ({
     title: s.e.title,
-    hue: s.e.hueOverride || hueOf(s.e.calIdx, calendarColors),
+    hue: s.isOverflow ? "gray-30" : (s.e.hueOverride || hueOf(s.e.calIdx, calendarColors)),
     personBadges: s.e.personBadges,
     startCol: s.startCol,
     span: s.span,
@@ -156,7 +265,6 @@ async function run(input) {
   }));
 
   const nowH = (nowEpoch - winSEpoch) / 3600000;
-  const [sky, rssHeadline] = await Promise.all([fetchSky(location, daysN, fahrenheit), fetchRssHeadline(rssUrl, rssLabel)]);
   const newsPct = rssHeadline ? NEWS_PCT : 0;
   rawDays.forEach((rd, i) => {
     rd.temp = sky.dailyTemps[i] || null;
@@ -189,7 +297,8 @@ async function run(input) {
   let endH = nowH !== null && nowH !== undefined ? Math.max(coreEndH, Math.ceil(nowH) + 1) : coreEndH;
   endH = Math.max(endH, startH + 1);
 
-  const grid = layoutNative(rawDays, alldayBars, startH, endH, coreStartH, coreEndH, nowH, sky.sunMarks, sky.hourlyWeather, calendarColors, HEADER_PCT, is12h, newsPct);
+  const alertsPct = calendarAlerts.length ? ALERTS_ROW_PCT : 0;
+  const grid = layoutNative(rawDays, alldayBars, startH, endH, coreStartH, coreEndH, nowH, sky.sunMarks, sky.hourlyWeather, calendarColors, HEADER_PCT, is12h, newsPct, alertsPct);
 
   const viewPeopleSeen = new Set();
   const viewPeople = [];
@@ -208,10 +317,19 @@ async function run(input) {
     all_day_label: allDayText(locale),
     has_events: alldayBars.length > 0 || rawDays.some((d) => d.timed.length),
     weather_error: sky.error,
+    weather_stale: weatherStale,
     temp_unit: fahrenheit ? "F" : "C",
     rss_headline: rssHeadline,
+    calendar_alerts: calendarAlerts,
   });
-  return { data };
+  const trmnl_state = {
+    weather: { sunMarks: sky.sunMarks, hourlyWeather: sky.hourlyWeather, dailyTemps: sky.dailyTemps },
+    weatherFetchedAt,
+    news: rssHeadline || null,
+    calendarDown,
+    calendarNames,
+  };
+  return { data, trmnl_state };
 }
 
 function cf(input, key) {
@@ -266,22 +384,24 @@ function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
     all_day_label: allDayText(locale),
     has_events: false,
     weather_error: null,
+    weather_stale: false,
     temp_unit: "C",
     rss_headline: null,
+    calendar_alerts: [],
   });
   return { data };
 }
 
-function parseConfig(raw) {
-  const empty = { calendars: [], people: {}, locale: null, timeZone: null };
-  if (typeof raw !== "string" || !raw.trim()) return empty;
-  let data;
-  try {
-    data = JSON.parse(raw);
-  } catch (e) {
-    data = { calendars: raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean) };
+function parseConfig(raw, extraUrls) {
+  let data = null;
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      data = { calendars: raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean) };
+    }
   }
-  if (!data || typeof data !== "object") return empty;
+  if (!data || typeof data !== "object") data = {};
 
   const locale = typeof data.locale === "string" && data.locale.trim() ? data.locale.trim() : null;
 
@@ -297,31 +417,31 @@ function parseConfig(raw) {
     people[name.toLowerCase()] = { name, color, badge };
   }
 
+  // Easy ICS field's plain URLs lead, Advanced Configuration's (possibly richer) entries
+  // follow — both go through the exact same per-calendar shaping below. name is left `null`
+  // here rather than auto-assigned: run() fills it in once calendars have actually been
+  // fetched, first from the feed's own X-WR-CALNAME, only then "Calendar N" — and only run()
+  // can de-duplicate names, since Easy and Advanced are combined there, not here.
+  const rawCalendars = (extraUrls || []).concat(Array.isArray(data.calendars) ? data.calendars : []);
   const calendars = [];
-  for (const raw_item of Array.isArray(data.calendars) ? data.calendars : []) {
+  for (const raw_item of rawCalendars) {
     const item = typeof raw_item === "string" ? { url: raw_item } : raw_item;
     if (!item || typeof item !== "object" || typeof item.url !== "string" || !item.url.trim()) continue;
-    const id = typeof item.id === "string" && item.id.trim() ? item.id.trim() : null;
+    const name = typeof item.name === "string" && item.name.trim() ? item.name.trim() : null;
     const color = typeof item.color === "string" && isValidColor(item.color.toLowerCase()) ? item.color.toLowerCase() : null;
-    const exclude = compileRegexList(item.exclude);
+    const exclude = compileMatcherList(item.exclude);
     const defaultPerson = normalizeNameList(item.defaultPerson);
 
     const personRules = [];
     for (const rule of Array.isArray(item.personRules) ? item.personRules : []) {
       if (!rule || typeof rule !== "object") continue;
-      const matchSrc = typeof rule.match === "string" ? rule.match : "";
+      const rx = compileMatcher(rule.match);
       const people_ = normalizeNameList(rule.person) || [];
-      if (!matchSrc || !people_.length) continue;
-      let rx;
-      try {
-        rx = new RegExp(matchSrc, "i");
-      } catch (e) {
-        continue;
-      }
+      if (!rx || !people_.length) continue;
       personRules.push({ rx, people: people_, rename: rule.rename !== false });
     }
 
-    calendars.push({ id, url: item.url.trim(), color, exclude, defaultPerson, personRules });
+    calendars.push({ name, url: item.url.trim(), color, exclude, defaultPerson, personRules });
   }
 
   return { calendars, people, locale, timeZone };
@@ -333,21 +453,36 @@ function normalizeNameList(raw) {
   return names.length ? names : null;
 }
 
-function compileRegex(pattern) {
-  const p = (pattern || "").trim();
-  if (!p) return null;
-  try {
-    return new RegExp(p, "i");
-  } catch (e) {
-    return null;
-  }
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function compileRegexList(raw) {
-  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+// The everyday case is a plain word (e.g. "L1") — matched case-insensitively on whole-word
+// boundaries so "L1" doesn't also catch "L10". Regex stays available as the expert escape
+// hatch via { regex: "..." }, unchanged from how exclude/personRules always worked.
+// A matcher is always an explicit { type, value } object — no inferring word-vs-regex from
+// whether the value happens to be a string or an object. type: "regex" uses value as-is;
+// type: "word" (or an unrecognized/missing type) escapes value and matches it case-insensitively
+// on whole-word boundaries, so "L1" matches "L1 Trip" but not "L10 Trip".
+function compileMatcher(spec) {
+  if (!spec || typeof spec !== "object" || typeof spec.value !== "string") return null;
+  const p = spec.value.trim();
+  if (!p) return null;
+  if (spec.type === "regex") {
+    try {
+      return new RegExp(p, "i");
+    } catch (e) {
+      return null;
+    }
+  }
+  return new RegExp("\\b" + escapeRegExp(p) + "\\b", "i");
+}
+
+function compileMatcherList(raw) {
+  const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : [];
   const rxs = [];
-  for (const pattern of list) {
-    const rx = compileRegex(typeof pattern === "string" ? pattern : "");
+  for (const spec of list) {
+    const rx = compileMatcher(spec);
     if (rx) rxs.push(rx);
   }
   return rxs;
@@ -651,6 +786,17 @@ function untext(v) {
   return v.replace(/\\n/g, "\n").replace(/\\N/g, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\").trim();
 }
 
+function extractCalName(text) {
+  for (const line of unfold(text || "")) {
+    const parsed = prop(line);
+    if (parsed && parsed[0] === "X-WR-CALNAME") {
+      const name = untext(parsed[2]);
+      if (name) return name;
+    }
+  }
+  return null;
+}
+
 function parseDt(value, params, tz) {
   const v = value.trim();
   if (params.VALUE === "DATE" || (v.length === 8 && !v.includes("T"))) {
@@ -890,7 +1036,11 @@ async function fetchWithTimeout(url, ms, opts) {
   }
 }
 
-async function fetchSky(location, daysN, fahrenheit) {
+function msUntil(deadline) {
+  return Math.max(0, deadline - Date.now());
+}
+
+async function fetchSky(location, daysN, fahrenheit, deadline) {
   location = (location || "").trim();
   if (!location) return { sunMarks: {}, hourlyWeather: {}, dailyTemps: {}, error: null };
   try {
@@ -903,7 +1053,9 @@ async function fetchSky(location, daysN, fahrenheit) {
       hourly: "weathercode", timezone: "auto", forecast_days: String(daysN),
     });
     if (fahrenheit) params.set("temperature_unit", "fahrenheit");
-    const resp = await fetchWithTimeout("https://api.open-meteo.com/v1/forecast?" + params.toString(), 3000, {
+    const budget = msUntil(deadline);
+    if (budget <= 0) throw new Error("timed out");
+    const resp = await fetchWithTimeout("https://api.open-meteo.com/v1/forecast?" + params.toString(), Math.min(budget, 3000), {
       headers: { "User-Agent": "TRMNL-ICS-Calendar" },
     });
     if (!resp.ok) throw new Error("HTTP " + resp.status);
@@ -964,8 +1116,6 @@ function decodeXmlEntities(s) {
 }
 
 const RSS_HEADLINE_LIMIT = 3;
-const RSS_HEADLINE_SEPARATOR = "   •   ";
-const RSS_LABEL_SEPARATOR = "  »  ";
 
 function findElements(xml, localName, limit) {
   const results = [];
@@ -991,11 +1141,13 @@ function findFirstElement(xml, localName) {
   return all.length ? all[0] : null;
 }
 
-async function fetchRssHeadline(url, label) {
+async function fetchRssHeadline(url, label, deadline) {
   url = (url || "").trim();
   if (!url) return null;
   try {
-    const resp = await fetchWithTimeout(url, 4000, { headers: { "User-Agent": "TRMNL-ICS-Calendar" } });
+    const budget = msUntil(deadline);
+    if (budget <= 0) return null;
+    const resp = await fetchWithTimeout(url, Math.min(budget, 4000), { headers: { "User-Agent": "TRMNL-ICS-Calendar" } });
     if (!resp.ok) return null;
     const text = await resp.text();
     let entries = findElements(text, "item", RSS_HEADLINE_LIMIT);
@@ -1006,8 +1158,7 @@ async function fetchRssHeadline(url, label) {
       .map((t) => decodeXmlEntities(t))
       .filter((t) => t);
     if (!titles.length) return null;
-    const joined = titles.join(RSS_HEADLINE_SEPARATOR);
-    return label ? label + RSS_LABEL_SEPARATOR + joined : joined;
+    return { label: label || null, titles };
   } catch (exc) {
     return null;
   }
@@ -1017,6 +1168,7 @@ const HEADER_PCT = 11;
 const FOOTER_PCT = 7;
 const NEWS_PCT = 2;
 const ALLDAY_ROW_PCT = 10;
+const ALERTS_ROW_PCT = 5;
 const MIN_EVENT_PCT = 10;
 function hueOf(calIdx, calendarColors) {
   if (calendarColors && calIdx < calendarColors.length && calendarColors[calIdx]) return calendarColors[calIdx];
@@ -1065,17 +1217,18 @@ function round4(x) {
 // outer window still gets a real 0) or padding out to match a genuinely relevant hour.
 const EXTENSION_WEIGHT = 0.4;
 
-function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd, nowH, sunMarks, hourlyWeather, calendarColors, headerPct, is12h, newsPct) {
+function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd, nowH, sunMarks, hourlyWeather, calendarColors, headerPct, is12h, newsPct, alertsPct) {
   outerStart = Math.max(0, Math.min(23, Math.trunc(outerStart)));
   outerEnd = Math.max(outerStart + 1, Math.min(24, Math.trunc(outerEnd)));
   coreStart = Math.max(outerStart, Math.min(23, Math.trunc(coreStart)));
   coreEnd = Math.max(coreStart + 1, Math.min(outerEnd, Math.trunc(coreEnd)));
   newsPct = newsPct || 0;
+  alertsPct = alertsPct || 0;
 
   const headerRenderedPct = headerPct + newsPct;
   const maxAdRows = alldayBars.length ? Math.max(...alldayBars.map((b) => b.row)) + 1 : 0;
   const alldayPct = Math.min(3, maxAdRows) * ALLDAY_ROW_PCT;
-  const gridBase = headerRenderedPct + alldayPct;
+  const gridBase = headerRenderedPct + alldayPct + alertsPct;
   const gridPct = 100 - gridBase - FOOTER_PCT;
 
   const weight = new Array(24).fill(0);
@@ -1215,5 +1368,5 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
     continues_before: b.continuesBefore, continues_after: b.continuesAfter,
   }));
 
-  return { header_pct: headerRenderedPct, allday_pct: alldayPct, allday_row_pct: ALLDAY_ROW_PCT, allday_bars: alldayBarsOut, allday_max_rows: maxAdRows, grid_pct: gridPct, footer_pct: FOOTER_PCT, news_pct: newsPct, hour_rows: hourRows, days: outDays };
+  return { header_pct: headerRenderedPct, allday_pct: alldayPct, allday_row_pct: ALLDAY_ROW_PCT, allday_bars: alldayBarsOut, allday_max_rows: maxAdRows, grid_pct: gridPct, footer_pct: FOOTER_PCT, news_pct: newsPct, alerts_pct: alertsPct, hour_rows: hourRows, days: outDays };
 }
