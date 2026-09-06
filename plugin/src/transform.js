@@ -1320,12 +1320,6 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
       segments.push({ pct, shade, night: isNight(mid), past, weather: dayWeather[Math.trunc(a)] || null });
     }
 
-    let nowMarker = null;
-    if (d.isToday && nowH !== null && nowH !== undefined && nowH >= 0 && nowH < 24) {
-      const top = pctAt(nowH) - gridBase;
-      nowMarker = { top_pct: round4((top / gridPct) * 100), night: isNight(nowH) };
-    }
-
     const flatEvents = [];
     for (const c of clusters) {
       for (const [ev, laneIdx] of c.lanes) flatEvents.push({ ev, laneIdx, nlanes: c.nlanes });
@@ -1358,7 +1352,7 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
       label_short_weekday: d.labelShortWeekday, label_short_rest: d.labelShortRest,
       is_today: d.isToday,
       temp: d.temp || null, icon: d.icon || null,
-      segments, events, now_marker: nowMarker,
+      segments, events,
     });
   });
 

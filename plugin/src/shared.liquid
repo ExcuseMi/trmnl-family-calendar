@@ -37,9 +37,11 @@
    around this render — no JS measurement needed since grid-template-rows already gives each
    hour an exact, deterministic track size. */
 .screen:not(.screen--lg) .view--half_vertical .cal-axis-col [data-hour-shade="1"],
-.screen:not(.screen--lg) .view--quadrant .cal-axis-col [data-hour-shade="1"] { display: none; }
+.screen:not(.screen--lg) .view--quadrant .cal-axis-col [data-hour-shade="1"],
+.screen:not(.screen--lg) .view--half_horizontal .cal-axis-col [data-hour-shade="1"] { display: none; }
 .screen:not(.screen--lg) .view--half_vertical .cal-axis-col [data-hour-shade="0"],
-.screen:not(.screen--lg) .view--quadrant .cal-axis-col [data-hour-shade="0"] { grid-row: span 2; }
+.screen:not(.screen--lg) .view--quadrant .cal-axis-col [data-hour-shade="0"],
+.screen:not(.screen--lg) .view--half_horizontal .cal-axis-col [data-hour-shade="0"] { grid-row: span 2; }
 </style>
 {%- assign header_pct_scale = 1 -%}
 {%- if view == 4 -%}
@@ -187,7 +189,7 @@
           {% assign ad_border_color = "currentColor" %}
           {% if bar.fg == "white" %}{% assign ad_border_color = "#888888" %}{% endif %}
           <div class="bg--{{ bar.hue }} text--{{ bar.fg }} flex flex--row flex--center-x flex--center-y cal-fit-box rounded--none relative cal-allday-bar-el" data-start-col="{{ bar.start_col }}" data-span="{{ allday_visible_span }}" style="grid-column:{{ allday_col_start }} / span {{ allday_bar_span }};grid-row:{{ allday_row_num }};overflow:hidden;box-sizing:border-box;border-bottom:1px solid {{ ad_border_color }};">
-            <span class="title {{ chip_title_cls }} text--{{ bar.fg }} cal-fit-text cal-fit-clip w--min-0" data-fit-min="9" data-fit-max="90">{{ bar.title }}</span>
+            <span class="title {{ chip_title_cls }} text--{{ bar.fg }} cal-fit-text cal-fit-clip cal-allday-title w--min-0" data-fit-min="9" data-fit-max="90">{{ bar.title }}</span>
           </div>
           {% endif %}
         {% endfor %}
@@ -251,15 +253,6 @@
           {% endfor %}
         </div>
       {% endfor %}
-      {% if data.days.first.now_marker %}
-        <div class="absolute left--0 right--0 z--0" style="grid-column:2 / -1;top:{{ data.days.first.now_marker.top_pct }}%;">
-          {% if data.days.first.now_marker.night %}
-            <div class="h--1 w--full bg--gray-70"></div>
-          {% else %}
-            <div class="h--1 w--full bg--red"></div>
-          {% endif %}
-        </div>
-      {% endif %}
     </div>
 
     <div class="grid gap--none h--[{{ data.footer_pct }}cqh] h--min-[{{ data.footer_pct }}cqh] bg--black flex flex--center-y" style="overflow:hidden;">
@@ -465,7 +458,7 @@
 
     var lgPortrait = !!document.querySelector('.screen--lg.screen--portrait');
 
-    var titles = root.querySelectorAll('.cal-fit-text:not(.cal-axis-text)');
+    var titles = root.querySelectorAll('.cal-fit-text:not(.cal-axis-text):not(.cal-allday-title)');
     for (var i = 0; i < titles.length; i++) {
       if (lgPortrait) titles[i].setAttribute('data-fit-max', '100');
       fit(titles[i]);
@@ -478,7 +471,12 @@
     // also drag every other (genuinely legible) row in the same group down to match it.
     var MIN_LEGIBLE_AXIS_BOX_PX = 10;
 
-    function fitAxisGroup(selector, maxOverride) {
+    // Shared by the hour axis (each of its two legibility tiers) and the all-day bar titles:
+    // fits every element in the group independently, then re-fits all of them at the smallest
+    // size any one of them needed, so sibling labels that are meant to read as one row/band
+    // (e.g. two same-row all-day bars, or every hour number) share a single consistent size
+    // instead of each just filling its own box to the max.
+    function fitSharedGroup(selector, maxOverride) {
       var all = root.querySelectorAll(selector);
       var els = [];
       for (var i = 0; i < all.length; i++) {
@@ -506,8 +504,9 @@
         for (var k = 0; k < els.length; k++) fit(els[k], minSize);
       }
     }
-    fitAxisGroup('.cal-axis-important', lgPortrait ? '48' : null);
-    fitAxisGroup('.cal-axis-text:not(.cal-axis-important)', lgPortrait ? '48' : null);
+    fitSharedGroup('.cal-axis-important', lgPortrait ? '48' : null);
+    fitSharedGroup('.cal-axis-text:not(.cal-axis-important)', lgPortrait ? '48' : null);
+    fitSharedGroup('.cal-allday-title', null);
 
     var periodEls = root.querySelectorAll('.cal-axis-period');
     for (var p = 0; p < periodEls.length; p++) {
