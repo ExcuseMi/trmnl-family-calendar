@@ -38,7 +38,7 @@ END:VEVENT
 BEGIN:VEVENT
 UID:demo-family-test-event@trmnl.bettens.dev
 DTSTAMP:20240101T000000Z
-SUMMARY:Test Event
+SUMMARY:Quarterly Family Budget And Household Chores Planning Discussion
 DTSTART:20240108T140000
 DTEND:20240108T141500
 RRULE:FREQ=WEEKLY;BYDAY=MO
