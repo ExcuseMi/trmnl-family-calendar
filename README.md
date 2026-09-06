@@ -66,10 +66,12 @@ the plugin depends on at render time.
    templates, and `transform.js` in one go.
 3. Paste your calendar link(s) into **Easy ICS** — one per line, nothing else needed. Each
    calendar's name is read automatically from the feed itself, and colors auto-assign. If you
-   want per-calendar colors, filtering, or to attach specific people to specific events, build
-   that with the [Configuration Editor](#configuration-editor) instead (or hand-write the JSON —
-   see its shape there) and paste it into **Advanced Configuration** — it adds to Easy ICS, it
-   doesn't replace it, so you can mix a few simple calendars with one that needs the extra setup.
+   want per-calendar colors, filtering, or to attach specific people to specific events, flip
+   **Advanced Configuration** to On (it's hidden by default) to reveal a JSON field, and build
+   that with the [Configuration Editor](#configuration-editor) (or hand-write the JSON — see its
+   shape there). It adds to Easy ICS, it doesn't replace it, so you can mix a few simple
+   calendars with one that needs the extra setup — and flipping the toggle back off later just
+   hides the field again, it doesn't stop whatever JSON you already saved from being used.
    Then fill in the plugin's remaining custom fields:
    - **Time Zone**: leave blank to use your TRMNL account's own time zone, or set one explicitly.
    - **Time Format**: 24-hour or 12-hour (AM/PM).
@@ -91,9 +93,9 @@ the plugin depends on at render time.
 
 No calendar of your own handy, or just want to see a genuinely busy grid (overlapping events,
 multi-day banners, recurring classes, a couple of kids each with their own color) before wiring
-up your real one? Paste [`demo-config.json`](demo-config.json) straight into the plugin's
-**Advanced Configuration** field as-is — it's a complete, working config, not a fragment to edit
-first. It points at a small fictional family (parents Alex/Jordan, kids Mia/Leo — nobody real)
+up your real one? Flip **Advanced Configuration** to On and paste
+[`demo-config.json`](demo-config.json) straight into the field that reveals — it's a complete,
+working config, not a fragment to edit first. It points at a small fictional family (parents Alex/Jordan, kids Mia/Leo — nobody real)
 spread across a few ICS feeds this repo hosts directly at
 [`demo/*.ics`](demo/) (via raw.githubusercontent.com — plain static files, no backend
 involved), every event `RRULE`-recurring (weekly or yearly) so it stays "today, busy"
