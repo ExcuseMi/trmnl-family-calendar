@@ -47,18 +47,18 @@ custom_fields:
     https://cloud.example.com/school.ics
   optional: true
 - keyname: advanced_config_enabled
-  field_type: select
+  field_type: boolean
   name: Advanced Configuration
-  description: Need per-calendar colors, filtering, or to attach specific people to events? Turn this on to reveal a JSON config field. Adds to (doesn't replace) Easy ICS above — most people don't need this at all.
-  options:
-  - 'Off': 'no'
-  - 'On': 'yes'
-  default: 'no'
+  description: Need per-calendar colors, filtering, or to attach specific people to events? Turn this on to reveal a JSON config field in place of Easy ICS above — most people don't need this at all.
+  default: false
   optional: true
   conditional_validation:
-  - when: 'no'
+  - when: 'false'
     hidden:
     - calendars
+  - when: 'true'
+    hidden:
+    - calendars_simple
 - keyname: calendars
   field_type: code
   name: Advanced Configuration JSON
@@ -121,25 +121,15 @@ custom_fields:
   description: Default hour range, as "start-end" (e.g. "7-21"). Always widens to fit real events/sunrise/sunset. Blank = 7-21.
   placeholder: 7-21
   optional: true
-  group: Advanced
-- keyname: time_zone
-  field_type: time_zone
-  name: Time Zone
-  description: Blank = your TRMNL account's own time zone.
-  optional: true
-  group: Advanced
 - keyname: news_feed_enabled
-  field_type: select
+  field_type: boolean
   name: News Feed
   description: Show top headlines from an RSS or Atom feed as a ticker in the footer, instead of per-day weather (which moves up into the header).
-  options:
-  - 'Off': 'no'
-  - 'On': 'yes'
-  default: 'no'
+  default: false
   optional: true
-  group: Advanced
+  group: News Feed
   conditional_validation:
-  - when: 'no'
+  - when: 'false'
     hidden:
     - rss_url
     - rss_label
@@ -149,14 +139,14 @@ custom_fields:
   description: An RSS or Atom feed URL.
   placeholder: https://rss.nytimes.com/services/xml/rss/nyt/US.xml
   optional: true
-  group: Advanced
+  group: News Feed
 - keyname: rss_label
   field_type: string
   name: News Feed Label
   description: Tag shown before the headlines in the ticker (it doesn't have to say "NEWS" — use whatever fits the feed, e.g. "SPORTS" or "BLOG"). Blank = "NEWS".
   placeholder: NEWS
   optional: true
-  group: Advanced
+  group: News Feed
 name: Family Calendar
 description: Smart-scaling family agenda
 refresh_interval: 15

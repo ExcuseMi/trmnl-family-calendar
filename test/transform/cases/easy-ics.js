@@ -1,12 +1,15 @@
 module.exports = function (test, h) {
   const { runTransform, icsWithEvents, okText, baseInput, assert, assertEqual } = h;
 
+  // Pinned, not real "today" — see the same note in allday-overflow.js.
+  const NOW = Date.parse('2026-09-05T12:00:00Z');
+
   const EVENT_A = { uid: 1, start: '20260905T120000Z', end: '20260905T130000Z', summary: 'From Easy' };
   const EVENT_B = { uid: 2, start: '20260905T140000Z', end: '20260905T150000Z', summary: 'From Advanced' };
 
   test('Easy ICS and Advanced Configuration calendars combine, they don\'t replace each other', async () => {
     const fetchImpl = async (url) => okText(icsWithEvents([url.includes('a.ics') ? EVENT_A : EVENT_B]));
-    const { run } = runTransform(fetchImpl, Date.now());
+    const { run } = runTransform(fetchImpl, NOW);
     const input = baseInput({
       calendars_simple: 'https://example.com/a.ics',
       calendars: JSON.stringify({ calendars: [{ url: 'https://example.com/b.ics', name: 'Advanced Cal' }] }),
@@ -18,7 +21,7 @@ module.exports = function (test, h) {
 
   test('Easy ICS alone (no Advanced Configuration at all) still works', async () => {
     const fetchImpl = async () => okText(icsWithEvents([EVENT_A]));
-    const { run } = runTransform(fetchImpl, Date.now());
+    const { run } = runTransform(fetchImpl, NOW);
     const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
     assertEqual(r.data.days[0].events.length, 1);
     assertEqual(r.data.error, null);

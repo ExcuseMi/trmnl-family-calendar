@@ -79,8 +79,8 @@ keeps going with everything else, rather than showing an error for your whole ca
 deliberate — it's meant to tolerate you editing the JSON a bit at a time.
 
 **The default hour range** the grid shows (e.g. "7-21") isn't set here — it's the plugin's own
-**Visible Hours** field, alongside Time Zone/Time Format/Location in the plugin's settings, not
-in this JSON. Like everything else in the grid's layout, it's only ever a *starting point*: real
+**Visible Hours** field, alongside Time Format/Location in the plugin's settings, not in this
+JSON. Like everything else in the grid's layout, it's only ever a *starting point*: real
 events, sunrise/sunset, and the current hour always widen it further, and hours outside your
 configured range but inside that wider window render compressed rather than disappearing or
 padding out to full size.
@@ -99,7 +99,7 @@ account instead of set here:
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `locale` | a locale tag, e.g. `"en"`, `"nl-BE"`, `"fr"` | your TRMNL account's own locale | Controls day/month name language. Any locale your browser/`Intl` supports — not a fixed list. |
-| `timeZone` | an IANA zone name, e.g. `"Europe/Brussels"`, `"America/New_York"` | your TRMNL account's own time zone, or the plugin's own **Time Zone** setting if that's set | Which zone events/sun times/the current-time line are computed in. |
+| `timeZone` | an IANA zone name, e.g. `"Europe/Brussels"`, `"America/New_York"` | your TRMNL account's own time zone | Which zone events/sun times/the current-time line are computed in. There's no separate plugin setting for this — set it here if you need to override the account default. |
 
 You'd normally leave both out entirely and let them follow your account — they exist mainly for
 a calendar you want to read the same way regardless of who's actually viewing the device (e.g.
@@ -348,8 +348,8 @@ reads.
 ## Common mistakes
 
 - **Putting `"hours"` in this JSON.** It used to live here; it's now the plugin's own **Visible
-  Hours** setting field (a plain "7-21" string, not JSON) alongside Time Zone and Location. A
-  stray `"hours"` key in this config is simply ignored.
+  Hours** setting field (a plain "7-21" string, not JSON) alongside Location. A stray `"hours"`
+  key in this config is simply ignored.
 - **A single backslash in a regex.** `\bL6\b` in raw JSON is invalid — it needs to be `\\bL6\\b`.
   If your pattern silently doesn't match anything, this is the first thing to check. (The
   Configuration Editor's form fields avoid this entirely — only matters if hand-editing JSON.)

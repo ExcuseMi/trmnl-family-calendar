@@ -54,7 +54,7 @@ module.exports = function (test, h) {
       if (url.includes('rss')) return rssFails ? fail(500) : okText('<rss><channel><title>Feed</title><item><title>Headline</title></item></channel></rss>');
       return okText(icsWithEvents([EVENT]));
     };
-    const cfg = { calendars_simple: 'https://example.com/a.ics', news_feed_enabled: 'yes', rss_url: 'https://example.com/rss.xml' };
+    const cfg = { calendars_simple: 'https://example.com/a.ics', news_feed_enabled: 'true', rss_url: 'https://example.com/rss.xml' };
 
     let r = await runTransform(fetchImpl, NOW).run(baseInput(cfg, {}));
     assert(!!r.data.rss_headline, 'first fetch should succeed');
@@ -69,8 +69,8 @@ module.exports = function (test, h) {
       if (url.includes('rss')) return okText('<rss><channel><title>Feed</title><item><title>Headline</title></item></channel></rss>');
       return okText(icsWithEvents([EVENT]));
     };
-    const cfgOn = { calendars_simple: 'https://example.com/a.ics', news_feed_enabled: 'yes', rss_url: 'https://example.com/rss.xml' };
-    const cfgOff = { calendars_simple: 'https://example.com/a.ics', news_feed_enabled: 'no', rss_url: 'https://example.com/rss.xml' };
+    const cfgOn = { calendars_simple: 'https://example.com/a.ics', news_feed_enabled: 'true', rss_url: 'https://example.com/rss.xml' };
+    const cfgOff = { calendars_simple: 'https://example.com/a.ics', news_feed_enabled: 'false', rss_url: 'https://example.com/rss.xml' };
 
     let r = await runTransform(fetchImpl, NOW).run(baseInput(cfgOn, {}));
     assert(!!r.data.rss_headline, 'feature on: headline present');

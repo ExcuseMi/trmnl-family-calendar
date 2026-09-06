@@ -119,10 +119,6 @@
         <select id="tTimeFormat"><option value="24h">24h</option><option value="12h">12h</option></select>
       </div>
       <div>
-        <label>Time zone (IANA, blank = browser's)</label>
-        <input type="text" id="tTimeZone" placeholder="Europe/Brussels" class="field-url" style="flex:0 0 220px;">
-      </div>
-      <div>
         <label>Location lat,lon (blank = no sun/weather)</label>
         <input type="text" id="tLatLon" placeholder="50.8503,4.3517" class="field-url" style="flex:0 0 200px;">
       </div>
@@ -164,13 +160,6 @@
   // resolve to whatever window.fetch currently is, which during a test run is runTest's own
   // wrapper that calls fetchIcsSmart in the first place, recursing into itself forever.
   var realFetch = window.fetch.bind(window);
-
-  // This plugin's own backend (see /backend in the repo) — self-hosted, so unlike a
-  // third-party CORS proxy it's already trusted with the same private calendar URLs the
-  // plugin itself fetches at render time. /ics-proxy fetches a calendar server-side and
-  // hands the raw text back with CORS headers, for testing a feed here that blocks direct
-  // browser fetches.
-  var BACKEND_BASE_URL = "https://trmnl.bettens.dev/advanced-family-calendar";
 
   // Mirrors HUES/GRAY_SHADES/BLACK_WHITE/colorClass/foregroundFor in plugin/src/transform.js —
   // kept as a second copy (not shared code) since this is a plain <script> tag, not a module;
@@ -745,38 +734,17 @@
   // --------------------------------------------------------------- ICS sources
 
   // For each configured calendar: try a direct fetch() first (works when the host happens
-  // to send permissive CORS headers), then this plugin's own backend /ics-proxy (fetches
-  // server-side, where CORS doesn't apply — see BACKEND_BASE_URL above), and only then fall
-  // back to letting you upload/paste the ICS content by hand.
-  var icsOverrides = {}; // url -> ICS text, from a successful fetch/proxy/upload/paste
+  // to send permissive CORS headers — most calendar hosts do), and only then fall back to
+  // letting you upload/paste the ICS content by hand. No proxy of any kind — this page never
+  // routes a calendar URL through any third party, or through a server of its own.
+  var icsOverrides = {}; // url -> ICS text, from a successful fetch/upload/paste
 
-  // Tries direct fetch, then the backend proxy, in that order — resolves with { text, via }
-  // or rejects with an Error carrying both failure messages, so a caller can show exactly
-  // what was tried.
   function fetchIcsSmart(url) {
     return realFetch(url).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.text();
     }).then(function (text) {
       return { text: text, via: "direct fetch" };
-    }).catch(function (directErr) {
-      var proxyUrl = BACKEND_BASE_URL + "/ics-proxy?url=" + encodeURIComponent(url);
-      return realFetch(proxyUrl).then(function (r) {
-        // Body is read exactly once regardless of outcome: raw ICS text on success, a JSON
-        // {error} body on failure — parsing it as JSON only after already having the text
-        // (rather than calling r.json() first) avoids a second, invalid read of the same
-        // already-consumed response stream.
-        return r.text().then(function (bodyText) {
-          if (r.ok) return bodyText;
-          var message = "HTTP " + r.status;
-          try { message = JSON.parse(bodyText).error || message; } catch (e) { /* not JSON, keep default */ }
-          throw new Error(message);
-        });
-      }).then(function (text) {
-        return { text: text, via: "backend proxy" };
-      }).catch(function (proxyErr) {
-        throw new Error("direct fetch failed (" + directErr.message + "); backend proxy also failed (" + proxyErr.message + ")");
-      });
     });
   }
 
@@ -859,7 +827,6 @@
           instance_name: "Preview",
           custom_fields_values: {
             calendars: JSON.stringify(config),
-            time_zone: document.getElementById("tTimeZone").value.trim(),
             time_format: document.getElementById("tTimeFormat").value,
             lat_lon: document.getElementById("tLatLon").value.trim(),
             temperature_unit: "celsius",
@@ -870,9 +837,9 @@
     };
 
     // Route configured calendar URLs to their pasted/fetched override (if any), or — for a
-    // calendar URL with no override yet — try fetchIcsSmart (direct, then the backend
-    // proxy) automatically rather than making the user click "Try fetch" first. Anything
-    // else (Open-Meteo) goes through untouched, real fetch only. Reuses the module-level
+    // calendar URL with no override yet — try fetchIcsSmart (a direct fetch) automatically
+    // rather than making the user click "Try fetch" first. Anything else (Open-Meteo) goes
+    // through untouched, real fetch only. Reuses the module-level
     // realFetch (captured once at load time, see above) rather than re-binding window.fetch
     // here — at this point it's already been overridden by THIS wrapper if runTest is
     // somehow invoked twice without the first call finishing, so re-binding here could

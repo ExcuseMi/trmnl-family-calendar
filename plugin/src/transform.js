@@ -35,11 +35,11 @@ async function run(input) {
   const people = cfg.people;
   const calendarColors = calendars.map((c) => c.color);
   const locale = cfg.locale || localeOf(input);
-  const tzname = cfg.timeZone || cf(input, "time_zone").trim() || userTz(input) || "UTC";
+  const tzname = cfg.timeZone || userTz(input) || "UTC";
   const is12h = cf(input, "time_format").trim().toLowerCase() === "12h";
   const location = cf(input, "lat_lon");
   const fahrenheit = cf(input, "temperature_unit").trim().toLowerCase() === "fahrenheit";
-  const newsFeedEnabled = cf(input, "news_feed_enabled").trim().toLowerCase() === "yes";
+  const newsFeedEnabled = cf(input, "news_feed_enabled").trim().toLowerCase() === "true";
   const rssUrl = newsFeedEnabled ? cf(input, "rss_url").trim() : "";
   const rssLabel = cf(input, "rss_label").trim() || "NEWS";
   const daysN = toInt(cf(input, "view_days"), DEFAULT_DAYS, 1, 3);

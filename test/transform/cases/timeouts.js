@@ -1,7 +1,13 @@
 module.exports = function (test, h) {
   const { runTransform, icsWithEvents, okText, okJson, baseInput, assert } = h;
 
-  const EVENT = { uid: 1, start: '20260905T120000Z', end: '20260905T130000Z', summary: 'Fast Event' };
+  // Built from the real current time (not a pinned date) since this test deliberately uses the
+  // real clock/timers, not a fake Date — a hardcoded past date would silently fall outside
+  // today's render window and this test would start reporting 0 events on any later run.
+  function icsUtcStamp(d) { return d.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z'); }
+  const now = new Date();
+  const inOneHour = new Date(now.getTime() + 60 * 60 * 1000);
+  const EVENT = { uid: 1, start: icsUtcStamp(now), end: icsUtcStamp(inOneHour), summary: 'Fast Event' };
 
   test('a slow/unreachable calendar does not block the whole run past TRMNL\'s serverless deadline', async () => {
     // Real setTimeout/AbortController (no fake Date here) since this test is about actual

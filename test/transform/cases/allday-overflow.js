@@ -1,6 +1,11 @@
 module.exports = function (test, h) {
   const { runTransform, icsWithEvents, okText, baseInput, assert, assertEqual } = h;
 
+  // Pinned, not real "today" — an all-day event dated against the real clock would silently
+  // fall outside the render window (and these tests would start reporting 0 events) the day
+  // after whoever last touched this file happened to run it.
+  const NOW = Date.parse('2026-09-05T12:00:00Z');
+
   function allDayIcs(n) {
     const events = [];
     for (let i = 0; i < n; i++) {
@@ -11,7 +16,7 @@ module.exports = function (test, h) {
 
   test('all-day events at or under the 3-row cap: every one shows, no "+N more"', async () => {
     const fetchImpl = async () => okText(allDayIcs(3));
-    const { run } = runTransform(fetchImpl, Date.now());
+    const { run } = runTransform(fetchImpl, NOW);
     const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
     assertEqual(r.data.allday_bars.length, 3);
     assert(!r.data.allday_bars.some((b) => b.title.includes('more')), 'no overflow summary expected');
@@ -20,7 +25,7 @@ module.exports = function (test, h) {
 
   test('all-day events beyond the cap: real events truncate to 2, a "+N more" summarizes the rest — nothing silently vanishes', async () => {
     const fetchImpl = async () => okText(allDayIcs(5));
-    const { run } = runTransform(fetchImpl, Date.now());
+    const { run } = runTransform(fetchImpl, NOW);
     const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
     const real = r.data.allday_bars.filter((b) => !b.title.includes('more'));
     const overflow = r.data.allday_bars.filter((b) => b.title.includes('more'));
