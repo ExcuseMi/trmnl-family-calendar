@@ -335,8 +335,14 @@
     function fitsOneLine(px) {
       return el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= Math.round(px * 1.15) + 2 && el.scrollHeight <= contentH + 1;
     }
-    function fitsWrapped() {
-      return el.scrollHeight <= contentH + 1 && el.scrollWidth <= el.clientWidth + 1;
+    // Capped at 2 lines regardless of how much vertical room the box actually has — a tall box
+    // technically "fits" 4-5 wrapped lines of tiny text, but that reads far worse than an
+    // ellipsis after 2 real-sized lines, so wrapping past this is treated as not fitting at all.
+    var MAX_WRAP_LINES = 2;
+    function fitsWrapped(px) {
+      var lineH = Math.round(px * 1.15);
+      var lines = Math.round(el.scrollHeight / lineH);
+      return el.scrollHeight <= contentH + 1 && el.scrollWidth <= el.clientWidth + 1 && lines <= MAX_WRAP_LINES;
     }
 
     setSize(max);
