@@ -46,9 +46,22 @@ custom_fields:
     https://cloud.example.com/family.ics
     https://cloud.example.com/school.ics
   optional: true
+- keyname: advanced_config_enabled
+  field_type: select
+  name: Advanced Configuration
+  description: Need per-calendar colors, filtering, or to attach specific people to events? Turn this on to reveal a JSON config field. Adds to (doesn't replace) Easy ICS above — most people don't need this at all.
+  options:
+  - 'Off': 'no'
+  - 'On': 'yes'
+  default: 'no'
+  optional: true
+  conditional_validation:
+  - when: 'no'
+    hidden:
+    - calendars
 - keyname: calendars
   field_type: code
-  name: Advanced Configuration (optional)
+  name: Advanced Configuration JSON
   description: For per-calendar names/colors, filtering, or attaching people — as JSON. Adds to (doesn't replace) Easy ICS above.<br /><br />Build it with <a href="https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html" target="_blank">the Configuration Editor</a> — paste the result here. Reference docs — <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/CONFIG.md" target="_blank">CONFIG.md</a> (or <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/LLM.md" target="_blank">LLM.md</a> for an LLM to read).
   placeholder: |-
     {
