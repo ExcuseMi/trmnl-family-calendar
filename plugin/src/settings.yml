@@ -60,7 +60,7 @@ custom_fields:
 - keyname: calendars
   field_type: code
   name: Advanced Configuration JSON
-  description: For per-calendar names/colors, filtering, or attaching people - as JSON. Adds to (doesn't replace) Easy ICS above.<br /><br />Build it with <a href="https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html" target="_blank">the Configuration Editor</a> - paste the result here. Reference docs - <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/CONFIG.md" target="_blank">CONFIG.md</a> (or <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/LLM.md" target="_blank">LLM.md</a> for an LLM to read).
+  description: For per-calendar names/colors, filtering, or attaching people - as JSON. Replaces Easy ICS above while Advanced Configuration is on - list every calendar you want here, not just the ones needing special setup.<br /><br />Build it with <a href="https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html" target="_blank">the Configuration Editor</a> - paste the result here. Reference docs - <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/CONFIG.md" target="_blank">CONFIG.md</a> (or <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/LLM.md" target="_blank">LLM.md</a> for an LLM to read).
   placeholder: |-
     {
       "calendars": [
