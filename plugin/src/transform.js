@@ -1288,7 +1288,7 @@ const FOOTER_PCT = 7;
 const NEWS_PCT = 2;
 const ALLDAY_ROW_PCT = 10;
 const ALERTS_ROW_PCT = 5;
-const READABLE_BOX_CAP_HOURS = 0.25;
+const READABLE_BOX_MIN_PCT = 4;
 function hueOf(calIdx, calendarColors) {
   if (calendarColors && calIdx < calendarColors.length && calendarColors[calIdx]) return calendarColors[calIdx];
   return AUTO_HUES[calIdx % AUTO_HUES.length];
@@ -1449,8 +1449,8 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
       for (let j = idx + 1; j < flatEvents.length; j++) {
         if (flatEvents[j].laneIdx === item.laneIdx) { nextTop = pctAt(flatEvents[j].ev.h0) - gridBase; break; }
       }
-      const capEnd = pctAt(Math.min(24, ev.h0 + READABLE_BOX_CAP_HOURS)) - gridBase;
-      const boxHeight = Math.max(height, Math.min(capEnd - top, nextTop - top));
+      const minBoxHeight = gridPct * READABLE_BOX_MIN_PCT / 100;
+      const boxHeight = Math.max(height, Math.min(minBoxHeight, nextTop - top));
       const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);
       events.push({
         top_pct: round4((top / gridPct) * 100),

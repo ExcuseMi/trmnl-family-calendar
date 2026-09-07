@@ -73,10 +73,10 @@ module.exports = function (test, h) {
     assert(turnen.box_height_pct >= turnen.height_pct, 'the readable box must never be shorter than the real duration');
     assert(turnen.top_pct + turnen.box_height_pct <= standup.top_pct + 0.01, 'the readable box must not grow past the next event\'s true (unmoved) start: turnen box bottom=' + (turnen.top_pct + turnen.box_height_pct) + ' standup top=' + standup.top_pct);
     // Standup has the whole rest of the day free after it, so its box should be able to grow
-    // past its own tiny 5-min duration — but the growth itself is capped to a fixed amount of
-    // REAL TIME (READABLE_BOX_CAP_HOURS = 0.25h), not a flat percentage of the grid, so a 5-min
-    // event should grow to roughly (at most) a 15-min-equivalent box, not something open-ended.
-    assert(standup.box_height_pct >= standup.height_pct * 2.7, 'a short event with free room after it should get a noticeably taller readable box than its bare duration: height=' + standup.height_pct + ' box=' + standup.box_height_pct);
-    assert(standup.box_height_pct <= standup.height_pct * 3.3, 'the readable box must not grow open-endedly just because room is free — it should track a fixed real-time cap (~15 min here), not balloon into something that visually misrepresents duration: height=' + standup.height_pct + ' box=' + standup.box_height_pct);
+    // past its own tiny 5-min duration — but the growth itself is capped to a fixed MINIMUM
+    // PERCENTAGE of the grid (READABLE_BOX_MIN_PCT = 4), not a multiple of its own duration, so
+    // it lands at that fixed floor regardless of how short the real event is.
+    assert(standup.box_height_pct > standup.height_pct, 'a short event with free room after it should get a noticeably taller readable box than its bare duration: height=' + standup.height_pct + ' box=' + standup.box_height_pct);
+    assertEqual(standup.box_height_pct, 4, 'the readable box should land exactly at the fixed minimum floor (READABLE_BOX_MIN_PCT) when there is room for it, not some other open-ended amount');
   });
 };
