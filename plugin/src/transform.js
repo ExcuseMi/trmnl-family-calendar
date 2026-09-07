@@ -43,7 +43,7 @@ async function run(input) {
   const calendars = cfg.calendars;
   const people = cfg.people;
   const globalRules = cfg.globalRules;
-  const globalDefaultPerson = cfg.defaultPerson;
+  const everyonePerson = cfg.everyonePerson;
   const calendarColors = calendars.map((c) => c.color);
   const locale = cfg.locale || localeOf(input);
   const tzname = cfg.timeZone || userTz(input) || "UTC";
@@ -84,7 +84,8 @@ async function run(input) {
     try {
       const budget = msUntil(deadline);
       if (budget <= 0) throw new Error("timed out");
-      const resp = await fetchWithTimeout(url, Math.min(budget, 4000), { headers: { "User-Agent": "TRMNL-ICS-Calendar" } });
+      const headers = Object.assign({ "User-Agent": "TRMNL-ICS-Calendar" }, cal.headers);
+      const resp = await fetchWithTimeout(url, Math.min(budget, 4000), { headers });
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       return { calIdx, url: cal.url, text: await resp.text(), ok: true };
     } catch (exc) {
@@ -173,7 +174,7 @@ async function run(input) {
   const filtered = [];
   for (const e of occ) {
     const cal = calendars[e.calIdx];
-    const r = applyCalendarRules(e.title, cal, people, globalRules, globalDefaultPerson);
+    const r = applyCalendarRules(e.title, cal, people, globalRules, everyonePerson);
     if (r.hide) continue;
     e.title = r.title;
     e.hueOverride = r.hue;
@@ -404,12 +405,15 @@ function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
   return { data };
 }
 
-// A rule is { match, person?, allDay?, hide?, rewrite? } — one match, any combination of
-// effects. `match` is required; a rule with none of the effects does nothing and is dropped.
-// `rename` (default true) only matters when `person` is set: whether the matched text in the
-// title gets replaced with the assigned person's name(s), same as the old personRules always
-// did. `rewrite` is independent of `person` — a literal string the matched text gets replaced
-// with, for titles that need fixing up regardless of who they're assigned to.
+// A rule is { match, person?, allDay?, hide?, rewrite?, rewriteFull? } — one match, any
+// combination of effects. `match` is required; a rule with none of the effects does nothing and
+// is dropped. `rename` (default true) only matters when `person` is set: whether the matched
+// text in the title gets replaced with the assigned person's name(s), same as the old
+// personRules always did. `rewrite` is independent of `person` — text that replaces some or all
+// of the title, for titles that need fixing up regardless of who they're assigned to. Two modes:
+// `rewriteFull: true` replaces the WHOLE title outright with `rewrite`'s literal text; the
+// default (`rewriteFull` false/absent) replaces only the matched substring, so `rewrite` can use
+// regex backreferences ($1, $2, ...) against `match`'s own capture groups.
 function compileRule(spec) {
   if (!spec || typeof spec !== "object") return null;
   const rx = compileMatcher(spec.match);
@@ -418,8 +422,9 @@ function compileRule(spec) {
   const allDay = spec.allDay === true;
   const hide = spec.hide === true;
   const rewrite = typeof spec.rewrite === "string" ? spec.rewrite : null;
+  const rewriteFull = spec.rewriteFull === true;
   if (!person && !allDay && !hide && rewrite === null) return null;
-  return { rx, person, allDay, hide, rename: person ? spec.rename !== false : false, rewrite };
+  return { rx, person, allDay, hide, rename: person ? spec.rename !== false : false, rewrite, rewriteFull };
 }
 
 function compileRuleList(raw) {
@@ -437,14 +442,14 @@ function compileRuleList(raw) {
 function legacyRules(item) {
   const rules = [];
   for (const rx of compileMatcherList(item.exclude)) {
-    rules.push({ rx, person: null, allDay: false, hide: true, rename: false, rewrite: null });
+    rules.push({ rx, person: null, allDay: false, hide: true, rename: false, rewrite: null, rewriteFull: false });
   }
   for (const rule of Array.isArray(item.personRules) ? item.personRules : []) {
     if (!rule || typeof rule !== "object") continue;
     const rx = compileMatcher(rule.match);
     const person = normalizeNameList(rule.person);
     if (!rx || !person) continue;
-    rules.push({ rx, person, allDay: false, hide: false, rename: rule.rename !== false, rewrite: null });
+    rules.push({ rx, person, allDay: false, hide: false, rename: rule.rename !== false, rewrite: null, rewriteFull: false });
   }
   return rules;
 }
@@ -465,6 +470,12 @@ function parseConfig(raw, extraUrls) {
   const timeZone = typeof data.timeZone === "string" && data.timeZone.trim() ? data.timeZone.trim() : null;
 
   const people = {};
+  // The first entry in `people[]` (config order, not insertion order into this lookup object)
+  // is the "Everyone/All" fallback: whatever event nothing else assigned a person to gets
+  // badged with this one, so a family calendar's unclaimed events still read as "this is a
+  // family thing" rather than unbadged. It's an ordinary person otherwise — its own icon/emoji
+  // `badge` and `color` are fully overridable, nothing special about its shape.
+  let everyonePerson = null;
   for (const item of Array.isArray(data.people) ? data.people : []) {
     if (!item || typeof item !== "object") continue;
     const name = typeof item.name === "string" ? item.name.trim() : "";
@@ -474,6 +485,7 @@ function parseConfig(raw, extraUrls) {
     // (surrogate pair in UTF-16) doesn't get sliced in half into a broken/invisible glyph.
     const badgeSrc = typeof item.badge === "string" && item.badge.trim() ? item.badge.trim() : name;
     const badge = Array.from(badgeSrc)[0].toUpperCase();
+    if (everyonePerson === null) everyonePerson = name;
     people[name.toLowerCase()] = { name, color, badge };
   }
 
@@ -481,10 +493,6 @@ function parseConfig(raw, extraUrls) {
   // before each calendar's own rules, so a calendar-specific rule can override a global one
   // (e.g. a global "assign Mom" rule, narrowed by a specific calendar's own rule for one title).
   const globalRules = compileRuleList(data.rules);
-  // The fallback for any calendar that doesn't set its own defaultPerson — typically a generic
-  // "Everyone"/"Family" person with a distinctive badge (an emoji works well here), so events
-  // nobody's specifically claimed still read as "this is a family event" rather than unbadged.
-  const defaultPerson = normalizeNameList(data.defaultPerson);
 
   // Easy ICS field's plain URLs lead, Advanced Configuration's (possibly richer) entries
   // follow — both go through the exact same per-calendar shaping below. name is left `null`
@@ -498,13 +506,22 @@ function parseConfig(raw, extraUrls) {
     if (!item || typeof item !== "object" || typeof item.url !== "string" || !item.url.trim()) continue;
     const name = typeof item.name === "string" && item.name.trim() ? item.name.trim() : null;
     const color = typeof item.color === "string" && isValidColor(item.color.toLowerCase()) ? item.color.toLowerCase() : null;
-    const defaultPersonForCal = normalizeNameList(item.defaultPerson);
     const rules = legacyRules(item).concat(compileRuleList(item.rules));
+    // Some hosts (self-hosted Nextcloud/CalDAV behind auth, a private feed needing a token,
+    // etc.) need a request header this plugin can't otherwise supply — an escape hatch mirroring
+    // TRMNL's own official Calendar plugin's `headers` setting. String values only (never sent
+    // if not a string) — a header value must be a header value, not accidentally a whole object.
+    const headers = {};
+    if (item.headers && typeof item.headers === "object") {
+      for (const k of Object.keys(item.headers)) {
+        if (typeof item.headers[k] === "string") headers[k] = item.headers[k];
+      }
+    }
 
-    calendars.push({ name, url: item.url.trim(), color, rules, defaultPerson: defaultPersonForCal });
+    calendars.push({ name, url: item.url.trim(), color, rules, headers });
   }
 
-  return { calendars, people, locale, timeZone, globalRules, defaultPerson };
+  return { calendars, people, locale, timeZone, globalRules, everyonePerson };
 }
 
 function normalizeNameList(raw) {
@@ -552,7 +569,7 @@ function compileMatcherList(raw) {
 // since whichever rule runs last wins for those two), then this calendar's own rules. `hide`
 // and `allDay` are OR'd across every matching rule instead — one rule flagging either is enough,
 // regardless of what order rules ran in or what any other matching rule said.
-function applyCalendarRules(title, cal, people, globalRules, globalDefaultPerson) {
+function applyCalendarRules(title, cal, people, globalRules, everyonePerson) {
   const originalTitle = title;
   let personNames = null;
   let renameRule = null;
@@ -577,11 +594,13 @@ function applyCalendarRules(title, cal, people, globalRules, globalDefaultPerson
   // person-name substitution `rename` does — only the last matching rule of whichever kind won
   // gets to touch the title, same reasoning as renameRule below.
   if (rewriteRule) {
-    title = originalTitle.replace(new RegExp(rewriteRule.rx.source, "gi"), rewriteRule.rewrite);
+    title = rewriteRule.rewriteFull
+      ? rewriteRule.rewrite
+      : originalTitle.replace(new RegExp(rewriteRule.rx.source, "gi"), rewriteRule.rewrite);
   } else if (renameRule) {
     title = originalTitle.replace(new RegExp(renameRule.rx.source, "gi"), renameRule.person.join(" & "));
   }
-  if (personNames === null) personNames = cal.defaultPerson || globalDefaultPerson;
+  if (personNames === null && everyonePerson) personNames = [everyonePerson];
 
   let hue = null;
   const badges = [];

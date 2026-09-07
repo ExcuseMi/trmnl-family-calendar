@@ -10,29 +10,34 @@
     {
       "name": "Alex",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/alex.ics",
-      "defaultPerson": "Alex"
+      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Alex" }]
     },
     {
       "name": "Jordan",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/jordan.ics",
-      "defaultPerson": "Jordan"
+      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Jordan" }]
     },
     {
       "name": "Mia",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/mia.ics",
-      "defaultPerson": "Mia"
+      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Mia" }]
     },
     {
       "name": "Leo",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/leo.ics",
-      "defaultPerson": "Leo"
+      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Leo" }]
+    },
+    {
+      "name": "Work",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/sam.ics",
+      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Sam" }]
     },
     {
       "name": "School",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/school.ics",
       "color": "gray-70",
-      "exclude": [{ "type": "regex", "value": "(?=.*\\b(?:L[1345]|K[123])\\b)(?!.*\\b(?:L2|L6)\\b)" }],
-      "personRules": [
+      "rules": [
+        { "match": { "type": "regex", "value": "(?=.*\\b(?:L[1345]|K[123])\\b)(?!.*\\b(?:L2|L6)\\b)" }, "hide": true },
         { "match": { "type": "word", "value": "L2" }, "person": "Mia" },
         { "match": { "type": "word", "value": "L6" }, "person": "Leo" }
       ]
@@ -44,9 +49,11 @@
     }
   ],
   "people": [
+    { "name": "Family", "badge": "👪" },
     { "name": "Alex", "color": "gray-15" },
     { "name": "Jordan", "color": "gray-35" },
     { "name": "Mia", "color": "gray-55" },
-    { "name": "Leo", "color": "gray-65" }
+    { "name": "Leo", "color": "gray-65" },
+    { "name": "Sam", "color": "gray-75" }
   ]
 }

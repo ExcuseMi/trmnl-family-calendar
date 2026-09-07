@@ -144,7 +144,7 @@
   {% else %}
 
     {%- assign show_badge_overlay = false -%}
-    {%- if data.people.size > 0 and view == 1 -%}{%- assign show_badge_overlay = true -%}{%- endif -%}
+    {%- if data.people.size > 0 -%}{%- assign show_badge_overlay = true -%}{%- endif -%}
 
     <div class="grid gap--none h--[{{ header_pct }}cqh] h--min-[{{ header_pct }}cqh] bg--black flex-none" style="overflow:hidden;">
 
@@ -175,15 +175,13 @@
       {%- assign gutter_pct = header_pct | plus: allday_pct -%}
       {%- assign badge_count = data.people.size -%}
       {%- if badge_count > 8 -%}{%- assign badge_count = 8 -%}{%- endif -%}
-      {%- assign badge_cols = axis_span -%}
-      {%- assign badge_rows = badge_count | plus: badge_cols | minus: 1 | divided_by: badge_cols -%}
       {%- assign total_cols = day_span | times: shown_days_n | plus: axis_span -%}
       {%- assign axis_width_pct = axis_span | times: 100.0 | divided_by: total_cols -%}
-      {%- assign badge_w_pct = axis_width_pct | divided_by: badge_cols | times: 0.85 -%}
-      {%- assign badge_h_pct = gutter_pct | times: 1.0 | divided_by: badge_rows | times: 0.85 -%}
+      {%- assign badge_w_pct = axis_width_pct | times: 0.85 -%}
+      {%- assign badge_h_pct = gutter_pct | times: 1.0 | divided_by: badge_count | times: 0.85 -%}
       <div class="absolute left--0 top--0 grid gap--none z--1" style="height:{{ gutter_pct }}cqh;width:100%;grid-template-columns:repeat({{ day_span | times: shown_days_n | plus: axis_span }}, 1fr);overflow:hidden;">
         <div class="col--span-{{ axis_span }} bg--black flex flex--col flex--center-x flex--center-y p--0.5" style="overflow:hidden;box-sizing:border-box;">
-          <div class="grid gap--xsmall grid--cols-{{ badge_cols }}">
+          <div class="grid w--auto gap--xsmall grid--cols-1 flex--center-x">
             {%- for b in data.people limit: 8 -%}
               {%- render "badge_circle", badge_w_pct: badge_w_pct, badge_h_pct: badge_h_pct, b: b, hue: b.hue, fg: b.fg -%}
             {%- endfor -%}

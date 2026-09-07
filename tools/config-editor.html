@@ -44,6 +44,9 @@
   .advanced-body { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #ddd; }
   .sub-entry { border: 1px solid #e5e5e2; border-radius: 6px; padding: 8px; margin-bottom: 6px; background: #fff; display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
   .sub-entry .field { flex: 1 1 140px; }
+  .rule-card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: #fff; }
+  .rule-step + .rule-step { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e5e5e2; }
+  .rule-step-label { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #888; margin-bottom: 6px; }
   .swatch {
     display: inline-flex; align-items: center; justify-content: center;
     width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; font-size: 10px;
@@ -81,29 +84,26 @@
     </div>
   </div>
 
-  <h2>Calendars</h2>
+  <h2>Calendars <span class="muted">(order matters — shown first when there's more all-day content than fits)</span></h2>
   <div id="calendars"></div>
   <button id="addCalendar">+ Add calendar</button>
 
+  <h2>Holiday calendars <span class="muted">(kept separate for clarity — fully customizable, same as any calendar above)</span></h2>
+  <div id="holidayCalendars"></div>
+  <div class="row" style="margin-top:6px;">
+    <button id="addCalendarHoliday">+ Add calendar</button>
+  </div>
   <div class="card" style="margin-top:10px;">
-    <p class="muted" style="margin-top:0;">Add a public holiday calendar — a real Google-hosted ICS feed, no account needed. Adds it as a normal calendar above (color pre-filled, freely editable).</p>
+    <p class="muted" style="margin-top:0;">Add a public holiday calendar — a real Google-hosted ICS feed, no account needed.</p>
     <div class="row">
       <select id="holidayCountrySelect"></select>
       <button id="addHolidayCalendar">+ Add public holidays</button>
     </div>
   </div>
 
-  <h2>People <span class="muted">(optional — just names + colors/badges; who a badge/color applies to is set per calendar above, under each calendar's Advanced section)</span></h2>
+  <h2>People <span class="muted">(the first person is the "Everyone / All" fallback badge — shown on any event nobody more specific claims)</span></h2>
   <div id="people"></div>
   <button id="addPerson">+ Add person</button>
-
-  <h2>Default person <span class="muted">(optional — the fallback badge for any event nobody more specific claims)</span></h2>
-  <div class="card">
-    <p class="muted" style="margin-top:0;">Applied whenever neither a calendar's own Default person nor any rule (global or that
-      calendar's own) assigns someone. A generic "Everyone"/"Family" person with an emoji badge (e.g. 👪) works well here — every
-      event still reads as "this is a family event" instead of showing no badge at all.</p>
-    <div id="globalDefaultPersonWrap"></div>
-  </div>
 
   <h2>Global rules <span class="muted">(optional — apply across every calendar, not just one)</span></h2>
   <div class="card">
@@ -316,7 +316,15 @@
   // ------------------------------------------------------------------- state
 
   function uid() { return Math.random().toString(36).slice(2, 9); }
-  function newCalendar() { return { _id: uid(), url: "", name: "", color: "", rules: [], defaultPerson: [] }; }
+  function newCalendar() { return { _id: uid(), url: "", name: "", color: "", rules: [], headers: [] }; }
+  function newHeader() { return { _id: uid(), key: "", value: "" }; }
+  // Google's public per-country holiday feed always follows this exact predictable URL shape
+  // (see holidayIcsUrl below) — used on import to sort a flat calendars[] back into "regular"
+  // vs "holiday calendars", since transform.js's own schema has no such distinction at all;
+  // it's purely how this editor organizes the same flat array for clarity.
+  function isHolidayUrl(url) {
+    return /^https:\/\/calendar\.google\.com\/calendar\/ical\/en\.[^%]+%23holiday%40group\.v\.calendar\.google\.com\/public\/basic\.ics$/i.test(url || "");
+  }
   function newPerson() { return { _id: uid(), name: "", color: "", badge: "" }; }
 
   // A "matcher" backs a rule's match — two tiers, matching
@@ -414,7 +422,7 @@
   // A "rule" is one matcher plus any combination of three effects: assign a person, mark the
   // event all-day, hide it — the exact same shape whether it's this calendar's own rule or a
   // global one, and the exact same shape rules[] in transform.js's parseConfig expects.
-  function newRule() { return Object.assign(newMatcher(), { person: [], rename: true, allDay: false, hide: false, rewrite: "" }); }
+  function newRule() { return Object.assign(newMatcher(), { person: [], rename: true, allDay: false, hide: false, rewrite: "", rewriteFull: false }); }
   function ruleFromValue(v) {
     var r = matcherFromValue(v.match);
     r.person = normalizeNames(v.person);
@@ -422,6 +430,7 @@
     r.allDay = v.allDay === true;
     r.hide = v.hide === true;
     r.rewrite = typeof v.rewrite === "string" ? v.rewrite : "";
+    r.rewriteFull = v.rewriteFull === true;
     return r;
   }
   // The JSON value transform.js's parseConfig actually expects for one rule — null when the
@@ -437,13 +446,21 @@
     }
     if (r.allDay) out.allDay = true;
     if (r.hide) out.hide = true;
-    if (r.rewrite) out.rewrite = r.rewrite;
+    if (r.rewrite) {
+      out.rewrite = r.rewrite;
+      if (r.rewriteFull) out.rewriteFull = true;
+    }
     if (!out.person && !out.allDay && !out.hide && !out.rewrite) return null;
     return out;
   }
   // Renders a repeatable list of rules into `container` (used for both a calendar's own rules
   // and the top-level global rules — identical UI and behavior either way) and returns a
   // re-render function for the "+ Add rule" button to call after pushing a new one.
+  //
+  // Each rule is laid out as two explicit steps rather than one flat row of controls: Step 1
+  // ("If the title matches") is just the matcher; step 2 ("Then") is every action the match can
+  // trigger (assign a person, rewrite the title, make it all-day, hide it), so it reads as a
+  // sentence instead of a wall of inputs.
   function renderRulesList(container, rules) {
     function render() {
       container.innerHTML = "";
@@ -460,18 +477,45 @@
           chk.addEventListener("change", function () { onChange(chk.checked); renderJson(); });
           return el("label", { style: "display:flex;align-items:center;gap:4px;margin:0;font-size:12px;color:#333;white-space:nowrap;" }, [chk, document.createTextNode(text)]);
         }
-        var renameLbl = checkboxLabel(r.rename !== false, "rename title", function (v) { r.rename = v; });
+        var renameLbl = checkboxLabel(r.rename !== false, "rename title to person", function (v) { r.rename = v; });
         var allDayLbl = checkboxLabel(!!r.allDay, "make all-day", function (v) { r.allDay = v; });
         var hideLbl = checkboxLabel(!!r.hide, "hide", function (v) { r.hide = v; });
 
-        var rewriteInput = el("input", { type: "text", class: "field", placeholder: "rewrite matched text to...", value: r.rewrite || "", style: "flex:1 1 140px;" });
+        // Rewrite has two modes: "Regex replace" (default) only touches the matched substring,
+        // so the replacement text can use $1/$2 backreferences into the match's own capture
+        // groups; "Full rewrite" discards the rest of the original title outright and replaces
+        // it entirely with the given text.
+        var rewriteInput = el("input", { type: "text", class: "field", placeholder: "replacement text...", value: r.rewrite || "", style: "flex:1 1 160px;" });
         rewriteInput.addEventListener("input", function () { r.rewrite = rewriteInput.value; renderJson(); });
+        var rewriteModeSel = el("select", { class: "field", style: "flex:0 0 auto;width:auto;" }, [
+          el("option", { value: "regex" }, [document.createTextNode("Regex replace")]),
+          el("option", { value: "full" }, [document.createTextNode("Full rewrite")]),
+        ]);
+        rewriteModeSel.value = r.rewriteFull ? "full" : "regex";
+        rewriteModeSel.addEventListener("change", function () { r.rewriteFull = rewriteModeSel.value === "full"; renderJson(); });
+        var rewriteRow = el("div", { class: "sub-entry", style: "background:transparent;border:none;padding:4px 0 0;margin:0;" }, [rewriteModeSel, rewriteInput]);
 
-        var rm = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
+        var rm = el("button", { class: "small danger" }, [document.createTextNode("Remove rule")]);
         rm.addEventListener("click", function () { rules.splice(i, 1); render(); renderJson(); });
 
-        container.appendChild(el("div", { class: "sub-entry", style: "flex-wrap:wrap;" }, [f.typeSelect, f.textInput, f.regexInput, personInput, renameLbl, allDayLbl, hideLbl, rewriteInput, rm]));
-        container.appendChild(el("div", { style: "display:flex;gap:6px;align-items:center;margin:2px 0 8px;" }, [f.testInput, f.testResult]));
+        var matchStep = el("div", { class: "rule-step" }, [
+          el("div", { class: "rule-step-label" }, [document.createTextNode("1. If the title matches")]),
+          el("div", { class: "sub-entry" }, [f.typeSelect, f.textInput, f.regexInput]),
+          el("div", { style: "display:flex;gap:6px;align-items:center;" }, [f.testInput, f.testResult]),
+        ]);
+        var thenStep = el("div", { class: "rule-step" }, [
+          el("div", { class: "rule-step-label" }, [document.createTextNode("2. Then")]),
+          el("div", { class: "sub-entry" }, [
+            el("div", {}, [el("label", { text: "Assign person(s)" }), personInput]),
+            renameLbl, allDayLbl, hideLbl,
+          ]),
+          el("div", {}, [el("label", { text: "Rewrite title (optional)" }), rewriteRow]),
+        ]);
+
+        container.appendChild(el("div", { class: "rule-card" }, [
+          matchStep, thenStep,
+          el("div", { style: "text-align:right;margin-top:6px;" }, [rm]),
+        ]));
       });
     }
     render();
@@ -479,9 +523,9 @@
   }
 
   var calendars = [newCalendar()];
+  var holidayCalendars = [];
   var people = [];
   var globalRules = [];
-  var globalDefaultPerson = [];
 
   // -------------------------------------------------------------- calendars UI
 
@@ -489,8 +533,8 @@
   // rather than free text — `value` is preserved as the selection if it still matches a
   // declared name, otherwise falls back to the placeholder/empty option so a rename or
   // removal in People doesn't leave a select silently pointing at a name that's gone.
-  // Multi-select: personRules[].person and defaultPerson each accept one name OR several (a
-  // shared event tagging more than one person — see applyCalendarPerson in transform.js), so
+  // Multi-select: a rule's person field accepts one name OR several (a
+  // shared event tagging more than one person — see applyCalendarRules in transform.js), so
   // this always returns/accepts an ARRAY, even for a single pick. Native <select multiple>
   // rather than a custom checkbox widget — ctrl/cmd-click (or shift-click for a range) is a
   // standard-enough pattern and this is far less code than building one, for a field that's
@@ -514,18 +558,24 @@
   function selectedValues(sel) {
     return Array.from(sel.selectedOptions).map(function (o) { return o.value; }).filter(Boolean);
   }
-  // Mirrors normalizeNameList() in plugin/src/transform.js: personRules[].person/defaultPerson
-  // accept one name (string) or several (array) on import — always normalized to an array here
+  // Mirrors normalizeNameList() in plugin/src/transform.js: a rule's person field accepts one
+  // name (string) or several (array) on import — always normalized to an array here
   // (possibly empty) so this editor's own model only ever deals with one shape.
   function normalizeNames(raw) {
     var list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
     return list.filter(function (n) { return typeof n === "string" && n.trim(); }).map(function (n) { return n.trim(); });
   }
 
-  function renderCalendars() {
-    var wrap = document.getElementById("calendars");
+  // Shared by both the regular calendars list and the holiday calendars list below — same row
+  // UI (URL/name/color/rules), same reordering, just a different backing array/container so the
+  // two groups render as visually separate sections while both still land in one flat
+  // `calendars[]` in the exported JSON (see buildConfig) — transform.js has no notion of
+  // "holiday calendars" at all, this grouping exists purely for this editor's own clarity.
+  function renderCalendarList(containerId, list) {
+    var wrap = document.getElementById(containerId);
     wrap.innerHTML = "";
-    calendars.forEach(function (c, idx) {
+    function rerenderAll() { renderCalendarList(containerId, list); renderJson(); renderIcsSources(); }
+    list.forEach(function (c, idx) {
       var urlInput = el("input", { type: "text", class: "field-url", placeholder: "https://.../calendar.ics", value: c.url });
       urlInput.addEventListener("input", function () { c.url = urlInput.value; renderJson(); renderIcsSources(); });
 
@@ -537,15 +587,31 @@
       var swatch = swatchFor(c.color);
       swatch.id = "swatch-" + c._id;
 
+      // Order determines display priority — e.g. which all-day events win the visible rows
+      // when there are more than fit — so reordering is a real, meaningful action, not just
+      // cosmetic list management.
+      var upBtn = el("button", { class: "small", title: "Move up" }, [document.createTextNode("↑")]);
+      upBtn.disabled = idx === 0;
+      upBtn.addEventListener("click", function () {
+        var tmp = list[idx - 1]; list[idx - 1] = list[idx]; list[idx] = tmp;
+        rerenderAll();
+      });
+      var downBtn = el("button", { class: "small", title: "Move down" }, [document.createTextNode("↓")]);
+      downBtn.disabled = idx === list.length - 1;
+      downBtn.addEventListener("click", function () {
+        var tmp = list[idx + 1]; list[idx + 1] = list[idx]; list[idx] = tmp;
+        rerenderAll();
+      });
+
       var removeBtn = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
       removeBtn.addEventListener("click", function () {
-        calendars = calendars.filter(function (x) { return x._id !== c._id; });
-        renderCalendars(); renderJson(); renderIcsSources();
+        list.splice(idx, 1);
+        rerenderAll();
       });
 
       var head = el("div", { class: "entry-head" }, [
         el("strong", {}, [document.createTextNode("Calendar " + (idx + 1))]),
-        removeBtn,
+        el("div", { class: "row", style: "gap:4px;" }, [upBtn, downBtn, removeBtn]),
       ]);
 
       var body = el("div", { class: "row" }, [
@@ -557,29 +623,57 @@
       wrap.appendChild(el("div", { class: "entry" }, [head, body, advancedBlockFor(c)]));
     });
   }
+  function renderCalendars() { renderCalendarList("calendars", calendars); }
+  function renderHolidayCalendars() { renderCalendarList("holidayCalendars", holidayCalendars); }
+
+  function renderHeadersList(container, headers) {
+    function render() {
+      container.innerHTML = "";
+      headers.forEach(function (h, i) {
+        var keyInput = el("input", { type: "text", class: "field-narrow", placeholder: "Header name, e.g. Authorization", value: h.key });
+        keyInput.addEventListener("input", function () { h.key = keyInput.value; renderJson(); });
+        var valueInput = el("input", { type: "text", class: "field-url", placeholder: "Header value", value: h.value });
+        valueInput.addEventListener("input", function () { h.value = valueInput.value; renderJson(); });
+        var rm = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
+        rm.addEventListener("click", function () { headers.splice(i, 1); render(); renderJson(); });
+        container.appendChild(el("div", { class: "sub-entry" }, [keyInput, valueInput, rm]));
+      });
+    }
+    render();
+    return render;
+  }
 
   function advancedBlockFor(c) {
     var body = el("div", { class: "advanced-body" });
 
-    // Default person (one or more — ctrl/cmd-click for multiple) ---------------------
-    var defaultPersonInput = personMultiSelect(c.defaultPerson);
-    defaultPersonInput.addEventListener("change", function () { c.defaultPerson = selectedValues(defaultPersonInput); renderJson(); });
-
-    // Rules (repeatable) — each one matches a title and can assign a person, mark the event
-    // all-day, and/or hide it, in any combination -------------------------------------------
+    // Rules (repeatable) — each one matches a title and can assign a person, rewrite the
+    // title, mark the event all-day, and/or hide it, in any combination ---------------------
     var rulesWrap = el("div", {});
     var rerender = renderRulesList(rulesWrap, c.rules);
     var addRule = el("button", { class: "small" }, [document.createTextNode("+ Add rule")]);
     addRule.addEventListener("click", function () { c.rules.push(newRule()); rerender(); });
 
-    body.appendChild(el("div", {}, [el("label", { text: "Default person (applied when no rule below, and no global rule, assigns one)" }), defaultPersonInput]));
-    body.appendChild(el("div", { style: "margin-top:12px;" }, [
-      el("label", { text: "Rules — if a title matches, then: assign a person, make it all-day, and/or hide it (checked in order; later matches override earlier ones for person)" }),
+    body.appendChild(el("div", {}, [
+      el("label", { text: "Rules for this calendar" }),
       rulesWrap, addRule,
     ]));
 
+    // Custom HTTP headers (repeatable) — an escape hatch for hosts that need auth or other
+    // request headers this plugin can't otherwise supply (a private/self-hosted feed behind
+    // Basic auth or a bearer token, etc.), mirroring TRMNL's own official Calendar plugin's
+    // `headers` setting.
+    var headersWrap = el("div", {});
+    var rerenderHeaders = renderHeadersList(headersWrap, c.headers);
+    var addHeader = el("button", { class: "small" }, [document.createTextNode("+ Add header")]);
+    addHeader.addEventListener("click", function () { c.headers.push(newHeader()); rerenderHeaders(); });
+
+    body.appendChild(el("div", { style: "margin-top:12px;" }, [
+      el("label", { text: "Custom HTTP headers for this calendar's ICS request (optional — e.g. Authorization for a private feed)" }),
+      headersWrap, addHeader,
+    ]));
+
     var details = el("details", { class: "advanced" }, [
-      el("summary", { text: "Advanced (default person, rules)" }),
+      el("summary", { text: "Rules & custom headers" }),
       body,
     ]);
     return details;
@@ -588,6 +682,10 @@
   document.getElementById("addCalendar").addEventListener("click", function () {
     calendars.push(newCalendar());
     renderCalendars(); renderJson(); renderIcsSources();
+  });
+  document.getElementById("addCalendarHoliday").addEventListener("click", function () {
+    holidayCalendars.push(newCalendar());
+    renderHolidayCalendars(); renderJson(); renderIcsSources();
   });
 
   // ------------------------------------------------------- public holiday calendar quick-add
@@ -606,8 +704,8 @@
     cal.url = holidayIcsUrl(code);
     cal.name = "Holidays";
     cal.color = "red";
-    calendars.push(cal);
-    renderCalendars(); renderJson(); renderIcsSources();
+    holidayCalendars.push(cal);
+    renderHolidayCalendars(); renderJson(); renderIcsSources();
   });
 
   // ----------------------------------------------------------------- people UI
@@ -616,50 +714,61 @@
     var wrap = document.getElementById("people");
     wrap.innerHTML = "";
     people.forEach(function (p, idx) {
-      var nameInput = el("input", { type: "text", class: "field-narrow", placeholder: "Alex", value: p.name });
-      nameInput.addEventListener("input", function () { p.name = nameInput.value; renderJson(); renderCalendars(); renderGlobal(); });
+      var isEveryone = idx === 0;
+      var nameInput = el("input", { type: "text", class: "field-narrow", placeholder: isEveryone ? "Everyone" : "Alex", value: p.name });
+      nameInput.addEventListener("input", function () { p.name = nameInput.value; renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal(); });
 
       var colorSel = hueSelect("p-color-" + p._id, p.color, false);
       colorSel.addEventListener("change", function () { p.color = colorSel.value; renderJson(); swatch.replaceWith(swatchFor(p.color)); swatch = wrap.querySelector("#pswatch-" + p._id); });
       var swatch = swatchFor(p.color);
       swatch.id = "pswatch-" + p._id;
 
-      var badgeInput = el("input", { type: "text", class: "field-narrow", placeholder: "(auto: first letter)", value: p.badge, maxlength: "3" });
+      var badgeInput = el("input", { type: "text", class: "field-narrow", placeholder: isEveryone ? "e.g. 👪 or F" : "(auto: first letter)", value: p.badge, maxlength: "4" });
       badgeInput.addEventListener("input", function () { p.badge = badgeInput.value; renderJson(); });
+
+      // Order matters here too: whichever person ends up first becomes the "Everyone/All"
+      // fallback (see transform.js's parseConfig), so reordering is how you change who that is.
+      var upBtn = el("button", { class: "small", title: "Move up" }, [document.createTextNode("↑")]);
+      upBtn.disabled = idx === 0;
+      upBtn.addEventListener("click", function () {
+        var tmp = people[idx - 1]; people[idx - 1] = people[idx]; people[idx] = tmp;
+        renderPeople(); renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal();
+      });
+      var downBtn = el("button", { class: "small", title: "Move down" }, [document.createTextNode("↓")]);
+      downBtn.disabled = idx === people.length - 1;
+      downBtn.addEventListener("click", function () {
+        var tmp = people[idx + 1]; people[idx + 1] = people[idx]; people[idx] = tmp;
+        renderPeople(); renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal();
+      });
 
       var removeBtn = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
       removeBtn.addEventListener("click", function () {
         people = people.filter(function (x) { return x._id !== p._id; });
-        renderPeople(); renderJson(); renderCalendars(); renderGlobal();
+        renderPeople(); renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal();
       });
 
       var head = el("div", { class: "entry-head" }, [
-        el("strong", {}, [document.createTextNode("Person " + (idx + 1))]),
-        removeBtn,
+        el("strong", {}, [document.createTextNode(isEveryone ? "Everyone / All (fallback)" : "Person " + idx)]),
+        el("div", { class: "row", style: "gap:4px;" }, [upBtn, downBtn, removeBtn]),
       ]);
       var body = el("div", { class: "row" }, [
         el("div", {}, [el("label", { text: "Name" }), nameInput]),
         el("div", {}, [el("label", { text: "Color" }), el("div", { class: "row", style: "gap:6px;" }, [colorSel, swatch])]),
-        el("div", {}, [el("label", { text: "Badge" }), badgeInput]),
+        el("div", {}, [el("label", { text: "Badge (icon/unicode/text)" }), badgeInput]),
       ]);
+      if (isEveryone) body.appendChild(el("p", { class: "muted", style: "flex-basis:100%;margin:2px 0 0;" }, [document.createTextNode("Shown on any event no rule below assigns to someone more specific.")]));
       wrap.appendChild(el("div", { class: "entry" }, [head, body]));
     });
   }
 
   document.getElementById("addPerson").addEventListener("click", function () {
     people.push(newPerson());
-    renderPeople(); renderJson(); renderCalendars(); renderGlobal();
+    renderPeople(); renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal();
   });
 
-  // ------------------------------------------------------- global default person + rules
+  // ------------------------------------------------------------------- global rules
 
   function renderGlobal() {
-    var wrap = document.getElementById("globalDefaultPersonWrap");
-    wrap.innerHTML = "";
-    var sel = personMultiSelect(globalDefaultPerson);
-    sel.addEventListener("change", function () { globalDefaultPerson = selectedValues(sel); renderJson(); });
-    wrap.appendChild(sel);
-
     var rulesWrap = document.getElementById("globalRules");
     renderRulesList(rulesWrap, globalRules);
   }
@@ -675,7 +784,10 @@
     var cfg = {};
     cfg.calendars = [];
     cfg.people = [];
-    calendars.forEach(function (c) {
+    // Holiday calendars are a separate list purely for this editor's own organization — they
+    // land in the exact same flat `calendars[]` transform.js expects, always after the regular
+    // ones (each group keeps its own reorderable priority; the groups themselves don't interleave).
+    calendars.concat(holidayCalendars).forEach(function (c) {
       if (!c.url.trim()) return;
       var entry = { url: c.url.trim() };
       if (c.name.trim()) entry.name = c.name.trim();
@@ -683,7 +795,16 @@
 
       var rules = c.rules.map(ruleValue).filter(Boolean);
       if (rules.length) entry.rules = rules;
-      if (c.defaultPerson.length) entry.defaultPerson = c.defaultPerson.length === 1 ? c.defaultPerson[0] : c.defaultPerson;
+
+      var headers = {};
+      var hasHeaders = false;
+      (c.headers || []).forEach(function (h) {
+        var k = h.key.trim();
+        if (!k) return;
+        headers[k] = h.value;
+        hasHeaders = true;
+      });
+      if (hasHeaders) entry.headers = headers;
 
       cfg.calendars.push(entry);
     });
@@ -696,7 +817,6 @@
     });
     var gRules = globalRules.map(ruleValue).filter(Boolean);
     if (gRules.length) cfg.rules = gRules;
-    if (globalDefaultPerson.length) cfg.defaultPerson = globalDefaultPerson.length === 1 ? globalDefaultPerson[0] : globalDefaultPerson;
     return cfg;
   }
 
@@ -740,13 +860,19 @@
         (Array.isArray(c.rules) ? c.rules : [])
           .filter(function (rv) { return rv && typeof rv === "object" && rv.match && typeof rv.match.value === "string"; })
           .forEach(function (rv) { rules.push(ruleFromValue(rv)); });
+        var headers = [];
+        if (c.headers && typeof c.headers === "object" && !Array.isArray(c.headers)) {
+          Object.keys(c.headers).forEach(function (k) {
+            if (typeof c.headers[k] === "string") headers.push({ _id: uid(), key: k, value: c.headers[k] });
+          });
+        }
         return {
           _id: uid(),
           url: c.url.trim(),
           name: typeof c.name === "string" ? c.name.trim() : "",
           color: typeof c.color === "string" && VALID_COLORS.indexOf(c.color.toLowerCase()) !== -1 ? c.color.toLowerCase() : "",
           rules: rules,
-          defaultPerson: normalizeNames(c.defaultPerson),
+          headers: headers,
         };
       });
     var newPeople = (Array.isArray(data.people) ? data.people : [])
@@ -759,14 +885,33 @@
           badge: typeof p.badge === "string" ? p.badge.trim() : "",
         };
       });
+    // Legacy top-level (and legacy per-calendar) `defaultPerson` no longer exists as a field at
+    // all — the schema's replacement is simply "the first person[] entry is the fallback" — so
+    // promote whoever was named there to the front of the imported list instead of just
+    // dropping the reference and silently losing that config's fallback badge.
+    var legacyDefaultPerson = typeof data.defaultPerson === "string" ? data.defaultPerson.trim()
+      : Array.isArray(data.defaultPerson) && typeof data.defaultPerson[0] === "string" ? data.defaultPerson[0].trim() : "";
+    if (legacyDefaultPerson) {
+      var ldpIdx = newPeople.findIndex(function (p) { return p.name.toLowerCase() === legacyDefaultPerson.toLowerCase(); });
+      if (ldpIdx > 0) newPeople.unshift(newPeople.splice(ldpIdx, 1)[0]);
+      else if (ldpIdx === -1) newPeople.unshift({ _id: uid(), name: legacyDefaultPerson, color: "", badge: "" });
+    }
 
-    calendars = newCalendars.length ? newCalendars : [newCalendar()];
+    // Google's public holiday feeds get their own section purely for this editor's clarity —
+    // see isHolidayUrl — everything else (including a holiday feed some other host serves) is
+    // a regular calendar.
+    var splitCalendars = newCalendars.reduce(function (acc, c) {
+      acc[isHolidayUrl(c.url) ? 1 : 0].push(c);
+      return acc;
+    }, [[], []]);
+
+    calendars = splitCalendars[0].length ? splitCalendars[0] : [newCalendar()];
+    holidayCalendars = splitCalendars[1];
     people = newPeople;
     globalRules = (Array.isArray(data.rules) ? data.rules : [])
       .filter(function (rv) { return rv && typeof rv === "object" && rv.match && typeof rv.match.value === "string"; })
       .map(ruleFromValue);
-    globalDefaultPerson = normalizeNames(data.defaultPerson);
-    renderCalendars(); renderPeople(); renderGlobal(); renderJson(); renderIcsSources();
+    renderCalendars(); renderHolidayCalendars(); renderPeople(); renderGlobal(); renderJson(); renderIcsSources();
     status.textContent = "Loaded " + newCalendars.length + " calendar(s) and " + newPeople.length + " person/people.";
     status.className = "status ok";
   });
@@ -808,7 +953,7 @@
   function renderIcsSources() {
     var wrap = document.getElementById("icsSources");
     wrap.innerHTML = "";
-    var withUrls = calendars.filter(function (c) { return c.url.trim(); });
+    var withUrls = calendars.concat(holidayCalendars).filter(function (c) { return c.url.trim(); });
     if (!withUrls.length) {
       wrap.appendChild(el("p", { class: "muted", text: "Add at least one calendar above to test it." }));
       return;
@@ -901,7 +1046,7 @@
     // here — at this point it's already been overridden by THIS wrapper if runTest is
     // somehow invoked twice without the first call finishing, so re-binding here could
     // capture the wrapper itself instead of the real thing.
-    var calendarUrls = calendars.map(function (c) { return c.url.trim(); }).filter(Boolean);
+    var calendarUrls = calendars.concat(holidayCalendars).map(function (c) { return c.url.trim(); }).filter(Boolean);
     window.fetch = function (url, opts) {
       var key = Object.keys(icsOverrides).find(function (u) { return url === u || url.indexOf(u) === 0; });
       if (key) {
@@ -994,6 +1139,7 @@
   // ------------------------------------------------------------------- init
 
   renderCalendars();
+  renderHolidayCalendars();
   renderPeople();
   renderJson();
   renderIcsSources();

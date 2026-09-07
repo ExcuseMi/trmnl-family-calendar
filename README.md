@@ -141,7 +141,7 @@ No calendar of your own handy, or just want to see a genuinely busy grid (overla
 multi-day banners, recurring classes, a couple of kids each with their own color) before wiring
 up your real one? Flip **Advanced Configuration** to On and paste
 [`demo-config.json`](demo-config.json) straight into the field that reveals — it's a complete,
-working config, not a fragment to edit first. It points at a small fictional family (parents Alex/Jordan, kids Mia/Leo — nobody real)
+working config, not a fragment to edit first. It points at a small fictional family (parents Alex/Jordan, kids Mia/Leo, plus Sam's standalone Outlook-style work calendar — nobody real)
 spread across a few ICS feeds this repo hosts directly at
 [`demo/*.ics`](demo/) (via raw.githubusercontent.com — plain static files, no backend
 involved), every event `RRULE`-recurring (weekly or yearly) so it stays "today, busy"

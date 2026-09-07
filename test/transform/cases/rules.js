@@ -44,6 +44,30 @@ module.exports = function (test, h) {
     assertEqual(titles, ['Lesson 6 Swim Class']);
   });
 
+  test('rewriteFull replaces the whole title, not just the matched substring', async () => {
+    const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'L6 Swim Class with Jane' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'L6' }, rewrite: 'Swimming', rewriteFull: true }] }],
+    })));
+    const r = await run(input);
+    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
+    assertEqual(titles, ['Swimming'], 'rewriteFull should discard the rest of the original title entirely');
+  });
+
+  test('rewrite without rewriteFull still supports regex backreferences against the match', async () => {
+    const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Sprint 26-08' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'regex', value: 'Sprint (\\d+-\\d+)' }, rewrite: 'Sprint #$1' }] }],
+    })));
+    const r = await run(input);
+    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
+    assertEqual(titles, ['Sprint #26-08'], 'the regex-replace mode should support $1 backreferences from the match');
+  });
+
   test('a rewrite rule wins over a rename from a person assignment on the same title', async () => {
     const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'L6 Swim Class' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
@@ -89,12 +113,41 @@ module.exports = function (test, h) {
     assertEqual(r.data.people.map((p) => p.person), ['Dad'], 'the calendar-specific rule should win over the global one');
   });
 
-  test('a top-level defaultPerson badges any event with no other person assigned', async () => {
+  test('a calendar\'s custom headers are sent on its ICS fetch, alongside the default User-Agent', async () => {
+    let capturedHeaders = null;
+    const fetchImpl = async (url, opts) => {
+      capturedHeaders = opts && opts.headers;
+      return okText(icsWithEvents([]));
+    };
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
+      calendars: [{ url: 'https://example.com/a.ics', headers: { Authorization: 'Bearer secret-token' } }],
+    })));
+    await run(input);
+    assertEqual(capturedHeaders.Authorization, 'Bearer secret-token', 'the custom header should reach the actual fetch call');
+    assertEqual(capturedHeaders['User-Agent'], 'TRMNL-ICS-Calendar', 'the default User-Agent should still be sent alongside it');
+  });
+
+  test('non-string values in a calendar\'s headers are dropped rather than sent as-is', async () => {
+    let capturedHeaders = null;
+    const fetchImpl = async (url, opts) => {
+      capturedHeaders = opts && opts.headers;
+      return okText(icsWithEvents([]));
+    };
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
+      calendars: [{ url: 'https://example.com/a.ics', headers: { 'X-Ok': 'fine', 'X-Bad': { nested: true } } }],
+    })));
+    await run(input);
+    assertEqual(capturedHeaders['X-Ok'], 'fine');
+    assertEqual('X-Bad' in capturedHeaders, false, 'a non-string header value should be dropped, not passed through');
+  });
+
+  test('the first person in people[] badges any event with no other person assigned', async () => {
     const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Unclaimed Event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const { run } = runTransform(fetchImpl, NOW);
     const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
-      defaultPerson: 'Everyone',
       people: [{ name: 'Everyone', badge: '★' }],
       calendars: [{ url: 'https://example.com/a.ics' }],
     })));
@@ -102,20 +155,19 @@ module.exports = function (test, h) {
     assertEqual(r.data.people, [{ text: '★', person: 'Everyone', hue: 'black', fg: 'white' }]);
   });
 
-  test('a calendar\'s own defaultPerson wins over the top-level one', async () => {
-    const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Event' };
+  test('a rule\'s own person assignment still wins over the first-person fallback', async () => {
+    const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Alex event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const { run } = runTransform(fetchImpl, NOW);
     const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
-      defaultPerson: 'Everyone',
       people: [{ name: 'Everyone', badge: '★' }, { name: 'Alex', badge: 'A' }],
-      calendars: [{ url: 'https://example.com/a.ics', defaultPerson: 'Alex' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'Alex' }, person: 'Alex' }] }],
     })));
     const r = await run(input);
     assertEqual(r.data.people.map((p) => p.person), ['Alex']);
   });
 
-  test('no defaultPerson anywhere: event just has no badge, not a crash', async () => {
+  test('no people configured: event just has no badge, not a crash', async () => {
     const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const { run } = runTransform(fetchImpl, NOW);
@@ -130,7 +182,6 @@ module.exports = function (test, h) {
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const { run } = runTransform(fetchImpl, NOW);
     const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
-      defaultPerson: 'Everyone',
       people: [{ name: 'Everyone', badge: '👪 Family' }],
       calendars: [{ url: 'https://example.com/a.ics' }],
     })));
