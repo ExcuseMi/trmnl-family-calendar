@@ -246,10 +246,25 @@
       </div>
     {% endif %}
 
-    {%- capture axis_row_tracks -%}{% for row in data.hour_rows %}{{ row.pct }}fr {% endfor %}{%- endcapture -%}
+    {%- comment -%}
+      The single-day views (half_horizontal/half_vertical/quadrant) get their own axis/day data
+      (data.single_day) laid out against just that one day's own events instead of the shared
+      multi-day window the full view uses — see the single_day comment in transform.js. The full
+      view keeps using the shared data.hour_rows/data.days, which correctly stays wide enough to
+      cover every visible day at once.
+    {%- endcomment -%}
+    {%- if view == 1 -%}
+      {%- assign grid_hour_rows = data.hour_rows -%}
+      {%- assign grid_days = data.days -%}
+    {%- else -%}
+      {%- assign grid_hour_rows = data.single_day.hour_rows -%}
+      {%- assign grid_days = data.single_day.days -%}
+    {%- endif -%}
+
+    {%- capture axis_row_tracks -%}{% for row in grid_hour_rows %}{{ row.pct }}fr {% endfor %}{%- endcapture -%}
     <div class="grid gap--none h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none relative">
       <div class="col--span-{{ axis_span }} cal-axis-col" style="display:grid;grid-template-rows:{{ axis_row_tracks | strip }};">
-        {% for row in data.hour_rows %}
+        {% for row in grid_hour_rows %}
 
           <div class="w--full flex flex--row {% if row.period %}gap--distribute{% else %}flex--right{% endif %} cal-row cal-fit-box relative pr--2 {% if row.current %}bg--black{% elsif row.shade == 1 %}bg--gray-65{% endif %}" data-hour-shade="{{ row.shade }}" data-hour-current="{{ row.current }}" {% if row.current %}style="border-top:1px solid #888888;"{% endif %}>
 
@@ -257,7 +272,7 @@
           </div>
         {% endfor %}
       </div>
-      {% for day in data.days limit: shown_days_n %}
+      {% for day in grid_days limit: shown_days_n %}
         {%- assign day_idx = forloop.index0 -%}
         {%- assign day_has_allday = false -%}
         {%- for bar in data.allday_bars -%}
@@ -284,7 +299,14 @@
               {% assign seg_bg = "bg--gray-75" %}
               {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-70" %}{% endif %}
             {% endif %}
-            {%- assign seg_pct_of_cell = seg.pct | times: 100.0 | divided_by: data.grid_pct -%}
+            {%- comment -%}
+              grid_pct here is the LOCAL variable (assigned above near allday_max_rows), not
+              data.grid_pct directly — for single-day views it's already been recomputed against
+              that day's own allday-bar rows, matching the gridPct data.single_day's events were
+              positioned against. Using data.grid_pct here instead would silently misscale every
+              segment's height whenever some other visible day has more allday rows than this one.
+            {%- endcomment -%}
+            {%- assign seg_pct_of_cell = seg.pct | times: 100.0 | divided_by: grid_pct -%}
             <div class="w--full cal-row {{ seg_bg }} relative" style="height:{{ seg_pct_of_cell }}%;{% if seg.night %}border-bottom:1px solid rgba(255,255,255,0.2);{% endif %}">
               {% if seg.weather == "rain" %}
                 <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2714%27 height=%2714%27 viewBox=%270 0 14 14%27%3E%3Cg stroke=%27%23888888%27 stroke-width=%271.6%27 stroke-linecap=%27round%27%3E%3Cline x1=%2711%27 y1=%271%27 x2=%278%27 y2=%277%27/%3E%3Cline x1=%274%27 y1=%278%27 x2=%271%27 y2=%2714%27/%3E%3C/g%3E%3C/svg%3E');image-rendering:-moz-crisp-edges;image-rendering:pixelated;background-position:0 -{{ seg_cum_pct }}cqh;"></div>
@@ -317,7 +339,7 @@
     <div class="grid gap--none h--[{{ data.footer_pct }}cqh] h--min-[{{ data.footer_pct }}cqh] bg--black flex flex--center-y" style="overflow:hidden;">
       {% if data.rss_headline %}
         <div class="h--full col--span-{{ shown_days_n | times: day_span | plus: axis_span }} flex flex--row flex--center-y flex--left pl--2 pr--2 w--min-0" style="overflow:hidden;">
-          <span class="label {% if view == 1 %}label--large lg:label--xlarge{% else %}label--base{% endif %} font--bold bg--black text--white w--min-0 w--full block" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;letter-spacing:0.5px;">{%- if data.rss_headline.label -%}<span class="text--gray-50">{{ data.rss_headline.label }}</span><span class="text--gray-50">&nbsp;»&nbsp;</span>{%- endif -%}{%- for t in data.rss_headline.titles -%}{{ t }}{%- unless forloop.last -%}<span class="text--gray-50">&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;</span>{%- endunless -%}{%- endfor -%}</span>
+          <span class="label {% if view == 1 %}label--large lg:label--xlarge{% else %}label--base{% endif %} font--bold bg--black text--white w--min-0 w--full block" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;letter-spacing:0.5px;">{%- if data.rss_headline.label -%}<span class="text--gray-50">{{ data.rss_headline.label }}</span><span class="text--gray-50">&nbsp;»&nbsp;</span>{%- endif -%}{%- for t in data.rss_headline.titles -%}{{ t }}{%- unless forloop.last -%}<span class="text--gray-50">&nbsp;•&nbsp;</span>{%- endunless -%}{%- endfor -%}</span>
         </div>
       {% else %}
       <div class="col--span-{{ axis_span }} flex flex--center-x">

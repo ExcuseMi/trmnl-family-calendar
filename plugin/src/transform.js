@@ -292,6 +292,30 @@ async function run(input) {
   const alertsPct = calendarAlerts.length ? ALERTS_ROW_PCT : 0;
   const grid = layoutNative(rawDays, alldayBars, startH, endH, coreStartH, coreEndH, nowH, sky.sunMarks, sky.hourlyWeather, calendarColors, HEADER_PCT, is12h, newsPct, alertsPct);
 
+  // The single-day views (half_horizontal/half_vertical/quadrant) show only rawDays[0] — reusing
+  // the multi-day grid above for them means their hour axis reflects every configured day's
+  // earliest/latest event, not just this one day's, so an otherwise-quiet night still gets the
+  // multi-day window's full height. Laying that one day out again on its own tighter
+  // start/core/end window lets layoutNative's existing "outside outerStart/outerEnd gets zero
+  // height" behavior collapse hours this specific day has nothing in, without touching the
+  // full view's shared (and correctly multi-day-wide) axis at all.
+  const day0 = rawDays[0];
+  const day0Starts = day0.timed.map((e) => e.h0);
+  const day0Ends = day0.timed.map((e) => e.h1);
+  const day0CoreStartCandidates = [defaultHours.start, sunriseMark ? sunriseMark.hour : null, ...day0Starts].filter((h) => h !== null && h !== undefined);
+  const day0CoreEndCandidates = [defaultHours.end, sunsetMark ? sunsetMark.hour : null, ...day0Ends].filter((h) => h !== null && h !== undefined);
+  const day0CoreStartH = Math.floor(Math.min(...day0CoreStartCandidates));
+  let day0CoreEndH = Math.ceil(Math.max(...day0CoreEndCandidates));
+  day0CoreEndH = Math.max(day0CoreEndH, day0CoreStartH + 1);
+  const day0StartH = day0.isToday && nowH !== null && nowH !== undefined ? Math.min(day0CoreStartH, Math.floor(nowH)) : day0CoreStartH;
+  let day0EndH = day0.isToday && nowH !== null && nowH !== undefined ? Math.max(day0CoreEndH, Math.ceil(nowH) + 1) : day0CoreEndH;
+  day0EndH = Math.max(day0EndH, day0StartH + 1);
+  // Matches the allday_max_rows recompute the liquid template does for these same views (only
+  // bars actually on day 0), so the single-day grid's own gridPct denominator (used to normalize
+  // event top/height into percentages) agrees with what the template will actually render.
+  const day0AlldayBars = alldayBars.filter((b) => b.startCol === 0);
+  const singleDayGrid = layoutNative([day0], day0AlldayBars, day0StartH, day0EndH, day0CoreStartH, day0CoreEndH, nowH, sky.sunMarks, sky.hourlyWeather, calendarColors, HEADER_PCT, is12h, newsPct, alertsPct);
+
   const viewPeopleSeen = new Set();
   const viewPeople = [];
   for (const b of [...alldayBars.flatMap((a) => a.personBadges || []), ...rawDays.flatMap((d) => d.timed.flatMap((t) => t.personBadges || []))]) {
@@ -301,6 +325,7 @@ async function run(input) {
   }
 
   const data = Object.assign({}, grid, {
+    single_day: { hour_rows: singleDayGrid.hour_rows, days: singleDayGrid.days },
     people: viewPeople,
     generated_at: Math.floor(nowEpoch / 1000),
     tz: tzname,
@@ -368,6 +393,7 @@ function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
   }
   const grid = layoutNative(days, [], 8, 22, null, null, null, null, HEADER_PCT, is12h);
   const data = Object.assign({}, grid, {
+    single_day: { hour_rows: grid.hour_rows, days: grid.days },
     people: [],
     generated_at: Math.floor(nowEpoch / 1000),
     tz: tzname,
