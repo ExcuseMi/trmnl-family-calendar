@@ -404,10 +404,12 @@ function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
   return { data };
 }
 
-// A rule is { match, person?, allDay?, hide? } — one match, any combination of effects. `match`
-// is required; a rule with none of the three effects does nothing and is dropped. `rename`
-// (default true) only matters when `person` is set: whether the matched text in the title gets
-// replaced with the assigned person's name(s), same as the old personRules always did.
+// A rule is { match, person?, allDay?, hide?, rewrite? } — one match, any combination of
+// effects. `match` is required; a rule with none of the effects does nothing and is dropped.
+// `rename` (default true) only matters when `person` is set: whether the matched text in the
+// title gets replaced with the assigned person's name(s), same as the old personRules always
+// did. `rewrite` is independent of `person` — a literal string the matched text gets replaced
+// with, for titles that need fixing up regardless of who they're assigned to.
 function compileRule(spec) {
   if (!spec || typeof spec !== "object") return null;
   const rx = compileMatcher(spec.match);
@@ -415,8 +417,9 @@ function compileRule(spec) {
   const person = normalizeNameList(spec.person);
   const allDay = spec.allDay === true;
   const hide = spec.hide === true;
-  if (!person && !allDay && !hide) return null;
-  return { rx, person, allDay, hide, rename: person ? spec.rename !== false : false };
+  const rewrite = typeof spec.rewrite === "string" ? spec.rewrite : null;
+  if (!person && !allDay && !hide && rewrite === null) return null;
+  return { rx, person, allDay, hide, rename: person ? spec.rename !== false : false, rewrite };
 }
 
 function compileRuleList(raw) {
@@ -429,19 +432,19 @@ function compileRuleList(raw) {
 }
 
 // Legacy exclude/personRules (still accepted so existing configs keep working) compile into the
-// exact same { rx, person, allDay, hide, rename } shape as the new unified `rules` — one engine
-// underneath regardless of which the config actually used.
+// exact same { rx, person, allDay, hide, rename, rewrite } shape as the new unified `rules` — one
+// engine underneath regardless of which the config actually used.
 function legacyRules(item) {
   const rules = [];
   for (const rx of compileMatcherList(item.exclude)) {
-    rules.push({ rx, person: null, allDay: false, hide: true, rename: false });
+    rules.push({ rx, person: null, allDay: false, hide: true, rename: false, rewrite: null });
   }
   for (const rule of Array.isArray(item.personRules) ? item.personRules : []) {
     if (!rule || typeof rule !== "object") continue;
     const rx = compileMatcher(rule.match);
     const person = normalizeNameList(rule.person);
     if (!rx || !person) continue;
-    rules.push({ rx, person, allDay: false, hide: false, rename: rule.rename !== false });
+    rules.push({ rx, person, allDay: false, hide: false, rename: rule.rename !== false, rewrite: null });
   }
   return rules;
 }
@@ -553,6 +556,7 @@ function applyCalendarRules(title, cal, people, globalRules, globalDefaultPerson
   const originalTitle = title;
   let personNames = null;
   let renameRule = null;
+  let rewriteRule = null;
   let allDay = false;
   let hide = false;
   // Every rule tests against the untouched original title, not whatever a previous match may
@@ -567,11 +571,14 @@ function applyCalendarRules(title, cal, people, globalRules, globalDefaultPerson
       personNames = rule.person;
       renameRule = rule.rename ? rule : null;
     }
+    if (rule.rewrite !== null) rewriteRule = rule;
   }
-  // Only the rule that actually won the person assignment gets to rename the title — applying
-  // every matching rule's rename in sequence could compound (or, worse, silently no-op once an
-  // earlier rename already consumed the text a later one was looking for).
-  if (renameRule) {
+  // A rewrite rule is a literal, explicit text override, so it takes priority over the
+  // person-name substitution `rename` does — only the last matching rule of whichever kind won
+  // gets to touch the title, same reasoning as renameRule below.
+  if (rewriteRule) {
+    title = originalTitle.replace(new RegExp(rewriteRule.rx.source, "gi"), rewriteRule.rewrite);
+  } else if (renameRule) {
     title = originalTitle.replace(new RegExp(renameRule.rx.source, "gi"), renameRule.person.join(" & "));
   }
   if (personNames === null) personNames = cal.defaultPerson || globalDefaultPerson;
@@ -956,6 +963,7 @@ function parseDt(value, params, tz) {
 function collectIcs(text, tz, winS, winE, out, calIdx) {
   let inEv = false;
   let ev = null;
+  const events = [];
   for (const line of unfold(text)) {
     if (line === "BEGIN:VEVENT") {
       inEv = true;
@@ -964,10 +972,7 @@ function collectIcs(text, tz, winS, winE, out, calIdx) {
     }
     if (line === "END:VEVENT") {
       inEv = false;
-      if (ev) {
-        ev.calIdx = calIdx;
-        expandEvent(ev, tz, winS, winE, out);
-      }
+      if (ev) events.push(ev);
       continue;
     }
     if (!inEv) continue;
@@ -992,7 +997,38 @@ function collectIcs(text, tz, winS, winE, out, calIdx) {
           ev.exdate.add(Math.floor(p.epoch / 1000));
         } catch (e) {}
       }
+    } else if (name === "UID") {
+      ev.uid = value.trim();
+    } else if (name === "RECURRENCE-ID") {
+      try {
+        ev.recurrenceId = parseDt(value, params, tz);
+      } catch (e) {}
     }
+  }
+
+  // A recurring event's exceptions/overrides (e.g. one instance's attendee response changed, or
+  // it was moved) arrive as SEPARATE VEVENTs sharing the master's UID and carrying a
+  // RECURRENCE-ID equal to the original occurrence's own start time. Per RFC 5545 that override
+  // REPLACES the master's RRULE-generated occurrence at that instant — but nothing here told the
+  // master to skip it, so both were emitted: the master's own generated occurrence AND the
+  // override's, a real duplicate seen from an Outlook feed whose exporter emits a no-op override
+  // (a response-only change, same date/time) instead of leaving the instance untouched. Treat
+  // every override's RECURRENCE-ID as an implicit EXDATE on its same-UID master so only the
+  // override (which still gets expanded normally below, same as any standalone event) shows.
+  const overrideEpochsByUid = new Map();
+  for (const e of events) {
+    if (!e.uid || !e.recurrenceId) continue;
+    if (!overrideEpochsByUid.has(e.uid)) overrideEpochsByUid.set(e.uid, new Set());
+    overrideEpochsByUid.get(e.uid).add(Math.floor(e.recurrenceId.epoch / 1000));
+  }
+
+  for (const e of events) {
+    if (e.uid && !e.recurrenceId && overrideEpochsByUid.has(e.uid)) {
+      e.exdate = e.exdate || new Set();
+      for (const epoch of overrideEpochsByUid.get(e.uid)) e.exdate.add(epoch);
+    }
+    e.calIdx = calIdx;
+    expandEvent(e, tz, winS, winE, out);
   }
 }
 

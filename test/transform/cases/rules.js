@@ -32,6 +32,34 @@ module.exports = function (test, h) {
     assertEqual(titles, ['Keep Me']);
   });
 
+  test('a rewrite rule replaces the matched text with literal text, independent of person', async () => {
+    const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'L6 Swim Class' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'L6' }, rewrite: 'Lesson 6' }] }],
+    })));
+    const r = await run(input);
+    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
+    assertEqual(titles, ['Lesson 6 Swim Class']);
+  });
+
+  test('a rewrite rule wins over a rename from a person assignment on the same title', async () => {
+    const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'L6 Swim Class' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
+      people: [{ name: 'Alex' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [
+        { match: { type: 'word', value: 'L6' }, person: 'Alex' },
+        { match: { type: 'word', value: 'L6' }, rewrite: 'Lesson 6' },
+      ] }],
+    })));
+    const r = await run(input);
+    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
+    assertEqual(titles, ['Lesson 6 Swim Class']);
+  });
+
   test('a global rule assigns a person across every calendar, not just one', async () => {
     const fetchImpl = async (url) => okText(icsWithEvents([{
       uid: 1, start: '20260907T140000Z', end: '20260907T150000Z',

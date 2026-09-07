@@ -414,18 +414,19 @@
   // A "rule" is one matcher plus any combination of three effects: assign a person, mark the
   // event all-day, hide it — the exact same shape whether it's this calendar's own rule or a
   // global one, and the exact same shape rules[] in transform.js's parseConfig expects.
-  function newRule() { return Object.assign(newMatcher(), { person: [], rename: true, allDay: false, hide: false }); }
+  function newRule() { return Object.assign(newMatcher(), { person: [], rename: true, allDay: false, hide: false, rewrite: "" }); }
   function ruleFromValue(v) {
     var r = matcherFromValue(v.match);
     r.person = normalizeNames(v.person);
     r.rename = v.rename !== false;
     r.allDay = v.allDay === true;
     r.hide = v.hide === true;
+    r.rewrite = typeof v.rewrite === "string" ? v.rewrite : "";
     return r;
   }
   // The JSON value transform.js's parseConfig actually expects for one rule — null when the
-  // rule has no usable match, or matches but does nothing (no person/allDay/hide), for the
-  // caller to drop, mirroring compileRule() in transform.js exactly.
+  // rule has no usable match, or matches but does nothing (no person/allDay/hide/rewrite), for
+  // the caller to drop, mirroring compileRule() in transform.js exactly.
   function ruleValue(r) {
     var mv = matcherValue(r);
     if (!mv) return null;
@@ -436,7 +437,8 @@
     }
     if (r.allDay) out.allDay = true;
     if (r.hide) out.hide = true;
-    if (!out.person && !out.allDay && !out.hide) return null;
+    if (r.rewrite) out.rewrite = r.rewrite;
+    if (!out.person && !out.allDay && !out.hide && !out.rewrite) return null;
     return out;
   }
   // Renders a repeatable list of rules into `container` (used for both a calendar's own rules
@@ -462,10 +464,13 @@
         var allDayLbl = checkboxLabel(!!r.allDay, "make all-day", function (v) { r.allDay = v; });
         var hideLbl = checkboxLabel(!!r.hide, "hide", function (v) { r.hide = v; });
 
+        var rewriteInput = el("input", { type: "text", class: "field", placeholder: "rewrite matched text to...", value: r.rewrite || "", style: "flex:1 1 140px;" });
+        rewriteInput.addEventListener("input", function () { r.rewrite = rewriteInput.value; renderJson(); });
+
         var rm = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
         rm.addEventListener("click", function () { rules.splice(i, 1); render(); renderJson(); });
 
-        container.appendChild(el("div", { class: "sub-entry", style: "flex-wrap:wrap;" }, [f.typeSelect, f.textInput, f.regexInput, personInput, renameLbl, allDayLbl, hideLbl, rm]));
+        container.appendChild(el("div", { class: "sub-entry", style: "flex-wrap:wrap;" }, [f.typeSelect, f.textInput, f.regexInput, personInput, renameLbl, allDayLbl, hideLbl, rewriteInput, rm]));
         container.appendChild(el("div", { style: "display:flex;gap:6px;align-items:center;margin:2px 0 8px;" }, [f.testInput, f.testResult]));
       });
     }
@@ -676,22 +681,9 @@
       if (c.name.trim()) entry.name = c.name.trim();
       if (c.color) entry.color = c.color;
 
-      var excludes = c.excludes.map(matcherValue).filter(function (v) { return v !== null; });
-      if (excludes.length === 1) entry.exclude = excludes[0];
-      else if (excludes.length > 1) entry.exclude = excludes;
-
+      var rules = c.rules.map(ruleValue).filter(Boolean);
+      if (rules.length) entry.rules = rules;
       if (c.defaultPerson.length) entry.defaultPerson = c.defaultPerson.length === 1 ? c.defaultPerson[0] : c.defaultPerson;
-
-      var rules = c.personRules
-        .map(function (r) {
-          var mv = matcherValue(r);
-          if (!mv || !r.person.length) return null;
-          var re = { match: mv, person: r.person.length === 1 ? r.person[0] : r.person };
-          if (r.rename === false) re.rename = false;
-          return re;
-        })
-        .filter(Boolean);
-      if (rules.length) entry.personRules = rules;
 
       cfg.calendars.push(entry);
     });
@@ -702,6 +694,9 @@
       if (p.badge.trim()) entry.badge = p.badge.trim();
       cfg.people.push(entry);
     });
+    var gRules = globalRules.map(ruleValue).filter(Boolean);
+    if (gRules.length) cfg.rules = gRules;
+    if (globalDefaultPerson.length) cfg.defaultPerson = globalDefaultPerson.length === 1 ? globalDefaultPerson[0] : globalDefaultPerson;
     return cfg;
   }
 
@@ -735,24 +730,23 @@
       .map(function (c) { return typeof c === "string" ? { url: c } : c; })
       .filter(function (c) { return c && typeof c === "object" && typeof c.url === "string" && c.url.trim(); })
       .map(function (c) {
-        var rawExcludes = Array.isArray(c.exclude) ? c.exclude : c.exclude ? [c.exclude] : [];
-        var excludes = rawExcludes
+        var rules = [];
+        (Array.isArray(c.exclude) ? c.exclude : c.exclude ? [c.exclude] : [])
           .filter(function (x) { return x && typeof x === "object" && typeof x.value === "string"; })
-          .map(matcherFromValue);
-        var personRules = (Array.isArray(c.personRules) ? c.personRules : [])
-          .filter(function (r) {
-            return r && typeof r === "object" && (typeof r.person === "string" || Array.isArray(r.person)) &&
-              r.match && typeof r.match === "object" && typeof r.match.value === "string";
-          })
-          .map(function (r) { return Object.assign(matcherFromValue(r.match), { person: normalizeNames(r.person), rename: r.rename !== false }); });
+          .forEach(function (x) { var r = matcherFromValue(x); r.person = []; r.rename = false; r.allDay = false; r.hide = true; r.rewrite = ""; rules.push(r); });
+        (Array.isArray(c.personRules) ? c.personRules : [])
+          .filter(function (pr) { return pr && typeof pr === "object" && pr.match && typeof pr.match.value === "string" && (typeof pr.person === "string" || Array.isArray(pr.person)); })
+          .forEach(function (pr) { var r = matcherFromValue(pr.match); r.person = normalizeNames(pr.person); r.rename = pr.rename !== false; r.allDay = false; r.hide = false; r.rewrite = ""; rules.push(r); });
+        (Array.isArray(c.rules) ? c.rules : [])
+          .filter(function (rv) { return rv && typeof rv === "object" && rv.match && typeof rv.match.value === "string"; })
+          .forEach(function (rv) { rules.push(ruleFromValue(rv)); });
         return {
           _id: uid(),
           url: c.url.trim(),
           name: typeof c.name === "string" ? c.name.trim() : "",
           color: typeof c.color === "string" && VALID_COLORS.indexOf(c.color.toLowerCase()) !== -1 ? c.color.toLowerCase() : "",
-          excludes: excludes.length ? excludes : [newMatcher()],
+          rules: rules,
           defaultPerson: normalizeNames(c.defaultPerson),
-          personRules: personRules,
         };
       });
     var newPeople = (Array.isArray(data.people) ? data.people : [])
@@ -768,7 +762,11 @@
 
     calendars = newCalendars.length ? newCalendars : [newCalendar()];
     people = newPeople;
-    renderCalendars(); renderPeople(); renderJson(); renderIcsSources();
+    globalRules = (Array.isArray(data.rules) ? data.rules : [])
+      .filter(function (rv) { return rv && typeof rv === "object" && rv.match && typeof rv.match.value === "string"; })
+      .map(ruleFromValue);
+    globalDefaultPerson = normalizeNames(data.defaultPerson);
+    renderCalendars(); renderPeople(); renderGlobal(); renderJson(); renderIcsSources();
     status.textContent = "Loaded " + newCalendars.length + " calendar(s) and " + newPeople.length + " person/people.";
     status.className = "status ok";
   });

@@ -2,7 +2,7 @@
 
 {% template badge_circle %}
 
-  <span class="rounded--small {{head_badge_cls}} no-shrink flex flex--center-x flex--center-y text--{{ fg }} bg--{{ hue }} font--bold">
+  <span class="rounded--small no-shrink flex flex--center-x flex--center-y text--{{ fg }} bg--{{ hue }} font--bold" style="width:min({{ badge_w_pct }}cqw, {{ badge_h_pct }}cqh);height:min({{ badge_w_pct }}cqw, {{ badge_h_pct }}cqh);">
     {{- b.text -}}
   </span>
 {% endtemplate %}
@@ -52,7 +52,6 @@
   {%- assign event_pad_cls = "pt--0 pb--1" -%}
   {%- assign event_title_cls = "title--small" -%}
   {%- assign pad_x_cls = "px--1" -%}
-  {%- assign head_badge_cls = "w--3 h--3 lg:w--4 lg:h--4 rounded rounded--small"  -%}
 {%- elsif view == 3 -%}
 
   {%- assign head_title_cls = "title--base lg:title--large" -%}
@@ -61,7 +60,6 @@
   {%- assign event_pad_cls = "pt--0 pb--1" -%}
   {%- assign event_title_cls = "title--small" -%}
   {%- assign pad_x_cls = "px--1" -%}
-  {%- assign head_badge_cls = "w--3 h--3 lg:w--4 lg:h--4  rounded rounded--small" -%}
   {%- assign header_pct_scale = 0.6 -%}
 {%- elsif view == 2 -%}
 
@@ -71,7 +69,6 @@
   {%- assign event_pad_cls = "pt--1 pb--2" -%}
   {%- assign event_title_cls = "title--small" -%}
   {%- assign pad_x_cls = "px--2" -%}
-  {%- assign head_badge_cls = "w--3 h--3 lg:w--4 lg:h--4  rounded rounded--small" -%}
 {%- else -%}
 
   {%- assign head_title_cls = "title--large lg:title--large lg:portrait:title--xlarge" -%}
@@ -80,7 +77,6 @@
   {%- assign event_pad_cls = "pt--1 pb--2" -%}
   {%- assign event_title_cls = "title--base" -%}
   {%- assign pad_x_cls = "px--2" -%}
-  {%- assign head_badge_cls = "w--4 h--4 lg:w--8 lg:h--8  rounded" -%}
 {%- endif -%}
 
 {%- if view == 1 -%}
@@ -114,6 +110,28 @@
 {%- endif -%}
 
 {%- assign header_pct = data.header_pct | times: header_pct_scale -%}
+
+{%- comment -%}
+  data.allday_pct/allday_max_rows are computed once across every fetched day, not just the
+  one(s) this particular view shows — a non-full view only ever renders day 0, so if some OTHER
+  day has an all-day event but day 0 doesn't, using the raw global values here would still
+  reserve a whole (empty) all-day gutter for a day that has nothing to put in it. Re-derive both
+  from day 0's own bars whenever only 1 day is visible; the full view (every day) keeps the
+  global values unchanged since they already describe exactly what it renders.
+{%- endcomment -%}
+{%- assign allday_pct = data.allday_pct -%}
+{%- assign allday_max_rows = data.allday_max_rows -%}
+{%- if shown_days_n == 1 -%}
+  {%- assign day0_max_row = -1 -%}
+  {%- for bar in data.allday_bars -%}
+    {%- if bar.start_col == 0 and bar.row > day0_max_row -%}
+      {%- assign day0_max_row = bar.row -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- assign allday_max_rows = day0_max_row | plus: 1 -%}
+  {%- assign allday_pct = allday_max_rows | times: data.allday_row_pct -%}
+{%- endif -%}
+{%- assign grid_pct = data.grid_pct | plus: data.allday_pct | minus: allday_pct -%}
 
 <div class="layout layout--col gap--none relative" id="cal-root" data-days-n="{{ shown_days_n }}">
   {% if data.error and data.has_events == false %}
@@ -154,33 +172,38 @@
     </div>
 
     {%- if show_badge_overlay -%}
-      {%- assign gutter_pct = header_pct | plus: data.allday_pct -%}
+      {%- assign gutter_pct = header_pct | plus: allday_pct -%}
+      {%- assign badge_count = data.people.size -%}
+      {%- if badge_count > 8 -%}{%- assign badge_count = 8 -%}{%- endif -%}
+      {%- assign badge_cols = axis_span -%}
+      {%- assign badge_rows = badge_count | plus: badge_cols | minus: 1 | divided_by: badge_cols -%}
+      {%- assign total_cols = day_span | times: shown_days_n | plus: axis_span -%}
+      {%- assign axis_width_pct = axis_span | times: 100.0 | divided_by: total_cols -%}
+      {%- assign badge_w_pct = axis_width_pct | divided_by: badge_cols | times: 0.85 -%}
+      {%- assign badge_h_pct = gutter_pct | times: 1.0 | divided_by: badge_rows | times: 0.85 -%}
       <div class="absolute left--0 top--0 grid gap--none z--1" style="height:{{ gutter_pct }}cqh;width:100%;grid-template-columns:repeat({{ day_span | times: shown_days_n | plus: axis_span }}, 1fr);overflow:hidden;">
         <div class="col--span-{{ axis_span }} bg--black flex flex--col flex--center-x flex--center-y p--0.5" style="overflow:hidden;box-sizing:border-box;">
-          <div class="grid w--auto gap--xsmall grid--cols-2 ">
+          <div class="grid gap--xsmall grid--cols-{{ badge_cols }}">
             {%- for b in data.people limit: 8 -%}
-              {%- render "badge_circle", head_badge_cls:head_badge_cls, b: b, hue: b.hue, fg: b.fg, extra: "cal-head-badge" -%}
+              {%- render "badge_circle", badge_w_pct: badge_w_pct, badge_h_pct: badge_h_pct, b: b, hue: b.hue, fg: b.fg -%}
             {%- endfor -%}
           </div>
-          {% if data.allday_pct > 0 %}
-            <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/today/default/48px.svg" alt="{{ data.all_day_label }}" class="w--3 h--3 lg:w--5 lg:h--5 mt--1" style="filter:invert(1);">
-          {% endif %}
         </div>
       </div>
     {%- endif -%}
 
-    {% if data.allday_pct > 0 %}
+    {% if allday_pct > 0 %}
 
       {%- assign allday_total_units = day_span | times: shown_days_n | plus: axis_span -%}
       {%- assign allday_days_last_idx = shown_days_n | minus: 1 -%}
-      <div class="grid gap--none h--[{{ data.allday_pct }}cqh] h--min-[{{ data.allday_pct }}cqh] flex-none relative" style="grid-template-columns:repeat({{ allday_total_units }}, 1fr);overflow:hidden;">
+      <div class="grid gap--none h--[{{ allday_pct }}cqh] h--min-[{{ allday_pct }}cqh] flex-none relative" style="grid-template-columns:repeat({{ allday_total_units }}, 1fr);overflow:hidden;">
 
-        <div class="col--span-{{ axis_span }} flex flex--col flex--center-x flex--center-y px--0.5 bg--black" style="grid-row:1 / span {{ data.allday_max_rows }};overflow:hidden;box-sizing:border-box;">
+        <div class="col--span-{{ axis_span }} flex flex--col flex--center-x flex--center-y px--0.5 bg--black" style="grid-row:1 / span {{ allday_max_rows }};overflow:hidden;box-sizing:border-box;">
           {% unless show_badge_overlay %}
             <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/today/default/48px.svg" alt="{{ data.all_day_label }}" class="w--3 h--3 lg:w--5 lg:h--5" style="filter:invert(1);">
           {% endunless %}
         </div>
-        {% for r in (1..data.allday_max_rows) %}
+        {% for r in (1..allday_max_rows) %}
           {% for d in (0..allday_days_last_idx) %}
             {% assign allday_fill_col = day_span | times: d | plus: axis_span | plus: 1 %}
             <div class="bg--gray-75 border--v-1 cal-allday-fill" data-day-idx="{{ d }}" style="grid-column:{{ allday_fill_col }} / span {{ day_span }};grid-row:{{ r }};box-sizing:border-box;"></div>
@@ -214,7 +237,7 @@
     {% endif %}
 
     {%- capture axis_row_tracks -%}{% for row in data.hour_rows %}{{ row.pct }}fr {% endfor %}{%- endcapture -%}
-    <div class="grid gap--none h--[{{ data.grid_pct }}cqh] h--min-[{{ data.grid_pct }}cqh] flex-none relative">
+    <div class="grid gap--none h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none relative">
       <div class="col--span-{{ axis_span }} cal-axis-col" style="display:grid;grid-template-rows:{{ axis_row_tracks | strip }};">
         {% for row in data.hour_rows %}
 
@@ -225,7 +248,15 @@
         {% endfor %}
       </div>
       {% for day in data.days limit: shown_days_n %}
-        <div class="col--span-{{ day_span }} flex flex--col gap--none border--v-1 relative cal-day-cell" data-day-idx="{{ forloop.index0 }}">
+        {%- assign day_idx = forloop.index0 -%}
+        {%- assign day_has_allday = false -%}
+        {%- for bar in data.allday_bars -%}
+          {%- assign bar_end_col = bar.start_col | plus: bar.span -%}
+          {%- if day_idx >= bar.start_col and day_idx < bar_end_col -%}{%- assign day_has_allday = true -%}{%- endif -%}
+        {%- endfor -%}
+        {%- assign day_is_empty = false -%}
+        {%- if day.events.size == 0 and day_has_allday == false -%}{%- assign day_is_empty = true -%}{%- endif -%}
+        <div class="col--span-{{ day_span }} flex flex--col gap--none border--v-1 relative cal-day-cell" data-day-idx="{{ day_idx }}">
 
           {% assign seg_cum_pct = 0 %}
           {% for seg in day.segments %}
@@ -256,6 +287,9 @@
             </div>
             {% assign seg_cum_pct = seg_cum_pct | plus: seg.pct %}
           {% endfor %}
+          {% if day_is_empty %}
+            <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27%3E%3Cpath d=%27M-4 4l8 -8M-4 20l24 -24M8 20l8 -8%27 stroke=%27%23999999%27 stroke-width=%271%27 opacity=%270.35%27/%3E%3C/svg%3E');pointer-events:none;"></div>
+          {% endif %}
           {% for event in day.events %}
 
             <div class="absolute px--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event.height_pct }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});box-sizing:border-box;">
@@ -269,7 +303,7 @@
     <div class="grid gap--none h--[{{ data.footer_pct }}cqh] h--min-[{{ data.footer_pct }}cqh] bg--black flex flex--center-y" style="overflow:hidden;">
       {% if data.rss_headline %}
         <div class="h--full col--span-{{ shown_days_n | times: day_span | plus: axis_span }} flex flex--row flex--center-y flex--left pl--2 pr--2 w--min-0" style="overflow:hidden;">
-          <span class="label {% if view == 1 %}label--large lg:label--xlarge{% else %}label--base{% endif %} font--bold bg--black text--white w--min-0 w--full" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;letter-spacing:0.5px;">{%- if data.rss_headline.label -%}<span class="text--gray-50">{{ data.rss_headline.label }}</span><span class="text--gray-50">&nbsp;&nbsp;»&nbsp;&nbsp;</span>{%- endif -%}{%- for t in data.rss_headline.titles -%}{{ t }}{%- unless forloop.last -%}<span class="text--gray-50">&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;</span>{%- endunless -%}{%- endfor -%}</span>
+          <span class="label {% if view == 1 %}label--large lg:label--xlarge{% else %}label--base{% endif %} font--bold bg--black text--white w--min-0 w--full" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;letter-spacing:0.5px;">{%- if data.rss_headline.label -%}<span class="text--gray-50">{{ data.rss_headline.label }}</span><span class="text--gray-50">&nbsp;»&nbsp;</span>{%- endif -%}{%- for t in data.rss_headline.titles -%}{{ t }}{%- unless forloop.last -%}<span class="text--gray-50">&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;</span>{%- endunless -%}{%- endfor -%}</span>
         </div>
       {% else %}
       <div class="col--span-{{ axis_span }} flex flex--center-x">
@@ -346,6 +380,14 @@
       return forced;
     }
 
+    // A prior pass (run() fires again on +400ms and on fonts-ready) may have left this element
+    // truncated with whiteSpace:nowrap from truncateToFit() below — restore the untouched
+    // original text and wrapping before measuring again, or every later pass would keep
+    // re-measuring (and re-truncating) the already-shortened string with wrapping permanently
+    // disabled, even once the box is actually large enough to fit the real title.
+    if (el.hasAttribute('data-fit-original')) el.textContent = el.getAttribute('data-fit-original');
+    el.style.whiteSpace = 'normal';
+
     var boxCs = getComputedStyle(box);
     var padX = (parseFloat(boxCs.paddingLeft) || 0) + (parseFloat(boxCs.paddingRight) || 0);
     var availW = box.clientWidth - padX - 2;
@@ -391,6 +433,7 @@
 
     var oneLineSize = searchMax(absMin, max, fitsOneLine);
 
+    var WRAP_MIN = 11;
     var wrappedSize = null;
     if (isMultiWord) {
       el.style.overflowWrap = 'normal';
@@ -400,7 +443,6 @@
       // each one is illegibly small. Searching from WRAP_MIN instead means wrapping only wins
       // when it can do so at a size that's actually worth reading; otherwise this comes back
       // null and the single-line ellipsis-truncate fallback below takes over.
-      var WRAP_MIN = 11;
       wrappedSize = searchMax(WRAP_MIN, max, fitsWrapped);
     }
 
@@ -413,6 +455,21 @@
       el.style.overflowWrap = 'normal';
       setSize(wrappedSize);
       return wrappedSize;
+    }
+
+    // Nothing fit even as a single word-wrapped line at WRAP_MIN — usually one word (or the
+    // whole phrase) is simply wider than the box at any readable size. Retrying with
+    // overflow-wrap:anywhere lets a long word break mid-character onto a second/third line,
+    // which reads better on a small box than shrinking to the 8px ellipsis floor below.
+    var wrappedAnywhereSize = null;
+    if (isMultiWord && oneLineSize === null) {
+      el.style.overflowWrap = 'anywhere';
+      wrappedAnywhereSize = searchMax(WRAP_MIN, max, fitsWrapped);
+    }
+    if (wrappedAnywhereSize !== null) {
+      el.style.overflowWrap = 'anywhere';
+      setSize(wrappedAnywhereSize);
+      return wrappedAnywhereSize;
     }
 
     setSize(absMin);
