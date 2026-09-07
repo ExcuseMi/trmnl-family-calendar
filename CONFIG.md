@@ -344,27 +344,3 @@ color TRMNL panels and fall back to a distinct gray on black-and-white ones; an 
 reads.
 
 ---
-
-## Common mistakes
-
-- **Putting `"hours"` in this JSON.** It used to live here; it's now the plugin's own **Visible
-  Hours** setting field (a plain "7-21" string, not JSON) alongside Location. A stray `"hours"`
-  key in this config is simply ignored.
-- **A single backslash in a regex.** `\bL6\b` in raw JSON is invalid — it needs to be `\\bL6\\b`.
-  If your pattern silently doesn't match anything, this is the first thing to check. (The
-  Configuration Editor's form fields avoid this entirely — only matters if hand-editing JSON.)
-- **Writing a bare string for `match`/`exclude` instead of a `{ "type", "value" }` object.** A
-  matcher is never a bare string — `"match": "L6"` is invalid (silently ignored, so the rule just
-  never matches). Write `{ "match": { "type": "word", "value": "L6" } }` instead — or, if "L6"
-  was meant as a regex, `{ "type": "regex", "value": "\\bL6\\b" }` (though plain `"word"`/`"L6"`
-  already means the same thing here, with none of the escaping).
-- **Expecting `name` to rename or match events on its own.** It doesn't — renaming/matching always
-  happens through `personRules`/`defaultPerson`, never `name` directly; `name` only identifies the
-  calendar (e.g. in the "unavailable for a while" banner).
-- **A person with no color pinned still needing to look different.** If you want Alex's events
-  to visually stand out, `people[].color` has to actually be set — otherwise their events just
-  keep whatever color the calendar itself uses, with only the header's own badge to tell them
-  apart (see [`people[]`](#people) — no per-event badge exists to fall back on).
-- **A trailing comma, or a stray quote**, breaking the whole JSON. Paste it into the
-  [Configuration Editor](tools/config-editor.html) or any JSON validator to check before saving —
-  malformed JSON falls back to showing nothing configured at all.

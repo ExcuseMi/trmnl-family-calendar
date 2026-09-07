@@ -41,7 +41,7 @@ custom_fields:
 - keyname: calendars_simple
   field_type: text
   name: Easy ICS (start here)
-  description: Your calendar links, one per line. That's it — no JSON needed. Each calendar's name is read automatically from the feed itself, and colors auto-assign. Combine with Advanced Configuration below only if you need per-calendar colors, filtering, or people.
+  description: Your calendar links, one per line. That's it - no JSON needed. Each calendar's name is read automatically from the feed itself, and colors auto-assign.<br /> Use the Advanced Configuration below only if you need per-calendar colors, filtering, or people.
   placeholder: |-
     https://cloud.example.com/family.ics
     https://cloud.example.com/school.ics
@@ -49,7 +49,7 @@ custom_fields:
 - keyname: advanced_config_enabled
   field_type: boolean
   name: Advanced Configuration
-  description: Need per-calendar colors, filtering, or to attach specific people to events? Turn this on to reveal a JSON config field in place of Easy ICS above — most people don't need this at all.
+  description: Need per-calendar colors, filtering, or to attach specific people to events? Turn this on to reveal a JSON config field in place of Easy ICS above - most people don't need this at all.
   default: false
   optional: true
   conditional_validation:
@@ -62,7 +62,7 @@ custom_fields:
 - keyname: calendars
   field_type: code
   name: Advanced Configuration JSON
-  description: For per-calendar names/colors, filtering, or attaching people — as JSON. Adds to (doesn't replace) Easy ICS above.<br /><br />Build it with <a href="https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html" target="_blank">the Configuration Editor</a> — paste the result here. Reference docs — <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/CONFIG.md" target="_blank">CONFIG.md</a> (or <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/LLM.md" target="_blank">LLM.md</a> for an LLM to read).
+  description: For per-calendar names/colors, filtering, or attaching people - as JSON. Adds to (doesn't replace) Easy ICS above.<br /><br />Build it with <a href="https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html" target="_blank">the Configuration Editor</a> - paste the result here. Reference docs - <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/CONFIG.md" target="_blank">CONFIG.md</a> (or <a href="https://github.com/ExcuseMi/trmnl-family-calendar/blob/main/LLM.md" target="_blank">LLM.md</a> for an LLM to read).
   placeholder: |-
     {
       "calendars": [
@@ -138,13 +138,15 @@ custom_fields:
   name: News Feed URL
   description: An RSS or Atom feed URL.
   placeholder: https://rss.nytimes.com/services/xml/rss/nyt/US.xml
+  default: https://rss.nytimes.com/services/xml/rss/nyt/WORLD.xml
   optional: true
   group: News Feed
 - keyname: rss_label
   field_type: string
   name: News Feed Label
-  description: Tag shown before the headlines in the ticker (it doesn't have to say "NEWS" — use whatever fits the feed, e.g. "SPORTS" or "BLOG"). Blank = "NEWS".
+  description: Tag shown before the headlines in the ticker (it doesn't have to say "NEWS" - use whatever fits the feed, e.g. "SPORTS" or "BLOG"). Blank = "NEWS".
   placeholder: NEWS
+  default: NEWS
   optional: true
   group: News Feed
 name: Family Calendar
