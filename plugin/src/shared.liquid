@@ -354,7 +354,14 @@
             {%- endcomment -%}
             {%- assign event_box_h = event.box_height_pct | default: event.height_pct -%}
             {%- assign accent_h_pct = event.height_pct | times: 100.0 | divided_by: event_box_h -%}
-            <div class="absolute px--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
+            {%- comment -%}
+              bg--black on this wrapper plus insetting the chip away from the wrapper's bottom
+              and left (px--1 padding there instead of h--full/w--full flush) is a hard-edged,
+              no-blur drop shadow — a solid black offset silhouette peeking out behind the chip's
+              bottom-left, not a real box-shadow (which the framework's own docs warn dithers
+              badly on e-ink: no blur/opacity to fake here, just an offset solid shape).
+            {%- endcomment -%}
+            <div class="absolute px--0.5 relative z--1 bg--black" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
               {%- assign event_clip = true -%}
               {%- comment -%}
                 rounded--none, not the usual rounded--xsmall: mixing a rounded right side with a
@@ -363,7 +370,7 @@
                 choice — the accent bar is square by design (see above), so the chip matches it
                 fully instead of partially.
               {%- endcomment -%}
-              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--none", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
+              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "w--full", size_style: "height:calc(100% - 3px);", pad_cls: event_pad_cls, radius_cls: "rounded--none", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
               {%- comment -%}
                 Deliberately a SIBLING of the chip, not a child of it: the chip has its own
                 border (1px top/left, 3px bottom/right), and CSS resolves a position:absolute
