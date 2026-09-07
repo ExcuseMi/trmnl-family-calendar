@@ -28,7 +28,17 @@
 {% template chip %}
   {%- assign border_color = "currentColor" -%}
   {%- if fg == "white" -%}{%- assign border_color = "#888888" -%}{%- endif -%}
-  <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border-top:1px solid {{ border_color }};border-left:1px solid {{ border_color }};border-bottom:3px solid {{ border_color }};border-right:3px solid {{ border_color }};">
+  {%- comment -%}
+    A real box-shadow, not a manual offset background — 0 blur/0 spread means it's a flat solid
+    rectangle with no gradient or alpha blending, so it doesn't dither on e-ink (the framework's
+    docs warning is about BLURRED shadows specifically). This replaces the old asymmetric
+    1px/3px border trick that faked a shadow via border thickness, and the wrapper-padding-plus-
+    background hack that faked it via a background color peeking out — both were workarounds for
+    not using this directly. A real box-shadow also doesn't consume any of the box's own layout
+    space, so the chip stays exactly sized to the event's accurate time slot with nothing shaved
+    off for shadow clearance, unlike the padding-based version.
+  {%- endcomment -%}
+  <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border:2px solid {{ border_color }};box-shadow:10px 10px 0 0 {{ border_color }};">
     {%- render "chip_body", title: title, fg: fg, title_cls: title_cls, fit_min: fit_min, clip: clip, pad_x_cls: pad_x_cls -%}
   </div>
 {% endtemplate %}
@@ -354,27 +364,17 @@
             {%- endcomment -%}
             {%- assign event_box_h = event.box_height_pct | default: event.height_pct -%}
             {%- assign accent_h_pct = event.height_pct | times: 100.0 | divided_by: event_box_h -%}
-            {%- comment -%}
-              A hard-edged, no-blur drop shadow — a solid offset silhouette peeking out behind
-              the chip's bottom-right, not a real box-shadow (the framework's own docs warn that
-              dithers badly on e-ink: no blur/opacity to fake here, just an offset solid shape).
-              The wrapper (already sized to the event's exact time slot) IS the shadow: its own
-              background is the shadow color, and the chip — flush at the wrapper's top-left,
-              shrunk by the wrapper's own pr--2.5/pb--2.5 (10px) padding — sits on top, revealing
-              10px of shadow along the bottom and right. Shadow color matches the chip's own
-              border-color convention (gray-ish for a white-fg chip, black otherwise) rather than
-              a flat black, so it stays consistent with the chip's existing border treatment.
-            {%- endcomment -%}
-            {%- assign event_shadow_color = "#000000" -%}
-            {%- if event.fg == "white" -%}{%- assign event_shadow_color = "#888888" -%}{%- endif -%}
-            <div class="absolute pr--2.5 pb--2.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});background-color:{{ event_shadow_color }};">
+            <div class="absolute relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
               {%- assign event_clip = true -%}
               {%- comment -%}
                 rounded--none, not the usual rounded--xsmall: mixing a rounded right side with a
                 square left (to match the accent bar) read as an inconsistent, half-finished
                 shape rather than a deliberate one. Square all around is the simpler, coherent
                 choice — the accent bar is square by design (see above), so the chip matches it
-                fully instead of partially.
+                fully instead of partially. Drop shadow is a real box-shadow set inside the chip
+                template itself (0 blur/spread, so no e-ink dithering) — the chip fills this
+                wrapper exactly (h--full w--full), nothing shaved off for shadow clearance, since
+                box-shadow paints outside the box without consuming layout space.
               {%- endcomment -%}
               {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--none", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
               {%- comment -%}
@@ -413,20 +413,16 @@
                 the chip didn't need to grow (accent_h_pct 100, the common case), the hatch
                 covers the chip's full real height; when it did grow, the hatch stops exactly at
                 the real elapsed time and the chip's plain hue continues for the grown portion.
-                When full height, the bar's own bottom border would otherwise sit exactly where
-                the chip's own bottom border is — which, now that the wrapper carries the 10px
-                drop-shadow padding (pb--2.5) the chip's h--full shrinks to fit inside, is 10px
-                (shadow) + 3px (chip's own border-bottom) = 13px above the WRAPPER's own bottom
-                edge (which is what this bar's height percentage is relative to, since it's a
-                sibling of the chip, not a child) — inset by that in the full-height case only (a
-                partial-height bar already stops well short of the bottom, needing no inset).
-                Left is 0, not the previous 2px: the chip is now flush with the wrapper's own
-                left edge (no more horizontal padding there since the shadow moved to
-                right/bottom only), so this bar's left offset — always relative to the wrapper,
-                never affected by the wrapper's OWN padding value — must match that directly.
+                When full height, inset the bottom by 2px (the chip's own uniform border
+                thickness, now that the drop shadow is a real box-shadow again and the chip is
+                back to filling the wrapper exactly via h--full) so the bar's own border doesn't
+                collide with the chip's — a partial-height bar already stops well short of the
+                bottom and needs no such inset. Left is 0: the chip fills the wrapper exactly
+                with no padding on any side now, so this bar (relative to that same wrapper)
+                starts flush with the chip's own left edge directly.
               {%- endcomment -%}
               {%- assign accent_bottom_inset = 0 -%}
-              {%- if accent_h_pct >= 99.5 -%}{%- assign accent_bottom_inset = 13 -%}{%- endif -%}
+              {%- if accent_h_pct >= 99.5 -%}{%- assign accent_bottom_inset = 2 -%}{%- endif -%}
               <div class="absolute top--0 w--[6px] bg--white" style="left:0;height:calc({{ accent_h_pct }}% - {{ accent_bottom_inset }}px);border:1px solid black;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%278%27 height=%278%27%3E%3Cpath d=%27M0 8L8 0M-2 2L2 -2M6 10L10 6%27 stroke=%27%23000000%27 stroke-width=%272%27/%3E%3C/svg%3E');"></div>
             </div>
           {% endfor %}
