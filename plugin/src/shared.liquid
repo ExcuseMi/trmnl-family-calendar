@@ -37,8 +37,25 @@
     not using this directly. A real box-shadow also doesn't consume any of the box's own layout
     space, so the chip stays exactly sized to the event's accurate time slot with nothing shaved
     off for shadow clearance, unlike the padding-based version.
+
+    Rounded corners are back (radius_cls is "rounded--xsmall" from the event-loop call site) —
+    per an explicit reference the user liked: a rounded card with the accent bar clipped INSIDE
+    those corners by the card's own overflow:hidden, rather than living outside as a separate
+    square element fighting the curve. accent_h_pct (0-100, or blank/nil to skip) renders that
+    bar as a CHILD of this div so it gets exactly that clipping automatically.
   {%- endcomment -%}
   <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border:2px solid {{ border_color }};box-shadow:2px 2px 0 0 {{ border_color }};">
+    {%- if accent_h_pct -%}
+      {%- comment -%}
+        Diagonal stripe pattern using this event's OWN colors (hue background, fg stripes)
+        instead of a flat fill — "plays with the colors of the event" rather than being an
+        arbitrary neutral marker. height:{{accent_h_pct}}% marks the real elapsed time (100% the
+        common case where the chip never grew past its own duration); the chip's plain background
+        continues below it for whatever extra room was added for legibility, same principle as
+        before, just rendered inline now that it lives inside the chip instead of beside it.
+      {%- endcomment -%}
+      <div class="absolute top--0 left--0 w--[10px] h--full bg--{{ hue }}" style="background-image:repeating-linear-gradient(45deg, transparent, transparent 3px, {{ border_color }} 3px, {{ border_color }} 6px);height:{{ accent_h_pct }}%;border-right:2px solid {{ border_color }};"></div>
+    {%- endif -%}
     {%- render "chip_body", title: title, fg: fg, title_cls: title_cls, fit_min: fit_min, clip: clip, pad_x_cls: pad_x_cls -%}
   </div>
 {% endtemplate %}
@@ -380,65 +397,14 @@
             <div class="absolute pr--0.5 pb--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
               {%- assign event_clip = true -%}
               {%- comment -%}
-                rounded--none, not the usual rounded--xsmall: mixing a rounded right side with a
-                square left (to match the accent bar) read as an inconsistent, half-finished
-                shape rather than a deliberate one. Square all around is the simpler, coherent
-                choice — the accent bar is square by design (see above), so the chip matches it
-                fully instead of partially. Drop shadow is a real box-shadow set inside the chip
-                template itself (0 blur/spread, so no e-ink dithering) — the chip fills this
-                wrapper exactly (h--full w--full), nothing shaved off for shadow clearance, since
-                box-shadow paints outside the box without consuming layout space.
+                Per an explicit reference the user liked: rounded--xsmall corners are back (this
+                event chip is the only "chip" caller, so it's safe to change there directly), and
+                the accent bar now renders INSIDE the chip template itself (accent_h_pct passed
+                through) so it's naturally clipped to those same rounded corners by the chip's
+                own overflow:hidden — no separate square element living outside fighting the
+                curve, no separate offset arithmetic to keep in sync with the chip's own border.
               {%- endcomment -%}
-              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--none", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
-              {%- comment -%}
-                Deliberately a SIBLING of the chip, not a child of it: the chip has its own
-                border (1px top/left, 3px bottom/right), and CSS resolves a position:absolute
-                child's percentage height/top against the PADDING box of its containing block —
-                i.e. excluding that border — so nesting this inside the chip and using
-                height:{{ accent_h_pct }}% silently meant 100% there was actually (chip height -
-                4px), not the true chip height, and any correction attempt compounded that error
-                (this shipped once and rendered a real event's bar as ~0.4px tall instead of
-                ~4px). This wrapper div has no border/vertical padding of its own, so its 100% is
-                exactly its own true height with no hidden offset, and the chip fills that same
-                box exactly (h--full) — so top:0/height:{{ accent_h_pct }}% here lines up exactly
-                with the chip's own true top-left corner and real elapsed height, with no
-                subtraction needed. Left offset is 3px: this wrapper's own left/top offsets
-                resolve against ITS padding edge, which (wrapper has no border) sits at its
-                border-box edge — NOT shifted by the wrapper's own px--0.5 (2px) padding, since
-                padding only moves where normal-flow CONTENT (the chip) sits, not where an
-                absolutely-positioned sibling's own offsets anchor. The chip, as that
-                normal-flow content, IS shifted 2px in by that padding, and its own border is a
-                further 1px — so 2px + 1px = 3px lands the bar exactly one pixel past the chip's
-                real left border, keeping that border visible as a hairline (confirmed by
-                measuring actual rendered rects — this exact spot is where an initial guess of
-                1px, which forgot the wrapper's own padding shift, put the bar into the 2px
-                gutter before the chip started at all). Deliberately NOT clipped to the chip's
-                rounded corner — a curved edge would blur exactly where the real time starts,
-                which defeats the point of an exact-time marker.
-
-                Shown on every timed event (not all-day bars, which have their own separate
-                render loop above and never touch this code path). A diagonal hatch — the same
-                visual language as the empty-day/empty-slot patterns elsewhere in this file —
-                always plain black-on-white, deliberately NOT tied to the event's own hue/fg, so
-                it reads as a consistent, neutral marker against any chip color rather than
-                blending into it. A black border always frames it (not just when partial) for
-                the same reason: a crisp, consistent edge regardless of what's behind it. When
-                the chip didn't need to grow (accent_h_pct 100, the common case), the hatch
-                covers the chip's full real height; when it did grow, the hatch stops exactly at
-                the real elapsed time and the chip's plain hue continues for the grown portion.
-                When full height, inset the bottom by 3px: the wrapper's own pb--0.5 (2px, the
-                gap left between stacked events) plus 1px of clearance into the chip's own 2px
-                border, matching the same "1px into the border" relationship this had before
-                that gap existed — re-derived by measuring actual rendered rects after adding
-                pb--0.5, not by re-deriving the arithmetic from scratch. A partial-height bar
-                already stops well short of the bottom and needs no such inset. Left is 0: the
-                chip fills the wrapper's left edge exactly (pr--0.5/pb--0.5 only pad the
-                right/bottom), so this bar (relative to that same wrapper) starts flush with the
-                chip's own left edge directly.
-              {%- endcomment -%}
-              {%- assign accent_bottom_inset = 0 -%}
-              {%- if accent_h_pct >= 99.5 -%}{%- assign accent_bottom_inset = 3 -%}{%- endif -%}
-              <div class="absolute top--0 w--[6px] bg--white" style="left:0;height:calc({{ accent_h_pct }}% - {{ accent_bottom_inset }}px);border:1px solid black;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%278%27 height=%278%27%3E%3Cpath d=%27M0 8L8 0M-2 2L2 -2M6 10L10 6%27 stroke=%27%23000000%27 stroke-width=%272%27/%3E%3C/svg%3E');"></div>
+              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls, accent_h_pct: accent_h_pct %}
             </div>
           {% endfor %}
         </div>
