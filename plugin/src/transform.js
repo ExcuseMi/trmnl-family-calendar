@@ -408,21 +408,6 @@ function compileRuleList(raw) {
   return rules;
 }
 
-function legacyRules(item) {
-  const rules = [];
-  for (const m of compileMatcherList(item.exclude)) {
-    rules.push({ match: m.test, rx: m.rx, person: null, allDay: false, hide: true, rename: false, rewrite: null, rewriteFull: false });
-  }
-  for (const rule of Array.isArray(item.personRules) ? item.personRules : []) {
-    if (!rule || typeof rule !== "object") continue;
-    const m = compileMatcher(rule.match);
-    const person = normalizeNameList(rule.person);
-    if (!m || !person) continue;
-    rules.push({ match: m.test, rx: m.rx, person, allDay: false, hide: false, rename: rule.rename !== false, rewrite: null, rewriteFull: false });
-  }
-  return rules;
-}
-
 function parseConfig(raw, extraUrls) {
   let data = null;
   if (typeof raw === "string" && raw.trim()) {
@@ -460,7 +445,7 @@ function parseConfig(raw, extraUrls) {
     if (!item || typeof item !== "object" || typeof item.url !== "string" || !item.url.trim()) continue;
     const name = typeof item.name === "string" && item.name.trim() ? item.name.trim() : null;
     const color = typeof item.color === "string" && isValidColor(item.color.toLowerCase()) ? item.color.toLowerCase() : null;
-    const rules = legacyRules(item).concat(compileRuleList(item.rules));
+    const rules = compileRuleList(item.rules);
     const headers = {};
     if (item.headers && typeof item.headers === "object") {
       for (const k of Object.keys(item.headers)) {
@@ -529,16 +514,6 @@ function compileMatcher(spec) {
     rx = new RegExp("\\b" + escapeRegExp(p) + "\\b", "i");
   }
   return { rx, test: (ctx) => rx.test(ctx.title) || (!!ctx.desc && rx.test(ctx.desc)) };
-}
-
-function compileMatcherList(raw) {
-  const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : [];
-  const out = [];
-  for (const spec of list) {
-    const m = compileMatcher(spec);
-    if (m) out.push(m);
-  }
-  return out;
 }
 
 function replaceMatch(text, rx, replacement) {

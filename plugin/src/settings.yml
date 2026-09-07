@@ -64,11 +64,14 @@ custom_fields:
   placeholder: |-
     {
       "calendars": [
-        { "name": "Alex", "url": "https://cloud.example.com/alex.ics", "defaultPerson": "Alex" },
+        {
+          "name": "Alex", "url": "https://cloud.example.com/alex.ics",
+          "rules": [{ "match": { "type": "any" }, "person": "Alex" }]
+        },
         {
           "name": "School", "url": "https://cloud.example.com/school.ics",
-          "exclude": [{ "type": "regex", "value": "\\bL[1345]\\b" }, { "type": "regex", "value": "\\bK[123]\\b" }],
-          "personRules": [
+          "rules": [
+            { "match": { "type": "regex", "value": "\\bL[1345]\\b|\\bK[123]\\b" }, "hide": true },
             { "match": { "type": "word", "value": "L6" }, "person": "Alex" }
           ]
         },

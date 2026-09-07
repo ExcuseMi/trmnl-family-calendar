@@ -110,21 +110,9 @@ module.exports = function (test, h) {
     assert(JSON.stringify(rule.person) === JSON.stringify(['Alex']), 'person should be normalized to an array');
   });
 
-  test('legacy exclude/personRules still compile into the same rules list', () => {
+  test('a calendar rule with an invalid matcher (missing value) drops the rule, not the calendar', () => {
     const cfg = parse({
-      calendars: [{
-        url: 'https://x/a.ics',
-        exclude: [{ type: 'word', value: 'L1' }, { type: 'regex', value: '\\bK[123]\\b' }],
-        personRules: [{ match: { type: 'word', value: 'assembly' }, person: 'Alex' }],
-      }],
-    });
-    assert(cfg.calendars[0].rules.length === 3, 'both legacy exclude entries and the personRule should compile');
-    assert(cfg.calendars[0].rules.filter((r) => r.hide).length === 2, 'both exclude entries should carry hide:true');
-  });
-
-  test('personRules.match with an invalid matcher (missing value) drops the rule, not the calendar', () => {
-    const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', personRules: [{ match: { type: 'word' }, person: 'Alex' }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word' }, person: 'Alex' }] }],
     });
     assert(cfg.calendars[0].rules.length === 0, 'rule with no usable match should be dropped');
     assert(cfg.calendars.length === 1, 'the calendar itself should still be kept');

@@ -459,9 +459,8 @@
     if (values.length === 1) return values[0];
     return { type: rule.combinator === "or" ? "or" : "and", matchers: values };
   }
-  // Builds the type-select + word/regex inputs + live tester shared by exclude entries and
-  // personRules — same three controls, same behavior, just different sibling fields (a
-  // person picker + rename checkbox for personRules, nothing extra for exclude).
+  // Builds the type-select + type-specific input(s) + live tester for one matcher — reused for
+  // every condition in every rule (a calendar's own, or global).
   function buildMatcherFields(m, onChange) {
     var typeSelect = el("select", { class: "field", style: "flex:0 0 auto;width:auto;" });
     MATCH_TYPES.forEach(function (t) {
@@ -482,7 +481,10 @@
 
     // A day-of-week is picked with toggle buttons, not a <select multiple> — 7 fixed options
     // read faster as a row of on/off pills than as a scrolling list box.
-    var weekdayGroup = el("div", { style: "display:flex;gap:4px;flex-wrap:wrap;align-items:center;" });
+    // No `display` here — it's set explicitly in applyMode() below (flex when shown, none when
+    // not), since an always-on inline `display:flex` would outrank the `hidden` attribute's own
+    // (very low-specificity) UA style and stay visually visible even while .hidden is true.
+    var weekdayGroup = el("div", { style: "gap:4px;flex-wrap:wrap;align-items:center;" });
     function weekdayBtnStyle(active) {
       return "min-width:42px;" + (active ? "background:#1a1a1a;color:#fff;border-color:#1a1a1a;" : "");
     }
@@ -501,7 +503,9 @@
       textInput.hidden = PLAIN_TEXT_TYPES.indexOf(m.matchType) === -1;
       regexInput.hidden = m.matchType !== "regex";
       statusSelect.hidden = m.matchType !== "status";
-      weekdayGroup.hidden = m.matchType !== "weekday";
+      var showWeekday = m.matchType === "weekday";
+      weekdayGroup.hidden = !showWeekday;
+      weekdayGroup.style.display = showWeekday ? "flex" : "none";
     }
     applyMode();
 
@@ -1059,16 +1063,9 @@
       .map(function (c) { return typeof c === "string" ? { url: c } : c; })
       .filter(function (c) { return c && typeof c === "object" && typeof c.url === "string" && c.url.trim(); })
       .map(function (c) {
-        var rules = [];
-        (Array.isArray(c.exclude) ? c.exclude : c.exclude ? [c.exclude] : [])
-          .filter(function (x) { return x && typeof x === "object" && typeof x.value === "string"; })
-          .forEach(function (x) { var r = matcherFromValue(x); r.person = []; r.rename = false; r.allDay = false; r.hide = true; r.rewrite = ""; rules.push(r); });
-        (Array.isArray(c.personRules) ? c.personRules : [])
-          .filter(function (pr) { return pr && typeof pr === "object" && pr.match && typeof pr.match.value === "string" && (typeof pr.person === "string" || Array.isArray(pr.person)); })
-          .forEach(function (pr) { var r = matcherFromValue(pr.match); r.person = normalizeNames(pr.person); r.rename = pr.rename !== false; r.allDay = false; r.hide = false; r.rewrite = ""; rules.push(r); });
-        (Array.isArray(c.rules) ? c.rules : [])
+        var rules = (Array.isArray(c.rules) ? c.rules : [])
           .filter(function (rv) { return rv && typeof rv === "object" && isUsableMatchValue(rv.match); })
-          .forEach(function (rv) { rules.push(ruleFromValue(rv)); });
+          .map(ruleFromValue);
         var headers = [];
         if (c.headers && typeof c.headers === "object" && !Array.isArray(c.headers)) {
           Object.keys(c.headers).forEach(function (k) {
@@ -1094,18 +1091,6 @@
           badge: typeof p.badge === "string" ? p.badge.trim() : "",
         };
       });
-    // Legacy top-level (and legacy per-calendar) `defaultPerson` no longer exists as a field at
-    // all — the schema's replacement is simply "the first person[] entry is the fallback" — so
-    // promote whoever was named there to the front of the imported list instead of just
-    // dropping the reference and silently losing that config's fallback badge.
-    var legacyDefaultPerson = typeof data.defaultPerson === "string" ? data.defaultPerson.trim()
-      : Array.isArray(data.defaultPerson) && typeof data.defaultPerson[0] === "string" ? data.defaultPerson[0].trim() : "";
-    if (legacyDefaultPerson) {
-      var ldpIdx = newPeople.findIndex(function (p) { return p.name.toLowerCase() === legacyDefaultPerson.toLowerCase(); });
-      if (ldpIdx > 0) newPeople.unshift(newPeople.splice(ldpIdx, 1)[0]);
-      else if (ldpIdx === -1) newPeople.unshift({ _id: uid(), name: legacyDefaultPerson, color: "", badge: "" });
-    }
-
     // Google's public holiday feeds get their own section purely for this editor's clarity —
     // see isHolidayUrl — everything else (including a holiday feed some other host serves) is
     // a regular calendar.

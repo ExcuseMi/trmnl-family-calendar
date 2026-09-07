@@ -149,9 +149,9 @@ regardless of when you actually load it, plus the same public-Google-holiday cal
 Configuration Editor's own "Add public holidays" picker would add. It's also how this project's
 own layout work gets tested end to end — Mia's and Leo's Thursday "Gymnastics" deliberately land
 at the exact same time, so the grid always has at least one genuinely overlapping pair of events
-to check, and the School feed carries the same class-code style
-(`exclude`/`personRules`/renaming) the placeholder example below demonstrates, with real matching
-and non-matching classes side by side.
+to check, and the School feed carries the same class-code style (rules that hide, rename, and
+attach a person) the placeholder example below demonstrates, with real matching and non-matching
+classes side by side.
 
 ## Configuration Editor
 
@@ -181,8 +181,10 @@ The JSON shape it produces:
     { "url": "https://cloud.example.com/family.ics", "color": "pink" },
     {
       "url": "https://cloud.example.com/school.ics",
-      "exclude": "\\bL[1345]\\b",
-      "personRules": [{ "match": "\\bL6\\b", "person": "Alex" }]
+      "rules": [
+        { "match": { "type": "regex", "value": "\\bL[1345]\\b" }, "hide": true },
+        { "match": { "type": "regex", "value": "\\bL6\\b" }, "person": "Alex" }
+      ]
     }
   ],
   "people": [
@@ -200,22 +202,15 @@ The JSON shape it produces:
   Pins that calendar's color instead of auto-assigning by position. What the Configuration
   Editor's "Add public holidays" picker sets, for instance — the plugin has no built-in notion
   of holidays, that button just fills in a normal calendar entry.
-- `calendars[].exclude` — optional regex, or array of them (case-insensitive). Matching events
-  from *that* calendar are hidden entirely, before `people` ever sees them.
-- `calendars[].personRules` — optional array of `{ match, person, rename }`, checked in order
-  against every surviving event on *that* calendar. `person` names who it belongs to — one name,
-  or an array of them for a shared event (e.g. `["Alex", "Jordan"]` for a family trip); doesn't
-  need to already exist in `people[]`, but only a declared name contributes a badge. `rename`
-  (default `true`) controls whether the matched text is replaced with the name(s), joined with
-  " & " when there's more than one.
-- `calendars[].rules` (and top-level `rules` for global ones) — the current, more general
-  replacement for `personRules`/`exclude`: also supports `hide`, `allDay`, `rewrite`, and matcher
-  types beyond word/regex (`status`, `weekday`, `and`/`or`). See [CONFIG.md](CONFIG.md) for the
-  full schema. There is no `defaultPerson` field (an older version of this schema had one) — the
-  first entry in `people[]` is automatically the fallback for any event no rule assigns more
-  specifically, no rule needed at all.
-- `people[].name` — required, the lookup key a `rules[].person`/`personRules[].person` entry references.
-  `people[].color` — optional; overrides that event's chip color. `people[].badge` — optional, a
+- `calendars[].rules` (and top-level `rules` for global ones, checked first) — attach a
+  [person](#people), hide, retitle, or all-day-ify specific events on that calendar. Each rule is
+  a `match` (a matcher — word/regex/contains/exact text, ICS `status`, `weekday`, or an `and`/`or`
+  combining any of those) plus any combination of `person`, `hide`, `allDay`, and `rewrite`. See
+  [CONFIG.md](CONFIG.md) for the full schema and every matcher type. The first entry in
+  `people[]` is automatically the fallback person for any event no rule assigns more
+  specifically — no rule needed for that.
+- `people[].name` — required, the lookup key a `rules[].person` entry references. `people[].color`
+  — optional; overrides that event's chip color. `people[].badge` — optional, a
   short label (defaults to the name's first letter) shown in the header's own small per-person
   badge (full view only — see People above — never repeated per event).
 
@@ -237,22 +232,29 @@ exercise `run()`/`transform.js` itself against real data, use the
 
 ## Tests
 
-`test/transform/` is a regression suite for `transform.js` — word/regex matchers, calendar name
-auto-detection and de-duplication, the saved-state fallbacks (weather, news, a calendar that's
-been down a while), the shared serverless-deadline fetch budget, the all-day "+N more" overflow,
-and that each plugin setting (`view_days`, `hours`, `temperature_unit`, `time_format`, `lat_lon`,
-`rss_label`, Easy ICS vs. Advanced Configuration) actually does what its description says. It
-mocks `fetch()` per test rather than replaying static fixtures, since `run()` does its own
-fetching (unlike a typical polling-strategy plugin).
+`test/transform/` is a regression suite for `transform.js` — word/regex/status/weekday/and/or
+matchers, calendar name auto-detection and de-duplication, the saved-state fallbacks (weather,
+news, a calendar that's been down a while), the shared serverless-deadline fetch budget, the
+all-day "+N more" overflow, and that each plugin setting (`view_days`, `hours`,
+`temperature_unit`, `time_format`, `lat_lon`, `rss_label`, Easy ICS vs. Advanced Configuration)
+actually does what its description says. It mocks `fetch()` per test rather than replaying
+static fixtures, since `run()` does its own fetching (unlike a typical polling-strategy plugin).
+
+`test/config-editor/` is a regression suite for `tools/config-editor.html` itself — loads the
+real page into a headless DOM ([jsdom](https://github.com/jsdom/jsdom)) and drives it the way a
+person would (type into fields, click buttons, toggle day/status pickers, read the generated
+JSON), covering the rule builder (every matcher type, AND/OR chaining, the "this rule won't be
+included" warning), people/Everyone-fallback handling, and JSON import.
 
 ```bash
 ./test.sh
 ```
 
-(equivalent to `cd test/transform && npm test`). No Docker needed for that;
-`docker compose -f docker-compose.test.yml run --rm test-transform` also works, exercising the
-exact same `transform.js` mounted read-only, for CI parity. A GitHub Actions workflow
-(`.github/workflows/test.yml`) runs `./test.sh` on every push and pull request.
+(equivalent to `cd test/transform && npm test` followed by `cd test/config-editor && npm install
+&& npm test`). No Docker/browser needed for either suite; `docker compose -f
+docker-compose.test.yml run --rm test-transform` also works for the `transform.js` suite,
+exercising the exact same file mounted read-only, for CI parity. A GitHub Actions workflow
+(`.github/workflows/test.yml`) runs `./test.sh` (both suites) on every push and pull request.
 
 ## Files
 
@@ -267,6 +269,7 @@ exact same `transform.js` mounted read-only, for CI parity. A GitHub Actions wor
 | `demo-config.json` | The complete Calendar Configuration paired with the demo calendars above — paste as-is to try the plugin |
 | `assets/weather/*.svg` | Source SVGs for the rain/storm/snow/fog hour-background patterns (tiled as a CSS background in the grid) |
 | `test/transform/` | Regression tests for `transform.js` — see [Tests](#tests) |
+| `test/config-editor/` | Regression tests for `tools/config-editor.html` — see [Tests](#tests) |
 
 ## Notes & limits
 

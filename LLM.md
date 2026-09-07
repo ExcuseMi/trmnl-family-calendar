@@ -26,7 +26,7 @@ it rather than guessing — a misspelled key is silently ignored, not an error.
 Alternative top-level shape: if the whole field's contents fail to parse as JSON, they're read as
 **freetext instead — one ICS URL per line, nothing else** — equivalent to
 `{"calendars": [<those URLs>]}`. Only offer this when the user explicitly wants the simplest
-possible input (no color/exclude/personRules on any calendar); otherwise generate the JSON below.
+possible input (no color/rules on any calendar); otherwise generate the JSON below.
 
 ```
 {
@@ -50,16 +50,8 @@ possible input (no color/exclude/personRules on any calendar); otherwise generat
                                                     // renames or matches anything by itself —
                                                     // usually best left out entirely
       "color"?: Color,                              // pins this calendar's default color
-      "rules"?: Rule[],                             // this calendar's own rules, checked after
-                                                        // global ones (see Rule below) — this is
-                                                        // the current, preferred way to attach
-                                                        // people/hide/rewrite/allDay; prefer it
-                                                        // over the legacy fields below
-      "exclude"?: Matcher | Matcher[],               // LEGACY shorthand for Rule{match,hide:true}
-      "personRules"?: [
-        { "match": Matcher, "person": string | string[], "rename"?: bool }  // LEGACY shorthand
-                                                        // for Rule{match,person,rename}
-      ]
+      "rules"?: Rule[]                              // this calendar's own rules, checked after
+                                                        // global ones — see Rule below
     }
   ],
   "people"?: [
@@ -129,12 +121,12 @@ Other matcher types, usable anywhere a `Matcher` is expected (including nested i
 
 ## How matching/precedence actually works
 
-- **Color**: calendar's own pinned color (else auto-assigned by position) → person's color (if
-  a rule, `personRules` entry, or the automatic Everyone fallback attached one). Later/more-specific wins.
+- **Color**: calendar's own pinned color (else auto-assigned by position) → person's color (if a
+  rule, or the automatic Everyone fallback, attached one). Later/more-specific wins.
 - No person badge ever shows on an event chip; it only ever appears once, in the header's own
   per-person badge (see `people[].badge` above, full view only), covering every distinct person
   with anything anywhere in the visible range — not per event.
-- **`rules`/`personRules` are checked in array order**; `rename` (default `true` for a plain
+- **`rules` are checked in array order**; `rename` (default `true` for a plain
   word/regex/contains/exact match) replaces the matched text with the person's name(s) in the
   title — joined with " & " when `person` is a list of more than one.
 
@@ -142,8 +134,8 @@ Other matcher types, usable anywhere a `Matcher` is expected (including nested i
 
 - Generating a top-level `"hours"` key. It's not part of this JSON — visible hour range is the
   plugin's own separate "Visible Hours" setting field, not something this config controls.
-- Writing a bare string for `match`/`exclude` (e.g. `"match": "L6"`) instead of the `Matcher`
-  object shape — always `{ "type": "word", "value": "L6" }` or `{ "type": "regex", "value": ... }`.
+- Writing a bare string for `match` (e.g. `"match": "L6"`) instead of the `Matcher` object shape
+  — always `{ "type": "word", "value": "L6" }` or `{ "type": "regex", "value": ... }`.
 - Un-escaped backslashes inside a `"regex"`-type `value` (`"\bL6\b"` is invalid JSON-as-written;
   must be `"\\bL6\\b"`).
 - Treating `name` as something that renames or matches events — it only identifies the calendar.
@@ -168,11 +160,10 @@ Other matcher types, usable anywhere a `Matcher` is expected (including nested i
 }
 ```
 
-A shared-event variant of `personRules` (e.g. a family calendar where one event belongs to more
-than one kid):
+A shared-event variant (e.g. a family calendar where one event belongs to more than one kid):
 
 ```json
-"personRules": [
+"rules": [
   { "match": { "type": "word", "value": "family trip" }, "person": ["Alex", "Jordan"] }
 ]
 ```
