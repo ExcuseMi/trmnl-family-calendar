@@ -5,6 +5,7 @@ const WEATHER_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_DAYS = 3;
 const DEFAULT_HOURS = { start: 7, end: 21 };
 const SINGLE_DAY_LOOKAHEAD_HOURS = 8;
+const AGENDA_MAX_ITEMS = 6;
 const WD_MAP = { MO: 0, TU: 1, WE: 2, TH: 3, FR: 4, SA: 5, SU: 6 };
 
 const HUES = ["blue", "green", "orange", "purple", "red", "cyan", "pink", "lime", "violet", "yellow"];
@@ -327,6 +328,34 @@ async function run(input) {
   const day0AlldayBars = alldayBars.filter((b) => b.startCol === 0);
   const singleDayGrid = layoutNative([day0], day0AlldayBars, day0StartH, day0EndH, day0CoreStartH, day0CoreEndH, nowH, sky.sunMarks, sky.hourlyWeather, calendarColors, HEADER_PCT, is12h, newsPct, alertsPct);
 
+  // half_horizontal/quadrant render this as a plain time+title list instead of a timeline grid
+  // — a grid this small is more cramped than useful. All-day items are left to the existing
+  // all-day bar header (already rendered above this for every view) rather than repeated here
+  // too. Every timed event still relevant from now on (already-ended ones are dropped; one in
+  // progress right now is kept and flagged `current` so the template can call it out) is capped
+  // with a "+N more" row, same convention as the all-day bar overflow above, since a physically
+  // tiny screen can't grow to fit an arbitrarily busy day.
+  const nowIsKnown = nowH !== null && nowH !== undefined;
+  let agendaItems = day0.timed
+    .filter((e) => !nowIsKnown || e.h1 > nowH)
+    .sort((a, b) => a.h0 - b.h0)
+    .map((e) => {
+      const color = e.hueOverride || hueOf(e.calIdx, calendarColors);
+      return {
+        time: e.label, title: e.title,
+        hue: colorClass(color), fg: foregroundFor(color),
+        current: nowIsKnown && e.h0 <= nowH && e.h1 > nowH,
+      };
+    });
+  if (agendaItems.length > AGENDA_MAX_ITEMS) {
+    const shown = agendaItems.slice(0, AGENDA_MAX_ITEMS - 1);
+    shown.push({
+      time: null, title: "+" + (agendaItems.length - shown.length) + " more",
+      hue: colorClass("gray-30"), fg: foregroundFor("gray-30"), current: false,
+    });
+    agendaItems = shown;
+  }
+
   const viewPeopleSeen = new Set();
   const viewPeople = [];
   for (const b of [...alldayBars.flatMap((a) => a.personBadges || []), ...rawDays.flatMap((d) => d.timed.flatMap((t) => t.personBadges || []))]) {
@@ -336,7 +365,7 @@ async function run(input) {
   }
 
   const data = Object.assign({}, grid, {
-    single_day: { hour_rows: singleDayGrid.hour_rows, days: singleDayGrid.days },
+    single_day: { hour_rows: singleDayGrid.hour_rows, days: singleDayGrid.days, agenda: agendaItems },
     people: viewPeople,
     generated_at: Math.floor(nowEpoch / 1000),
     tz: tzname,
@@ -404,7 +433,7 @@ function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
   }
   const grid = layoutNative(days, [], 8, 22, null, null, null, null, HEADER_PCT, is12h);
   const data = Object.assign({}, grid, {
-    single_day: { hour_rows: grid.hour_rows, days: grid.days },
+    single_day: { hour_rows: grid.hour_rows, days: grid.days, agenda: [] },
     people: [],
     generated_at: Math.floor(nowEpoch / 1000),
     tz: tzname,

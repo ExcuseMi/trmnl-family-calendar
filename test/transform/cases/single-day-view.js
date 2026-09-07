@@ -73,4 +73,37 @@ module.exports = function (test, h) {
     assertEqual(sd.hour_rows[11].pct, 0, 'hour 11 (before "now") should still collapse on an empty day too');
     assertEqual(sd.days[0].events.length, 0, 'no events today');
   });
+
+  test('data.single_day.agenda lists timed events chronologically, dropping already-ended ones and flagging the in-progress one', async () => {
+    // All-day items (e.g. a "Kantoor" all-day event) are deliberately left out of this list —
+    // they're already shown in the existing all-day bar header above it, for every view.
+    const events = [
+      { uid: 1, allDay: true, start: '20260905', end: '20260906', summary: 'Holiday' },
+      { uid: 2, start: '20260905T090000Z', end: '20260905T093000Z', summary: 'Past Standup' }, // ended before noon
+      { uid: 3, start: '20260905T140000Z', end: '20260905T150000Z', summary: 'Client Call' },
+      { uid: 4, start: '20260905T110000Z', end: '20260905T130000Z', summary: 'Workshop' }, // in progress at noon
+    ];
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
+    const agenda = r.data.single_day.agenda;
+    assertEqual(agenda.map((i) => i.title), ['Workshop', 'Client Call'], 'timed events sorted by start, past ones dropped, all-day event excluded');
+    assertEqual(agenda[0].current, true, 'Workshop (11:00-13:00) is in progress at noon');
+    assertEqual(agenda[1].current, false, 'Client Call has not started yet');
+    assert(agenda[0].time && agenda[1].time, 'every item here should carry a formatted time label');
+  });
+
+  test('data.single_day.agenda caps a very busy day with a "+N more" row instead of listing everything', async () => {
+    const events = [];
+    for (let i = 0; i < 9; i++) {
+      const hh = String(12 + i).padStart(2, '0'); // 12:00 through 20:00, all still upcoming/in-progress at noon
+      events.push({ uid: i, start: '20260905T' + hh + '0000Z', end: '20260905T' + hh + '3000Z', summary: 'Event ' + i });
+    }
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
+    const agenda = r.data.single_day.agenda;
+    assertEqual(agenda.length, 6, 'should cap at AGENDA_MAX_ITEMS (6) total rows, including the overflow row');
+    assertEqual(agenda[5].title, '+4 more', '9 events, 5 shown + 1 overflow row covering the remaining 4');
+  });
 };

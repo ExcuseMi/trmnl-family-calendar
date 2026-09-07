@@ -247,12 +247,31 @@
     {% endif %}
 
     {%- comment -%}
-      The single-day views (half_horizontal/half_vertical/quadrant) get their own axis/day data
-      (data.single_day) laid out against just that one day's own events instead of the shared
-      multi-day window the full view uses — see the single_day comment in transform.js. The full
-      view keeps using the shared data.hour_rows/data.days, which correctly stays wide enough to
-      cover every visible day at once. Falls back to the shared data if single_day is missing
-      (e.g. a cached render from before this field existed) instead of rendering an empty grid.
+      half_horizontal/quadrant are too small for a legible timeline grid — they get a plain
+      time+title list instead (data.single_day.agenda, built in transform.js). half_vertical
+      keeps the grid (it has more room), and the full view keeps its own shared multi-day grid.
+    {%- endcomment -%}
+    {%- if view == 2 or view == 4 -%}
+      <div class="w--full h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none flex flex--col gap--xsmall p--2" style="overflow:hidden;box-sizing:border-box;">
+        {% for item in data.single_day.agenda %}
+          <div class="w--full flex flex--row flex--center-y gap--small bg--{{ item.hue }} text--{{ item.fg }} rounded--xsmall px--2 py--1 relative no-shrink" style="overflow:hidden;min-width:0;{% if item.current %}box-shadow:0 0 0 2px {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};{% endif %}">
+            {% if item.time %}<span class="label {{ axis_cls }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
+            <span class="title {{ event_title_cls }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
+          </div>
+        {% else %}
+          <div class="w--full h--full flex flex--center-x flex--center-y">
+            <span class="label {{ axis_cls }} text--gray-50">Nothing scheduled</span>
+          </div>
+        {% endfor %}
+      </div>
+    {%- else -%}
+    {%- comment -%}
+      half_vertical and full still use the timeline grid. half_vertical gets its own axis/day
+      data (data.single_day) laid out against just that one day's own events instead of the
+      shared multi-day window the full view uses — see the single_day comment in transform.js.
+      The full view keeps using the shared data.hour_rows/data.days, which correctly stays wide
+      enough to cover every visible day at once. Falls back to the shared data if single_day is
+      missing (e.g. a cached render from before this field existed) instead of an empty grid.
     {%- endcomment -%}
     {%- if view == 1 or data.single_day.hour_rows == blank -%}
       {%- assign grid_hour_rows = data.hour_rows -%}
@@ -336,6 +355,7 @@
         </div>
       {% endfor %}
     </div>
+    {%- endif -%}
 
     <div class="grid gap--none h--[{{ data.footer_pct }}cqh] h--min-[{{ data.footer_pct }}cqh] bg--black flex flex--center-y" style="overflow:hidden;">
       {% if data.rss_headline %}
