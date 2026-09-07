@@ -4,7 +4,6 @@ const CALENDAR_DOWN_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 const WEATHER_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_DAYS = 3;
 const DEFAULT_HOURS = { start: 7, end: 21 };
-const SINGLE_DAY_LOOKAHEAD_HOURS = 8;
 const AGENDA_SANITY_CAP = 20;
 const WD_MAP = { MO: 0, TU: 1, WE: 2, TH: 3, FR: 4, SA: 5, SU: 6 };
 
@@ -294,48 +293,15 @@ async function run(input) {
   const alertsPct = calendarAlerts.length ? ALERTS_ROW_PCT : 0;
   const grid = layoutNative(rawDays, alldayBars, startH, endH, coreStartH, coreEndH, nowH, sky.sunMarks, sky.hourlyWeather, calendarColors, HEADER_PCT, is12h, newsPct, alertsPct);
 
-  // The single-day views (half_horizontal/half_vertical/quadrant) show only rawDays[0] — reusing
-  // the multi-day grid above for them means their hour axis reflects every configured day's
-  // earliest/latest event, not just this one day's, so an otherwise-quiet night still gets the
-  // multi-day window's full height. Laying that one day out again on its own tighter
-  // start/core/end window lets layoutNative's existing "outside outerStart/outerEnd gets zero
-  // height" behavior collapse hours this specific day has nothing in, without touching the
-  // full view's shared (and correctly multi-day-wide) axis at all.
-  // day0 is always "today" for these views (they only ever show rawDays[0]) — rather than a
-  // window sized around the day's activity, show a fixed rolling look-ahead: the current hour
-  // through SINGLE_DAY_LOOKAHEAD_HOURS after it. floor(nowH) as the start (not now itself) means
-  // an event already in progress still renders from its own start, clamped to the top of the
-  // window, instead of being cut mid-box. Events entirely before "now" or entirely past the
-  // look-ahead window collapse to zero height via layoutNative's usual outerStart/outerEnd
-  // handling — deliberately: this window is "what's next", not "everything today".
-  const day0 = rawDays[0];
-  let day0CoreStartH;
-  let day0CoreEndH;
-  if (day0.isToday && nowH !== null && nowH !== undefined) {
-    day0CoreStartH = Math.max(0, Math.floor(nowH));
-    day0CoreEndH = day0CoreStartH + SINGLE_DAY_LOOKAHEAD_HOURS;
-  } else {
-    // Shouldn't normally happen (day0 is always today for these views) — fall back to the
-    // configured default hours rather than a "now"-relative window that has no "now" to anchor.
-    day0CoreStartH = defaultHours.start;
-    day0CoreEndH = Math.max(defaultHours.end, day0CoreStartH + 1);
-  }
-  const day0StartH = day0CoreStartH;
-  const day0EndH = day0CoreEndH;
-  // Matches the allday_max_rows recompute the liquid template does for these same views (only
-  // bars actually on day 0), so the single-day grid's own gridPct denominator (used to normalize
-  // event top/height into percentages) agrees with what the template will actually render.
-  const day0AlldayBars = alldayBars.filter((b) => b.startCol === 0);
-  const singleDayGrid = layoutNative([day0], day0AlldayBars, day0StartH, day0EndH, day0CoreStartH, day0CoreEndH, nowH, sky.sunMarks, sky.hourlyWeather, calendarColors, HEADER_PCT, is12h, newsPct, alertsPct);
-
-  // half_horizontal/quadrant render this as a plain time+title list instead of a timeline grid
-  // — a grid this small is more cramped than useful. All-day items are left to the existing
-  // all-day bar header (already rendered above this for every view) rather than repeated here
-  // too. Every timed event still relevant from now on is included (already-ended ones are
-  // dropped; one in progress right now is kept and flagged `current` so the template can call it
-  // out) — how many of these actually fit, and the "+N more" row past that, is a per-view layout
-  // decision (half_horizontal is far roomier than quadrant) made in the template, not here.
+  // The single-day views (half_horizontal/half_vertical/quadrant) show only rawDays[0], rendered
+  // as a plain time+title list rather than a timeline grid — a grid this small is more cramped
+  // than useful. All-day items are left to the existing all-day bar header (already rendered
+  // above this for every view) rather than repeated here too. Every timed event still relevant
+  // from now on is included (already-ended ones are dropped; one in progress right now is kept
+  // and flagged `current` so the template can call it out) — how many of these actually fit, and
+  // the "+N more" row past that, is a per-view layout decision made in the template, not here.
   // AGENDA_SANITY_CAP is just a hard ceiling against a pathological day, not a display cap.
+  const day0 = rawDays[0];
   const nowIsKnown = nowH !== null && nowH !== undefined;
   const agendaItems = day0.timed
     .filter((e) => !nowIsKnown || e.h1 > nowH)
@@ -347,6 +313,7 @@ async function run(input) {
         time: e.label, title: e.title,
         hue: colorClass(color), fg: foregroundFor(color),
         current: nowIsKnown && e.h0 <= nowH && e.h1 > nowH,
+        badges: e.personBadges || [],
       };
     });
 
@@ -359,7 +326,7 @@ async function run(input) {
   }
 
   const data = Object.assign({}, grid, {
-    single_day: { hour_rows: singleDayGrid.hour_rows, days: singleDayGrid.days, agenda: agendaItems },
+    single_day: { agenda: agendaItems },
     people: viewPeople,
     generated_at: Math.floor(nowEpoch / 1000),
     tz: tzname,
@@ -427,7 +394,7 @@ function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
   }
   const grid = layoutNative(days, [], 8, 22, null, null, null, null, HEADER_PCT, is12h);
   const data = Object.assign({}, grid, {
-    single_day: { hour_rows: grid.hour_rows, days: grid.days, agenda: [] },
+    single_day: { agenda: [] },
     people: [],
     generated_at: Math.floor(nowEpoch / 1000),
     tz: tzname,

@@ -247,23 +247,27 @@
     {% endif %}
 
     {%- comment -%}
-      half_horizontal/quadrant are too small for a legible timeline grid — they get a plain
-      time+title list instead (data.single_day.agenda, built in transform.js). half_vertical
-      keeps the grid (it has more room), and the full view keeps its own shared multi-day grid.
+      half_horizontal/half_vertical/quadrant are too small for a legible timeline grid — they get
+      a plain time+title list instead (data.single_day.agenda, built in transform.js). The full
+      view keeps its own shared multi-day grid.
     {%- endcomment -%}
-    {%- if view == 2 or view == 4 -%}
+    {%- if view == 2 or view == 3 or view == 4 -%}
       {%- comment -%}
-        half_horizontal has roughly twice the usable width of quadrant, so it lays the agenda out
-        in 2 columns (grid-auto-flow:column with a fixed row count — the browser fills column 1
-        top-to-bottom, then wraps into column 2 on its own) instead of quadrant's single column.
-        Each view decides its own "how many actually fit" limit and shows a "+N more" row for
-        whatever's left — the underlying data.single_day.agenda list itself isn't pre-cut to fit
-        either one specifically.
+        half_horizontal has roughly twice the usable width of the other two, so it lays the
+        agenda out in 2 columns (grid-auto-flow:column with a fixed row count — the browser fills
+        column 1 top-to-bottom, then wraps into column 2 on its own); half_vertical and quadrant
+        use a single column, just with different row budgets (half_vertical is the tallest of the
+        three). Each view decides its own "how many actually fit" limit and shows a "+N more" row
+        for whatever's left — the underlying data.single_day.agenda list itself isn't pre-cut to
+        fit any one of them specifically.
       {%- endcomment -%}
       {%- if view == 2 -%}
         {%- assign agenda_rows = 5 -%}
         {%- assign agenda_style = "display:grid;grid-auto-flow:column;grid-template-rows:repeat(" | append: agenda_rows | append: ", auto);column-gap:8px;row-gap:4px;overflow:hidden;box-sizing:border-box;" -%}
         {%- assign agenda_limit = 10 -%}
+      {%- elsif view == 3 -%}
+        {%- assign agenda_style = "display:flex;flex-direction:column;gap:4px;overflow:hidden;box-sizing:border-box;" -%}
+        {%- assign agenda_limit = 8 -%}
       {%- else -%}
         {%- assign agenda_style = "display:flex;flex-direction:column;gap:4px;overflow:hidden;box-sizing:border-box;" -%}
         {%- assign agenda_limit = 5 -%}
@@ -273,9 +277,24 @@
       {%- if agenda_total > agenda_limit -%}{%- assign agenda_shown_limit = agenda_limit | minus: 1 -%}{%- endif -%}
       <div class="w--full h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none p--2" style="{{ agenda_style }}">
         {% for item in data.single_day.agenda limit: agenda_shown_limit %}
-          <div class="w--full flex flex--row flex--center-y gap--small bg--{{ item.hue }} text--{{ item.fg }} rounded--xsmall px--2 py--1 relative" style="overflow:hidden;min-width:0;flex-shrink:0;{% if item.current %}box-shadow:0 0 0 2px {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};{% endif %}">
-            {% if item.time %}<span class="label {{ axis_cls }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
-            <span class="title {{ event_title_cls }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
+          {%- comment -%}
+            bg-- and text-- on the exact same element didn't reliably render together here — an
+            outer div carrying just the background/shape, wrapping an inner div that carries the
+            text color and the actual flex row, matches the working chip/chip_body split
+            elsewhere in this file and fixes it.
+          {%- endcomment -%}
+          <div class="w--full bg--{{ item.hue }} rounded--xsmall relative" style="overflow:hidden;flex-shrink:0;{% if item.current %}box-shadow:0 0 0 2px {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};{% endif %}">
+            <div class="w--full flex flex--row flex--center-y gap--small text--{{ item.fg }} px--2 py--1" style="min-width:0;">
+              {% if item.time %}<span class="label {{ axis_cls }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
+              <span class="title {{ event_title_cls }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
+              {% if item.badges and item.badges.size > 0 %}
+                <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;">
+                  {% for badge in item.badges limit: 2 %}
+                    {%- render "badge_circle", badge_w_expr: "16px", badge_h_expr: "16px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
+                  {% endfor %}
+                </span>
+              {% endif %}
+            </div>
           </div>
         {% else %}
           <div class="w--full h--full flex flex--center-x flex--center-y">
@@ -283,27 +302,21 @@
           </div>
         {% endfor %}
         {% if agenda_total > agenda_limit %}
-          <div class="w--full flex flex--row flex--center-y flex--center-x bg--gray-30 text--white rounded--xsmall px--2 py--1 relative">
-            <span class="title {{ event_title_cls }}">+{{ agenda_total | minus: agenda_shown_limit }} more</span>
+          <div class="w--full bg--gray-30 rounded--xsmall relative">
+            <div class="w--full flex flex--row flex--center-y flex--center-x text--white px--2 py--1">
+              <span class="title {{ event_title_cls }}">+{{ agenda_total | minus: agenda_shown_limit }} more</span>
+            </div>
           </div>
         {% endif %}
       </div>
     {%- else -%}
     {%- comment -%}
-      half_vertical and full still use the timeline grid. half_vertical gets its own axis/day
-      data (data.single_day) laid out against just that one day's own events instead of the
-      shared multi-day window the full view uses — see the single_day comment in transform.js.
-      The full view keeps using the shared data.hour_rows/data.days, which correctly stays wide
-      enough to cover every visible day at once. Falls back to the shared data if single_day is
-      missing (e.g. a cached render from before this field existed) instead of an empty grid.
+      Only the full view reaches here now (view == 2/3/4 all take the agenda list branch above)
+      — its shared multi-day data.hour_rows/data.days correctly stays wide enough to cover every
+      visible day at once.
     {%- endcomment -%}
-    {%- if view == 1 or data.single_day.hour_rows == blank -%}
-      {%- assign grid_hour_rows = data.hour_rows -%}
-      {%- assign grid_days = data.days -%}
-    {%- else -%}
-      {%- assign grid_hour_rows = data.single_day.hour_rows -%}
-      {%- assign grid_days = data.single_day.days -%}
-    {%- endif -%}
+    {%- assign grid_hour_rows = data.hour_rows -%}
+    {%- assign grid_days = data.days -%}
 
     {%- capture axis_row_tracks -%}{% for row in grid_hour_rows %}{{ row.pct }}fr {% endfor %}{%- endcapture -%}
     <div class="grid gap--none h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none relative">
