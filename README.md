@@ -186,19 +186,22 @@ exercise `run()`/`transform.js` itself against real data, use the
 
 ## Tests
 
-`test/transform/` is a small regression suite for `transform.js` — word/regex matchers, calendar
-name auto-detection and de-duplication, the saved-state fallbacks (weather, news, a calendar
-that's been down a while), the shared serverless-deadline fetch budget, and the all-day
-"+N more" overflow. It mocks `fetch()` per test rather than replaying static fixtures, since
-`run()` does its own fetching (unlike a typical polling-strategy plugin).
+`test/transform/` is a regression suite for `transform.js` — word/regex matchers, calendar name
+auto-detection and de-duplication, the saved-state fallbacks (weather, news, a calendar that's
+been down a while), the shared serverless-deadline fetch budget, the all-day "+N more" overflow,
+and that each plugin setting (`view_days`, `hours`, `temperature_unit`, `time_format`, `lat_lon`,
+`rss_label`, Easy ICS vs. Advanced Configuration) actually does what its description says. It
+mocks `fetch()` per test rather than replaying static fixtures, since `run()` does its own
+fetching (unlike a typical polling-strategy plugin).
 
 ```bash
-cd test/transform
-npm test
+./test.sh
 ```
 
-No Docker needed for that; `docker compose -f docker-compose.test.yml run --rm test-transform`
-also works, exercising the exact same `transform.js` mounted read-only, for CI parity.
+(equivalent to `cd test/transform && npm test`). No Docker needed for that;
+`docker compose -f docker-compose.test.yml run --rm test-transform` also works, exercising the
+exact same `transform.js` mounted read-only, for CI parity. A GitHub Actions workflow
+(`.github/workflows/test.yml`) runs `./test.sh` on every push and pull request.
 
 ## Files
 
