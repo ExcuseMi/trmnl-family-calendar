@@ -36,6 +36,12 @@
   }
   button.primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
   button.danger { background: #fff0f0; border-color: #e3b3b3; color: #a33; }
+  /* Color-coded by what a button DOES, not what it's on — green to add something new, blue to
+     reorder, red (button.danger, above) to remove — so the same visual language works whether
+     it's a calendar, a person, a rule, or a condition, and the eye can find "add more" or "get
+     rid of this" at a glance without reading every label. */
+  button.add { background: #eefbf0; border-color: #a9dab5; color: #1a7a33; }
+  button.move { background: #eef4fc; border-color: #aecbea; color: #1a5c9c; }
   button.small { padding: 4px 9px; font-size: 12px; }
   .entry { border: 1px solid #eee; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fafaf9; }
   .entry-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -87,24 +93,24 @@
 
   <h2>Calendars <span class="muted">(order matters — shown first when there's more all-day content than fits)</span></h2>
   <div id="calendars"></div>
-  <button id="addCalendar">+ Add calendar</button>
+  <button id="addCalendar" class="add">+ Add calendar</button>
 
   <h2>Holiday calendars <span class="muted">(kept separate for clarity — fully customizable, same as any calendar above)</span></h2>
   <div id="holidayCalendars"></div>
   <div class="row" style="margin-top:6px;">
-    <button id="addCalendarHoliday">+ Add calendar</button>
+    <button id="addCalendarHoliday" class="add">+ Add calendar</button>
   </div>
   <div class="card" style="margin-top:10px;">
     <p class="muted" style="margin-top:0;">Add a public holiday calendar — a real Google-hosted ICS feed, no account needed.</p>
     <div class="row">
       <select id="holidayCountrySelect"></select>
-      <button id="addHolidayCalendar">+ Add public holidays</button>
+      <button id="addHolidayCalendar" class="add">+ Add public holidays</button>
     </div>
   </div>
 
   <h2>People <span class="muted">(the first person is the "Everyone / All" fallback badge — shown on any event nobody more specific claims)</span></h2>
   <div id="people"></div>
-  <button id="addPerson">+ Add person</button>
+  <button id="addPerson" class="add">+ Add person</button>
 
   <h2>Global rules <span class="muted">(optional — apply across every calendar, not just one)</span></h2>
   <div class="card">
@@ -112,7 +118,7 @@
       single calendar — e.g. "any event titled 'Doctor' → assign Mom", regardless of which calendar it came from. A calendar's own
       rule for the same event still wins over one of these.</p>
     <div id="globalRules"></div>
-    <button id="addGlobalRule" class="small">+ Add global rule</button>
+    <button id="addGlobalRule" class="small add">+ Add global rule</button>
   </div>
 
   <h2>Generated Configuration</h2>
@@ -350,8 +356,10 @@
   var PLAIN_TEXT_TYPES = ["word", "contains", "exact"];
   // Types that can be meaningfully "tested against a sample title" — status/weekday depend on
   // event metadata the live tester has no access to (just a typed sample title), so they get no
-  // test row at all rather than a misleading always-blank one.
-  var TITLE_TESTABLE_TYPES = ["word", "contains", "exact", "regex", "any"];
+  // test row at all rather than a misleading always-blank one. "any" is excluded too: it matches
+  // literally every title unconditionally, so testing it against a sample can only ever say
+  // "✓ matches" — there's nothing for the tester to actually tell you.
+  var TITLE_TESTABLE_TYPES = ["word", "contains", "exact", "regex"];
   var STATUS_OPTIONS = [
     { value: "confirmed", label: "Confirmed" },
     { value: "tentative", label: "Tentative" },
@@ -572,7 +580,7 @@
           wrap.appendChild(el("div", { style: "display:flex;gap:6px;align-items:center;margin:2px 0 8px;" }, [f.testInput, f.testResult]));
         }
       });
-      var addCond = el("button", { type: "button", class: "small" }, [document.createTextNode("+ Add condition (AND/OR)")]);
+      var addCond = el("button", { type: "button", class: "small add" }, [document.createTextNode("+ Add condition (AND/OR)")]);
       addCond.addEventListener("click", function () { rule.conditions.push(newMatcher()); render(); onChange(); });
       wrap.appendChild(addCond);
     }
@@ -801,13 +809,13 @@
       // Order determines display priority — e.g. which all-day events win the visible rows
       // when there are more than fit — so reordering is a real, meaningful action, not just
       // cosmetic list management.
-      var upBtn = el("button", { class: "small", title: "Move up" }, [document.createTextNode("↑")]);
+      var upBtn = el("button", { class: "small move", title: "Move up" }, [document.createTextNode("↑")]);
       upBtn.disabled = idx === 0;
       upBtn.addEventListener("click", function () {
         var tmp = list[idx - 1]; list[idx - 1] = list[idx]; list[idx] = tmp;
         rerenderAll();
       });
-      var downBtn = el("button", { class: "small", title: "Move down" }, [document.createTextNode("↓")]);
+      var downBtn = el("button", { class: "small move", title: "Move down" }, [document.createTextNode("↓")]);
       downBtn.disabled = idx === list.length - 1;
       downBtn.addEventListener("click", function () {
         var tmp = list[idx + 1]; list[idx + 1] = list[idx]; list[idx] = tmp;
@@ -861,7 +869,7 @@
     // title, mark the event all-day, and/or hide it, in any combination ---------------------
     var rulesWrap = el("div", {});
     var rerender = renderRulesList(rulesWrap, c.rules);
-    var addRule = el("button", { class: "small" }, [document.createTextNode("+ Add rule")]);
+    var addRule = el("button", { class: "small add" }, [document.createTextNode("+ Add rule")]);
     addRule.addEventListener("click", function () { c.rules.push(newRule()); rerender(); });
 
     body.appendChild(el("div", {}, [
@@ -875,7 +883,7 @@
     // `headers` setting.
     var headersWrap = el("div", {});
     var rerenderHeaders = renderHeadersList(headersWrap, c.headers);
-    var addHeader = el("button", { class: "small" }, [document.createTextNode("+ Add header")]);
+    var addHeader = el("button", { class: "small add" }, [document.createTextNode("+ Add header")]);
     addHeader.addEventListener("click", function () { c.headers.push(newHeader()); rerenderHeaders(); });
 
     body.appendChild(el("div", { style: "margin-top:12px;" }, [
@@ -941,13 +949,13 @@
 
       // Order matters here too: whichever person ends up first becomes the "Everyone/All"
       // fallback (see transform.js's parseConfig), so reordering is how you change who that is.
-      var upBtn = el("button", { class: "small", title: "Move up" }, [document.createTextNode("↑")]);
+      var upBtn = el("button", { class: "small move", title: "Move up" }, [document.createTextNode("↑")]);
       upBtn.disabled = idx === 0;
       upBtn.addEventListener("click", function () {
         var tmp = people[idx - 1]; people[idx - 1] = people[idx]; people[idx] = tmp;
         renderPeople(); renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal();
       });
-      var downBtn = el("button", { class: "small", title: "Move down" }, [document.createTextNode("↓")]);
+      var downBtn = el("button", { class: "small move", title: "Move down" }, [document.createTextNode("↓")]);
       downBtn.disabled = idx === people.length - 1;
       downBtn.addEventListener("click", function () {
         var tmp = people[idx + 1]; people[idx + 1] = people[idx]; people[idx] = tmp;

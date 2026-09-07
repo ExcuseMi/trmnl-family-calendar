@@ -55,4 +55,12 @@ module.exports = function (test, h) {
     fireChange(ruleCard.querySelector('.rule-step select'), 'word');
     assertEqual(isVisible(document, tester()), true, 'tester should reappear once back on a testable type');
   });
+
+  test('the live tester row is hidden for "any" — it always matches, so there is nothing to test', () => {
+    const { document } = loadEditor();
+    const ruleCard = setupRuleCard(document);
+    const tester = () => ruleCard.querySelector('.rule-step input[placeholder^="test against"]');
+    fireChange(ruleCard.querySelector('.rule-step select'), 'any');
+    assertEqual(isVisible(document, tester()), false, '"any" matches everything unconditionally — a sample-title test can only ever say "matches"');
+  });
 };
