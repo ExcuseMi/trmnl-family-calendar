@@ -393,23 +393,15 @@
                 Shown on every timed event (not all-day bars, which have their own separate
                 render loop above and never touch this code path). A diagonal hatch — the same
                 visual language as the empty-day/empty-slot patterns elsewhere in this file —
-                instead of a solid fill: the stroke uses the event's own fg (its usual
-                black/white text color) while the chip's own hue shows through in the gaps
-                between strokes, so the bar reads as textured from this event's own colors
-                rather than an arbitrary flat block. When the chip didn't need to grow
-                (accent_h_pct 100, the common case), the hatch simply covers the chip's full real
-                height; when it did grow, the hatch stops exactly at the real elapsed time and
-                the chip's plain hue continues for the grown portion, same as before — in that
-                case a white border frames the hatch so the cutoff itself is a crisp, visible
-                edge instead of the pattern just trailing off into the chip's own background.
-                When the chip is already full size, its own edges already are that boundary, so
-                no extra frame is drawn.
+                always plain black-on-white, deliberately NOT tied to the event's own hue/fg, so
+                it reads as a consistent, neutral marker against any chip color rather than
+                blending into it. A black border always frames it (not just when partial) for
+                the same reason: a crisp, consistent edge regardless of what's behind it. When
+                the chip didn't need to grow (accent_h_pct 100, the common case), the hatch
+                covers the chip's full real height; when it did grow, the hatch stops exactly at
+                the real elapsed time and the chip's plain hue continues for the grown portion.
               {%- endcomment -%}
-              {%- assign accent_stroke_hex = "000000" -%}
-              {%- if event.fg == "white" -%}{%- assign accent_stroke_hex = "ffffff" -%}{%- endif -%}
-              {%- assign accent_border = "" -%}
-              {%- if accent_h_pct < 99.5 -%}{%- assign accent_border = "border:1px solid white;" -%}{%- endif -%}
-              <div class="absolute top--0 w--[6px]" style="left:3px;height:{{ accent_h_pct }}%;{{ accent_border }}background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%278%27 height=%278%27%3E%3Cpath d=%27M0 8L8 0M-2 2L2 -2M6 10L10 6%27 stroke=%27%23{{ accent_stroke_hex }}%27 stroke-width=%272%27/%3E%3C/svg%3E');"></div>
+              <div class="absolute top--0 w--[6px] bg--white" style="left:3px;height:{{ accent_h_pct }}%;border:1px solid black;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%278%27 height=%278%27%3E%3Cpath d=%27M0 8L8 0M-2 2L2 -2M6 10L10 6%27 stroke=%27%23000000%27 stroke-width=%272%27/%3E%3C/svg%3E');"></div>
             </div>
           {% endfor %}
         </div>
