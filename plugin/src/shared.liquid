@@ -251,9 +251,10 @@
       (data.single_day) laid out against just that one day's own events instead of the shared
       multi-day window the full view uses — see the single_day comment in transform.js. The full
       view keeps using the shared data.hour_rows/data.days, which correctly stays wide enough to
-      cover every visible day at once.
+      cover every visible day at once. Falls back to the shared data if single_day is missing
+      (e.g. a cached render from before this field existed) instead of rendering an empty grid.
     {%- endcomment -%}
-    {%- if view == 1 -%}
+    {%- if view == 1 or data.single_day.hour_rows == blank -%}
       {%- assign grid_hour_rows = data.hour_rows -%}
       {%- assign grid_days = data.days -%}
     {%- else -%}
