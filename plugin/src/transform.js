@@ -296,7 +296,7 @@ async function run(input) {
   for (const b of [...alldayBars.flatMap((a) => a.personBadges || []), ...rawDays.flatMap((d) => d.timed.flatMap((t) => t.personBadges || []))]) {
     if (!b.person || viewPeopleSeen.has(b.person)) continue;
     viewPeopleSeen.add(b.person);
-    viewPeople.push({ text: b.text, person: b.person, hue: b.hue, fg: b.fg });
+    viewPeople.push({ text: b.text, person: b.person, hue: b.hue, fg: b.fg, is_everyone: b.is_everyone });
   }
 
   const data = Object.assign({}, grid, {
@@ -551,7 +551,7 @@ function applyCalendarRules(title, cal, people, globalRules, everyonePerson) {
       if (hue === null && p.color) hue = p.color;
       const badgeHue = p.color ? colorClass(p.color) : "black";
       const badgeFg = p.color ? foregroundFor(p.color) : "white";
-      badges.push({ text: p.badge, person: p.name, hue: badgeHue, fg: badgeFg });
+      badges.push({ text: p.badge, person: p.name, hue: badgeHue, fg: badgeFg, is_everyone: p.name === everyonePerson });
     }
   }
   return { title, hue, badges, allDay, hide };

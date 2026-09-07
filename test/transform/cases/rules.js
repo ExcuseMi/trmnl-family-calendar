@@ -195,7 +195,7 @@ module.exports = function (test, h) {
       calendars: [{ url: 'https://example.com/a.ics' }],
     })));
     const r = await run(input);
-    assertEqual(r.data.people, [{ text: '★', person: 'Everyone', hue: 'black', fg: 'white' }]);
+    assertEqual(r.data.people, [{ text: '★', person: 'Everyone', hue: 'black', fg: 'white', is_everyone: true }]);
   });
 
   test('a rule\'s own person assignment still wins over the first-person fallback', async () => {
