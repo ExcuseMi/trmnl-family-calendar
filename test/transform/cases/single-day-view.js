@@ -27,9 +27,9 @@ module.exports = function (test, h) {
     assertEqual(r.data.single_day.agenda.map((i) => i.title), ['This Afternoon'], 'only today\'s own event should appear, regardless of what other days have');
   });
 
-  test('data.single_day.agenda lists timed events chronologically, dropping already-ended ones and flagging the in-progress one', async () => {
-    // All-day items (e.g. a "Kantoor" all-day event) are deliberately left out of this list —
-    // they're already shown in the existing all-day bar header above it, for every view.
+  test('data.single_day.agenda lists all-day items first, then timed events chronologically, dropping already-ended ones and flagging the in-progress one', async () => {
+    // All-day items also still show in the existing all-day bar header (every view) — being in
+    // this list too is deliberate, not a duplicate-avoidance bug.
     const events = [
       { uid: 1, allDay: true, start: '20260905', end: '20260906', summary: 'Holiday' },
       { uid: 2, start: '20260905T090000Z', end: '20260905T093000Z', summary: 'Past Standup' }, // ended before noon
@@ -40,10 +40,12 @@ module.exports = function (test, h) {
     const { run } = runTransform(fetchImpl, NOW);
     const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
     const agenda = r.data.single_day.agenda;
-    assertEqual(agenda.map((i) => i.title), ['Workshop', 'Client Call'], 'timed events sorted by start, past ones dropped, all-day event excluded');
-    assertEqual(agenda[0].current, true, 'Workshop (11:00-13:00) is in progress at noon');
-    assertEqual(agenda[1].current, false, 'Client Call has not started yet');
-    assert(agenda[0].time && agenda[1].time, 'every item here should carry a formatted time label');
+    assertEqual(agenda.map((i) => i.title), ['Holiday', 'Workshop', 'Client Call'], 'all-day first, then timed events sorted by start, past ones dropped');
+    assertEqual(agenda[0].all_day, true, 'the all-day item should be flagged all_day');
+    assertEqual(agenda[0].time, null, 'an all-day item has no time label');
+    assertEqual(agenda[1].current, true, 'Workshop (11:00-13:00) is in progress at noon');
+    assertEqual(agenda[2].current, false, 'Client Call has not started yet');
+    assert(agenda[1].time && agenda[2].time, 'both timed items here should carry a formatted time label');
   });
 
   test('data.single_day.agenda is not pre-cut to a display limit — how many fit (and any "+N more") is decided per view in the template', async () => {

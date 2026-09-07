@@ -295,18 +295,24 @@ async function run(input) {
 
   // The single-day views (half_horizontal/half_vertical/quadrant) show only rawDays[0], rendered
   // as a plain time+title list rather than a timeline grid — a grid this small is more cramped
-  // than useful. All-day items are left to the existing all-day bar header (already rendered
-  // above this for every view) rather than repeated here too. Every timed event still relevant
-  // from now on is included (already-ended ones are dropped; one in progress right now is kept
-  // and flagged `current` so the template can call it out) — how many of these actually fit, and
-  // the "+N more" row past that, is a per-view layout decision made in the template, not here.
-  // AGENDA_SANITY_CAP is just a hard ceiling against a pathological day, not a display cap.
+  // than useful. All-day items touching today come first (also still shown in the all-day bar
+  // header above, for every view — this is deliberately in addition, not instead), then every
+  // timed event still relevant from now on (already-ended ones are dropped; one in progress right
+  // now is kept and flagged `current` so the template can call it out). How many of these
+  // actually fit, and the "+N more" row past that, is a per-view layout decision made in the
+  // template, not here. AGENDA_SANITY_CAP is just a hard ceiling against a pathological day, not
+  // a display cap.
   const day0 = rawDays[0];
+  const day0AlldayBars = alldayBars.filter((b) => b.startCol === 0);
   const nowIsKnown = nowH !== null && nowH !== undefined;
-  const agendaItems = day0.timed
+  const agendaAllDay = day0AlldayBars.map((b) => ({
+    time: null, all_day: true, title: b.title,
+    hue: colorClass(b.hue), fg: foregroundFor(b.hue), current: false,
+    badges: b.personBadges || [],
+  }));
+  const agendaTimed = day0.timed
     .filter((e) => !nowIsKnown || e.h1 > nowH)
     .sort((a, b) => a.h0 - b.h0)
-    .slice(0, AGENDA_SANITY_CAP)
     .map((e) => {
       const color = e.hueOverride || hueOf(e.calIdx, calendarColors);
       return {
@@ -316,6 +322,7 @@ async function run(input) {
         badges: e.personBadges || [],
       };
     });
+  const agendaItems = agendaAllDay.concat(agendaTimed).slice(0, AGENDA_SANITY_CAP);
 
   const viewPeopleSeen = new Set();
   const viewPeople = [];

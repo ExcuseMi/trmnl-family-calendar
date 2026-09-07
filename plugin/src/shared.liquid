@@ -1,8 +1,9 @@
 
 
 {% template badge_circle %}
-
-  <span class="rounded--small no-shrink flex flex--center-x flex--center-y text--{{ fg }} bg--{{ hue }} font--bold w--min-0 h--min-0 {{ extra_cls }}" style="width:min({{ badge_w_expr }}, {{ badge_h_expr }});height:min({{ badge_w_expr }}, {{ badge_h_expr }});font-size:calc(min({{ badge_w_expr }}, {{ badge_h_expr }}) * 0.55);line-height:1;">
+  {%- assign badge_border_color = "currentColor" -%}
+  {%- if fg == "white" -%}{%- assign badge_border_color = "#888888" -%}{%- endif -%}
+  <span class="rounded--small no-shrink flex flex--center-x flex--center-y text--{{ fg }} bg--{{ hue }} font--bold w--min-0 h--min-0 {{ extra_cls }}" style="width:min({{ badge_w_expr }}, {{ badge_h_expr }});height:min({{ badge_w_expr }}, {{ badge_h_expr }});font-size:calc(min({{ badge_w_expr }}, {{ badge_h_expr }}) * 0.55);line-height:1;border:2px solid {{ badge_border_color }};box-sizing:border-box;">
     {%- if b.is_everyone -%}
       <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/group/default/48px.svg" alt="{{ b.person }}" style="width:65%;height:65%;{% if fg == 'white' %}filter:invert(1);{% endif %}">
     {%- else -%}
@@ -136,8 +137,14 @@
     </div>
   {% else %}
 
+    {%- comment -%}
+      The person-badge legend in the top-left corner is redundant on the views that now render
+      the agenda list (view 2/3/4) — each event already carries its own badge there. Only the
+      full view (a real multi-day grid, where per-event badges are much smaller/less prominent)
+      still shows it.
+    {%- endcomment -%}
     {%- assign show_badge_overlay = false -%}
-    {%- if data.people.size > 0 -%}{%- assign show_badge_overlay = true -%}{%- endif -%}
+    {%- if data.people.size > 0 and view == 1 -%}{%- assign show_badge_overlay = true -%}{%- endif -%}
 
     {%- assign gutter_pct = header_pct | plus: allday_pct -%}
     {%- assign header_allday_rows = 1 -%}
@@ -279,18 +286,26 @@
         {% for item in data.single_day.agenda limit: agenda_shown_limit %}
           {%- comment -%}
             bg-- and text-- on the exact same element didn't reliably render together here — an
-            outer div carrying just the background/shape, wrapping an inner div that carries the
-            text color and the actual flex row, matches the working chip/chip_body split
-            elsewhere in this file and fixes it.
+            outer div carrying the background/shape/border wraps an inner div carrying the text
+            color and the actual flex row, matching the working chip/chip_body split elsewhere in
+            this file. The border+offset box-shadow is the same "sticker" treatment chip uses —
+            it's what keeps a chip's contents legible on-device regardless of fill color, so it's
+            applied here too rather than relying on bg/text contrast alone.
           {%- endcomment -%}
-          <div class="w--full bg--{{ item.hue }} rounded--xsmall relative" style="overflow:hidden;flex-shrink:0;{% if item.current %}box-shadow:0 0 0 2px {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};{% endif %}">
+          {%- assign row_border_color = "currentColor" -%}
+          {%- if item.fg == "white" -%}{%- assign row_border_color = "#888888" -%}{%- endif -%}
+          <div class="w--full bg--{{ item.hue }} text--{{ item.fg }} rounded--xsmall relative" style="overflow:hidden;flex-shrink:0;border:2px solid {{ row_border_color }};box-shadow:2px 2px 0 0 {{ row_border_color }};{% if item.current %}outline:2px solid {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};outline-offset:1px;{% endif %}">
             <div class="w--full flex flex--row flex--center-y gap--small text--{{ item.fg }} px--2 py--1" style="min-width:0;">
-              {% if item.time %}<span class="label {{ axis_cls }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
+              {% if item.time %}
+                <span class="label {{ axis_cls }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>
+              {% elsif item.all_day %}
+                <span class="label {{ axis_cls }} font--bold no-shrink" style="flex:0 0 auto;opacity:0.75;">{{ data.all_day_label }}</span>
+              {% endif %}
               <span class="title {{ event_title_cls }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
               {% if item.badges and item.badges.size > 0 %}
                 <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;">
                   {% for badge in item.badges limit: 2 %}
-                    {%- render "badge_circle", badge_w_expr: "16px", badge_h_expr: "16px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
+                    {%- render "badge_circle", badge_w_expr: "22px", badge_h_expr: "22px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
                   {% endfor %}
                 </span>
               {% endif %}
@@ -302,7 +317,7 @@
           </div>
         {% endfor %}
         {% if agenda_total > agenda_limit %}
-          <div class="w--full bg--gray-30 rounded--xsmall relative">
+          <div class="w--full bg--gray-30 text--white rounded--xsmall relative" style="flex-shrink:0;border:2px solid #888888;box-shadow:2px 2px 0 0 #888888;">
             <div class="w--full flex flex--row flex--center-y flex--center-x text--white px--2 py--1">
               <span class="title {{ event_title_cls }}">+{{ agenda_total | minus: agenda_shown_limit }} more</span>
             </div>
