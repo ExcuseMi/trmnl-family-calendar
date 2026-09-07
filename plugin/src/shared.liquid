@@ -21,12 +21,7 @@
 {% template chip %}
   {%- assign border_color = "currentColor" -%}
   {%- if fg == "white" -%}{%- assign border_color = "#888888" -%}{%- endif -%}
-  {%- assign chip_extra_style = "" -%}
-  {%- if accent_h_pct -%}{%- assign chip_extra_style = "padding-left:14px;" -%}{%- endif -%}
-  <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}{{ chip_extra_style }}border:2px solid {{ border_color }};box-shadow:2px 2px 0 0 {{ border_color }};">
-    {%- if accent_h_pct -%}
-      <div class="absolute top--0 left--0 w--[10px] h--full bg--{{ hue }}" style="background-image:repeating-linear-gradient(45deg, transparent, transparent 3px, var(--gray-20) 3px, var(--gray-20) 5px, var(--gray-45) 5px, var(--gray-45) 7px, var(--gray-70) 7px, var(--gray-70) 9px);border-right:2px solid {{ border_color }};"></div>
-    {%- endif -%}
+  <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border:2px solid {{ border_color }};box-shadow:2px 2px 0 0 {{ border_color }};">
     {%- render "chip_body", title: title, fg: fg, title_cls: title_cls, fit_min: fit_min, clip: clip, pad_x_cls: pad_x_cls -%}
   </div>
 {% endtemplate %}
@@ -310,10 +305,9 @@
           {% for event in day.events %}
 
             {%- assign event_box_h = event.box_height_pct | default: event.height_pct -%}
-            {%- assign accent_h_pct = event.height_pct | times: 100.0 | divided_by: event_box_h -%}
             <div class="absolute pr--0.5 pb--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
               {%- assign event_clip = true -%}
-              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls, accent_h_pct: accent_h_pct %}
+              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
             </div>
           {% endfor %}
         </div>
