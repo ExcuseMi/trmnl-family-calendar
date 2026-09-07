@@ -4,7 +4,7 @@ const CALENDAR_DOWN_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 const WEATHER_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_DAYS = 3;
 const DEFAULT_HOURS = { start: 7, end: 21 };
-const HALF_DAY_HOURS = 12;
+const SINGLE_DAY_LOOKAHEAD_HOURS = 8;
 const WD_MAP = { MO: 0, TU: 1, WE: 2, TH: 3, FR: 4, SA: 5, SU: 6 };
 
 const HUES = ["blue", "green", "orange", "purple", "red", "cyan", "pink", "lime", "violet", "yellow"];
@@ -300,48 +300,27 @@ async function run(input) {
   // start/core/end window lets layoutNative's existing "outside outerStart/outerEnd gets zero
   // height" behavior collapse hours this specific day has nothing in, without touching the
   // full view's shared (and correctly multi-day-wide) axis at all.
+  // day0 is always "today" for these views (they only ever show rawDays[0]) — rather than a
+  // window sized around the day's activity, show a fixed rolling look-ahead: the current hour
+  // through SINGLE_DAY_LOOKAHEAD_HOURS after it. floor(nowH) as the start (not now itself) means
+  // an event already in progress still renders from its own start, clamped to the top of the
+  // window, instead of being cut mid-box. Events entirely before "now" or entirely past the
+  // look-ahead window collapse to zero height via layoutNative's usual outerStart/outerEnd
+  // handling — deliberately: this window is "what's next", not "everything today".
   const day0 = rawDays[0];
-  const day0Starts = day0.timed.map((e) => e.h0);
-  const day0Ends = day0.timed.map((e) => e.h1);
-  // "Real" signals only (events + sunrise/sunset) — excludes defaultHours, so the half-day cap
-  // below can tell the difference between "this day genuinely has 14h of activity" (never
-  // truncated) and "there's nothing here, defaultHours is just padding" (safe to trim).
-  const day0RealStartCandidates = [sunriseMark ? sunriseMark.hour : null, ...day0Starts].filter((h) => h !== null && h !== undefined);
-  const day0RealEndCandidates = [sunsetMark ? sunsetMark.hour : null, ...day0Ends].filter((h) => h !== null && h !== undefined);
-  const day0RealStart = day0RealStartCandidates.length ? Math.floor(Math.min(...day0RealStartCandidates)) : null;
-  const day0RealEnd = day0RealEndCandidates.length ? Math.ceil(Math.max(...day0RealEndCandidates)) : null;
-
-  let day0CoreStartH = Math.min(defaultHours.start, day0RealStart !== null ? day0RealStart : defaultHours.start);
-  let day0CoreEndH = Math.max(defaultHours.end, day0RealEnd !== null ? day0RealEnd : defaultHours.end);
-  day0CoreEndH = Math.max(day0CoreEndH, day0CoreStartH + 1);
-
-  // Smaller views only ever show this one day, so a full default-hours window is often more
-  // than a quiet day needs — cap it to roughly half a day, but only by trimming padding: a day
-  // whose real events (or sunrise/sunset) already span more than that is shown in full, never
-  // truncated (an event must never be hidden by this).
-  if (day0CoreEndH - day0CoreStartH > HALF_DAY_HOURS) {
-    if (day0RealStart !== null && day0RealEnd !== null) {
-      const realSpan = Math.max(day0RealEnd - day0RealStart, 1);
-      if (realSpan >= HALF_DAY_HOURS) {
-        day0CoreStartH = day0RealStart;
-        day0CoreEndH = day0RealEnd;
-      } else {
-        const padBefore = Math.floor((HALF_DAY_HOURS - realSpan) / 2);
-        day0CoreStartH = day0RealStart - padBefore;
-        day0CoreEndH = day0CoreStartH + HALF_DAY_HOURS;
-      }
-    } else {
-      // Nothing real to anchor to at all (no events, no sunrise/sunset) — center a half-day
-      // window inside the configured default range rather than showing it in full.
-      const mid = (day0CoreStartH + day0CoreEndH) / 2;
-      day0CoreStartH = Math.round(mid - HALF_DAY_HOURS / 2);
-      day0CoreEndH = day0CoreStartH + HALF_DAY_HOURS;
-    }
+  let day0CoreStartH;
+  let day0CoreEndH;
+  if (day0.isToday && nowH !== null && nowH !== undefined) {
+    day0CoreStartH = Math.max(0, Math.floor(nowH));
+    day0CoreEndH = day0CoreStartH + SINGLE_DAY_LOOKAHEAD_HOURS;
+  } else {
+    // Shouldn't normally happen (day0 is always today for these views) — fall back to the
+    // configured default hours rather than a "now"-relative window that has no "now" to anchor.
+    day0CoreStartH = defaultHours.start;
+    day0CoreEndH = Math.max(defaultHours.end, day0CoreStartH + 1);
   }
-
-  const day0StartH = day0.isToday && nowH !== null && nowH !== undefined ? Math.min(day0CoreStartH, Math.floor(nowH)) : day0CoreStartH;
-  let day0EndH = day0.isToday && nowH !== null && nowH !== undefined ? Math.max(day0CoreEndH, Math.ceil(nowH) + 1) : day0CoreEndH;
-  day0EndH = Math.max(day0EndH, day0StartH + 1);
+  const day0StartH = day0CoreStartH;
+  const day0EndH = day0CoreEndH;
   // Matches the allday_max_rows recompute the liquid template does for these same views (only
   // bars actually on day 0), so the single-day grid's own gridPct denominator (used to normalize
   // event top/height into percentages) agrees with what the template will actually render.
