@@ -1,5 +1,5 @@
 module.exports = function (test, h) {
-  const { loadEditor, fireInput, clickButtonByText, jsonOut, assert, assertEqual } = h;
+  const { loadEditor, fireInput, fireChange, clickButtonByText, jsonOut, assert, assertEqual } = h;
 
   test('the first person is labeled as the Everyone fallback and its badge input is disabled', () => {
     const { document } = loadEditor();
@@ -50,5 +50,17 @@ module.exports = function (test, h) {
     colorSel.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     fireInput(entries[1].querySelectorAll('input[type=text]')[1], 'A');
     assertEqual(jsonOut(document).people, [{ name: 'Alex', color: 'pink', badge: 'A' }]);
+  });
+
+  test('a person\'s color swatch resets to the no-color style after clearing the color back to (none)', () => {
+    const { document } = loadEditor();
+    document.getElementById('addPerson').click();
+    const entry = document.querySelector('#people .entry');
+    const colorSel = entry.querySelector('select');
+    const swatch = entry.querySelector('.swatch');
+    fireChange(colorSel, 'pink');
+    assert(swatch.getAttribute('style').indexOf('dashed') === -1, 'swatch should show a real color after picking pink');
+    fireChange(colorSel, '');
+    assert(swatch.getAttribute('style').indexOf('dashed') !== -1, 'swatch should go back to the dashed "no color" style once cleared');
   });
 };

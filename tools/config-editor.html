@@ -45,6 +45,13 @@
   button.small { padding: 4px 9px; font-size: 12px; }
   .entry { border: 1px solid #eee; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fafaf9; }
   .entry-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .entry-title-input {
+    font: inherit; font-weight: 600; font-size: 14px; border: 1px solid transparent; background: transparent;
+    padding: 3px 5px; border-radius: 5px; flex: 1 1 auto; min-width: 0; margin-right: 8px;
+  }
+  .entry-title-input:hover { border-color: #ddd; }
+  .entry-title-input:focus { border-color: #bbb; background: #fff; outline: none; }
+  .entry-title-input::placeholder { color: #111; opacity: 1; font-weight: 600; }
   .advanced { margin-top: 10px; }
   .advanced > summary { font-size: 12.5px; color: #555; padding: 4px 0; user-select: none; }
   .advanced-body { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #ddd; }
@@ -315,15 +322,17 @@
   // .trmnl on <body> but deliberately no .screen ancestor (adding one broke this page's own
   // layout the first time it was tried). Reusing colorOptionStyle's already-correct computed
   // rgb() values sidesteps that entirely, same fix as the <option> list, applied here too.
+  function swatchStyle(color) {
+    return color ? colorOptionStyle(color) : "border:1px dashed #bbb;";
+  }
   function swatchFor(color) {
-    var s = el("span", { class: "swatch", style: color ? colorOptionStyle(color) : "border:1px dashed #bbb;" });
-    return s;
+    return el("span", { class: "swatch", style: swatchStyle(color) });
   }
 
   // ------------------------------------------------------------------- state
 
   function uid() { return Math.random().toString(36).slice(2, 9); }
-  function newCalendar() { return { _id: uid(), url: "", name: "", color: "", rules: [], headers: [] }; }
+  function newCalendar() { return { _id: uid(), url: "", name: "", color: "", assignPerson: [], rules: [], headers: [] }; }
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
   // Google's public per-country holiday feed always follows this exact predictable URL shape
   // (see holidayIcsUrl below) — used on import to sort a flat calendars[] back into "regular"
@@ -592,17 +601,41 @@
   // the title, mark the event all-day, hide it — the exact same shape whether it's this
   // calendar's own rule or a global one, and the exact same shape rules[] in transform.js's
   // parseConfig expects.
-  function newRule() { return { _id: uid(), conditions: [newMatcher()], combinator: "and", person: [], rename: true, allDay: false, hide: false, rewrite: "", rewriteFull: false }; }
+  // "Then" actions are added one at a time (pick a type, it appears — see buildThenStep) rather
+  // than always showing all four at once — activeActions tracks which ones are currently shown
+  // for this rule; it's purely a UI-side concern, never part of the exported JSON (ruleValue
+  // below still looks at person/rewrite/allDay/hide directly, regardless of activeActions).
+  var ACTION_TYPES = [
+    { value: "person", label: "Assign person(s)" },
+    { value: "rewrite", label: "Rewrite title" },
+    { value: "allDay", label: "Make all-day" },
+    { value: "hide", label: "Hide" },
+  ];
+  function newRule() { return { _id: uid(), conditions: [newMatcher()], combinator: "and", activeActions: [], person: [], rename: true, allDay: false, hide: false, rewrite: "", rewriteFull: false }; }
   function ruleFromValue(v) {
     var c = conditionsFromMatchValue(v.match);
-    var r = { _id: uid(), conditions: c.conditions, combinator: c.combinator };
+    var r = { _id: uid(), conditions: c.conditions, combinator: c.combinator, activeActions: [] };
     r.person = normalizeNames(v.person);
     r.rename = v.rename !== false;
     r.allDay = v.allDay === true;
     r.hide = v.hide === true;
     r.rewrite = typeof v.rewrite === "string" ? v.rewrite : "";
     r.rewriteFull = v.rewriteFull === true;
+    if (r.person.length) r.activeActions.push("person");
+    if (r.rewrite) r.activeActions.push("rewrite");
+    if (r.allDay) r.activeActions.push("allDay");
+    if (r.hide) r.activeActions.push("hide");
     return r;
+  }
+  // Shared by every checkbox-driven action ("make all-day", "hide") — a plain, stateless toggle
+  // row; the caller's onToggle is fully responsible for reacting (including re-rendering/JSON).
+  function checkboxLabel(checked, text, onToggle) {
+    var chk = el("input", { type: "checkbox" });
+    chk.checked = checked;
+    chk.addEventListener("change", function () { onToggle(chk.checked); });
+    var lbl = el("label", { style: "display:flex;align-items:center;gap:4px;margin:0;font-size:12px;color:#333;white-space:nowrap;" }, [chk, document.createTextNode(text)]);
+    lbl.checkboxEl = chk;
+    return lbl;
   }
   // Whether this rule's match, as it will actually export, is a single plain word/regex/
   // contains/exact matcher — the only case where "rename"/a non-full "rewrite" have an actual
@@ -610,6 +643,130 @@
   // transform.js: an and/or/any/status/weekday top-level match has nothing to point at).
   function ruleHasRenameableMatch(r) {
     return r.conditions.length === 1 && PLAIN_TEXT_TYPES.concat(["regex"]).indexOf(r.conditions[0].matchType) !== -1;
+  }
+  function actionHeader(label, onRemove) {
+    var rm = el("button", { type: "button", class: "small danger" }, [document.createTextNode("Remove")]);
+    rm.addEventListener("click", onRemove);
+    return el("div", { class: "row", style: "justify-content:space-between;align-items:center;" }, [
+      el("label", { text: label, style: "margin:0;" }), rm,
+    ]);
+  }
+  // Renders rule `r`'s "Then" actions. Each of the four (person/rewrite/allDay/hide) is added
+  // one at a time via the "+ Add an action" picker at the bottom, rather than always showing
+  // all four — removing one also resets its underlying value back to the rule's default, so no
+  // orphaned state survives once its block disappears. `refresh` is the rule's shared refresh
+  // (updates the no-op warning, re-renders the JSON) — called after every change here.
+  //
+  // rebuild() (full DOM replace) only runs when the SET of active actions changes; ordinary
+  // typing/toggling instead mutates the existing hint elements in place via refreshHints(), so
+  // an input never loses focus just because a sibling hint needed updating.
+  function buildThenStep(r, refresh) {
+    var wrap = el("div", {});
+    var hints = {};
+
+    function removeAction(type) {
+      r.activeActions = r.activeActions.filter(function (t) { return t !== type; });
+      if (type === "person") { r.person = []; r.rename = true; }
+      if (type === "rewrite") { r.rewrite = ""; r.rewriteFull = false; }
+      if (type === "allDay") r.allDay = false;
+      if (type === "hide") r.hide = false;
+      rebuild();
+      refresh();
+    }
+
+    function buildPersonBlock() {
+      var personInput = personMultiSelect(r.person);
+      personInput.classList.add("field");
+      personInput.addEventListener("change", function () { r.person = selectedValues(personInput); refresh(); });
+      var renameLbl = checkboxLabel(r.rename !== false, "rename match to person name", function (v) { r.rename = v; refresh(); });
+      var renameHint = el("p", { class: "muted", style: "flex-basis:100%;margin:2px 0 0;font-size:11.5px;" });
+      hints.person = { renameLbl: renameLbl, renameHint: renameHint };
+      return el("div", { class: "action-group" }, [
+        actionHeader("Assign person(s)", function () { removeAction("person"); }),
+        el("div", { class: "sub-entry" }, [personInput, renameLbl, renameHint]),
+      ]);
+    }
+
+    function buildRewriteBlock() {
+      var rewriteInput = el("input", { type: "text", class: "field", placeholder: "replacement text...", value: r.rewrite || "", style: "flex:1 1 160px;" });
+      rewriteInput.addEventListener("input", function () { r.rewrite = rewriteInput.value; refresh(); });
+      var rewriteModeSel = el("select", { class: "field", style: "flex:0 0 auto;width:auto;" }, [
+        el("option", { value: "regex" }, [document.createTextNode("Regex replace")]),
+        el("option", { value: "full" }, [document.createTextNode("Full rewrite")]),
+      ]);
+      rewriteModeSel.value = r.rewriteFull ? "full" : "regex";
+      rewriteModeSel.addEventListener("change", function () { r.rewriteFull = rewriteModeSel.value === "full"; refresh(); });
+      var rewriteHint = el("p", { class: "muted", style: "margin:4px 0 0;font-size:11.5px;" });
+      hints.rewrite = { rewriteHint: rewriteHint };
+      return el("div", { class: "action-group" }, [
+        actionHeader("Rewrite title", function () { removeAction("rewrite"); }),
+        el("div", { class: "sub-entry", style: "background:transparent;border:none;padding:4px 0 0;margin:0;" }, [rewriteModeSel, rewriteInput]),
+        rewriteHint,
+      ]);
+    }
+
+    function buildAllDayBlock() {
+      r.allDay = true;
+      return el("div", { class: "action-group" }, [
+        actionHeader("Make all-day", function () { removeAction("allDay"); }),
+        el("p", { class: "muted", style: "margin:2px 0 0;" }, [document.createTextNode("Matching events render as an all-day bar instead of a timed one.")]),
+      ]);
+    }
+
+    function buildHideBlock() {
+      r.hide = true;
+      return el("div", { class: "action-group" }, [
+        actionHeader("Hide", function () { removeAction("hide"); }),
+        el("p", { class: "muted", style: "margin:2px 0 0;" }, [document.createTextNode("Matching events are dropped entirely.")]),
+      ]);
+    }
+
+    var BUILDERS = { person: buildPersonBlock, rewrite: buildRewriteBlock, allDay: buildAllDayBlock, hide: buildHideBlock };
+
+    function rebuild() {
+      wrap.innerHTML = "";
+      hints = {};
+      r.activeActions.forEach(function (type) { wrap.appendChild(BUILDERS[type]()); });
+
+      var remaining = ACTION_TYPES.filter(function (a) { return r.activeActions.indexOf(a.value) === -1; });
+      if (remaining.length) {
+        var options = [el("option", { value: "" }, [document.createTextNode("+ Add an action...")])].concat(
+          remaining.map(function (a) { return el("option", { value: a.value }, [document.createTextNode(a.label)]); })
+        );
+        var sel = el("select", { class: "field-narrow" }, options);
+        var addBtn = el("button", { type: "button", class: "small add" }, [document.createTextNode("+ Add")]);
+        addBtn.disabled = true;
+        sel.addEventListener("change", function () { addBtn.disabled = !sel.value; });
+        addBtn.addEventListener("click", function () {
+          if (!sel.value) return;
+          r.activeActions.push(sel.value);
+          rebuild();
+          refresh();
+        });
+        wrap.appendChild(el("div", { class: "sub-entry" }, [sel, addBtn]));
+      }
+      refreshHints();
+    }
+
+    function refreshHints() {
+      if (hints.person) {
+        var hasPerson = r.person && r.person.length > 0;
+        var renameable = ruleHasRenameableMatch(r);
+        hints.person.renameLbl.checkboxEl.disabled = !(hasPerson && renameable);
+        hints.person.renameLbl.style.opacity = hasPerson && renameable ? "1" : "0.45";
+        hints.person.renameHint.textContent = hasPerson && !renameable
+          ? "Only works with a single Word/Contains/Exact/Regex condition — this rule's match won't rename anything, but the person/color/badge still apply."
+          : "";
+      }
+      if (hints.rewrite) {
+        hints.rewrite.rewriteHint.textContent = !!r.rewrite && !r.rewriteFull && !ruleHasRenameableMatch(r)
+          ? "\"Regex replace\" needs a single Word/Contains/Exact/Regex condition to know what to replace — switch to \"Full rewrite\", or this has no effect."
+          : "";
+      }
+    }
+
+    rebuild();
+    return { wrap: wrap, refreshHints: refreshHints };
   }
   // The JSON value transform.js's parseConfig actually expects for one rule — null when the
   // rule has no usable condition, or matches but does nothing (no person/allDay/hide/rewrite),
@@ -643,93 +800,34 @@
     function render() {
       container.innerHTML = "";
       rules.forEach(function (r, i) {
-        var personInput = personMultiSelect(r.person);
-        personInput.classList.add("field");
-
-        function checkboxLabel(checked, text, onChange) {
-          var chk = el("input", { type: "checkbox" });
-          chk.checked = checked;
-          chk.addEventListener("change", function () { onChange(chk.checked); refresh(); });
-          var lbl = el("label", { style: "display:flex;align-items:center;gap:4px;margin:0;font-size:12px;color:#333;white-space:nowrap;" }, [chk, document.createTextNode(text)]);
-          lbl.checkboxEl = chk;
-          return lbl;
-        }
-        // Meaningless (and, worse, shown checked by default) when no person is assigned, or
-        // when this rule's match won't export as a single plain word/regex/contains/exact (an
-        // and/or/any/status/weekday match has no specific text to rename TO — see
-        // ruleHasRenameableMatch) — so it lives inside the person-assignment group, not
-        // alongside allDay/hide, and disables itself whenever either condition isn't met.
-        var renameLbl = checkboxLabel(r.rename !== false, "rename match to person name", function (v) { r.rename = v; });
-        var renameHint = el("p", { class: "muted", style: "flex-basis:100%;margin:2px 0 0;font-size:11.5px;" });
-        function updateRenameEnabled() {
-          var hasPerson = r.person && r.person.length > 0;
-          var renameable = ruleHasRenameableMatch(r);
-          renameLbl.checkboxEl.disabled = !(hasPerson && renameable);
-          renameLbl.style.opacity = hasPerson && renameable ? "1" : "0.45";
-          renameHint.textContent = hasPerson && !renameable
-            ? "Only works with a single Word/Contains/Exact/Regex condition — this rule's match won't rename anything, but the person/color/badge still apply."
-            : "";
-        }
-        updateRenameEnabled();
-        personInput.addEventListener("change", function () { r.person = selectedValues(personInput); refresh(); });
-
-        var allDayLbl = checkboxLabel(!!r.allDay, "make all-day", function (v) { r.allDay = v; });
-        var hideLbl = checkboxLabel(!!r.hide, "hide", function (v) { r.hide = v; });
-
-        // Rewrite has two modes: "Regex replace" (default) only touches the matched substring,
-        // so the replacement text can use $1/$2 backreferences into the match's own capture
-        // groups; "Full rewrite" discards the rest of the original title outright and replaces
-        // it entirely with the given text. Regex replace needs the same single-plain-match
-        // condition as rename above — a hint (not a hard block) covers that here too.
-        var rewriteInput = el("input", { type: "text", class: "field", placeholder: "replacement text...", value: r.rewrite || "", style: "flex:1 1 160px;" });
-        rewriteInput.addEventListener("input", function () { r.rewrite = rewriteInput.value; refresh(); });
-        var rewriteModeSel = el("select", { class: "field", style: "flex:0 0 auto;width:auto;" }, [
-          el("option", { value: "regex" }, [document.createTextNode("Regex replace")]),
-          el("option", { value: "full" }, [document.createTextNode("Full rewrite")]),
-        ]);
-        rewriteModeSel.value = r.rewriteFull ? "full" : "regex";
-        rewriteModeSel.addEventListener("change", function () { r.rewriteFull = rewriteModeSel.value === "full"; refresh(); });
-        var rewriteHint = el("p", { class: "muted", style: "flex-basis:100%;margin:2px 0 0;font-size:11.5px;" });
-        var rewriteRow = el("div", { class: "sub-entry", style: "background:transparent;border:none;padding:4px 0 0;margin:0;" }, [rewriteModeSel, rewriteInput]);
-        function updateRewriteHint() {
-          rewriteHint.textContent = !!r.rewrite && !r.rewriteFull && !ruleHasRenameableMatch(r)
-            ? "\"Regex replace\" needs a single Word/Contains/Exact/Regex condition to know what to replace — switch to \"Full rewrite\", or this has no effect."
-            : "";
-        }
-        updateRewriteHint();
-
         var rm = el("button", { class: "small danger" }, [document.createTextNode("Remove rule")]);
         rm.addEventListener("click", function () { rules.splice(i, 1); render(); renderJson(); });
 
+        // A rule that matches but triggers nothing usable (no action added yet, or a blank
+        // match) is silently dropped from the exported JSON by ruleValue — surfaced here
+        // instead of leaving the user to wonder why a rule "disappeared".
+        var noopWarning = el("p", { class: "status err", style: "margin:6px 0 0;" });
+        function updateNoopWarning() {
+          noopWarning.textContent = ruleValue(r) === null ? "⚠ This rule won't be included in the JSON — it either has no usable condition, or has no action added yet (Assign person, Rewrite, All-day, or Hide)." : "";
+        }
+
+        var thenUI; // assigned below; referenced here since refresh() can fire from conditionsUI
+                    // before thenUI itself is built — safe, refresh() isn't actually called until
+                    // both are constructed.
+        function refresh() { thenUI.refreshHints(); updateNoopWarning(); renderJson(); }
+
         var conditionsUI = buildConditionsUI(r, refresh);
+        thenUI = buildThenStep(r, refresh);
+        updateNoopWarning();
+
         var matchStep = el("div", { class: "rule-step" }, [
           el("div", { class: "rule-step-label" }, [document.createTextNode("1. If")]),
           conditionsUI.wrap,
         ]);
         var thenStep = el("div", { class: "rule-step" }, [
           el("div", { class: "rule-step-label" }, [document.createTextNode("2. Then")]),
-          el("div", { class: "action-group" }, [
-            el("label", { text: "Assign person(s) (optional)" }),
-            el("div", { class: "sub-entry" }, [personInput, renameLbl, renameHint]),
-          ]),
-          el("div", { class: "action-group" }, [
-            el("label", { text: "Rewrite title (optional)" }),
-            rewriteRow, rewriteHint,
-          ]),
-          el("div", { class: "action-group sub-entry" }, [allDayLbl, hideLbl]),
+          thenUI.wrap,
         ]);
-
-        // A rule that matches but triggers nothing usable (e.g. a person picked with no
-        // declared color/badge is still fine — but a blank match, or every action left off) is
-        // silently dropped from the exported JSON by ruleValue — surfaced here instead of
-        // leaving the user to wonder why a rule "disappeared".
-        var noopWarning = el("p", { class: "status err", style: "margin:6px 0 0;" });
-        function updateNoopWarning() {
-          noopWarning.textContent = ruleValue(r) === null ? "⚠ This rule won't be included in the JSON — it either has no usable condition, or does nothing (pick a person, rewrite, all-day, or hide)." : "";
-        }
-        updateNoopWarning();
-
-        function refresh() { updateRenameEnabled(); updateRewriteHint(); updateNoopWarning(); renderJson(); }
 
         container.appendChild(el("div", { class: "rule-card" }, [
           matchStep, thenStep, noopWarning,
@@ -798,13 +896,35 @@
       var urlInput = el("input", { type: "text", class: "field-url", placeholder: "https://.../calendar.ics", value: c.url });
       urlInput.addEventListener("input", function () { c.url = urlInput.value; renderJson(); renderIcsSources(); });
 
-      var nameInput = el("input", { type: "text", class: "field-narrow", placeholder: "e.g. Family", value: c.name });
+      // The name doubles as this entry's own heading — an editable input styled to look like
+      // the bold "Calendar N" label it replaces, rather than a separate labeled field further
+      // down the form. Placeholder (not a real value) falls back to "Calendar N" so an unnamed
+      // entry still reads the same as before until the feed's own name is read at render time.
+      var nameInput = el("input", { type: "text", class: "entry-title-input", placeholder: "Calendar " + (idx + 1), value: c.name });
       nameInput.addEventListener("input", function () { c.name = nameInput.value; renderJson(); });
 
       var colorSel = hueSelect("cal-color-" + c._id, c.color, true);
-      colorSel.addEventListener("change", function () { c.color = colorSel.value; renderJson(); swatch.replaceWith(swatchFor(c.color)); swatch = wrap.querySelector("#swatch-" + c._id); });
+      colorSel.addEventListener("change", function () { c.color = colorSel.value; renderJson(); swatch.setAttribute("style", swatchStyle(c.color)); });
       var swatch = swatchFor(c.color);
       swatch.id = "swatch-" + c._id;
+
+      // Assigning a person here (rather than via a rule) covers the common case of a whole
+      // calendar belonging to one person — it's exported as an implicit "match everything"
+      // rule placed first, so any more specific per-title rule below still overrides it (see
+      // applyCalendarRules in transform.js: later matches win). Picking a person presets this
+      // calendar's own color to that person's color as a one-time convenience — it only fires
+      // on this change event, so a manual color edit afterward is never fought/overwritten.
+      var personSelect = personMultiSelect(c.assignPerson);
+      personSelect.addEventListener("change", function () {
+        c.assignPerson = selectedValues(personSelect);
+        var first = people.filter(function (p) { return c.assignPerson.indexOf(p.name.trim()) !== -1; })[0];
+        if (first && first.color) {
+          c.color = first.color;
+          colorSel.value = first.color;
+          swatch.setAttribute("style", swatchStyle(c.color));
+        }
+        renderJson();
+      });
 
       // Order determines display priority — e.g. which all-day events win the visible rows
       // when there are more than fit — so reordering is a real, meaningful action, not just
@@ -829,13 +949,13 @@
       });
 
       var head = el("div", { class: "entry-head" }, [
-        el("strong", {}, [document.createTextNode("Calendar " + (idx + 1))]),
+        nameInput,
         el("div", { class: "row", style: "gap:4px;" }, [upBtn, downBtn, removeBtn]),
       ]);
 
       var body = el("div", { class: "row" }, [
         el("div", { style: "flex:1 1 320px;" }, [el("label", { text: "ICS URL" }), urlInput]),
-        el("div", {}, [el("label", { text: "Name" }), nameInput]),
+        el("div", {}, [el("label", { text: "Person" }), personSelect]),
         el("div", {}, [el("label", { text: "Color" }), el("div", { class: "row", style: "gap:6px;" }, [colorSel, swatch])]),
       ]);
 
@@ -938,7 +1058,7 @@
       nameInput.addEventListener("input", function () { p.name = nameInput.value; renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal(); });
 
       var colorSel = hueSelect("p-color-" + p._id, p.color, false);
-      colorSel.addEventListener("change", function () { p.color = colorSel.value; renderJson(); swatch.replaceWith(swatchFor(p.color)); swatch = wrap.querySelector("#pswatch-" + p._id); });
+      colorSel.addEventListener("change", function () { p.color = colorSel.value; renderJson(); swatch.setAttribute("style", swatchStyle(p.color)); });
       var swatch = swatchFor(p.color);
       swatch.id = "pswatch-" + p._id;
 
@@ -1014,7 +1134,11 @@
       if (c.name.trim()) entry.name = c.name.trim();
       if (c.color) entry.color = c.color;
 
-      var rules = c.rules.map(ruleValue).filter(Boolean);
+      var rules = [];
+      if (c.assignPerson && c.assignPerson.length) {
+        rules.push({ match: { type: "any" }, person: c.assignPerson.length === 1 ? c.assignPerson[0] : c.assignPerson });
+      }
+      rules = rules.concat(c.rules.map(ruleValue).filter(Boolean));
       if (rules.length) entry.rules = rules;
 
       var headers = {};
@@ -1085,6 +1209,7 @@
           url: c.url.trim(),
           name: typeof c.name === "string" ? c.name.trim() : "",
           color: typeof c.color === "string" && VALID_COLORS.indexOf(c.color.toLowerCase()) !== -1 ? c.color.toLowerCase() : "",
+          assignPerson: [],
           rules: rules,
           headers: headers,
         };
