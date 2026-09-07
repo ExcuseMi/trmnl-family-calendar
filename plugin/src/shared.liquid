@@ -115,7 +115,7 @@
 
 {%- assign header_pct = data.header_pct | times: header_pct_scale -%}
 
-<div class="layout layout--col gap--none" id="cal-root" data-days-n="{{ shown_days_n }}">
+<div class="layout layout--col gap--none relative" id="cal-root" data-days-n="{{ shown_days_n }}">
   {% if data.error and data.has_events == false %}
 
     <div class="flex flex--col flex--center-x flex--center-y w--full h--full text--center p--6 gap--small" style="box-sizing:border-box;">
@@ -125,19 +125,12 @@
     </div>
   {% else %}
 
+    {%- assign show_badge_overlay = false -%}
+    {%- if data.people.size > 0 and view == 1 -%}{%- assign show_badge_overlay = true -%}{%- endif -%}
+
     <div class="grid gap--none h--[{{ header_pct }}cqh] h--min-[{{ header_pct }}cqh] bg--black flex-none" style="overflow:hidden;">
 
-      <div class="col--span-{{ axis_span }} flex flex--col flex--center-x flex--center-y p--0.5" style="overflow:hidden;box-sizing:border-box;">
-
-        {%- if data.people.size > 0 and view == 1 -%}
-
-          <div class="grid w--auto gap--xsmall grid--cols-2 ">
-            {%- for b in data.people limit: 4 -%}
-              {%- render "badge_circle", head_badge_cls:head_badge_cls, b: b, hue: b.hue, fg: b.fg, extra: "cal-head-badge" -%}
-            {%- endfor -%}
-          </div>
-        {%- endif -%}
-      </div>
+      <div class="col--span-{{ axis_span }}" style="overflow:hidden;box-sizing:border-box;"></div>
       {% for day in data.days limit: shown_days_n %}
 
         <div class="col--span-{{ day_span }} flex flex--col flex--center-x flex--center-y border--v-1 cal-day-cell" data-day-idx="{{ forloop.index0 }}">
@@ -160,6 +153,22 @@
       {% endfor %}
     </div>
 
+    {%- if show_badge_overlay -%}
+      {%- assign gutter_pct = header_pct | plus: data.allday_pct -%}
+      <div class="absolute left--0 top--0 grid gap--none z--1" style="height:{{ gutter_pct }}cqh;width:100%;grid-template-columns:repeat({{ day_span | times: shown_days_n | plus: axis_span }}, 1fr);overflow:hidden;">
+        <div class="col--span-{{ axis_span }} bg--black flex flex--col flex--center-x flex--center-y p--0.5" style="overflow:hidden;box-sizing:border-box;">
+          <div class="grid w--auto gap--xsmall grid--cols-2 ">
+            {%- for b in data.people limit: 8 -%}
+              {%- render "badge_circle", head_badge_cls:head_badge_cls, b: b, hue: b.hue, fg: b.fg, extra: "cal-head-badge" -%}
+            {%- endfor -%}
+          </div>
+          {% if data.allday_pct > 0 %}
+            <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/today/default/48px.svg" alt="{{ data.all_day_label }}" class="w--3 h--3 lg:w--5 lg:h--5 mt--1" style="filter:invert(1);">
+          {% endif %}
+        </div>
+      </div>
+    {%- endif -%}
+
     {% if data.allday_pct > 0 %}
 
       {%- assign allday_total_units = day_span | times: shown_days_n | plus: axis_span -%}
@@ -167,7 +176,9 @@
       <div class="grid gap--none h--[{{ data.allday_pct }}cqh] h--min-[{{ data.allday_pct }}cqh] flex-none relative" style="grid-template-columns:repeat({{ allday_total_units }}, 1fr);overflow:hidden;">
 
         <div class="col--span-{{ axis_span }} flex flex--col flex--center-x flex--center-y px--0.5 bg--black" style="grid-row:1 / span {{ data.allday_max_rows }};overflow:hidden;box-sizing:border-box;">
-          <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/today/default/48px.svg" alt="{{ data.all_day_label }}" class="w--3 h--3 lg:w--5 lg:h--5" style="filter:invert(1);">
+          {% unless show_badge_overlay %}
+            <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/today/default/48px.svg" alt="{{ data.all_day_label }}" class="w--3 h--3 lg:w--5 lg:h--5" style="filter:invert(1);">
+          {% endunless %}
         </div>
         {% for r in (1..data.allday_max_rows) %}
           {% for d in (0..allday_days_last_idx) %}
@@ -223,14 +234,14 @@
               {% assign seg_bg = "bg--gray-30" %}
             {% elsif day.is_today and seg.past %}
 
-              {% assign seg_bg = "bg--gray-70" %}
-              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-55" %}{% endif %}
+              {% assign seg_bg = "bg--gray-75" %}
+              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-70" %}{% endif %}
             {% elsif day.is_today %}
               {% assign seg_bg = "" %}
-              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-65" %}{% endif %}
+              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-75" %}{% endif %}
             {% else %}
-              {% assign seg_bg = "bg--gray-70" %}
-              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-55" %}{% endif %}
+              {% assign seg_bg = "bg--gray-75" %}
+              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-70" %}{% endif %}
             {% endif %}
             <div class="h--[{{ seg.pct }}cqh] w--full cal-row {{ seg_bg }} relative" {% if seg.night %}style="border-bottom:1px solid rgba(255,255,255,0.2);"{% endif %}>
               {% if seg.weather == "rain" %}

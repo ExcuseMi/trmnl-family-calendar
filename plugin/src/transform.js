@@ -42,6 +42,8 @@ async function run(input) {
   const cfg = parseConfig(advancedEnabled ? cf(input, "calendars") : "", simpleUrls);
   const calendars = cfg.calendars;
   const people = cfg.people;
+  const globalRules = cfg.globalRules;
+  const globalDefaultPerson = cfg.defaultPerson;
   const calendarColors = calendars.map((c) => c.color);
   const locale = cfg.locale || localeOf(input);
   const tzname = cfg.timeZone || userTz(input) || "UTC";
@@ -168,15 +170,16 @@ async function run(input) {
   // is actually turned on — disabling it should not resurrect old cached headlines.
   if (rssUrl && !rssHeadline && prevState.news) rssHeadline = prevState.news;
 
-  const filtered = occ.filter((e) => {
+  const filtered = [];
+  for (const e of occ) {
     const cal = calendars[e.calIdx];
-    return !cal.exclude.some((rx) => rx.test(e.title));
-  });
-  for (const e of filtered) {
-    const r = applyCalendarPerson(e.title, calendars[e.calIdx], people, hueOf(e.calIdx, calendarColors));
+    const r = applyCalendarRules(e.title, cal, people, globalRules, globalDefaultPerson);
+    if (r.hide) continue;
     e.title = r.title;
     e.hueOverride = r.hue;
     e.personBadges = r.badges;
+    if (r.allDay) e.allDay = true;
+    filtered.push(e);
   }
 
   const dayBounds = [];
@@ -401,6 +404,48 @@ function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
   return { data };
 }
 
+// A rule is { match, person?, allDay?, hide? } — one match, any combination of effects. `match`
+// is required; a rule with none of the three effects does nothing and is dropped. `rename`
+// (default true) only matters when `person` is set: whether the matched text in the title gets
+// replaced with the assigned person's name(s), same as the old personRules always did.
+function compileRule(spec) {
+  if (!spec || typeof spec !== "object") return null;
+  const rx = compileMatcher(spec.match);
+  if (!rx) return null;
+  const person = normalizeNameList(spec.person);
+  const allDay = spec.allDay === true;
+  const hide = spec.hide === true;
+  if (!person && !allDay && !hide) return null;
+  return { rx, person, allDay, hide, rename: person ? spec.rename !== false : false };
+}
+
+function compileRuleList(raw) {
+  const rules = [];
+  for (const spec of Array.isArray(raw) ? raw : []) {
+    const compiled = compileRule(spec);
+    if (compiled) rules.push(compiled);
+  }
+  return rules;
+}
+
+// Legacy exclude/personRules (still accepted so existing configs keep working) compile into the
+// exact same { rx, person, allDay, hide, rename } shape as the new unified `rules` — one engine
+// underneath regardless of which the config actually used.
+function legacyRules(item) {
+  const rules = [];
+  for (const rx of compileMatcherList(item.exclude)) {
+    rules.push({ rx, person: null, allDay: false, hide: true, rename: false });
+  }
+  for (const rule of Array.isArray(item.personRules) ? item.personRules : []) {
+    if (!rule || typeof rule !== "object") continue;
+    const rx = compileMatcher(rule.match);
+    const person = normalizeNameList(rule.person);
+    if (!rx || !person) continue;
+    rules.push({ rx, person, allDay: false, hide: false, rename: rule.rename !== false });
+  }
+  return rules;
+}
+
 function parseConfig(raw, extraUrls) {
   let data = null;
   if (typeof raw === "string" && raw.trim()) {
@@ -422,9 +467,21 @@ function parseConfig(raw, extraUrls) {
     const name = typeof item.name === "string" ? item.name.trim() : "";
     if (!name) continue;
     const color = typeof item.color === "string" && isValidColor(item.color.toLowerCase()) ? item.color.toLowerCase() : "";
-    const badge = (typeof item.badge === "string" && item.badge.trim() ? item.badge.trim() : name[0].toUpperCase()).slice(0, 1).toUpperCase();
+    // Array.from (not .slice) so a badge given as an emoji or other astral-plane character
+    // (surrogate pair in UTF-16) doesn't get sliced in half into a broken/invisible glyph.
+    const badgeSrc = typeof item.badge === "string" && item.badge.trim() ? item.badge.trim() : name;
+    const badge = Array.from(badgeSrc)[0].toUpperCase();
     people[name.toLowerCase()] = { name, color, badge };
   }
+
+  // Rules that apply to every calendar, regardless of which one an event came from — evaluated
+  // before each calendar's own rules, so a calendar-specific rule can override a global one
+  // (e.g. a global "assign Mom" rule, narrowed by a specific calendar's own rule for one title).
+  const globalRules = compileRuleList(data.rules);
+  // The fallback for any calendar that doesn't set its own defaultPerson — typically a generic
+  // "Everyone"/"Family" person with a distinctive badge (an emoji works well here), so events
+  // nobody's specifically claimed still read as "this is a family event" rather than unbadged.
+  const defaultPerson = normalizeNameList(data.defaultPerson);
 
   // Easy ICS field's plain URLs lead, Advanced Configuration's (possibly richer) entries
   // follow — both go through the exact same per-calendar shaping below. name is left `null`
@@ -438,22 +495,13 @@ function parseConfig(raw, extraUrls) {
     if (!item || typeof item !== "object" || typeof item.url !== "string" || !item.url.trim()) continue;
     const name = typeof item.name === "string" && item.name.trim() ? item.name.trim() : null;
     const color = typeof item.color === "string" && isValidColor(item.color.toLowerCase()) ? item.color.toLowerCase() : null;
-    const exclude = compileMatcherList(item.exclude);
-    const defaultPerson = normalizeNameList(item.defaultPerson);
+    const defaultPersonForCal = normalizeNameList(item.defaultPerson);
+    const rules = legacyRules(item).concat(compileRuleList(item.rules));
 
-    const personRules = [];
-    for (const rule of Array.isArray(item.personRules) ? item.personRules : []) {
-      if (!rule || typeof rule !== "object") continue;
-      const rx = compileMatcher(rule.match);
-      const people_ = normalizeNameList(rule.person) || [];
-      if (!rx || !people_.length) continue;
-      personRules.push({ rx, people: people_, rename: rule.rename !== false });
-    }
-
-    calendars.push({ name, url: item.url.trim(), color, exclude, defaultPerson, personRules });
+    calendars.push({ name, url: item.url.trim(), color, rules, defaultPerson: defaultPersonForCal });
   }
 
-  return { calendars, people, locale, timeZone };
+  return { calendars, people, locale, timeZone, globalRules, defaultPerson };
 }
 
 function normalizeNameList(raw) {
@@ -497,16 +545,36 @@ function compileMatcherList(raw) {
   return rxs;
 }
 
-function applyCalendarPerson(title, cal, people, calHue) {
+// Global rules run first (a calendar-specific match below can still override person/allDay,
+// since whichever rule runs last wins for those two), then this calendar's own rules. `hide`
+// and `allDay` are OR'd across every matching rule instead — one rule flagging either is enough,
+// regardless of what order rules ran in or what any other matching rule said.
+function applyCalendarRules(title, cal, people, globalRules, globalDefaultPerson) {
+  const originalTitle = title;
   let personNames = null;
-  for (const rule of cal.personRules) {
-    if (!rule.rx.test(title)) continue;
-    if (rule.rename) {
-      title = title.replace(new RegExp(rule.rx.source, "gi"), rule.people.join(" & "));
+  let renameRule = null;
+  let allDay = false;
+  let hide = false;
+  // Every rule tests against the untouched original title, not whatever a previous match may
+  // already have rewritten it to — otherwise a rule "wins" the person assignment, as intended,
+  // but an EARLIER rule's rename already erased the very text this one needed to match against,
+  // so it silently never fires at all.
+  for (const rule of globalRules.concat(cal.rules)) {
+    if (!rule.rx.test(originalTitle)) continue;
+    if (rule.hide) hide = true;
+    if (rule.allDay) allDay = true;
+    if (rule.person) {
+      personNames = rule.person;
+      renameRule = rule.rename ? rule : null;
     }
-    personNames = rule.people;
   }
-  if (personNames === null) personNames = cal.defaultPerson;
+  // Only the rule that actually won the person assignment gets to rename the title — applying
+  // every matching rule's rename in sequence could compound (or, worse, silently no-op once an
+  // earlier rename already consumed the text a later one was looking for).
+  if (renameRule) {
+    title = originalTitle.replace(new RegExp(renameRule.rx.source, "gi"), renameRule.person.join(" & "));
+  }
+  if (personNames === null) personNames = cal.defaultPerson || globalDefaultPerson;
 
   let hue = null;
   const badges = [];
@@ -520,15 +588,7 @@ function applyCalendarPerson(title, cal, people, calHue) {
       badges.push({ text: p.badge, person: p.name, hue: badgeHue, fg: badgeFg });
     }
   }
-  // No person attached to this event — badge it with the calendar's own initial instead, in
-  // the calendar's own color, so every event still gets some badge in the header rather than
-  // only ones a specific family member is attached to.
-  if (badges.length === 0 && cal.name) {
-    const badgeHue = colorClass(calHue);
-    const badgeFg = foregroundFor(calHue);
-    badges.push({ text: cal.name.trim()[0].toUpperCase(), person: cal.name, hue: badgeHue, fg: badgeFg });
-  }
-  return { title, hue, badges };
+  return { title, hue, badges, allDay, hide };
 }
 
 function localeOf(input) {
@@ -678,6 +738,53 @@ function addMonths(civil, n) {
   const m = ((mTotal % 12) + 12) % 12;
   const maxDay = m === 1 ? (isLeap(y) ? 29 : 28) : MONTH_DAYS[m];
   return { y, mo: m + 1, d: Math.min(civil.d, maxDay), h: civil.h, mi: civil.mi, s: civil.s };
+}
+
+function daysInMonth(y, mo) {
+  return mo === 2 ? (isLeap(y) ? 29 : 28) : MONTH_DAYS[mo - 1];
+}
+
+// The Nth (or, for negative n, the |n|th-from-the-end) weekday `wd` (0=Mon..6=Sun) in y/mo, or
+// null if that month doesn't have one (e.g. a "5th Monday" most months don't have).
+function nthWeekdayOfMonth(y, mo, wd, n) {
+  const maxDay = daysInMonth(y, mo);
+  if (n > 0) {
+    const firstWd = civilWeekday(y, mo, 1);
+    const d = 1 + ((wd - firstWd + 7) % 7) + (n - 1) * 7;
+    return d <= maxDay ? d : null;
+  }
+  const lastWd = civilWeekday(y, mo, maxDay);
+  const d = maxDay - ((lastWd - wd + 7) % 7) - (-n - 1) * 7;
+  return d >= 1 ? d : null;
+}
+
+// Re-targets `civil`'s day-of-month per BYMONTHDAY/BYDAY-with-ordinal, or null if that specific
+// month has no such day (e.g. BYMONTHDAY=31 in February, or a "5th Friday" that month).
+function retargetDay(civil, byMonthDay, byDayNth, byDayNthWd) {
+  if (byDayNth !== null) {
+    const d = nthWeekdayOfMonth(civil.y, civil.mo, byDayNthWd, byDayNth);
+    return d === null ? null : Object.assign({}, civil, { d });
+  }
+  if (byMonthDay !== null) {
+    const maxDay = daysInMonth(civil.y, civil.mo);
+    const d = byMonthDay > 0 ? byMonthDay : maxDay + byMonthDay + 1;
+    return d >= 1 && d <= maxDay ? Object.assign({}, civil, { d }) : null;
+  }
+  return civil;
+}
+
+// Advances a MONTHLY/YEARLY occurrence by `monthStep` months at a time, skipping (without
+// emitting) any month that doesn't have the BYMONTHDAY/BYDAY-ordinal day being targeted, capped
+// so a rule that can never be satisfied (e.g. a typo'd BYMONTHDAY) can't spin forever.
+function advanceNthDayMonth(civil, monthStep, byMonthDay, byDayNth, byDayNthWd) {
+  let next = addMonths(civil, monthStep);
+  if (byMonthDay === null && byDayNth === null) return next;
+  for (let tries = 0; tries < 60; tries++) {
+    const adj = retargetDay(next, byMonthDay, byDayNth, byDayNthWd);
+    if (adj !== null) return adj;
+    next = addMonths(next, monthStep);
+  }
+  return next;
 }
 
 const I18N = {
@@ -938,6 +1045,22 @@ function expandEvent(ev, tz, winS, winE, out) {
     byday = rr.BYDAY.split(",").map((tok) => tok.slice(-2)).filter((code) => code in WD_MAP).map((code) => WD_MAP[code]).sort((a, b) => a - b);
   }
 
+  // MONTHLY/YEARLY "Nth weekday" (e.g. BYDAY=-1FR for "last Friday", BYMONTHDAY=15 for "the
+  // 15th") — without this, every monthly/yearly rule just reused DTSTART's day-of-month
+  // (addMonths' own clamping), which is wrong the moment BYMONTHDAY/BYDAY names a day that
+  // doesn't match DTSTART's own. DTSTART is trusted to already be a valid first instance, so
+  // only occurrences AFTER it need this adjustment.
+  let byMonthDay = null;
+  if (rr.BYMONTHDAY) {
+    const n = parseInt(rr.BYMONTHDAY.split(",")[0], 10);
+    if (isFinite(n) && n !== 0 && n >= -31 && n <= 31) byMonthDay = n;
+  }
+  let byDayNth = null, byDayNthWd = null;
+  if ((freq === "MONTHLY" || freq === "YEARLY") && rr.BYDAY) {
+    const m = /^(-?\d{1,2})(MO|TU|WE|TH|FR|SA|SU)$/.exec(rr.BYDAY.split(",")[0]);
+    if (m) { byDayNth = parseInt(m[1], 10); byDayNthWd = WD_MAP[m[2]]; }
+  }
+
   let emitted = 0;
   let cur = { y: start.civil.y, mo: start.civil.mo, d: start.civil.d, h: start.civil.h, mi: start.civil.mi, s: start.civil.s };
   const zone = start.zone;
@@ -987,9 +1110,9 @@ function expandEvent(ev, tz, winS, winE, out) {
     } else if (freq === "WEEKLY") {
       cur = addCivilDays(cur, interval * 7);
     } else if (freq === "MONTHLY") {
-      cur = addMonths(cur, interval);
+      cur = advanceNthDayMonth(cur, interval, byMonthDay, byDayNth, byDayNthWd);
     } else if (freq === "YEARLY") {
-      cur = addMonths(cur, 12 * interval);
+      cur = advanceNthDayMonth(cur, 12 * interval, byMonthDay, byDayNth, byDayNthWd);
     } else {
       return;
     }
