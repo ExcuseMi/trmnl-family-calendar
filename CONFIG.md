@@ -137,7 +137,7 @@ same as leaving `color` out of the full object form:
 ```
 
 The two forms mix freely in the same list — use the plain string for a quick add, and the full
-object wherever you actually need `name`/`color`/`exclude`/`defaultPerson`/`personRules`.
+object wherever you actually need `name`/`color`/`rules`/`exclude`/`personRules`.
 
 **Freetext mode:** if you don't need JSON at all, the whole Calendar Configuration field also
 accepts **plain text — one ICS URL per line, nothing else**:
@@ -158,8 +158,14 @@ a URL (a color, `exclude`, a person), switch to the JSON object form above for t
 | `name` | text | no | the feed's own name (read from its `X-WR-CALNAME`), else `"Calendar 1"`, `"Calendar 2"`, ... | Identifies this calendar — shown, for example, in the "unavailable for a while" banner if its feed stops responding. Set it explicitly only to override what the feed calls itself. Must be unique; a duplicate gets " (2)", " (3)", etc. appended automatically. |
 | `color` | [color name](#colors) | no | auto-assigned | Pins this calendar's color. Without it, calendars are colored in the order they appear, cycling through 10 colors. |
 | `exclude` | [matcher](#matchers-word-vs-regex), or list of matchers | no | — | Any event whose title matches **hides it entirely**, only from this calendar. |
-| `personRules` | list (see below) | no | — | Rules for attaching a [person](#people) to specific events on this calendar. |
-| `defaultPerson` | text, or list of text | no | — | Person name(s) to attach to every event on this calendar that no `personRules` entry matched. One name, or a list for a calendar that's already shared between people. |
+| `rules` | list (see [below](#calendarsrules)) | no | — | The current, more general way to attach a [person](#people), hide, retitle, or all-day-ify specific events on this calendar. Prefer this over `personRules`/`exclude` for anything new. |
+| `personRules` | list (see below) | no | — | LEGACY shorthand for a `rules` entry with just `match`+`person`(+`rename`). Still works, kept for existing configs. |
+
+There is no `defaultPerson` field — an older version of this schema had one; it no longer exists
+and is silently ignored if written. To get the same effect ("attach this person to anything not
+already claimed by a more specific rule"), either make them the **first entry** in [`people[]`](#people)
+(that person automatically becomes the fallback for any unmatched event, no rule needed at all), or
+add an explicit catch-all rule: `{ "match": { "type": "any" }, "person": "Alex" }`.
 
 **Where do I find my ICS link?** Every major calendar app has one, usually tucked into settings:
 
@@ -168,6 +174,47 @@ a URL (a color, `exclude`, a person), switch to the JSON object form above for t
 - **Outlook / Apple Calendar**: similarly under calendar sharing/export settings
 
 Treat this link like a password — anyone with it can read your calendar.
+
+### `calendars[].rules[]`
+
+The current, general-purpose way to act on specific events — attach a person, hide, retitle, or
+turn a timed event into an all-day one. A top-level `"rules"` key (a sibling of `"calendars"`, not
+inside any one calendar) applies globally, checked before every calendar's own list. Global and
+per-calendar rules can also mix freely with the legacy `personRules`/`exclude` fields below on the
+same calendar — they all compile into one combined, in-order list.
+
+```json
+"rules": [
+  { "match": { "type": "word", "value": "L6" }, "person": "Alex" },
+  { "match": { "type": "word", "value": "Standup" }, "rewrite": "Standup", "rewriteFull": true },
+  { "match": { "type": "and", "matchers": [
+      { "type": "word", "value": "Happy Hour" },
+      { "type": "weekday", "value": "FR" }
+  ] }, "hide": true },
+  { "match": { "type": "status", "value": "tentative" }, "hide": true },
+  { "match": { "type": "word", "value": "Desk booking" }, "allDay": true, "rewrite": "Kantoor", "rewriteFull": true }
+]
+```
+
+| Field | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `match` | [matcher](#matchers-word-vs-regex) | **yes** | — | Tested against the event's title and its ICS description. |
+| `person` | text, or list of text | no | — | Same as `personRules[].person` above. |
+| `rename` | true/false | no | `true` for a plain word/regex/contains/exact match, `false` for any/all/and/or/status/weekday | Same as `personRules[].rename` above — only meaningful together with `person`. |
+| `hide` | true/false | no | `false` | Drop the event entirely — same effect as `exclude`, but composable with the other matcher types (status, weekday, and/or). |
+| `allDay` | true/false | no | `false` | Render this event as an all-day bar instead of a timed one, regardless of its real start/end time. |
+| `rewrite` | text | no | — | Replaces the matched text with literal text — independent of `person`, for titles that need fixing up regardless of who they're assigned to. |
+| `rewriteFull` | true/false | no | `false` | `true` replaces the WHOLE title with `rewrite`'s text; the default replaces only the matched substring (only meaningful for a plain word/regex/contains/exact match — see below). |
+
+If more than one rule matches the same event, the **last** one wins **per effect** — a later
+rule's `person` overrides an earlier one's, but doesn't cancel an earlier rule's unrelated `hide`.
+
+`rename`/non-full `rewrite` need an actual piece of matched TEXT to substitute — that only exists
+when the rule's match is a plain `word`/`regex`/`contains`/`exact` type (or an `and`/`or` that
+still bottoms out at one, for the purposes of `person`'s own default). A rule whose match is
+`any`/`all`/`status`/`weekday` (or an `and`/`or` combining only those) has nothing to point at, so
+`rename` defaults to `false` and a non-full `rewrite` is a no-op — use `rewriteFull: true` there
+instead if you want to change the title.
 
 ### `calendars[].personRules[]`
 
@@ -199,7 +246,7 @@ more than one rule matches the same event, the **last** one wins.
 A person is a **color**, plus one small badge shown in the header's own corner (not repeated on
 every one of their events — see below). People don't do any matching themselves; *where* a
 person's name gets attached to an event is entirely controlled by that calendar's
-[`personRules`/`defaultPerson`](#calendarspersonrules).
+[`rules`/`personRules`](#calendarsrules).
 
 ```json
 "people": [
@@ -209,9 +256,9 @@ person's name gets attached to an event is entirely controlled by that calendar'
 
 | Field | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| `name` | text | **yes** | — | Also the name `personRules[].person` / `defaultPerson` reference to attach this person. |
+| `name` | text | **yes** | — | Also the name a `rules[].person` / `personRules[].person` entry references to attach this person. The first person in this list is the automatic "Everyone" fallback (see [`calendars[].rules[]`](#calendarsrules)) and also gets a built-in group icon for their header badge instead of `badge`'s text. |
 | `color` | [color name](#colors) | no | — | If set, overrides the calendar's own color for this person's events. |
-| `badge` | short text (1–3 characters) | no | `name`'s first letter | Shown in the header's small per-person badge. |
+| `badge` | short text (1–3 characters) | no | `name`'s first letter | Shown in the header's small per-person badge. Ignored for the first (Everyone) person — see `name` above. |
 
 A person with no `color` set still gets the header badge — it just doesn't change the event's own
 color, which stays whatever the calendar alone would produce.
@@ -219,17 +266,20 @@ color, which stays whatever the calendar alone would produce.
 The header's own top-left corner (full view only) shows one small badge for every person with at
 least one event anywhere in the visible range — a glance at the top of the grid answers "does
 anyone have something coming up" without reading every chip below it. Automatic: no setting to
-turn it on, it just reflects whoever's actually tagged (by `personRules`/`defaultPerson`)
-somewhere in view. This is the *only* place a person's badge shows — individual event chips never
-carry one.
+turn it on, it just reflects whoever's actually tagged (by a `rules`/`personRules` entry, or the
+automatic Everyone fallback) somewhere in view. This is the *only* place a person's badge shows —
+individual event chips never carry one.
 
 ---
 
 ## Matchers: word vs. regex
 
 `exclude` and `personRules[].match` both take a **matcher** — something tested against an
-event's title. A matcher is always an explicit object with two fields, `type` and `value` —
-never a bare string, so it's unambiguous at a glance which kind you're looking at:
+event's title *and* its ICS description (a rule fires if either one matches, so you can hide or
+tag an event based on text that's only in the description, not the title — renaming still only
+touches the title, so a description-only match with `rename` on leaves the title as-is since
+there's nothing to replace there). A matcher is always an explicit object with two fields, `type`
+and `value` — never a bare string, so it's unambiguous at a glance which kind you're looking at:
 
 **Word (the default, and normally all you need):** `type: "word"`. `value` is matched
 case-insensitively, on whole-word boundaries, so `"L1"` matches "L1 Field Trip" but not "L10
@@ -264,6 +314,33 @@ A list mixes both freely:
 ]
 ```
 
+**Other matcher types** (usable anywhere a matcher is expected — `exclude`, `personRules[].match`,
+or `rules[].match`, including nested inside `and`/`or` below):
+
+| `type` | `value` | Matches |
+|---|---|---|
+| `contains` | text | Plain substring anywhere, no word boundaries — `"team"` matches both "Team Meeting" and "Steam Room". |
+| `exact` | text | The ENTIRE title (or description) equals `value`, case-insensitively — nothing more, nothing less. |
+| `any` (or `all`) | *(none)* | Matches unconditionally — the "always" case, e.g. a calendar-wide catch-all rule. |
+| `status` | `"confirmed"`, `"tentative"`, or `"cancelled"` | The event's ICS `STATUS`. Events with no `STATUS` at all never match any `status` matcher. |
+| `weekday` | a day code/name, or a list of them | The event's own local start day. Accepts 2-letter iCal codes (`"MO"`, `"TU"`, `"WE"`, `"TH"`, `"FR"`, `"SA"`, `"SU"`) or full English names (`"Monday"`, ...), case-insensitively; a list means "any of these days". |
+
+**Combining conditions with `and`/`or`:**
+
+```json
+{ "match": { "type": "and", "matchers": [
+    { "type": "word", "value": "Happy Hour" },
+    { "type": "weekday", "value": ["FR"] }
+] }, "hide": true }
+```
+
+`and`/`or` take a `matchers` array of any of the matcher types above (nesting `and`/`or` inside
+each other works too) and combine them — `and` requires every one to match, `or` requires at
+least one. There's no separate `not` — express "everything except X" with `exclude`'s own
+per-entry semantics, a `regex` negative lookahead, or by restructuring the condition (e.g. "hide
+unless confirmed" is `{ "type": "status", "value": "tentative" }` OR'd with
+`{ "type": "status", "value": "cancelled" }`, rather than "not confirmed").
+
 ---
 
 ## How a color gets decided
@@ -273,7 +350,7 @@ specific:
 
 1. **Base color** — the calendar's own pinned `color`, or if it doesn't have one, colors are
    auto-assigned in the order calendars appear.
-2. **Person color** — if the event has a person attached (via `personRules`/`defaultPerson`)
+2. **Person color** — if the event has a person attached (via `rules`, `personRules`, or the automatic Everyone fallback)
    *and* that person has a `color` set, it overrides the base.
 
 ### Worked example
@@ -307,7 +384,10 @@ country, and it fills in a real calendar entry like the one below):
   "locale": "en",
   "timeZone": "Europe/Brussels",
   "calendars": [
-    { "name": "Alex", "url": "https://cloud.example.com/alex.ics", "defaultPerson": "Alex" },
+    {
+      "name": "Alex", "url": "https://cloud.example.com/alex.ics",
+      "rules": [{ "match": { "type": "any" }, "person": "Alex" }]
+    },
     {
       "name": "School",
       "url": "https://cloud.example.com/school.ics",

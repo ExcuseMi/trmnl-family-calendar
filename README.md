@@ -208,9 +208,13 @@ The JSON shape it produces:
   need to already exist in `people[]`, but only a declared name contributes a badge. `rename`
   (default `true`) controls whether the matched text is replaced with the name(s), joined with
   " & " when there's more than one.
-- `calendars[].defaultPerson` — optional, applied when no `personRules` matched. Same shape as
-  `personRules[].person` above (one name or an array).
-- `people[].name` — required, the lookup key `personRules[].person`/`defaultPerson` reference.
+- `calendars[].rules` (and top-level `rules` for global ones) — the current, more general
+  replacement for `personRules`/`exclude`: also supports `hide`, `allDay`, `rewrite`, and matcher
+  types beyond word/regex (`status`, `weekday`, `and`/`or`). See [CONFIG.md](CONFIG.md) for the
+  full schema. There is no `defaultPerson` field (an older version of this schema had one) — the
+  first entry in `people[]` is automatically the fallback for any event no rule assigns more
+  specifically, no rule needed at all.
+- `people[].name` — required, the lookup key a `rules[].person`/`personRules[].person` entry references.
   `people[].color` — optional; overrides that event's chip color. `people[].badge` — optional, a
   short label (defaults to the name's first letter) shown in the header's own small per-person
   badge (full view only — see People above — never repeated per event).

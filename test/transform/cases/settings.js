@@ -132,4 +132,42 @@ module.exports = function (test, h) {
     }));
     assertEqual(r.data.rss_headline.label, 'SPORTS');
   });
+
+  test('a status value on an event never hides it by itself — only an explicit rule can', async () => {
+    const events = [
+      { uid: 1, start: '20260905T090000Z', end: '20260905T100000Z', summary: 'Confirmed', status: 'CONFIRMED' },
+      { uid: 2, start: '20260905T110000Z', end: '20260905T120000Z', summary: 'Tentative', status: 'TENTATIVE' },
+      { uid: 3, start: '20260905T130000Z', end: '20260905T140000Z', summary: 'Cancelled', status: 'CANCELLED' },
+      { uid: 4, start: '20260905T150000Z', end: '20260905T160000Z', summary: 'No Status' },
+    ];
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
+    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
+    assertEqual(titles.sort(), ['Cancelled', 'Confirmed', 'No Status', 'Tentative'].sort());
+  });
+
+  test('hiding unconfirmed events is done via an Advanced Configuration status rule, not a setting', async () => {
+    const events = [
+      { uid: 1, start: '20260905T090000Z', end: '20260905T100000Z', summary: 'Confirmed', status: 'CONFIRMED' },
+      { uid: 2, start: '20260905T110000Z', end: '20260905T120000Z', summary: 'Tentative', status: 'TENTATIVE' },
+      { uid: 3, start: '20260905T130000Z', end: '20260905T140000Z', summary: 'Cancelled', status: 'CANCELLED' },
+      { uid: 4, start: '20260905T150000Z', end: '20260905T160000Z', summary: 'No Status' },
+    ];
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput({
+      view_days: '3',
+      advanced_config_enabled: 'true',
+      calendars: JSON.stringify({
+        calendars: [{
+          url: 'https://example.com/a.ics',
+          rules: [{ match: { type: 'or', matchers: [{ type: 'status', value: 'tentative' }, { type: 'status', value: 'cancelled' }] }, hide: true }],
+        }],
+      }),
+    });
+    const r = await run(input);
+    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
+    assertEqual(titles.sort(), ['Confirmed', 'No Status'].sort());
+  });
 };

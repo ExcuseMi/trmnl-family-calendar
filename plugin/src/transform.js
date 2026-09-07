@@ -145,7 +145,8 @@ async function run(input) {
   const filtered = [];
   for (const e of occ) {
     const cal = calendars[e.calIdx];
-    const r = applyCalendarRules(e.title, cal, people, globalRules, everyonePerson);
+    const startWeekday = fromEpoch(e.startEpoch, tz).wd;
+    const r = applyCalendarRules(e.title, e.desc, e.status, startWeekday, cal, people, globalRules, everyonePerson);
     if (r.hide) continue;
     e.title = r.title;
     e.hueOverride = r.hue;
@@ -385,8 +386,8 @@ function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
 
 function compileRule(spec) {
   if (!spec || typeof spec !== "object") return null;
-  const rx = compileMatcher(spec.match);
-  if (!rx) return null;
+  const m = compileMatcher(spec.match);
+  if (!m) return null;
   const person = normalizeNameList(spec.person);
   const allDay = spec.allDay === true;
   const hide = spec.hide === true;
@@ -395,7 +396,7 @@ function compileRule(spec) {
   if (!person && !allDay && !hide && rewrite === null) return null;
   const isAnyMatch = spec.match && (spec.match.type === "any" || spec.match.type === "all");
   const rename = person ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
-  return { rx, person, allDay, hide, rename, rewrite, rewriteFull };
+  return { match: m.test, rx: m.rx, person, allDay, hide, rename, rewrite, rewriteFull };
 }
 
 function compileRuleList(raw) {
@@ -409,15 +410,15 @@ function compileRuleList(raw) {
 
 function legacyRules(item) {
   const rules = [];
-  for (const rx of compileMatcherList(item.exclude)) {
-    rules.push({ rx, person: null, allDay: false, hide: true, rename: false, rewrite: null, rewriteFull: false });
+  for (const m of compileMatcherList(item.exclude)) {
+    rules.push({ match: m.test, rx: m.rx, person: null, allDay: false, hide: true, rename: false, rewrite: null, rewriteFull: false });
   }
   for (const rule of Array.isArray(item.personRules) ? item.personRules : []) {
     if (!rule || typeof rule !== "object") continue;
-    const rx = compileMatcher(rule.match);
+    const m = compileMatcher(rule.match);
     const person = normalizeNameList(rule.person);
-    if (!rx || !person) continue;
-    rules.push({ rx, person, allDay: false, hide: false, rename: rule.rename !== false, rewrite: null, rewriteFull: false });
+    if (!m || !person) continue;
+    rules.push({ match: m.test, rx: m.rx, person, allDay: false, hide: false, rename: rule.rename !== false, rewrite: null, rewriteFull: false });
   }
   return rules;
 }
@@ -485,30 +486,59 @@ function escapeRegExp(s) {
 
 function compileMatcher(spec) {
   if (!spec || typeof spec !== "object") return null;
-  if (spec.type === "any" || spec.type === "all") return /[\s\S]*/i;
+  if (spec.type === "any" || spec.type === "all") {
+    return { rx: /[\s\S]*/i, test: () => true };
+  }
+  if (spec.type === "and" || spec.type === "or") {
+    const subs = (Array.isArray(spec.matchers) ? spec.matchers : []).map(compileMatcher).filter(Boolean);
+    if (!subs.length) return null;
+    const isAnd = spec.type === "and";
+    return { rx: null, test: (ctx) => (isAnd ? subs.every((m) => m.test(ctx)) : subs.some((m) => m.test(ctx))) };
+  }
+  if (spec.type === "status") {
+    const want = typeof spec.value === "string" ? spec.value.trim().toUpperCase() : "";
+    if (!want) return null;
+    return { rx: null, test: (ctx) => ctx.status === want };
+  }
+  if (spec.type === "weekday") {
+    const raw = Array.isArray(spec.value) ? spec.value : [spec.value];
+    const wanted = new Set();
+    for (const v of raw) {
+      if (typeof v !== "string") continue;
+      const code = v.trim().toUpperCase().slice(0, 2);
+      if (code in WD_MAP) wanted.add(WD_MAP[code]);
+    }
+    if (!wanted.size) return null;
+    return { rx: null, test: (ctx) => ctx.weekday !== null && wanted.has(ctx.weekday) };
+  }
   if (typeof spec.value !== "string") return null;
   const p = spec.value.trim();
   if (!p) return null;
+  let rx;
   if (spec.type === "regex") {
     try {
-      return new RegExp(p, "i");
+      rx = new RegExp(p, "i");
     } catch (e) {
       return null;
     }
+  } else if (spec.type === "contains") {
+    rx = new RegExp(escapeRegExp(p), "i");
+  } else if (spec.type === "exact") {
+    rx = new RegExp("^" + escapeRegExp(p) + "$", "i");
+  } else {
+    rx = new RegExp("\\b" + escapeRegExp(p) + "\\b", "i");
   }
-  if (spec.type === "contains") return new RegExp(escapeRegExp(p), "i");
-  if (spec.type === "exact") return new RegExp("^" + escapeRegExp(p) + "$", "i");
-  return new RegExp("\\b" + escapeRegExp(p) + "\\b", "i");
+  return { rx, test: (ctx) => rx.test(ctx.title) || (!!ctx.desc && rx.test(ctx.desc)) };
 }
 
 function compileMatcherList(raw) {
   const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : [];
-  const rxs = [];
+  const out = [];
   for (const spec of list) {
-    const rx = compileMatcher(spec);
-    if (rx) rxs.push(rx);
+    const m = compileMatcher(spec);
+    if (m) out.push(m);
   }
-  return rxs;
+  return out;
 }
 
 function replaceMatch(text, rx, replacement) {
@@ -516,15 +546,16 @@ function replaceMatch(text, rx, replacement) {
   return text.replace(new RegExp(rx.source, rx.flags.includes("g") ? rx.flags : rx.flags + "g"), replacement);
 }
 
-function applyCalendarRules(title, cal, people, globalRules, everyonePerson) {
+function applyCalendarRules(title, desc, status, weekday, cal, people, globalRules, everyonePerson) {
   const originalTitle = title;
+  const ctx = { title: originalTitle, desc: desc || "", status: status || "", weekday: weekday === undefined || weekday === null ? null : weekday };
   let personNames = null;
   let renameRule = null;
   let rewriteRule = null;
   let allDay = false;
   let hide = false;
   for (const rule of globalRules.concat(cal.rules)) {
-    if (!rule.rx.test(originalTitle)) continue;
+    if (!rule.match(ctx)) continue;
     if (rule.hide) hide = true;
     if (rule.allDay) allDay = true;
     if (rule.person) {
@@ -536,8 +567,10 @@ function applyCalendarRules(title, cal, people, globalRules, everyonePerson) {
   if (rewriteRule) {
     title = rewriteRule.rewriteFull
       ? rewriteRule.rewrite
-      : replaceMatch(originalTitle, rewriteRule.rx, rewriteRule.rewrite);
-  } else if (renameRule) {
+      : rewriteRule.rx
+      ? replaceMatch(originalTitle, rewriteRule.rx, rewriteRule.rewrite)
+      : originalTitle;
+  } else if (renameRule && renameRule.rx) {
     title = replaceMatch(originalTitle, renameRule.rx, renameRule.person.join(" & "));
   }
   if (personNames === null && everyonePerson) personNames = [everyonePerson];
@@ -930,6 +963,8 @@ function collectIcs(text, tz, winS, winE, out, calIdx) {
       ev.title = untext(value);
     } else if (name === "DESCRIPTION") {
       ev.desc = untext(value);
+    } else if (name === "STATUS") {
+      ev.status = value.trim().toUpperCase();
     } else if (name === "RRULE") {
       ev.rrule = parseRrule(value, tz);
     } else if (name === "EXDATE") {
@@ -1003,6 +1038,7 @@ function expandEvent(ev, tz, winS, winE, out) {
   const dur = end.epoch - start.epoch;
   const title = ev.title !== undefined ? ev.title : "(no title)";
   const desc = ev.desc || "";
+  const status = ev.status || "";
   const exdate = ev.exdate || new Set();
   const rr = ev.rrule;
   const calIdx = ev.calIdx || 0;
@@ -1011,7 +1047,7 @@ function expandEvent(ev, tz, winS, winE, out) {
     if (exdate.has(Math.floor(curEpoch / 1000))) return;
     const e = curEpoch + dur;
     if (curEpoch < winE && e > winS) {
-      out.push({ startEpoch: curEpoch, endEpoch: e, allDay, title, desc, calIdx });
+      out.push({ startEpoch: curEpoch, endEpoch: e, allDay, title, desc, status, calIdx });
     }
   }
 

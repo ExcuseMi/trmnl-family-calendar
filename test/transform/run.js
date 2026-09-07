@@ -62,6 +62,8 @@ function icsWithEvents(events) {
       s += 'DTSTART:' + e.start + '\r\nDTEND:' + e.end + '\r\n';
     }
     s += 'SUMMARY:' + e.summary + '\r\n';
+    if (e.description) s += 'DESCRIPTION:' + e.description + '\r\n';
+    if (e.status) s += 'STATUS:' + e.status + '\r\n';
     if (e.calname) s = s.replace('BEGIN:VEVENT', 'X-WR-CALNAME:' + e.calname + '\r\nBEGIN:VEVENT');
     s += 'END:VEVENT\r\n';
   }

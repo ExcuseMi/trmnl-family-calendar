@@ -138,4 +138,75 @@ module.exports = function (test, h) {
     assert(cfg.globalRules.length === 1, 'the top-level rule should compile');
     assert(cfg.calendars[0].rules.length === 0, 'it should not leak into the calendar\'s own rules');
   });
+
+  function ctx(overrides) {
+    return Object.assign({ title: '', desc: '', status: '', weekday: null }, overrides);
+  }
+
+  test('"and" matcher only matches when every sub-matcher matches', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{
+        match: { type: 'and', matchers: [{ type: 'word', value: 'Standup' }, { type: 'weekday', value: 'FR' }] },
+        hide: true,
+      }] }],
+    });
+    const m = cfg.calendars[0].rules[0].match;
+    assert(m(ctx({ title: 'Standup', weekday: 4 })), 'Friday (weekday 4) Standup should match');
+    assert(!m(ctx({ title: 'Standup', weekday: 0 })), 'Monday Standup should NOT match (fails the weekday half)');
+    assert(!m(ctx({ title: 'Retro', weekday: 4 })), 'Friday Retro should NOT match (fails the word half)');
+  });
+
+  test('"or" matcher matches when any sub-matcher matches', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{
+        match: { type: 'or', matchers: [{ type: 'word', value: 'Vacation' }, { type: 'status', value: 'cancelled' }] },
+        hide: true,
+      }] }],
+    });
+    const m = cfg.calendars[0].rules[0].match;
+    assert(m(ctx({ title: 'Vacation', status: 'CONFIRMED' })), 'title match alone should be enough');
+    assert(m(ctx({ title: 'Team Sync', status: 'CANCELLED' })), 'status match alone should be enough');
+    assert(!m(ctx({ title: 'Team Sync', status: 'CONFIRMED' })), 'neither matching should not match');
+  });
+
+  test('"status" matcher compares case-insensitively against the event\'s ICS STATUS', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'status', value: 'tentative' }, hide: true }] }],
+    });
+    const m = cfg.calendars[0].rules[0].match;
+    assert(m(ctx({ status: 'TENTATIVE' })), 'should match the uppercase ICS value against a lowercase config value');
+    assert(!m(ctx({ status: 'CONFIRMED' })), 'should not match a different status');
+  });
+
+  test('"weekday" matcher accepts a single day or a list, by 2-letter or full name', () => {
+    const single = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'weekday', value: 'Monday' }, hide: true }] }],
+    }).calendars[0].rules[0].match;
+    assert(single(ctx({ weekday: 0 })), 'weekday 0 (Monday) should match "Monday"');
+    assert(!single(ctx({ weekday: 1 })), 'weekday 1 (Tuesday) should not match "Monday"');
+
+    const list = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'weekday', value: ['SA', 'SU'] }, hide: true }] }],
+    }).calendars[0].rules[0].match;
+    assert(list(ctx({ weekday: 5 })), 'Saturday (5) should match ["SA","SU"]');
+    assert(list(ctx({ weekday: 6 })), 'Sunday (6) should match ["SA","SU"]');
+    assert(!list(ctx({ weekday: 2 })), 'Wednesday (2) should not match ["SA","SU"]');
+  });
+
+  test('a rule can hide events only on a specific weekday, end to end', async () => {
+    const { runTransform, icsWithEvents, okText, baseInput, assertEqual } = h;
+    const NOW = Date.parse('2026-09-07T12:00:00Z'); // a Monday
+    const events = [
+      { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Weekly Sync' }, // Monday
+      { uid: 2, start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Weekly Sync' }, // Wednesday
+    ];
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3', advanced_config_enabled: 'true' }, {
+      calendars: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'weekday', value: 'MO' }, hide: true }] }] }),
+    }));
+    const r = await run(input);
+    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
+    assertEqual(titles, ['Weekly Sync'], 'only the Wednesday occurrence should survive — the Monday one is hidden by the weekday rule');
+  });
 };

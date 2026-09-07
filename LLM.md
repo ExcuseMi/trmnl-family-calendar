@@ -34,6 +34,9 @@ possible input (no color/exclude/personRules on any calendar); otherwise generat
                                                     // account's own locale (day/month names)
   "timeZone"?: string,                             // IANA name, e.g. "Europe/Brussels" —
                                                     // overrides the account's own time zone
+  "rules"?: Rule[],                                // global rules, checked before any calendar's
+                                                    // own (see Rule below); last matching rule
+                                                    // wins per effect (person/hide/allDay/rewrite)
   "calendars": [                                  // required, at least one; a plain string entry
                                                     // (just the URL) is shorthand for { "url":
                                                     // string } with everything else defaulted —
@@ -47,14 +50,16 @@ possible input (no color/exclude/personRules on any calendar); otherwise generat
                                                     // renames or matches anything by itself —
                                                     // usually best left out entirely
       "color"?: Color,                              // pins this calendar's default color
-      "exclude"?: Matcher | Matcher[],               // matches hidden entirely
+      "rules"?: Rule[],                             // this calendar's own rules, checked after
+                                                        // global ones (see Rule below) — this is
+                                                        // the current, preferred way to attach
+                                                        // people/hide/rewrite/allDay; prefer it
+                                                        // over the legacy fields below
+      "exclude"?: Matcher | Matcher[],               // LEGACY shorthand for Rule{match,hide:true}
       "personRules"?: [
-        { "match": Matcher, "person": string | string[], "rename"?: bool }  // rename defaults
-                                                        // true; person: one name or several for
-                                                        // a shared event, e.g. ["Alex","Jordan"]
-      ],
-      "defaultPerson"?: string | string[]             // applied when no personRule matched;
-                                                        // same one-or-several shape as above
+        { "match": Matcher, "person": string | string[], "rename"?: bool }  // LEGACY shorthand
+                                                        // for Rule{match,person,rename}
+      ]
     }
   ],
   "people"?: [
@@ -62,11 +67,42 @@ possible input (no color/exclude/personRules on any calendar); otherwise generat
       "name": string, "color"?: Color,
       "badge"?: string                              // shown in the header's own per-person badge
                                                         // (defaults to name's first letter) —
-                                                        // full view only, never on event chips
+                                                        // full view only, never on event chips.
+                                                        // Note: for the FIRST person in this list
+                                                        // (see below) badge is ignored and a
+                                                        // built-in group icon renders instead.
     }
   ]
 }
 ```
+
+**The first entry in `people[]` is the automatic "Everyone" fallback** — any event no rule
+assigns to someone more specific gets attached to them automatically, no rule needed. This is the
+*only* way to get that behavior; there is no separate `defaultPerson` field (an older version of
+this schema had one — it no longer exists and is silently ignored if written).
+
+```
+Rule = {
+  "match": Matcher,                                 // required
+  "person"?: string | string[],                     // attach person(s) to matching events
+  "rename"?: bool,                                   // default true (false when match's top-level
+                                                       // type is any/all/and/or/status/weekday,
+                                                       // since there's no specific text to rename
+                                                       // to the person's name) — replaces matched
+                                                       // text with person's name(s), joined " & "
+  "allDay"?: bool,                                   // render as an all-day bar instead of timed
+  "hide"?: bool,                                     // drop the event entirely
+  "rewrite"?: string,                                // replace matched text with literal text
+                                                       // (ignored — no-op — if match's top-level
+                                                       // type has no literal text, unless
+                                                       // rewriteFull is also set)
+  "rewriteFull"?: bool                               // true: rewrite replaces the WHOLE title,
+                                                       // not just the matched substring
+}
+```
+Rules within one list (global, or one calendar's own) are checked **in order**; if more than one
+matches the same event, the **last** one wins per effect (a later rule's `person` overrides an
+earlier one's, etc. — effects don't merge). Global rules are checked before a calendar's own.
 
 `Color` = one of `red orange yellow lime green cyan blue violet purple pink`, or `gray-N` for
 N in `10 15 20 25 30 35 40 45 50 55 60 65 70 75` (10=darkest, 75=lightest), or literal `black` /
@@ -75,17 +111,31 @@ N in `10 15 20 25 30 35 40 45 50 55 60 65 70 75` (10=darkest, 75=lightest), or l
 `Matcher` = `{ "type": "word", "value": string }` (default — matched case-insensitively on
 whole-word boundaries, so `"L1"` matches "L1 Trip" but not "L10 Trip"; no escaping needed) OR
 `{ "type": "regex", "value": string }` for a real regex (JavaScript-flavored) when a plain word
-can't express it. Always this object shape — never a bare string. Prefer `"word"`.
+can't express it. Always this object shape — never a bare string. Prefer `"word"`. Word/regex
+(plus `contains`/`exact`) test against the event's title *and* its ICS description.
+
+Other matcher types, usable anywhere a `Matcher` is expected (including nested inside `and`/`or`):
+- `{ "type": "contains", "value": string }` — plain substring, no word boundaries.
+- `{ "type": "exact", "value": string }` — the whole title (or whole description) must equal `value`.
+- `{ "type": "any" }` (or `"all"`) — matches unconditionally, no `value`.
+- `{ "type": "status", "value": "confirmed" | "tentative" | "cancelled" }` — the event's ICS STATUS.
+- `{ "type": "weekday", "value": string | string[] }` — the event's local start day. Accepts
+  2-letter iCal codes (`"MO"`..`"SU"`) or full names (`"Monday"`); a list means "any of these".
+- `{ "type": "and", "matchers": Matcher[] }` / `{ "type": "or", "matchers": Matcher[] }` —
+  combine any of the above; nests freely. `rename`/non-full `rewrite` only replace matched text
+  when the rule's TOP-LEVEL match is a plain `word`/`regex`/`contains`/`exact` — an `and`/`or`/
+  `status`/`weekday` top-level match has no literal substring to replace, so rename is a no-op
+  unless you also use `rewriteFull: true`.
 
 ## How matching/precedence actually works
 
 - **Color**: calendar's own pinned color (else auto-assigned by position) → person's color (if
-  `personRules`/`defaultPerson` attached one). Later/more-specific wins.
+  a rule, `personRules` entry, or the automatic Everyone fallback attached one). Later/more-specific wins.
 - No person badge ever shows on an event chip; it only ever appears once, in the header's own
   per-person badge (see `people[].badge` above, full view only), covering every distinct person
   with anything anywhere in the visible range — not per event.
-- **`personRules` are per-calendar**, checked in array order against that one calendar's events
-  only; `rename` (default `true`) replaces the matched text with the person's name(s) in the
+- **`rules`/`personRules` are checked in array order**; `rename` (default `true` for a plain
+  word/regex/contains/exact match) replaces the matched text with the person's name(s) in the
   title — joined with " & " when `person` is a list of more than one.
 
 ## Common mistakes to avoid generating
@@ -109,7 +159,7 @@ can't express it. Always this object shape — never a bare string. Prefer `"wor
     { "name": "Family", "url": "https://cloud.example.com/family.ics", "color": "blue" },
     {
       "name": "Alex", "url": "https://cloud.example.com/alex.ics",
-      "defaultPerson": "Alex"
+      "rules": [{ "match": { "type": "any" }, "person": "Alex" }]
     }
   ],
   "people": [

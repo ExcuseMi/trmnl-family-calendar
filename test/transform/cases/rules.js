@@ -32,6 +32,20 @@ module.exports = function (test, h) {
     assertEqual(titles, ['Keep Me']);
   });
 
+  test('a rule can match against an event\'s description, not just its title', async () => {
+    const evA = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Team Sync', description: 'Status: confirmed' };
+    const evB = { uid: 2, start: '20260907T160000Z', end: '20260907T170000Z', summary: 'Team Sync', description: 'Status: cancelled' };
+    const fetchImpl = async () => okText(icsWithEvents([evA, evB]));
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'cancelled' }, hide: true }] }],
+    })));
+    const r = await run(input);
+    const remaining = r.data.days.flatMap((d) => d.events);
+    assertEqual(remaining.length, 1, 'only the event whose description does NOT match "cancelled" should remain');
+    assertEqual(remaining[0].top_pct <= 50, true, 'the surviving event should be the earlier (14:00) one, not the cancelled 16:00 one');
+  });
+
   test('a rewrite rule replaces the matched text with literal text, independent of person', async () => {
     const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'L6 Swim Class' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
