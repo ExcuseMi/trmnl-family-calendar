@@ -316,10 +316,10 @@
   // ------------------------------------------------------------------- state
 
   function uid() { return Math.random().toString(36).slice(2, 9); }
-  function newCalendar() { return { _id: uid(), url: "", name: "", color: "", excludes: [newMatcher()], defaultPerson: [], personRules: [] }; }
+  function newCalendar() { return { _id: uid(), url: "", name: "", color: "", rules: [], defaultPerson: [] }; }
   function newPerson() { return { _id: uid(), name: "", color: "", badge: "" }; }
 
-  // A "matcher" backs both exclude entries and personRules[].match — two tiers, matching
+  // A "matcher" backs a rule's match — two tiers, matching
   // compileMatcher() in plugin/src/transform.js exactly: "word" is the everyday case (plain
   // text, matched case-insensitively on whole-word boundaries so "L1" doesn't also catch
   // "L10" — no regex knowledge needed), "regex" is the expert escape hatch for anything a
@@ -411,10 +411,72 @@
 
     return { typeSelect: typeSelect, textInput: textInput, regexInput: regexInput, testInput: testInput, testResult: testResult };
   }
-  function newPersonRule() { return Object.assign(newMatcher(), { person: [], rename: true }); }
+  // A "rule" is one matcher plus any combination of three effects: assign a person, mark the
+  // event all-day, hide it — the exact same shape whether it's this calendar's own rule or a
+  // global one, and the exact same shape rules[] in transform.js's parseConfig expects.
+  function newRule() { return Object.assign(newMatcher(), { person: [], rename: true, allDay: false, hide: false }); }
+  function ruleFromValue(v) {
+    var r = matcherFromValue(v.match);
+    r.person = normalizeNames(v.person);
+    r.rename = v.rename !== false;
+    r.allDay = v.allDay === true;
+    r.hide = v.hide === true;
+    return r;
+  }
+  // The JSON value transform.js's parseConfig actually expects for one rule — null when the
+  // rule has no usable match, or matches but does nothing (no person/allDay/hide), for the
+  // caller to drop, mirroring compileRule() in transform.js exactly.
+  function ruleValue(r) {
+    var mv = matcherValue(r);
+    if (!mv) return null;
+    var out = { match: mv };
+    if (r.person && r.person.length) {
+      out.person = r.person.length === 1 ? r.person[0] : r.person;
+      if (r.rename === false) out.rename = false;
+    }
+    if (r.allDay) out.allDay = true;
+    if (r.hide) out.hide = true;
+    if (!out.person && !out.allDay && !out.hide) return null;
+    return out;
+  }
+  // Renders a repeatable list of rules into `container` (used for both a calendar's own rules
+  // and the top-level global rules — identical UI and behavior either way) and returns a
+  // re-render function for the "+ Add rule" button to call after pushing a new one.
+  function renderRulesList(container, rules) {
+    function render() {
+      container.innerHTML = "";
+      rules.forEach(function (r, i) {
+        var f = buildMatcherFields(r, renderJson);
+
+        var personInput = personMultiSelect(r.person);
+        personInput.classList.add("field");
+        personInput.addEventListener("change", function () { r.person = selectedValues(personInput); renderJson(); });
+
+        function checkboxLabel(checked, text, onChange) {
+          var chk = el("input", { type: "checkbox" });
+          chk.checked = checked;
+          chk.addEventListener("change", function () { onChange(chk.checked); renderJson(); });
+          return el("label", { style: "display:flex;align-items:center;gap:4px;margin:0;font-size:12px;color:#333;white-space:nowrap;" }, [chk, document.createTextNode(text)]);
+        }
+        var renameLbl = checkboxLabel(r.rename !== false, "rename title", function (v) { r.rename = v; });
+        var allDayLbl = checkboxLabel(!!r.allDay, "make all-day", function (v) { r.allDay = v; });
+        var hideLbl = checkboxLabel(!!r.hide, "hide", function (v) { r.hide = v; });
+
+        var rm = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
+        rm.addEventListener("click", function () { rules.splice(i, 1); render(); renderJson(); });
+
+        container.appendChild(el("div", { class: "sub-entry", style: "flex-wrap:wrap;" }, [f.typeSelect, f.textInput, f.regexInput, personInput, renameLbl, allDayLbl, hideLbl, rm]));
+        container.appendChild(el("div", { style: "display:flex;gap:6px;align-items:center;margin:2px 0 8px;" }, [f.testInput, f.testResult]));
+      });
+    }
+    render();
+    return render;
+  }
 
   var calendars = [newCalendar()];
   var people = [];
+  var globalRules = [];
+  var globalDefaultPerson = [];
 
   // -------------------------------------------------------------- calendars UI
 
@@ -494,63 +556,25 @@
   function advancedBlockFor(c) {
     var body = el("div", { class: "advanced-body" });
 
-    // Exclude patterns (repeatable) ------------------------------------------------
-    var excludesWrap = el("div", {});
-    function renderExcludes() {
-      excludesWrap.innerHTML = "";
-      c.excludes.forEach(function (m, i) {
-        var f = buildMatcherFields(m, renderJson);
-        var rm = el("button", { class: "small danger" }, [document.createTextNode("×")]);
-        rm.addEventListener("click", function () {
-          c.excludes.splice(i, 1);
-          if (!c.excludes.length) c.excludes.push(newMatcher());
-          renderExcludes(); renderJson();
-        });
-        excludesWrap.appendChild(el("div", { class: "sub-entry" }, [f.typeSelect, f.textInput, f.regexInput, rm]));
-        excludesWrap.appendChild(el("div", { style: "display:flex;gap:6px;align-items:center;margin:2px 0 8px;" }, [f.testInput, f.testResult]));
-      });
-    }
-    renderExcludes();
-    var addExclude = el("button", { class: "small" }, [document.createTextNode("+ Add exclude pattern")]);
-    addExclude.addEventListener("click", function () { c.excludes.push(newMatcher()); renderExcludes(); });
-
     // Default person (one or more — ctrl/cmd-click for multiple) ---------------------
     var defaultPersonInput = personMultiSelect(c.defaultPerson);
     defaultPersonInput.addEventListener("change", function () { c.defaultPerson = selectedValues(defaultPersonInput); renderJson(); });
 
-    // Person rules (repeatable) -------------------------------------------------------
+    // Rules (repeatable) — each one matches a title and can assign a person, mark the event
+    // all-day, and/or hide it, in any combination -------------------------------------------
     var rulesWrap = el("div", {});
-    function renderRules() {
-      rulesWrap.innerHTML = "";
-      c.personRules.forEach(function (r, i) {
-        var f = buildMatcherFields(r, renderJson);
+    var rerender = renderRulesList(rulesWrap, c.rules);
+    var addRule = el("button", { class: "small" }, [document.createTextNode("+ Add rule")]);
+    addRule.addEventListener("click", function () { c.rules.push(newRule()); rerender(); });
 
-        var personInput = personMultiSelect(r.person);
-        personInput.classList.add("field");
-        personInput.addEventListener("change", function () { r.person = selectedValues(personInput); renderJson(); });
-
-        var renameChk = el("input", { type: "checkbox" });
-        renameChk.checked = r.rename !== false;
-        renameChk.addEventListener("change", function () { r.rename = renameChk.checked; renderJson(); });
-        var renameLbl = el("label", { style: "display:flex;align-items:center;gap:4px;margin:0;font-size:12px;color:#333;white-space:nowrap;" }, [renameChk, document.createTextNode("rename")]);
-
-        var rm = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
-        rm.addEventListener("click", function () { c.personRules.splice(i, 1); renderRules(); renderJson(); });
-
-        rulesWrap.appendChild(el("div", { class: "sub-entry", style: "flex-wrap:wrap;" }, [f.typeSelect, f.textInput, f.regexInput, personInput, renameLbl, rm]));
-        rulesWrap.appendChild(el("div", { style: "display:flex;gap:6px;align-items:center;margin:2px 0 8px;" }, [f.testInput, f.testResult]));
-      });
-    }
-    renderRules();
-    var addRule = el("button", { class: "small" }, [document.createTextNode("+ Add person rule")]);
-    addRule.addEventListener("click", function () { c.personRules.push(newPersonRule()); renderRules(); });
-
-    body.appendChild(el("div", {}, [el("label", { text: "Exclude events (word or regex, one or more)" }), excludesWrap, addExclude]));
-    body.appendChild(el("div", { style: "margin-top:12px;" }, [el("label", { text: "Default person (applied when no rule below matches)" }), defaultPersonInput]));
-    body.appendChild(el("div", { style: "margin-top:12px;" }, [el("label", { text: "Person rules (checked in order; a match's color/badge wins over Default person)" }), rulesWrap, addRule]));
+    body.appendChild(el("div", {}, [el("label", { text: "Default person (applied when no rule below, and no global rule, assigns one)" }), defaultPersonInput]));
+    body.appendChild(el("div", { style: "margin-top:12px;" }, [
+      el("label", { text: "Rules — if a title matches, then: assign a person, make it all-day, and/or hide it (checked in order; later matches override earlier ones for person)" }),
+      rulesWrap, addRule,
+    ]));
 
     var details = el("details", { class: "advanced" }, [
-      el("summary", { text: "Advanced (exclude, default person, person rules)" }),
+      el("summary", { text: "Advanced (default person, rules)" }),
       body,
     ]);
     return details;
@@ -588,7 +612,7 @@
     wrap.innerHTML = "";
     people.forEach(function (p, idx) {
       var nameInput = el("input", { type: "text", class: "field-narrow", placeholder: "Alex", value: p.name });
-      nameInput.addEventListener("input", function () { p.name = nameInput.value; renderJson(); renderCalendars(); });
+      nameInput.addEventListener("input", function () { p.name = nameInput.value; renderJson(); renderCalendars(); renderGlobal(); });
 
       var colorSel = hueSelect("p-color-" + p._id, p.color, false);
       colorSel.addEventListener("change", function () { p.color = colorSel.value; renderJson(); swatch.replaceWith(swatchFor(p.color)); swatch = wrap.querySelector("#pswatch-" + p._id); });
@@ -601,7 +625,7 @@
       var removeBtn = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
       removeBtn.addEventListener("click", function () {
         people = people.filter(function (x) { return x._id !== p._id; });
-        renderPeople(); renderJson(); renderCalendars();
+        renderPeople(); renderJson(); renderCalendars(); renderGlobal();
       });
 
       var head = el("div", { class: "entry-head" }, [
@@ -619,7 +643,25 @@
 
   document.getElementById("addPerson").addEventListener("click", function () {
     people.push(newPerson());
-    renderPeople(); renderJson(); renderCalendars();
+    renderPeople(); renderJson(); renderCalendars(); renderGlobal();
+  });
+
+  // ------------------------------------------------------- global default person + rules
+
+  function renderGlobal() {
+    var wrap = document.getElementById("globalDefaultPersonWrap");
+    wrap.innerHTML = "";
+    var sel = personMultiSelect(globalDefaultPerson);
+    sel.addEventListener("change", function () { globalDefaultPerson = selectedValues(sel); renderJson(); });
+    wrap.appendChild(sel);
+
+    var rulesWrap = document.getElementById("globalRules");
+    renderRulesList(rulesWrap, globalRules);
+  }
+
+  document.getElementById("addGlobalRule").addEventListener("click", function () {
+    globalRules.push(newRule());
+    renderGlobal();
   });
 
   // ------------------------------------------------------------------ JSON out
