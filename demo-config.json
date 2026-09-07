@@ -49,7 +49,7 @@
     }
   ],
   "people": [
-    { "name": "Family", "badge": "👪" },
+    { "name": "Family" },
     { "name": "Alex", "color": "gray-15" },
     { "name": "Jordan", "color": "gray-35" },
     { "name": "Mia", "color": "gray-55" },

@@ -549,7 +549,7 @@ function applyCalendarRules(title, cal, people, globalRules, everyonePerson) {
       const p = people[personName.toLowerCase()];
       if (!p) continue;
       if (hue === null && p.color) hue = p.color;
-      const badgeHue = p.color ? colorClass(p.color) : "black";
+      const badgeHue = p.color ? colorClass(p.color) : "gray-30";
       const badgeFg = p.color ? foregroundFor(p.color) : "white";
       badges.push({ text: p.badge, person: p.name, hue: badgeHue, fg: badgeFg, is_everyone: p.name === everyonePerson });
     }

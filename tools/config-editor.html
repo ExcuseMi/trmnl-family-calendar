@@ -766,8 +766,10 @@
       var swatch = swatchFor(p.color);
       swatch.id = "pswatch-" + p._id;
 
-      var badgeInput = el("input", { type: "text", class: "field-narrow", placeholder: isEveryone ? "e.g. 👪 or F" : "(auto: first letter)", value: p.badge, maxlength: "4" });
+      var badgeInput = el("input", { type: "text", class: "field-narrow", placeholder: "(auto: first letter)", value: p.badge, maxlength: "4" });
       badgeInput.addEventListener("input", function () { p.badge = badgeInput.value; renderJson(); });
+      badgeInput.disabled = isEveryone;
+      if (isEveryone) badgeInput.placeholder = "(auto: group icon)";
 
       // Order matters here too: whichever person ends up first becomes the "Everyone/All"
       // fallback (see transform.js's parseConfig), so reordering is how you change who that is.
