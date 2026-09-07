@@ -30,6 +30,21 @@
   {%- if fg == "white" -%}{%- assign border_color = "#888888" -%}{%- endif -%}
   <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border-top:1px solid {{ border_color }};border-left:1px solid {{ border_color }};border-bottom:3px solid {{ border_color }};border-right:3px solid {{ border_color }};">
     {%- render "chip_body", title: title, fg: fg, title_cls: title_cls, fit_min: fit_min, clip: clip, pad_x_cls: pad_x_cls -%}
+    {%- comment -%}
+      accent_h_pct (0-100, or blank/nil to skip entirely): the true-time indicator, a two-tone
+      left bar — solid for the real time span, muted gray for whatever extra room this chip grew
+      into for legibility (see the event-loop call site). Rendered as a CHILD of this box (which
+      already has position:relative + overflow:hidden + the same rounded radius) instead of a
+      sibling with its own guessed inset, so it's clipped to the exact same rounded corners as
+      the box itself automatically — no separate offset arithmetic to keep in sync, and no risk
+      of the bar's flat corner poking out past the box's curved one.
+    {%- endcomment -%}
+    {%- if accent_h_pct -%}
+      <div class="absolute top--0 left--0 w--[6px] bg--{{ fg }}" style="height:{{ accent_h_pct }}%;"></div>
+      {%- if accent_h_pct < 99.5 -%}
+        <div class="absolute left--0 w--[6px] bg--gray-45" style="top:{{ accent_h_pct }}%;height:calc(100% - {{ accent_h_pct }}%);"></div>
+      {%- endif -%}
+    {%- endif -%}
   </div>
 {% endtemplate %}
 
@@ -353,25 +368,10 @@
               no room left to grow the chip to match.
             {%- endcomment -%}
             {%- assign event_box_h = event.box_height_pct | default: event.height_pct -%}
+            {%- assign accent_h_pct = event.height_pct | times: 100.0 | divided_by: event_box_h -%}
             <div class="absolute px--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
               {%- assign event_clip = true -%}
-              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
-              {%- comment -%}
-                A two-tone left bar: solid (bg--{{event.fg}}, high-contrast) for the event's real
-                time span, then a muted gray continuation for whatever extra room the chip above
-                grew into for legibility. Inset 2px from the edge and 6px wide so it reads as its
-                own deliberate marker instead of blending into the chip's own 1px border — the
-                earlier 3px-flush-left version did exactly that and was basically invisible.
-                top--0.5/left--0.5 and w--[6px] are real Position/Size utility classes (Position
-                only takes the fixed spacing scale — 0.5 step = 2px — and Size's bracket syntax
-                takes arbitrary px). Both heights stay inline: computed percentages, and neither
-                system has a class for an arbitrary computed value.
-              {%- endcomment -%}
-              {%- assign accent_h_pct = event.height_pct | times: 100.0 | divided_by: event_box_h -%}
-              <div class="absolute top--0.5 left--0.5 w--[6px] bg--{{ event.fg }}" style="height:{{ accent_h_pct }}%;"></div>
-              {%- if accent_h_pct < 99.5 -%}
-                <div class="absolute left--0.5 w--[6px] bg--gray-45" style="top:{{ accent_h_pct }}%;height:calc(100% - {{ accent_h_pct }}%);"></div>
-              {%- endif -%}
+              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls, accent_h_pct: accent_h_pct %}
             </div>
           {% endfor %}
         </div>
