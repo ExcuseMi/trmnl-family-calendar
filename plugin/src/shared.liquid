@@ -118,6 +118,14 @@
 {%- assign header_pct = data.header_pct | times: header_pct_scale -%}
 
 {%- comment -%}
+  Computed once, globally, so every section that needs "how wide is one day column, as a % of
+  the whole screen" (the badge overlay, and the hatch patterns below) shares the exact same
+  numbers rather than each recomputing its own locally-scoped copy.
+{%- endcomment -%}
+{%- assign total_cols = day_span | times: shown_days_n | plus: axis_span -%}
+{%- assign day_width_pct = day_span | times: 100.0 | divided_by: total_cols -%}
+
+{%- comment -%}
   data.allday_pct/allday_max_rows are computed once across every fetched day, not just the
   one(s) this particular view shows — a non-full view only ever renders day 0, so if some OTHER
   day has an all-day event but day 0 doesn't, using the raw global values here would still
@@ -185,7 +193,6 @@
       {%- assign badge_half_x2 = badge_count | divided_by: 2 | times: 2 -%}
       {%- assign badge_is_odd = true -%}
       {%- if badge_half_x2 == badge_count -%}{%- assign badge_is_odd = false -%}{%- endif -%}
-      {%- assign total_cols = day_span | times: shown_days_n | plus: axis_span -%}
       {%- assign axis_width_pct = axis_span | times: 100.0 | divided_by: total_cols -%}
       {%- assign badge_w_pct = axis_width_pct | divided_by: 2.0 | times: 0.85 -%}
       {%- assign badge_h_pct = gutter_pct | times: 1.0 | divided_by: badge_rows | times: 0.85 -%}
@@ -223,7 +230,9 @@
             {% assign allday_fill_col = day_span | times: d | plus: axis_span | plus: 1 %}
             <div class="bg--gray-75 border--v-1 cal-allday-fill relative" data-day-idx="{{ d }}" style="grid-column:{{ allday_fill_col }} / span {{ day_span }};grid-row:{{ r }};box-sizing:border-box;">
               {% unless allday_fill_has_bar %}
-                <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27%3E%3Cpath d=%27M0 12L12 0M-3 3L3 -3M9 15L15 9%27 stroke=%27%23aaaaaa%27 stroke-width=%271.5%27/%3E%3C/svg%3E');pointer-events:none;"></div>
+                {%- assign allday_hatch_x = d | times: day_width_pct -%}
+                {%- assign allday_hatch_y = r | minus: 1 | times: data.allday_row_pct -%}
+                <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%2710%27%3E%3Cpath d=%27M0 10L10 0M-2.5 2.5L2.5 -2.5M7.5 12.5L12.5 7.5%27 stroke=%27%23888888%27 stroke-width=%273%27/%3E%3C/svg%3E');background-position:-{{ allday_hatch_x }}cqw -{{ allday_hatch_y }}cqh;pointer-events:none;"></div>
               {% endunless %}
             </div>
           {% endfor %}
@@ -307,7 +316,8 @@
             {% assign seg_cum_pct = seg_cum_pct | plus: seg.pct %}
           {% endfor %}
           {% if day_is_empty %}
-            <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%2712%27%3E%3Cpath d=%27M0 12L12 0M-3 3L3 -3M9 15L15 9%27 stroke=%27%23aaaaaa%27 stroke-width=%271.5%27/%3E%3C/svg%3E');pointer-events:none;"></div>
+            {%- assign hatch_offset_pct = day_idx | times: day_width_pct -%}
+            <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%2710%27%3E%3Cpath d=%27M0 10L10 0M-2.5 2.5L2.5 -2.5M7.5 12.5L12.5 7.5%27 stroke=%27%23888888%27 stroke-width=%273%27/%3E%3C/svg%3E');background-position:-{{ hatch_offset_pct }}cqw 0;pointer-events:none;"></div>
           {% endif %}
           {% for event in day.events %}
 
