@@ -39,12 +39,10 @@ custom_fields:
   category: calendar
   help_text: TRMNL X Ready
 - keyname: calendars_simple
-  field_type: text
+  field_type: multi_string
   name: Easy ICS (start here)
-  description: Your calendar links, one per line. That's it - no JSON needed. Each calendar's name is read automatically from the feed itself, and colors auto-assign.<br /> Use the Advanced Configuration below only if you need per-calendar colors, filtering, or people.
-  placeholder: |-
-    https://cloud.example.com/family.ics
-    https://cloud.example.com/school.ics
+  description: Your calendar links. That's it - no JSON needed. Each calendar's name is read automatically from the feed itself, and colors auto-assign.<br /> Use the Advanced Configuration below only if you need per-calendar colors, filtering, or people.
+  placeholder: https://cloud.example.com/family.ics
   optional: true
 - keyname: advanced_config_enabled
   field_type: boolean
@@ -123,9 +121,9 @@ custom_fields:
   optional: true
 - keyname: news_feed_enabled
   field_type: boolean
-  name: News Feed
+  name: Enable News Feed
   description: Show top headlines from an RSS or Atom feed as a ticker in the footer, instead of per-day weather (which moves up into the header).
-  default: false
+  default: true
   optional: true
   group: News Feed
   conditional_validation:
