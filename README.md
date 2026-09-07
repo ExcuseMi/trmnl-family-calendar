@@ -63,14 +63,16 @@ hand — see [Configuration Editor](#configuration-editor) below.
 1. In TRMNL: **Plugins → Private Plugins → New**, name it, **Save**.
 2. Push this repo with `trmnlp push` (see below); it uploads `settings.yml`, the `.liquid`
    templates, and `transform.js` in one go.
-3. Paste your calendar link(s) into **Easy ICS** — one per line, nothing else needed. Each
+3. Add your calendar link(s) to **Easy ICS** — one per entry, nothing else needed. Each
    calendar's name is read automatically from the feed itself, and colors auto-assign. If you
    want per-calendar colors, filtering, or to attach specific people to specific events, flip
    **Advanced Configuration** to On (it's hidden by default) to reveal a JSON field, and build
    that with the [Configuration Editor](#configuration-editor) (or hand-write the JSON — see its
-   shape there). It adds to Easy ICS, it doesn't replace it, so you can mix a few simple
-   calendars with one that needs the extra setup — and flipping the toggle back off later just
-   hides the field again, it doesn't stop whatever JSON you already saved from being used.
+   shape there). Turning it on switches the plugin over to Advanced Configuration entirely —
+   Easy ICS is ignored while it's on, so list every calendar you want (including the simple
+   ones) in the JSON itself rather than splitting them across both fields. Flipping the toggle
+   back off does the reverse: Advanced Configuration is ignored (even if you leave the JSON
+   sitting there) and only Easy ICS is used.
    Then fill in the plugin's remaining custom fields:
    - **Time Format**: 24-hour or 12-hour (AM/PM).
    - **Location**: search a place or enter coordinates, for sunrise/sunset and daily weather.

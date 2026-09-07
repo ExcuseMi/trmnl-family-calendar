@@ -27,7 +27,7 @@ module.exports = function (test, h) {
       return Promise.resolve(okJson({}));
     };
     const { run } = runTransform(fetchImpl);
-    const input = baseInput({ calendars: JSON.stringify({ calendars: [{ url: 'https://example.com/cal-fast.ics', name: 'Fast' }, { url: 'https://example.com/cal-slow.ics', name: 'Slow' }] }) });
+    const input = baseInput({ advanced_config_enabled: 'true', calendars: JSON.stringify({ calendars: [{ url: 'https://example.com/cal-fast.ics', name: 'Fast' }, { url: 'https://example.com/cal-slow.ics', name: 'Slow' }] }) });
 
     const t0 = Date.now();
     const r = await run(input);

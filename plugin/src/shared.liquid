@@ -322,6 +322,15 @@
     }
 
     if (forced != null) {
+      // A forced (group-shared) size is applied without re-checking that THIS element actually
+      // fits at it — the group's chosen size comes from whichever member needed the smallest
+      // font, and a short number/label that would've been fine on its own can end up asked to
+      // hold a size too big for its own box. If a stale overflowWrap:anywhere survived from an
+      // earlier per-element pass, that overflow doesn't just clip — it splits a short token like
+      // "10" mid-character onto a second line. Force single-line + normal wrapping here so the
+      // worst case is a clean clip (overflow:hidden, set above) instead of a garbled split.
+      el.style.whiteSpace = 'nowrap';
+      el.style.overflowWrap = 'normal';
       setSize(forced);
       return forced;
     }
@@ -335,10 +344,12 @@
     function fitsOneLine(px) {
       return el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= Math.round(px * 1.15) + 2 && el.scrollHeight <= contentH + 1;
     }
-    // Capped at 2 lines regardless of how much vertical room the box actually has — a tall box
-    // technically "fits" 4-5 wrapped lines of tiny text, but that reads far worse than an
-    // ellipsis after 2 real-sized lines, so wrapping past this is treated as not fitting at all.
-    var MAX_WRAP_LINES = 2;
+    // Capped at 3 lines regardless of how much vertical room the box actually has — a tall box
+    // technically "fits" 5+ wrapped lines of tiny text, but that reads far worse than an
+    // ellipsis after a few real-sized lines, so wrapping past this is treated as not fitting.
+    // 3 (not 2) so a short multi-word phrase like "Work From Home" still gets one word per
+    // line at a large font, rather than being force-crammed into 2 lines at a smaller one.
+    var MAX_WRAP_LINES = 3;
     function fitsWrapped(px) {
       var lineH = Math.round(px * 1.15);
       var lines = Math.round(el.scrollHeight / lineH);
@@ -372,7 +383,14 @@
     var wrappedSize = null;
     if (isMultiWord) {
       el.style.overflowWrap = 'normal';
-      wrappedSize = searchMax(absMin, max, fitsWrapped);
+      // A wrapped fit has to clear a higher bar than a plain one-liner: the 3-line cap above
+      // only rules out pathological cases like 5+ lines, but a long phrase can still satisfy
+      // "3 lines" by shrinking all the way to the absolute floor — technically 3 lines, but
+      // each one is illegibly small. Searching from WRAP_MIN instead means wrapping only wins
+      // when it can do so at a size that's actually worth reading; otherwise this comes back
+      // null and the single-line ellipsis-truncate fallback below takes over.
+      var WRAP_MIN = 11;
+      wrappedSize = searchMax(WRAP_MIN, max, fitsWrapped);
     }
 
     if (oneLineSize !== null && (wrappedSize === null || wrappedSize <= oneLineSize)) {

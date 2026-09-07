@@ -9,6 +9,10 @@ const WD_MAP = { MO: 0, TU: 1, WE: 2, TH: 3, FR: 4, SA: 5, SU: 6 };
 const HUES = ["blue", "green", "orange", "purple", "red", "cyan", "pink", "lime", "violet", "yellow"];
 const GRAY_SHADES = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75];
 const BLACK_WHITE = ["black", "white"];
+// Calendars with no explicit color auto-assign from this grayscale ramp, not the named hues —
+// on 1-bit/2-bit e-ink, a named hue just dithers to some gray pattern anyway, so an explicit
+// gray reads as an intentional design choice instead of an arbitrary color losing its identity.
+const AUTO_HUES = GRAY_SHADES.map((n) => "gray-" + n);
 
 function isValidColor(v) {
   if (HUES.includes(v) || BLACK_WHITE.includes(v)) return true;
@@ -29,8 +33,13 @@ function foregroundFor(color) {
 }
 
 async function run(input) {
-  const simpleUrls = cf(input, "calendars_simple").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const cfg = parseConfig(cf(input, "calendars"), simpleUrls);
+  // The toggle is a hard either/or, not a merge: whichever side is switched off is fully
+  // ignored, even if it still has real content saved in it (a hidden field is never cleared
+  // just by hiding it). Combining both was the source of real double-counted-calendar bugs —
+  // the same calendar entered in both places was fetched and rendered twice.
+  const advancedEnabled = cf(input, "advanced_config_enabled").trim().toLowerCase() === "true";
+  const simpleUrls = advancedEnabled ? [] : cf(input, "calendars_simple").split(/[\r\n,]+/).map((l) => l.trim()).filter(Boolean);
+  const cfg = parseConfig(advancedEnabled ? cf(input, "calendars") : "", simpleUrls);
   const calendars = cfg.calendars;
   const people = cfg.people;
   const calendarColors = calendars.map((c) => c.color);
@@ -1172,7 +1181,7 @@ const ALERTS_ROW_PCT = 5;
 const MIN_EVENT_PCT = 10;
 function hueOf(calIdx, calendarColors) {
   if (calendarColors && calIdx < calendarColors.length && calendarColors[calIdx]) return calendarColors[calIdx];
-  return HUES[calIdx % HUES.length];
+  return AUTO_HUES[calIdx % AUTO_HUES.length];
 }
 
 function cluster(events) {
@@ -1332,7 +1341,15 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
       const top = pctAt(ev.h0) - gridBase;
       let height = pctAt(ev.h1) - gridBase - top;
       if (height < MIN_EVENT_PCT) {
-        const nextTop = idx + 1 < flatEvents.length ? pctAt(flatEvents[idx + 1].ev.h0) - gridBase : gridPct;
+        // Only a later event in this SAME lane can actually collide with this one visually —
+        // events in other lanes sit in their own horizontal slot, so constraining this event's
+        // height against the next one chronologically (regardless of lane) collapsed short
+        // events into an unreadable sliver whenever something else just happened to start soon
+        // after, even side-by-side in a different lane entirely.
+        let nextTop = gridPct;
+        for (let j = idx + 1; j < flatEvents.length; j++) {
+          if (flatEvents[j].laneIdx === item.laneIdx) { nextTop = pctAt(flatEvents[j].ev.h0) - gridBase; break; }
+        }
         height = Math.min(MIN_EVENT_PCT, Math.max(0, nextTop - top));
       }
       const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);

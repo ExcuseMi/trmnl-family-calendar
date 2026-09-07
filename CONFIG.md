@@ -1,18 +1,18 @@
 # Calendar Configuration reference
 
-**Just want your calendars showing up?** You don't need any of this — paste your ICS link(s),
-one per line, into the plugin's **Easy ICS** setting and you're done. Names are read
-automatically from each feed and colors auto-assign. Nothing below applies until you need more
-than that.
+**Just want your calendars showing up?** You don't need any of this — add your ICS link(s) to
+the plugin's **Easy ICS** setting (one per entry, add as many as you need) and you're done.
+Names are read automatically from each feed and colors auto-assign. Nothing below applies until
+you need more than that.
 
 This document explains, field by field, the JSON you paste into the plugin's **Advanced
 Configuration** setting instead — for per-calendar colors, filtering, or attaching specific
 people to specific events. It's the same JSON the
 [Configuration Editor](tools/config-editor.html) generates for you — you don't need to read this
 to use the plugin. It's here for when you want to hand-edit the JSON, understand exactly what a
-setting does, or troubleshoot why an event isn't showing the color you expected. Advanced
-Configuration adds to Easy ICS, it doesn't replace it — mix a few simple calendars in Easy ICS
-with one that needs the extra setup here.
+setting does, or troubleshoot why an event isn't showing the color you expected. Turning
+Advanced Configuration on replaces Easy ICS entirely — while it's on, Easy ICS is ignored, so
+list every calendar you want (including plain ones with no special setup) here in the JSON.
 
 If you just want to get set up, use the
 **[Configuration Editor](https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html)**

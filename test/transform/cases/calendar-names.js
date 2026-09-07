@@ -25,7 +25,7 @@ module.exports = function (test, h) {
     const fetchImpl = async () => okText(ics);
     const { run } = runTransform(fetchImpl, NOW);
     const cfg = JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Explicit' }] });
-    const r = await run(baseInput({ calendars: cfg }));
+    const r = await run(baseInput({ advanced_config_enabled: 'true', calendars: cfg }));
     assertEqual(r.trmnl_state.calendarNames['https://example.com/a.ics'], 'Explicit');
   });
 

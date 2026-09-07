@@ -7,10 +7,12 @@ examples, see [CONFIG.md](CONFIG.md) in this repo — this file is the terse/str
 the same schema.
 
 First check whether they need this JSON at all: if they just want their calendar(s) showing up,
-with no per-calendar colors, filtering, or people, tell them to paste the ICS link(s) — one per
-line — into the plugin's separate **Easy ICS** setting instead, and stop there. Only produce the
+with no per-calendar colors, filtering, or people, tell them to add the ICS link(s) — one per
+entry — into the plugin's separate **Easy ICS** setting instead, and stop there. Only produce the
 JSON below once they actually need something Easy ICS can't do; it goes in the **Advanced
-Configuration** field, which adds to (not replaces) whatever's in Easy ICS.
+Configuration** field. Turning that field's toggle on replaces Easy ICS entirely (it's ignored
+while Advanced Configuration is on) — so the JSON needs to list every calendar they want, not
+just the ones needing special setup.
 
 Output ONE JSON object, no comments, no trailing commas, matching the shape below. Prefer
 `"type": "word"` over `"type": "regex"` wherever a word does the job (see `Matcher` below) — only
