@@ -357,13 +357,21 @@
               {%- assign event_clip = true -%}
               {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
               {%- comment -%}
-                top--0/left--0 and w--[3px] are real Size/Position utility classes (Position
-                offsets only take the fixed spacing scale, and 0 is on it; Size's bracket syntax
-                takes arbitrary px). height stays inline: it's a computed percentage, and neither
+                A two-tone left bar: solid (bg--{{event.fg}}, high-contrast) for the event's real
+                time span, then a muted gray continuation for whatever extra room the chip above
+                grew into for legibility. Inset 2px from the edge and 6px wide so it reads as its
+                own deliberate marker instead of blending into the chip's own 1px border — the
+                earlier 3px-flush-left version did exactly that and was basically invisible.
+                top--0.5/left--0.5 and w--[6px] are real Position/Size utility classes (Position
+                only takes the fixed spacing scale — 0.5 step = 2px — and Size's bracket syntax
+                takes arbitrary px). Both heights stay inline: computed percentages, and neither
                 system has a class for an arbitrary computed value.
               {%- endcomment -%}
               {%- assign accent_h_pct = event.height_pct | times: 100.0 | divided_by: event_box_h -%}
-              <div class="absolute top--0 left--0 w--[3px] bg--{{ event.fg }}" style="height:{{ accent_h_pct }}%;"></div>
+              <div class="absolute top--0.5 left--0.5 w--[6px] bg--{{ event.fg }}" style="height:{{ accent_h_pct }}%;"></div>
+              {%- if accent_h_pct < 99.5 -%}
+                <div class="absolute left--0.5 w--[6px] bg--gray-45" style="top:{{ accent_h_pct }}%;height:calc(100% - {{ accent_h_pct }}%);"></div>
+              {%- endif -%}
             </div>
           {% endfor %}
         </div>
