@@ -266,7 +266,7 @@ async function run(input) {
       });
     }
   }
-  const alldayBars = alldaySpans.filter((s) => s.row < visibleCap || s.isOverflow).map((s) => ({
+  let alldayBars = alldaySpans.filter((s) => s.row < visibleCap || s.isOverflow).map((s) => ({
     title: s.e.title,
     hue: s.isOverflow ? "gray-30" : (s.e.hueOverride || hueOf(s.e.calIdx, calendarColors)),
     personBadges: s.e.personBadges,
@@ -276,6 +276,29 @@ async function run(input) {
     continuesBefore: s.continuesBefore,
     continuesAfter: s.continuesAfter,
   }));
+  // Two genuinely separate events (e.g. a daily-recurring "Desk booking" rewritten to "Kantoor"
+  // on both Monday and Tuesday) can land immediately next to each other in the same row after
+  // packing — visually that's one continuous thing, not two, so merge any run of same-row,
+  // contiguous (no gap between them), identical-looking (same title/hue/badges) bars into one
+  // wider one instead of rendering each with its own border. Never merges across an actual gap
+  // (a day with nothing between them) or two bars that just happen to share a title but differ
+  // in color/person — only true visual duplicates collapse.
+  alldayBars.sort((a, b) => a.row - b.row || a.startCol - b.startCol);
+  const mergedAlldayBars = [];
+  for (const bar of alldayBars) {
+    const prev = mergedAlldayBars[mergedAlldayBars.length - 1];
+    if (
+      prev && prev.row === bar.row && prev.startCol + prev.span === bar.startCol &&
+      prev.title === bar.title && prev.hue === bar.hue &&
+      JSON.stringify(prev.personBadges) === JSON.stringify(bar.personBadges)
+    ) {
+      prev.span += bar.span;
+      prev.continuesAfter = bar.continuesAfter;
+    } else {
+      mergedAlldayBars.push(Object.assign({}, bar));
+    }
+  }
+  alldayBars = mergedAlldayBars;
 
   const nowH = (nowEpoch - winSEpoch) / 3600000;
   const newsPct = rssHeadline ? NEWS_PCT : 0;

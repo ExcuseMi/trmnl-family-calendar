@@ -34,4 +34,37 @@ module.exports = function (test, h) {
     assertEqual(overflow[0].title, '+3 more', 'the summary should count the 3 events that did not fit');
     assertEqual(r.data.allday_max_rows, 3, 'total row budget should stay the same as the non-overflow case');
   });
+
+  test('adjacent same-title/same-color all-day bars in the same row merge into one wider bar', async () => {
+    // Two genuinely separate events (e.g. a daily-recurring "Desk booking" each rewritten to
+    // "Kantoor") landing on consecutive days should read as one continuous bar, not two
+    // touching boxes — see the real device screenshot that prompted this.
+    const events = [
+      { uid: 1, allDay: true, start: '20260905', end: '20260906', summary: 'Kantoor' },
+      { uid: 2, allDay: true, start: '20260906', end: '20260907', summary: 'Kantoor' },
+      { uid: 3, allDay: true, start: '20260907', end: '20260908', summary: 'Different Title' },
+    ];
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics', view_days: '3' }));
+    assertEqual(r.data.allday_bars.length, 2, 'the two "Kantoor" bars should merge into one');
+    const kantoor = r.data.allday_bars.find((b) => b.title === 'Kantoor');
+    assertEqual(kantoor.span, 2, 'the merged bar should span both days');
+    assertEqual(kantoor.start_col, 0);
+    const other = r.data.allday_bars.find((b) => b.title === 'Different Title');
+    assertEqual(other.span, 1, 'a differently-titled adjacent bar should not be swept into the merge');
+  });
+
+  test('same-title all-day bars in different rows do not merge', async () => {
+    const events = [
+      { uid: 1, allDay: true, start: '20260905', end: '20260906', summary: 'Kantoor' },
+      // Overlaps day 1 with the first event (both cover 2026-09-05), forcing it into a second
+      // row — same title, but genuinely not adjacent in the same row, so must NOT merge.
+      { uid: 2, allDay: true, start: '20260905', end: '20260906', summary: 'Kantoor' },
+    ];
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics', view_days: '3' }));
+    assertEqual(r.data.allday_bars.length, 2, 'two overlapping same-title bars in different rows must stay separate');
+  });
 };

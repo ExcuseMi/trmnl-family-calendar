@@ -3,14 +3,25 @@
 {% template badge_circle %}
 
   {%- comment -%}
-    font-size is tied to the exact same min(cqw,cqh) expression as the box itself — the mashup
-    views (half/quadrant) render into a much smaller physical tile than full view, and without
-    this the badge letter used a fixed ambient font-size regardless of how small the circle
-    actually was, overflowing it badly on the smaller tiles.
+    Two sizing modes. `fixed_cls` (non-full views): a small, constant framework size class, no
+    container-query math at all — cqw/cqh measure against whatever the nearest container-type
+    ancestor is, which on a mashup slot (half/quadrant) is NOT reliably the visually-scaled-down
+    tile a real device composes it into (confirmed: percentage sizing that looked right in an
+    isolated full-size local render came out badly oversized on an actual mashup device
+    screenshot) — so non-full views deliberately avoid cq units entirely rather than guess at a
+    container scope this codebase has no local way to verify. Full view keeps the min(cqw,cqh)
+    calc sizing, tied to badge_w_pct/badge_h_pct computed from the real layout math, verified
+    against real full-view device screenshots this session.
   {%- endcomment -%}
-  <span class="rounded--small no-shrink flex flex--center-x flex--center-y text--{{ fg }} bg--{{ hue }} font--bold {{ extra_cls }}" style="width:min({{ badge_w_pct }}cqw, {{ badge_h_pct }}cqh);height:min({{ badge_w_pct }}cqw, {{ badge_h_pct }}cqh);font-size:calc(min({{ badge_w_pct }}cqw, {{ badge_h_pct }}cqh) * 0.55);line-height:1;">
-    {{- b.text -}}
-  </span>
+  {%- if fixed_cls != blank -%}
+    <span class="rounded--small no-shrink flex flex--center-x flex--center-y text--{{ fg }} bg--{{ hue }} font--bold {{ fixed_cls }} {{ extra_cls }}">
+      {{- b.text -}}
+    </span>
+  {%- else -%}
+    <span class="rounded--small no-shrink flex flex--center-x flex--center-y text--{{ fg }} bg--{{ hue }} font--bold {{ extra_cls }}" style="width:min({{ badge_w_pct }}cqw, {{ badge_h_pct }}cqh);height:min({{ badge_w_pct }}cqw, {{ badge_h_pct }}cqh);font-size:calc(min({{ badge_w_pct }}cqw, {{ badge_h_pct }}cqh) * 0.55);line-height:1;">
+      {{- b.text -}}
+    </span>
+  {%- endif -%}
 {% endtemplate %}
 
 {% template chip_body %}
@@ -196,13 +207,20 @@
       {%- assign axis_width_pct = axis_span | times: 100.0 | divided_by: total_cols -%}
       {%- assign badge_w_pct = axis_width_pct | divided_by: 2.0 | times: 0.85 -%}
       {%- assign badge_h_pct = gutter_pct | times: 1.0 | divided_by: badge_rows | times: 0.85 -%}
+      {%- comment -%}
+        Full view's gutter is generous and its own real-device screenshots confirm the
+        min(cqw,cqh) sizing reads correctly there — every other view keeps a small constant
+        size instead (see badge_circle's own comment for why cq units aren't trusted there).
+      {%- endcomment -%}
+      {%- assign badge_fixed_cls = "" -%}
+      {%- unless view == 1 -%}{%- assign badge_fixed_cls = "w--3 h--3 rounded rounded--small" -%}{%- endunless -%}
       <div class="absolute left--0 top--0 grid gap--none z--1" style="height:{{ gutter_pct }}cqh;width:100%;grid-template-columns:repeat({{ day_span | times: shown_days_n | plus: axis_span }}, 1fr);overflow:hidden;">
         <div class="col--span-{{ axis_span }} bg--black flex flex--col flex--center-x flex--center-y p--0.5" style="overflow:hidden;box-sizing:border-box;">
           <div class="grid w--auto gap--xsmall grid--cols-2 flex--center-x" style="justify-items:center;">
             {%- for b in data.people limit: 8 -%}
               {%- assign badge_extra_cls = "" -%}
               {%- if forloop.last and badge_is_odd -%}{%- assign badge_extra_cls = "col--span-2" -%}{%- endif -%}
-              {%- render "badge_circle", badge_w_pct: badge_w_pct, badge_h_pct: badge_h_pct, b: b, hue: b.hue, fg: b.fg, extra_cls: badge_extra_cls -%}
+              {%- render "badge_circle", badge_w_pct: badge_w_pct, badge_h_pct: badge_h_pct, fixed_cls: badge_fixed_cls, b: b, hue: b.hue, fg: b.fg, extra_cls: badge_extra_cls -%}
             {%- endfor -%}
           </div>
         </div>
@@ -222,10 +240,11 @@
         </div>
         {% for r in (1..allday_max_rows) %}
           {% for d in (0..allday_days_last_idx) %}
+            {%- assign allday_fill_row0 = r | minus: 1 -%}
             {%- assign allday_fill_has_bar = false -%}
             {%- for bar in data.allday_bars -%}
               {%- assign allday_fill_bar_end = bar.start_col | plus: bar.span -%}
-              {%- if d >= bar.start_col and d < allday_fill_bar_end -%}{%- assign allday_fill_has_bar = true -%}{%- endif -%}
+              {%- if d >= bar.start_col and d < allday_fill_bar_end and bar.row == allday_fill_row0 -%}{%- assign allday_fill_has_bar = true -%}{%- endif -%}
             {%- endfor -%}
             {% assign allday_fill_col = day_span | times: d | plus: axis_span | plus: 1 %}
             <div class="bg--gray-75 border--v-1 cal-allday-fill relative" data-day-idx="{{ d }}" style="grid-column:{{ allday_fill_col }} / span {{ day_span }};grid-row:{{ r }};box-sizing:border-box;">
