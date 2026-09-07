@@ -1329,7 +1329,7 @@ function round4(x) {
   return Math.round(x * 10000) / 10000;
 }
 
-const EXTENSION_WEIGHT = 0.4;
+const EXTENSION_WEIGHT = 0.8;
 
 function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd, nowH, sunMarks, hourlyWeather, calendarColors, headerPct, is12h, newsPct, alertsPct) {
   outerStart = Math.max(0, Math.min(23, Math.trunc(outerStart)));
