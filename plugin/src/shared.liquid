@@ -155,7 +155,7 @@
           {%- assign badge_count = data.people.size -%}
           {%- if badge_count > 8 -%}{%- assign badge_count = 8 -%}{%- endif -%}
           {%- assign badge_cols = 1 -%}
-          {%- if axis_span >= 2 or badge_count >= 5 -%}{%- assign badge_cols = 2 -%}{%- endif -%}
+          {%- if axis_span >= 2 or badge_count >= 5 or view == 2 -%}{%- assign badge_cols = 2 -%}{%- endif -%}
           {%- assign badge_rows = badge_count | plus: badge_cols | minus: 1 | divided_by: badge_cols -%}
           {%- assign badge_cols_x_rows = badge_cols | times: badge_rows -%}
           {%- assign badge_is_odd = true -%}
