@@ -93,7 +93,7 @@ module.exports = function (test, h) {
     assert(agenda[0].time && agenda[1].time, 'every item here should carry a formatted time label');
   });
 
-  test('data.single_day.agenda caps a very busy day with a "+N more" row instead of listing everything', async () => {
+  test('data.single_day.agenda is not pre-cut to a display limit — how many fit (and any "+N more") is decided per view in the template', async () => {
     const events = [];
     for (let i = 0; i < 9; i++) {
       const hh = String(12 + i).padStart(2, '0'); // 12:00 through 20:00, all still upcoming/in-progress at noon
@@ -103,7 +103,26 @@ module.exports = function (test, h) {
     const { run } = runTransform(fetchImpl, NOW);
     const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
     const agenda = r.data.single_day.agenda;
-    assertEqual(agenda.length, 6, 'should cap at AGENDA_MAX_ITEMS (6) total rows, including the overflow row');
-    assertEqual(agenda[5].title, '+4 more', '9 events, 5 shown + 1 overflow row covering the remaining 4');
+    // half_horizontal (2 columns) and quadrant (1 column) fit very different numbers of rows —
+    // that decision belongs in shared.liquid (agenda_limit per view), not baked in here.
+    assertEqual(agenda.length, 9, 'all 9 real events should be present uncapped at the data level');
+    assertEqual(agenda.map((i) => i.title), events.map((e) => e.summary), 'still sorted chronologically');
+  });
+
+  test('data.single_day.agenda has a hard sanity cap against a pathologically busy day', async () => {
+    const events = [];
+    for (let i = 0; i < 30; i++) {
+      const startMin = i * 15; // packed every 15 minutes from noon onward, each 10 minutes long
+      const hh = String(12 + Math.floor(startMin / 60)).padStart(2, '0');
+      const mm = String(startMin % 60).padStart(2, '0');
+      const endMin = startMin + 10;
+      const ehh = String(12 + Math.floor(endMin / 60)).padStart(2, '0');
+      const emm = String(endMin % 60).padStart(2, '0');
+      events.push({ uid: i, start: '20260905T' + hh + mm + '00Z', end: '20260905T' + ehh + emm + '00Z', summary: 'Event ' + i });
+    }
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
+    assertEqual(r.data.single_day.agenda.length, 20, 'a pathologically busy day should still cap at the hard sanity limit (20)');
   });
 };

@@ -252,9 +252,28 @@
       keeps the grid (it has more room), and the full view keeps its own shared multi-day grid.
     {%- endcomment -%}
     {%- if view == 2 or view == 4 -%}
-      <div class="w--full h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none flex flex--col gap--xsmall p--2" style="overflow:hidden;box-sizing:border-box;">
-        {% for item in data.single_day.agenda %}
-          <div class="w--full flex flex--row flex--center-y gap--small bg--{{ item.hue }} text--{{ item.fg }} rounded--xsmall px--2 py--1 relative no-shrink" style="overflow:hidden;min-width:0;{% if item.current %}box-shadow:0 0 0 2px {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};{% endif %}">
+      {%- comment -%}
+        half_horizontal has roughly twice the usable width of quadrant, so it lays the agenda out
+        in 2 columns (grid-auto-flow:column with a fixed row count — the browser fills column 1
+        top-to-bottom, then wraps into column 2 on its own) instead of quadrant's single column.
+        Each view decides its own "how many actually fit" limit and shows a "+N more" row for
+        whatever's left — the underlying data.single_day.agenda list itself isn't pre-cut to fit
+        either one specifically.
+      {%- endcomment -%}
+      {%- if view == 2 -%}
+        {%- assign agenda_rows = 5 -%}
+        {%- assign agenda_style = "display:grid;grid-auto-flow:column;grid-template-rows:repeat(" | append: agenda_rows | append: ", auto);column-gap:8px;row-gap:4px;overflow:hidden;box-sizing:border-box;" -%}
+        {%- assign agenda_limit = 10 -%}
+      {%- else -%}
+        {%- assign agenda_style = "display:flex;flex-direction:column;gap:4px;overflow:hidden;box-sizing:border-box;" -%}
+        {%- assign agenda_limit = 5 -%}
+      {%- endif -%}
+      {%- assign agenda_total = data.single_day.agenda.size -%}
+      {%- assign agenda_shown_limit = agenda_limit -%}
+      {%- if agenda_total > agenda_limit -%}{%- assign agenda_shown_limit = agenda_limit | minus: 1 -%}{%- endif -%}
+      <div class="w--full h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none p--2" style="{{ agenda_style }}">
+        {% for item in data.single_day.agenda limit: agenda_shown_limit %}
+          <div class="w--full flex flex--row flex--center-y gap--small bg--{{ item.hue }} text--{{ item.fg }} rounded--xsmall px--2 py--1 relative" style="overflow:hidden;min-width:0;flex-shrink:0;{% if item.current %}box-shadow:0 0 0 2px {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};{% endif %}">
             {% if item.time %}<span class="label {{ axis_cls }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
             <span class="title {{ event_title_cls }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
           </div>
@@ -263,6 +282,11 @@
             <span class="label {{ axis_cls }} text--gray-50">Nothing scheduled</span>
           </div>
         {% endfor %}
+        {% if agenda_total > agenda_limit %}
+          <div class="w--full flex flex--row flex--center-y flex--center-x bg--gray-30 text--white rounded--xsmall px--2 py--1 relative">
+            <span class="title {{ event_title_cls }}">+{{ agenda_total | minus: agenda_shown_limit }} more</span>
+          </div>
+        {% endif %}
       </div>
     {%- else -%}
     {%- comment -%}

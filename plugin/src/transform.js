@@ -5,7 +5,7 @@ const WEATHER_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_DAYS = 3;
 const DEFAULT_HOURS = { start: 7, end: 21 };
 const SINGLE_DAY_LOOKAHEAD_HOURS = 8;
-const AGENDA_MAX_ITEMS = 6;
+const AGENDA_SANITY_CAP = 20;
 const WD_MAP = { MO: 0, TU: 1, WE: 2, TH: 3, FR: 4, SA: 5, SU: 6 };
 
 const HUES = ["blue", "green", "orange", "purple", "red", "cyan", "pink", "lime", "violet", "yellow"];
@@ -28,7 +28,7 @@ function foregroundFor(color) {
   if (color === "white") return "black";
   const m = /^gray-(\d+)$/.exec(color);
   if (!m) return "black";
-  return parseInt(m[1], 10) < 45 ? "white" : "black";
+  return parseInt(m[1], 10) < 55 ? "white" : "black";
 }
 
 async function run(input) {
@@ -331,14 +331,16 @@ async function run(input) {
   // half_horizontal/quadrant render this as a plain time+title list instead of a timeline grid
   // — a grid this small is more cramped than useful. All-day items are left to the existing
   // all-day bar header (already rendered above this for every view) rather than repeated here
-  // too. Every timed event still relevant from now on (already-ended ones are dropped; one in
-  // progress right now is kept and flagged `current` so the template can call it out) is capped
-  // with a "+N more" row, same convention as the all-day bar overflow above, since a physically
-  // tiny screen can't grow to fit an arbitrarily busy day.
+  // too. Every timed event still relevant from now on is included (already-ended ones are
+  // dropped; one in progress right now is kept and flagged `current` so the template can call it
+  // out) — how many of these actually fit, and the "+N more" row past that, is a per-view layout
+  // decision (half_horizontal is far roomier than quadrant) made in the template, not here.
+  // AGENDA_SANITY_CAP is just a hard ceiling against a pathological day, not a display cap.
   const nowIsKnown = nowH !== null && nowH !== undefined;
-  let agendaItems = day0.timed
+  const agendaItems = day0.timed
     .filter((e) => !nowIsKnown || e.h1 > nowH)
     .sort((a, b) => a.h0 - b.h0)
+    .slice(0, AGENDA_SANITY_CAP)
     .map((e) => {
       const color = e.hueOverride || hueOf(e.calIdx, calendarColors);
       return {
@@ -347,14 +349,6 @@ async function run(input) {
         current: nowIsKnown && e.h0 <= nowH && e.h1 > nowH,
       };
     });
-  if (agendaItems.length > AGENDA_MAX_ITEMS) {
-    const shown = agendaItems.slice(0, AGENDA_MAX_ITEMS - 1);
-    shown.push({
-      time: null, title: "+" + (agendaItems.length - shown.length) + " more",
-      hue: colorClass("gray-30"), fg: foregroundFor("gray-30"), current: false,
-    });
-    agendaItems = shown;
-  }
 
   const viewPeopleSeen = new Set();
   const viewPeople = [];
