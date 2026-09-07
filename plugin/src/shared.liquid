@@ -30,21 +30,6 @@
   {%- if fg == "white" -%}{%- assign border_color = "#888888" -%}{%- endif -%}
   <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border-top:1px solid {{ border_color }};border-left:1px solid {{ border_color }};border-bottom:3px solid {{ border_color }};border-right:3px solid {{ border_color }};">
     {%- render "chip_body", title: title, fg: fg, title_cls: title_cls, fit_min: fit_min, clip: clip, pad_x_cls: pad_x_cls -%}
-    {%- comment -%}
-      accent_h_pct (0-100, or blank/nil to skip entirely): the true-time indicator, a two-tone
-      left bar — solid for the real time span, muted gray for whatever extra room this chip grew
-      into for legibility (see the event-loop call site). Rendered as a CHILD of this box (which
-      already has position:relative + overflow:hidden + the same rounded radius) instead of a
-      sibling with its own guessed inset, so it's clipped to the exact same rounded corners as
-      the box itself automatically — no separate offset arithmetic to keep in sync, and no risk
-      of the bar's flat corner poking out past the box's curved one.
-    {%- endcomment -%}
-    {%- if accent_h_pct -%}
-      <div class="absolute top--0 left--0 w--[6px] bg--{{ fg }}" style="height:{{ accent_h_pct }}%;"></div>
-      {%- if accent_h_pct < 99.5 -%}
-        <div class="absolute left--0 w--[6px] bg--gray-45" style="top:{{ accent_h_pct }}%;height:calc(100% - {{ accent_h_pct }}%);"></div>
-      {%- endif -%}
-    {%- endif -%}
   </div>
 {% endtemplate %}
 
@@ -363,15 +348,42 @@
               top_pct/height_pct is the event's real, never-inflated start/end time — box_height_pct
               is how tall the readable content chip is allowed to grow (only into genuinely free
               room, see transform.js). The wrapper below uses box_height_pct so the chip stays
-              legible; the accent bar nested inside it marks the TRUE span so a short event
-              squeezed against a neighbor still shows exactly when it really is, even if there's
-              no room left to grow the chip to match.
+              legible; the accent bar (a sibling of the chip, not nested inside it — see below)
+              marks the TRUE span so a short event squeezed against a neighbor still shows exactly
+              when it really is, even if there's no room left to grow the chip to match.
             {%- endcomment -%}
             {%- assign event_box_h = event.box_height_pct | default: event.height_pct -%}
             {%- assign accent_h_pct = event.height_pct | times: 100.0 | divided_by: event_box_h -%}
             <div class="absolute px--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
               {%- assign event_clip = true -%}
-              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls, accent_h_pct: accent_h_pct %}
+              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
+              {%- comment -%}
+                Deliberately a SIBLING of the chip, not a child of it: the chip has its own
+                border (1px top/left, 3px bottom/right), and CSS resolves a position:absolute
+                child's percentage height/top against the PADDING box of its containing block —
+                i.e. excluding that border — so nesting this inside the chip and using
+                height:{{ accent_h_pct }}% silently meant 100% there was actually (chip height -
+                4px), not the true chip height, and any correction attempt compounded that error
+                (this shipped once and rendered a real event's bar as ~0.4px tall instead of
+                ~4px). This wrapper div has no border/vertical padding of its own, so its 100% is
+                exactly its own true height with no hidden offset, and the chip fills that same
+                box exactly (h--full) — so top:0/height:{{ accent_h_pct }}% here lines up exactly
+                with the chip's own true top-left corner and real elapsed height, with no
+                subtraction needed. Left offset is 3px: this wrapper's own left/top offsets
+                resolve against ITS padding edge, which (wrapper has no border) sits at its
+                border-box edge — NOT shifted by the wrapper's own px--0.5 (2px) padding, since
+                padding only moves where normal-flow CONTENT (the chip) sits, not where an
+                absolutely-positioned sibling's own offsets anchor. The chip, as that
+                normal-flow content, IS shifted 2px in by that padding, and its own border is a
+                further 1px — so 2px + 1px = 3px lands the bar exactly one pixel past the chip's
+                real left border, keeping that border visible as a hairline (confirmed by
+                measuring actual rendered rects — this exact spot is where an initial guess of
+                1px, which forgot the wrapper's own padding shift, put the bar into the 2px
+                gutter before the chip started at all). Deliberately NOT clipped to the chip's
+                rounded corner — a curved edge would blur exactly where the real time starts,
+                which defeats the point of an exact-time marker.
+              {%- endcomment -%}
+              <div class="absolute top--0 w--[6px] bg--{{ event.fg }}" style="left:3px;height:{{ accent_h_pct }}%;"></div>
             </div>
           {% endfor %}
         </div>
