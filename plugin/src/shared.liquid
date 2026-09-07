@@ -388,15 +388,20 @@
                 rounded corner — a curved edge would blur exactly where the real time starts,
                 which defeats the point of an exact-time marker.
 
-                Only rendered when the chip actually grew past the event's real duration
-                (accent_h_pct meaningfully < 100) — the overwhelming majority of events never
-                need to grow at all, and unconditionally drawing this on every chip covered
-                title text with an opaque block for no reason. When there's no growth, the
-                chip's own edges already ARE the accurate time, so no separate marker is needed.
+                Shown on every timed event (not all-day bars, which have their own separate
+                render loop above and never touch this code path). A diagonal hatch — the same
+                visual language as the empty-day/empty-slot patterns elsewhere in this file —
+                instead of a solid fill: the stroke uses the event's own fg (its usual
+                black/white text color) while the chip's own hue shows through in the gaps
+                between strokes, so the bar reads as textured from this event's own colors
+                rather than an arbitrary flat block. When the chip didn't need to grow
+                (accent_h_pct 100, the common case), the hatch simply covers the chip's full real
+                height; when it did grow, the hatch stops exactly at the real elapsed time and
+                the chip's plain hue continues for the grown portion, same as before.
               {%- endcomment -%}
-              {%- if accent_h_pct < 99.5 -%}
-                <div class="absolute top--0 w--[10px] bg--{{ event.fg }}" style="left:3px;height:{{ accent_h_pct }}%;"></div>
-              {%- endif -%}
+              {%- assign accent_stroke_hex = "000000" -%}
+              {%- if event.fg == "white" -%}{%- assign accent_stroke_hex = "ffffff" -%}{%- endif -%}
+              <div class="absolute top--0 w--[10px]" style="left:3px;height:{{ accent_h_pct }}%;background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%278%27 height=%278%27%3E%3Cpath d=%27M0 8L8 0M-2 2L2 -2M6 10L10 6%27 stroke=%27%23{{ accent_stroke_hex }}%27 stroke-width=%272%27/%3E%3C/svg%3E');"></div>
             </div>
           {% endfor %}
         </div>
