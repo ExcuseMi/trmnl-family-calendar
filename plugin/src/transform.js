@@ -657,6 +657,11 @@ function offsetFormatter(tz) {
 
 function getOffsetMinutes(epochMs, tz) {
   if (typeof tz === "number") return tz;
+  // A malformed DTSTART/DTEND/EXDATE/RRULE value upstream (real-world ICS feeds are not always
+  // well-formed) can produce a NaN epoch — new Date(NaN).formatToParts() throws a RangeError
+  // that would otherwise take down the entire run(), for every calendar, not just the one with
+  // the bad value. 0 offset is a safe, inert fallback for a value that was never usable anyway.
+  if (!isFinite(epochMs)) return 0;
   const parts = offsetFormatter(tz).formatToParts(new Date(epochMs));
   const part = parts.find((p) => p.type === "timeZoneName");
   const v = part ? part.value : "GMT";
@@ -691,6 +696,7 @@ function fromEpoch(epochMs, tz) {
       wd: (d.getUTCDay() + 6) % 7,
     };
   }
+  if (!isFinite(epochMs)) epochMs = 0;
   const parts = {};
   for (const p of civilFormatter(tz).formatToParts(new Date(epochMs))) parts[p.type] = p.value;
   const y = +parts.year, mo = +parts.month, d = +parts.day;
@@ -921,20 +927,28 @@ function extractCalName(text) {
   return null;
 }
 
+// Real-world ICS feeds are not always well-formed — a DTSTART/DTEND/EXDATE value that doesn't
+// actually look like a date (garbage, truncated, or some property this parser doesn't expect)
+// must not silently become a NaN epoch: that eventually reaches new Date(NaN).formatToParts()
+// (getOffsetMinutes/fromEpoch) which throws and would take down the ENTIRE run(), not just the
+// one malformed event. null here means "unusable", and callers skip the event instead.
 function parseDt(value, params, tz) {
   const v = value.trim();
   if (params.VALUE === "DATE" || (v.length === 8 && !v.includes("T"))) {
     const y = +v.slice(0, 4), mo = +v.slice(4, 6), d = +v.slice(6, 8);
+    if (!(isFinite(y) && isFinite(mo) && isFinite(d))) return null;
     return { epoch: zonedTimeToUtc(y, mo, d, 0, 0, 0, tz), allDay: true, civil: { y, mo, d, h: 0, mi: 0, s: 0 }, zone: tz };
   }
   if (v.endsWith("Z")) {
     const y = +v.slice(0, 4), mo = +v.slice(4, 6), d = +v.slice(6, 8),
           h = +v.slice(9, 11), mi = +v.slice(11, 13), s = +v.slice(13, 15);
+    if (!(isFinite(y) && isFinite(mo) && isFinite(d) && isFinite(h) && isFinite(mi) && isFinite(s))) return null;
     return { epoch: Date.UTC(y, mo - 1, d, h, mi, s), allDay: false, civil: { y, mo, d, h, mi, s }, zone: 0 };
   }
   const v15 = v.slice(0, 15);
   const y = +v15.slice(0, 4), mo = +v15.slice(4, 6), d = +v15.slice(6, 8),
         h = +v15.slice(9, 11), mi = +v15.slice(11, 13), s = +v15.slice(13, 15);
+  if (!(isFinite(y) && isFinite(mo) && isFinite(d) && isFinite(h) && isFinite(mi) && isFinite(s))) return null;
   const z = safeZone(params.TZID || "") || tz;
   return { epoch: zonedTimeToUtc(y, mo, d, h, mi, s, z), allDay: false, civil: { y, mo, d, h, mi, s }, zone: z };
 }

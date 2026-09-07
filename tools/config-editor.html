@@ -97,6 +97,23 @@
   <div id="people"></div>
   <button id="addPerson">+ Add person</button>
 
+  <h2>Default person <span class="muted">(optional — the fallback badge for any event nobody more specific claims)</span></h2>
+  <div class="card">
+    <p class="muted" style="margin-top:0;">Applied whenever neither a calendar's own Default person nor any rule (global or that
+      calendar's own) assigns someone. A generic "Everyone"/"Family" person with an emoji badge (e.g. 👪) works well here — every
+      event still reads as "this is a family event" instead of showing no badge at all.</p>
+    <div id="globalDefaultPersonWrap"></div>
+  </div>
+
+  <h2>Global rules <span class="muted">(optional — apply across every calendar, not just one)</span></h2>
+  <div class="card">
+    <p class="muted" style="margin-top:0;">Same rule engine as each calendar's own "Advanced" rules below, just not scoped to a
+      single calendar — e.g. "any event titled 'Doctor' → assign Mom", regardless of which calendar it came from. A calendar's own
+      rule for the same event still wins over one of these.</p>
+    <div id="globalRules"></div>
+    <button id="addGlobalRule" class="small">+ Add global rule</button>
+  </div>
+
   <h2>Generated Configuration</h2>
   <div class="card">
     <p class="muted" style="margin-top:0;">Paste this into the plugin's <strong>Calendar Configuration</strong> field on TRMNL.</p>
