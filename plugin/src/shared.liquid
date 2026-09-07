@@ -42,9 +42,13 @@
     per an explicit reference the user liked: a rounded card with the accent bar clipped INSIDE
     those corners by the card's own overflow:hidden, rather than living outside as a separate
     square element fighting the curve. accent_h_pct (0-100, or blank/nil to skip) renders that
-    bar as a CHILD of this div so it gets exactly that clipping automatically.
+    bar as a CHILD of this div so it gets exactly that clipping automatically. When present, pad
+    the whole content area left by the bar's own width (10px) plus a little breathing room so
+    the title text's flex--center-x centering doesn't creep back underneath the bar/its border.
   {%- endcomment -%}
-  <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border:2px solid {{ border_color }};box-shadow:2px 2px 0 0 {{ border_color }};">
+  {%- assign chip_extra_style = "" -%}
+  {%- if accent_h_pct -%}{%- assign chip_extra_style = "padding-left:14px;" -%}{%- endif -%}
+  <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}{{ chip_extra_style }}border:2px solid {{ border_color }};box-shadow:2px 2px 0 0 {{ border_color }};">
     {%- if accent_h_pct -%}
       {%- comment -%}
         Diagonal stripe pattern using this event's OWN colors (hue background, fg stripes)
