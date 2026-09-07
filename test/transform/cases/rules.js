@@ -73,6 +73,20 @@ module.exports = function (test, h) {
     assertEqual(titles, ['Schoolfotografie'], 'rename:false on a catch-all rule should badge the event without changing its title');
   });
 
+  test('the "any" match type is the intended way to write a catch-all rule — badges without renaming, by default', async () => {
+    const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Schoolfotografie' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
+      people: [{ name: 'Ward' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, person: 'Ward' }] }],
+    })));
+    const r = await run(input);
+    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
+    assertEqual(titles, ['Schoolfotografie'], 'an "any" match should badge Ward without needing an explicit rename:false');
+    assertEqual(r.data.people.map((p) => p.person), ['Ward']);
+  });
+
   test('rewriteFull replaces the whole title, not just the matched substring', async () => {
     const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'L6 Swim Class with Jane' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));

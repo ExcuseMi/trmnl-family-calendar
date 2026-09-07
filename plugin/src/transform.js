@@ -424,7 +424,14 @@ function compileRule(spec) {
   const rewrite = typeof spec.rewrite === "string" ? spec.rewrite : null;
   const rewriteFull = spec.rewriteFull === true;
   if (!person && !allDay && !hide && rewrite === null) return null;
-  return { rx, person, allDay, hide, rename: person ? spec.rename !== false : false, rewrite, rewriteFull };
+  // An "any"/"all" match has no specific text worth renaming to the person's name — default
+  // `rename` to false there (opt IN instead of opt out) instead of true like word/regex
+  // matches default to; this is what a plain `defaultPerson` always meant before it was
+  // replaced by an explicit catch-all rule, and forgetting to opt out used to double the whole
+  // title (see the "WardWard" bug — a bare ".*" regex hit this same case without the safety net).
+  const isAnyMatch = spec.match && (spec.match.type === "any" || spec.match.type === "all");
+  const rename = person ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
+  return { rx, person, allDay, hide, rename, rewrite, rewriteFull };
 }
 
 function compileRuleList(raw) {
@@ -540,9 +547,20 @@ function escapeRegExp(s) {
 // A matcher is always an explicit { type, value } object — no inferring word-vs-regex from
 // whether the value happens to be a string or an object. type: "regex" uses value as-is;
 // type: "word" (or an unrecognized/missing type) escapes value and matches it case-insensitively
-// on whole-word boundaries, so "L1" matches "L1 Trip" but not "L10 Trip".
+// on whole-word boundaries, so "L1" matches "L1 Trip" but not "L10 Trip"; type: "contains"
+// escapes value and matches it as a plain case-insensitive substring anywhere, no word
+// boundaries — "team" matches both "Team Meeting" and "Steam Room"; type: "exact" escapes value
+// and requires it to be the ENTIRE title (case-insensitive) — "Desk booking" matches only that
+// exact title, not "Desk booking (extended)"; type: "any"/"all" matches unconditionally.
 function compileMatcher(spec) {
-  if (!spec || typeof spec !== "object" || typeof spec.value !== "string") return null;
+  if (!spec || typeof spec !== "object") return null;
+  // "any"/"all" — matches every title unconditionally, no `value` needed at all. The explicit,
+  // self-documenting way to write "always" (a global rule with no match restriction, or a
+  // calendar whose every event goes to one person) instead of the regex trick `.*` — which
+  // works (compileRule/applyCalendarRules treat it identically) but reads as a coincidence, not
+  // an intent, and it's easy to forget `rename:false` needs to go with it (see compileRule).
+  if (spec.type === "any" || spec.type === "all") return /[\s\S]*/i;
+  if (typeof spec.value !== "string") return null;
   const p = spec.value.trim();
   if (!p) return null;
   if (spec.type === "regex") {
@@ -552,6 +570,8 @@ function compileMatcher(spec) {
       return null;
     }
   }
+  if (spec.type === "contains") return new RegExp(escapeRegExp(p), "i");
+  if (spec.type === "exact") return new RegExp("^" + escapeRegExp(p) + "$", "i");
   return new RegExp("\\b" + escapeRegExp(p) + "\\b", "i");
 }
 

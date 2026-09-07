@@ -31,6 +31,61 @@ module.exports = function (test, h) {
     assert(!rx.test('K4 Assembly'), 'should not match K4 (outside character class)');
   });
 
+  test('"contains" matcher: plain substring anywhere, no word boundaries', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'contains', value: 'team' }, hide: true }] }],
+    });
+    const rx = cfg.calendars[0].rules[0].rx;
+    assert(rx.test('Team Meeting'), 'should match at a word boundary too');
+    assert(rx.test('Steam Room'), 'should match mid-word, unlike "word"');
+    assert(!rx.test('Tea Room'), 'should not match when the substring genuinely is not present');
+  });
+
+  test('"exact" matcher: the whole title must equal the value, nothing more', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'exact', value: 'Desk booking' }, hide: true }] }],
+    });
+    const rx = cfg.calendars[0].rules[0].rx;
+    assert(rx.test('Desk booking'), 'should match the exact title');
+    assert(rx.test('DESK BOOKING'), 'should still be case-insensitive');
+    assert(!rx.test('Desk booking (extended)'), 'should not match a title that merely contains it');
+    assert(!rx.test('booking'), 'should not match a partial title');
+  });
+
+  test('"any"/"all" matcher matches every title, empty or not, no value needed', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, hide: true }] }],
+    });
+    const rx = cfg.calendars[0].rules[0].rx;
+    assert(rx.test('literally anything'), 'should match a normal title');
+    assert(rx.test(''), 'should match an empty title too');
+    const cfg2 = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'all' }, hide: true }] }],
+    });
+    assert(cfg2.calendars[0].rules[0].rx.test('anything'), '"all" should be accepted as a synonym for "any"');
+  });
+
+  test('an "any" match assigning a person defaults rename to false (opt-in, not opt-out)', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, person: 'Ward' }] }],
+    });
+    assert(cfg.calendars[0].rules[0].rename === false, 'rename should default to false for a catch-all match — there is no specific text to rename');
+  });
+
+  test('an "any" match can still opt into rename explicitly', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, person: 'Ward', rename: true }] }],
+    });
+    assert(cfg.calendars[0].rules[0].rename === true, 'rename:true should still be honored when explicitly set on an "any" match');
+  });
+
+  test('a word/regex match still defaults rename to true, unchanged from before "any" existed', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L6' }, person: 'Alex' }] }],
+    });
+    assert(cfg.calendars[0].rules[0].rename === true, 'word/regex matches should be unaffected by the "any" default change');
+  });
+
   test('a rule with no match is dropped, not crash', () => {
     const cfg = parse({
       calendars: [{ url: 'https://x/a.ics', rules: [{ hide: true }] }],

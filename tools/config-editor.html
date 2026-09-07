@@ -47,6 +47,7 @@
   .rule-card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: #fff; }
   .rule-step + .rule-step { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e5e5e2; }
   .rule-step-label { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #888; margin-bottom: 6px; }
+  .action-group + .action-group { margin-top: 8px; }
   .swatch {
     display: inline-flex; align-items: center; justify-content: center;
     width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; font-size: 10px;
@@ -335,12 +336,21 @@
   function newMatcher() { return { _id: uid(), matchType: "word", matchText: "", matchRegex: "", testText: "" }; }
   var MATCH_TYPES = [
     { value: "word", label: "Word" },
+    { value: "contains", label: "Contains" },
+    { value: "exact", label: "Exact match" },
     { value: "regex", label: "Regex (expert)" },
+    { value: "any", label: "Any (always matches)" },
   ];
+  // word/contains/exact all share the same plain-text input (matchText) — only their compiled
+  // boundary differs (\b...\b / none / ^...$) — regex gets its own field, any needs no text at
+  // all. Kept as one set so buildMatcherFields/applyMode below has a single place to ask
+  // "does this type use the plain-text field."
+  var PLAIN_TEXT_TYPES = ["word", "contains", "exact"];
   function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
   // Mirrors compileMatcher() in plugin/src/transform.js exactly, so the live tester below shows
   // precisely what transform.js itself would do with this matcher.
   function compileMatcherPreview(m) {
+    if (m.matchType === "any") return /[\s\S]*/i;
     if (m.matchType === "regex") {
       var p = (m.matchRegex || "").trim();
       if (!p) return null;
@@ -348,30 +358,48 @@
     }
     var p2 = (m.matchText || "").trim();
     if (!p2) return null;
+    if (m.matchType === "contains") return new RegExp(escapeRegExp(p2), "i");
+    if (m.matchType === "exact") return new RegExp("^" + escapeRegExp(p2) + "$", "i");
     return new RegExp("\\b" + escapeRegExp(p2) + "\\b", "i");
   }
-  // The JSON value transform.js's parseConfig actually expects for this matcher: a plain
-  // string for "word" (it derives the \b...\b regex on that side), or { regex: "..." } for
-  // "regex" — null when there's nothing usable yet (blank word/regex), for the caller to drop.
+  // The JSON value transform.js's parseConfig actually expects for this matcher: a plain string
+  // for "word"/"contains"/"exact" (it derives the right boundary on that side from `type`),
+  // { type: "regex", value: ... } for "regex", or just { type: "any" } (no value at all) for
+  // the catch-all — null when there's nothing usable yet (blank word/regex), for the caller to
+  // drop.
   function matcherValue(m) {
+    if (m.matchType === "any") return { type: "any" };
     if (m.matchType === "regex") {
       var p = (m.matchRegex || "").trim();
       return p ? { type: "regex", value: p } : null;
     }
     var p2 = (m.matchText || "").trim();
-    return p2 ? { type: "word", value: p2 } : null;
+    if (!p2) return null;
+    return m.matchType === "word" ? { type: "word", value: p2 } : { type: m.matchType, value: p2 };
   }
-  // Inverse of matcherValue() — used when importing an existing config, so { type: "word",
-  // value: ... } and { type: "regex", value: ... } each round-trip to the matching editor state.
+  // Inverse of matcherValue() — used when importing an existing config, so { type: "word"/
+  // "contains"/"exact", value: ... }, { type: "regex", value: ... }, and { type: "any" } each
+  // round-trip to the matching editor state.
+  // A match value is usable if it's a real word/regex/contains/exact string, OR an "any"/"all"
+  // catch-all (which needs no value at all) — used to decide whether an imported rule survives
+  // at all. Missing this for "any" would silently DROP every catch-all rule on import, since it
+  // has no `.value` to check.
+  function isUsableMatchValue(mv) {
+    return !!mv && typeof mv === "object" && (typeof mv.value === "string" || mv.type === "any" || mv.type === "all");
+  }
   function matcherFromValue(v) {
     var m = newMatcher();
-    if (!v || typeof v !== "object" || typeof v.value !== "string") return m;
-    if (v.type === "regex") {
-      m.matchType = "regex";
-      m.matchRegex = v.value;
-    } else {
-      m.matchType = "word";
-      m.matchText = v.value;
+    if (!v || typeof v !== "object") return m;
+    if (v.type === "any" || v.type === "all") {
+      m.matchType = "any";
+    } else if (typeof v.value === "string") {
+      if (v.type === "regex") {
+        m.matchType = "regex";
+        m.matchRegex = v.value;
+      } else {
+        m.matchType = PLAIN_TEXT_TYPES.indexOf(v.type) !== -1 ? v.type : "word";
+        m.matchText = v.value;
+      }
     }
     return m;
   }
@@ -386,13 +414,12 @@
       typeSelect.appendChild(opt);
     });
 
-    var textInput = el("input", { type: "text", class: "field", placeholder: "word to match, e.g. L6", value: m.matchText });
+    var textInput = el("input", { type: "text", class: "field", placeholder: "text to match, e.g. L6", value: m.matchText });
     var regexInput = el("input", { type: "text", class: "field field-regex", placeholder: "regex, e.g. \\bL[1345]\\b", value: m.matchRegex });
 
     function applyMode() {
-      var isRegex = m.matchType === "regex";
-      textInput.hidden = isRegex;
-      regexInput.hidden = !isRegex;
+      textInput.hidden = m.matchType !== "word" && m.matchType !== "contains" && m.matchType !== "exact";
+      regexInput.hidden = m.matchType !== "regex";
     }
     applyMode();
 
@@ -469,15 +496,27 @@
 
         var personInput = personMultiSelect(r.person);
         personInput.classList.add("field");
-        personInput.addEventListener("change", function () { r.person = selectedValues(personInput); renderJson(); });
 
         function checkboxLabel(checked, text, onChange) {
           var chk = el("input", { type: "checkbox" });
           chk.checked = checked;
           chk.addEventListener("change", function () { onChange(chk.checked); renderJson(); });
-          return el("label", { style: "display:flex;align-items:center;gap:4px;margin:0;font-size:12px;color:#333;white-space:nowrap;" }, [chk, document.createTextNode(text)]);
+          var lbl = el("label", { style: "display:flex;align-items:center;gap:4px;margin:0;font-size:12px;color:#333;white-space:nowrap;" }, [chk, document.createTextNode(text)]);
+          lbl.checkboxEl = chk;
+          return lbl;
         }
+        // Meaningless (and, worse, shown checked by default) when no person is assigned at
+        // all — nothing to rename TO — so it lives inside the person-assignment group, not
+        // alongside allDay/hide, and disables itself the moment the person list is empty.
         var renameLbl = checkboxLabel(r.rename !== false, "rename title to person", function (v) { r.rename = v; });
+        function updateRenameEnabled() {
+          var enabled = r.person && r.person.length > 0;
+          renameLbl.checkboxEl.disabled = !enabled;
+          renameLbl.style.opacity = enabled ? "1" : "0.45";
+        }
+        updateRenameEnabled();
+        personInput.addEventListener("change", function () { r.person = selectedValues(personInput); updateRenameEnabled(); renderJson(); });
+
         var allDayLbl = checkboxLabel(!!r.allDay, "make all-day", function (v) { r.allDay = v; });
         var hideLbl = checkboxLabel(!!r.hide, "hide", function (v) { r.hide = v; });
 
@@ -505,11 +544,15 @@
         ]);
         var thenStep = el("div", { class: "rule-step" }, [
           el("div", { class: "rule-step-label" }, [document.createTextNode("2. Then")]),
-          el("div", { class: "sub-entry" }, [
-            el("div", {}, [el("label", { text: "Assign person(s)" }), personInput]),
-            renameLbl, allDayLbl, hideLbl,
+          el("div", { class: "action-group" }, [
+            el("label", { text: "Assign person(s) (optional)" }),
+            el("div", { class: "sub-entry" }, [personInput, renameLbl]),
           ]),
-          el("div", {}, [el("label", { text: "Rewrite title (optional)" }), rewriteRow]),
+          el("div", { class: "action-group" }, [
+            el("label", { text: "Rewrite title (optional)" }),
+            rewriteRow,
+          ]),
+          el("div", { class: "action-group sub-entry" }, [allDayLbl, hideLbl]),
         ]);
 
         container.appendChild(el("div", { class: "rule-card" }, [
@@ -858,7 +901,7 @@
           .filter(function (pr) { return pr && typeof pr === "object" && pr.match && typeof pr.match.value === "string" && (typeof pr.person === "string" || Array.isArray(pr.person)); })
           .forEach(function (pr) { var r = matcherFromValue(pr.match); r.person = normalizeNames(pr.person); r.rename = pr.rename !== false; r.allDay = false; r.hide = false; r.rewrite = ""; rules.push(r); });
         (Array.isArray(c.rules) ? c.rules : [])
-          .filter(function (rv) { return rv && typeof rv === "object" && rv.match && typeof rv.match.value === "string"; })
+          .filter(function (rv) { return rv && typeof rv === "object" && isUsableMatchValue(rv.match); })
           .forEach(function (rv) { rules.push(ruleFromValue(rv)); });
         var headers = [];
         if (c.headers && typeof c.headers === "object" && !Array.isArray(c.headers)) {
@@ -909,7 +952,7 @@
     holidayCalendars = splitCalendars[1];
     people = newPeople;
     globalRules = (Array.isArray(data.rules) ? data.rules : [])
-      .filter(function (rv) { return rv && typeof rv === "object" && rv.match && typeof rv.match.value === "string"; })
+      .filter(function (rv) { return rv && typeof rv === "object" && isUsableMatchValue(rv.match); })
       .map(ruleFromValue);
     renderCalendars(); renderHolidayCalendars(); renderPeople(); renderGlobal(); renderJson(); renderIcsSources();
     status.textContent = "Loaded " + newCalendars.length + " calendar(s) and " + newPeople.length + " person/people.";
