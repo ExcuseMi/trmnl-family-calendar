@@ -39,6 +39,14 @@ module.exports = function (test, h) {
     assertEqual(r.trmnl_state.calendarNames['https://example.com/b.ics'], 'Family (2)');
   });
 
+  test('an event with no person attached gets badged with the calendar\'s own initial instead', async () => {
+    const ics = icsWithEvents([Object.assign({ calname: 'Work' }, EVENT)]);
+    const fetchImpl = async () => okText(ics);
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
+    assertEqual(r.data.people, [{ text: 'W', person: 'Work', hue: 'gray-10', fg: 'white' }]);
+  });
+
   test('calendar name: a currently-down calendar keeps showing its last-known name in the alert banner, not "Calendar N"', async () => {
     let calFails = false;
     const ics = icsWithEvents([Object.assign({ calname: 'Family' }, EVENT)]);

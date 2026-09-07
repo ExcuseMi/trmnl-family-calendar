@@ -173,7 +173,7 @@ async function run(input) {
     return !cal.exclude.some((rx) => rx.test(e.title));
   });
   for (const e of filtered) {
-    const r = applyCalendarPerson(e.title, calendars[e.calIdx], people);
+    const r = applyCalendarPerson(e.title, calendars[e.calIdx], people, hueOf(e.calIdx, calendarColors));
     e.title = r.title;
     e.hueOverride = r.hue;
     e.personBadges = r.badges;
@@ -497,7 +497,7 @@ function compileMatcherList(raw) {
   return rxs;
 }
 
-function applyCalendarPerson(title, cal, people) {
+function applyCalendarPerson(title, cal, people, calHue) {
   let personNames = null;
   for (const rule of cal.personRules) {
     if (!rule.rx.test(title)) continue;
@@ -519,6 +519,14 @@ function applyCalendarPerson(title, cal, people) {
       const badgeFg = p.color ? foregroundFor(p.color) : "white";
       badges.push({ text: p.badge, person: p.name, hue: badgeHue, fg: badgeFg });
     }
+  }
+  // No person attached to this event — badge it with the calendar's own initial instead, in
+  // the calendar's own color, so every event still gets some badge in the header rather than
+  // only ones a specific family member is attached to.
+  if (badges.length === 0 && cal.name) {
+    const badgeHue = colorClass(calHue);
+    const badgeFg = foregroundFor(calHue);
+    badges.push({ text: cal.name.trim()[0].toUpperCase(), person: cal.name, hue: badgeHue, fg: badgeFg });
   }
   return { title, hue, badges };
 }
