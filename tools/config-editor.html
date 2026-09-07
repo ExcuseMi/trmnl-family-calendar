@@ -333,24 +333,43 @@
   // text, matched case-insensitively on whole-word boundaries so "L1" doesn't also catch
   // "L10" — no regex knowledge needed), "regex" is the expert escape hatch for anything a
   // plain word can't express (character classes, lookaheads, alternation, ...).
-  function newMatcher() { return { _id: uid(), matchType: "word", matchText: "", matchRegex: "", testText: "" }; }
+  function newMatcher() { return { _id: uid(), matchType: "word", matchText: "", matchRegex: "", matchStatus: "confirmed", matchWeekdays: [], testText: "" }; }
   var MATCH_TYPES = [
     { value: "word", label: "Word" },
     { value: "contains", label: "Contains" },
     { value: "exact", label: "Exact match" },
     { value: "regex", label: "Regex (expert)" },
     { value: "any", label: "Any (always matches)" },
+    { value: "status", label: "Status (confirmed/tentative/cancelled)" },
+    { value: "weekday", label: "Day of week" },
   ];
   // word/contains/exact all share the same plain-text input (matchText) — only their compiled
   // boundary differs (\b...\b / none / ^...$) — regex gets its own field, any needs no text at
   // all. Kept as one set so buildMatcherFields/applyMode below has a single place to ask
   // "does this type use the plain-text field."
   var PLAIN_TEXT_TYPES = ["word", "contains", "exact"];
+  // Types that can be meaningfully "tested against a sample title" — status/weekday depend on
+  // event metadata the live tester has no access to (just a typed sample title), so they get no
+  // test row at all rather than a misleading always-blank one.
+  var TITLE_TESTABLE_TYPES = ["word", "contains", "exact", "regex", "any"];
+  var STATUS_OPTIONS = [
+    { value: "confirmed", label: "Confirmed" },
+    { value: "tentative", label: "Tentative" },
+    { value: "cancelled", label: "Cancelled" },
+  ];
+  // 2-letter codes match transform.js's own WD_MAP/compileMatcher exactly (RRULE-style),
+  // Monday-first to match how the plugin's own week/weekday logic is indexed everywhere else.
+  var WEEKDAY_CODES = [
+    { code: "MO", label: "Mon" }, { code: "TU", label: "Tue" }, { code: "WE", label: "Wed" },
+    { code: "TH", label: "Thu" }, { code: "FR", label: "Fri" }, { code: "SA", label: "Sat" },
+    { code: "SU", label: "Sun" },
+  ];
   function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
   // Mirrors compileMatcher() in plugin/src/transform.js exactly, so the live tester below shows
   // precisely what transform.js itself would do with this matcher.
   function compileMatcherPreview(m) {
     if (m.matchType === "any") return /[\s\S]*/i;
+    if (m.matchType === "status" || m.matchType === "weekday") return null;
     if (m.matchType === "regex") {
       var p = (m.matchRegex || "").trim();
       if (!p) return null;
@@ -369,6 +388,8 @@
   // drop.
   function matcherValue(m) {
     if (m.matchType === "any") return { type: "any" };
+    if (m.matchType === "status") return { type: "status", value: m.matchStatus || "confirmed" };
+    if (m.matchType === "weekday") return (m.matchWeekdays || []).length ? { type: "weekday", value: m.matchWeekdays.slice() } : null;
     if (m.matchType === "regex") {
       var p = (m.matchRegex || "").trim();
       return p ? { type: "regex", value: p } : null;
@@ -378,20 +399,36 @@
     return m.matchType === "word" ? { type: "word", value: p2 } : { type: m.matchType, value: p2 };
   }
   // Inverse of matcherValue() — used when importing an existing config, so { type: "word"/
-  // "contains"/"exact", value: ... }, { type: "regex", value: ... }, and { type: "any" } each
-  // round-trip to the matching editor state.
-  // A match value is usable if it's a real word/regex/contains/exact string, OR an "any"/"all"
-  // catch-all (which needs no value at all) — used to decide whether an imported rule survives
-  // at all. Missing this for "any" would silently DROP every catch-all rule on import, since it
-  // has no `.value` to check.
+  // "contains"/"exact", value: ... }, { type: "regex", value: ... }, { type: "any" },
+  // { type: "status", value: ... }, { type: "weekday", value: ... }, and { type: "and"/"or",
+  // matchers: [...] } each round-trip to the matching editor state.
+  // A match value is usable if it's a real word/regex/contains/exact/status string, a weekday
+  // string/array, an "any"/"all" catch-all (no value needed), or an "and"/"or" with at least one
+  // usable sub-matcher — used to decide whether an imported rule survives at all. Missing this
+  // for "any" would silently DROP every catch-all rule on import, since it has no `.value` to check.
   function isUsableMatchValue(mv) {
-    return !!mv && typeof mv === "object" && (typeof mv.value === "string" || mv.type === "any" || mv.type === "all");
+    if (!mv || typeof mv !== "object") return false;
+    if (mv.type === "any" || mv.type === "all") return true;
+    if (mv.type === "and" || mv.type === "or") return Array.isArray(mv.matchers) && mv.matchers.some(isUsableMatchValue);
+    if (mv.type === "status") return typeof mv.value === "string" && !!mv.value.trim();
+    if (mv.type === "weekday") return (typeof mv.value === "string" && !!mv.value.trim()) || (Array.isArray(mv.value) && mv.value.length > 0);
+    return typeof mv.value === "string";
   }
   function matcherFromValue(v) {
     var m = newMatcher();
     if (!v || typeof v !== "object") return m;
     if (v.type === "any" || v.type === "all") {
       m.matchType = "any";
+    } else if (v.type === "status" && typeof v.value === "string") {
+      m.matchType = "status";
+      var wantStatus = v.value.trim().toLowerCase();
+      m.matchStatus = STATUS_OPTIONS.some(function (s) { return s.value === wantStatus; }) ? wantStatus : "confirmed";
+    } else if (v.type === "weekday") {
+      m.matchType = "weekday";
+      var rawDays = Array.isArray(v.value) ? v.value : typeof v.value === "string" ? [v.value] : [];
+      m.matchWeekdays = rawDays
+        .map(function (x) { return typeof x === "string" ? x.trim().toUpperCase().slice(0, 2) : ""; })
+        .filter(function (c) { return WEEKDAY_CODES.some(function (w) { return w.code === c; }); });
     } else if (typeof v.value === "string") {
       if (v.type === "regex") {
         m.matchType = "regex";
@@ -402,6 +439,25 @@
       }
     }
     return m;
+  }
+  // A rule's exported `match` may be a single matcher, or an "and"/"or" combining several — this
+  // reads either shape back into a flat { combinator, conditions[] } the editor's UI works with
+  // (see buildConditionsUI). A plain (non-and/or) match becomes a one-condition list.
+  function conditionsFromMatchValue(mv) {
+    if (mv && typeof mv === "object" && (mv.type === "and" || mv.type === "or") && Array.isArray(mv.matchers) && mv.matchers.length) {
+      return { combinator: mv.type, conditions: mv.matchers.map(matcherFromValue) };
+    }
+    return { combinator: "and", conditions: [matcherFromValue(mv)] };
+  }
+  // Inverse of conditionsFromMatchValue() — collapses back to a single matcher when there's only
+  // one usable condition (so a simple rule still exports as a plain matcher, not a needless
+  // one-element "and"), or wraps 2+ into { type: combinator, matchers: [...] }. null when no
+  // condition is usable at all, for the caller to drop the whole rule.
+  function matchValueFromConditions(rule) {
+    var values = rule.conditions.map(matcherValue).filter(Boolean);
+    if (!values.length) return null;
+    if (values.length === 1) return values[0];
+    return { type: rule.combinator === "or" ? "or" : "and", matchers: values };
   }
   // Builds the type-select + word/regex inputs + live tester shared by exclude entries and
   // personRules — same three controls, same behavior, just different sibling fields (a
@@ -417,16 +473,45 @@
     var textInput = el("input", { type: "text", class: "field", placeholder: "text to match, e.g. L6", value: m.matchText });
     var regexInput = el("input", { type: "text", class: "field field-regex", placeholder: "regex, e.g. \\bL[1345]\\b", value: m.matchRegex });
 
+    var statusSelect = el("select", { class: "field", style: "flex:0 0 auto;width:auto;" });
+    STATUS_OPTIONS.forEach(function (s) {
+      var opt = el("option", { value: s.value }, [document.createTextNode(s.label)]);
+      if (s.value === m.matchStatus) opt.setAttribute("selected", "selected");
+      statusSelect.appendChild(opt);
+    });
+
+    // A day-of-week is picked with toggle buttons, not a <select multiple> — 7 fixed options
+    // read faster as a row of on/off pills than as a scrolling list box.
+    var weekdayGroup = el("div", { style: "display:flex;gap:4px;flex-wrap:wrap;align-items:center;" });
+    function weekdayBtnStyle(active) {
+      return "min-width:42px;" + (active ? "background:#1a1a1a;color:#fff;border-color:#1a1a1a;" : "");
+    }
+    WEEKDAY_CODES.forEach(function (w) {
+      var btn = el("button", { type: "button", class: "small", style: weekdayBtnStyle(m.matchWeekdays.indexOf(w.code) !== -1) }, [document.createTextNode(w.label)]);
+      btn.addEventListener("click", function () {
+        var idx = m.matchWeekdays.indexOf(w.code);
+        if (idx === -1) m.matchWeekdays.push(w.code); else m.matchWeekdays.splice(idx, 1);
+        btn.setAttribute("style", weekdayBtnStyle(m.matchWeekdays.indexOf(w.code) !== -1));
+        onChange();
+      });
+      weekdayGroup.appendChild(btn);
+    });
+
     function applyMode() {
-      textInput.hidden = m.matchType !== "word" && m.matchType !== "contains" && m.matchType !== "exact";
+      textInput.hidden = PLAIN_TEXT_TYPES.indexOf(m.matchType) === -1;
       regexInput.hidden = m.matchType !== "regex";
+      statusSelect.hidden = m.matchType !== "status";
+      weekdayGroup.hidden = m.matchType !== "weekday";
     }
     applyMode();
 
     var testInput = el("input", { type: "text", class: "field", placeholder: "test against a sample title...", value: m.testText, style: "flex:1 1 160px;" });
     var testResult = el("span", { style: "font-size:12px;white-space:nowrap;min-width:90px;" });
     function updateTestResult() {
-      if (!m.testText) { testResult.textContent = ""; return; }
+      var testable = TITLE_TESTABLE_TYPES.indexOf(m.matchType) !== -1;
+      testInput.hidden = !testable;
+      testResult.hidden = !testable;
+      if (!testable || !m.testText) { testResult.textContent = ""; return; }
       var rx = compileMatcherPreview(m);
       if (!rx) {
         testResult.textContent = m.matchType === "regex" ? "invalid regex" : "";
@@ -440,18 +525,65 @@
 
     textInput.addEventListener("input", function () { m.matchText = textInput.value; updateTestResult(); onChange(); });
     regexInput.addEventListener("input", function () { m.matchRegex = regexInput.value; updateTestResult(); onChange(); });
+    statusSelect.addEventListener("change", function () { m.matchStatus = statusSelect.value; onChange(); });
     typeSelect.addEventListener("change", function () { m.matchType = typeSelect.value; applyMode(); updateTestResult(); onChange(); });
     testInput.addEventListener("input", function () { m.testText = testInput.value; updateTestResult(); });
     updateTestResult();
 
-    return { typeSelect: typeSelect, textInput: textInput, regexInput: regexInput, testInput: testInput, testResult: testResult };
+    return {
+      typeSelect: typeSelect, textInput: textInput, regexInput: regexInput,
+      statusSelect: statusSelect, weekdayGroup: weekdayGroup,
+      testInput: testInput, testResult: testResult,
+      isTitleTestable: function () { return TITLE_TESTABLE_TYPES.indexOf(m.matchType) !== -1; },
+    };
   }
-  // A "rule" is one matcher plus any combination of three effects: assign a person, mark the
-  // event all-day, hide it — the exact same shape whether it's this calendar's own rule or a
-  // global one, and the exact same shape rules[] in transform.js's parseConfig expects.
-  function newRule() { return Object.assign(newMatcher(), { person: [], rename: true, allDay: false, hide: false, rewrite: "", rewriteFull: false }); }
+  // Renders one rule's full set of conditions — a single matcher by default, or several chained
+  // with a shared AND/OR combinator (see matchValueFromConditions/conditionsFromMatchValue for
+  // how this maps to the exported JSON). Returns the wrapper element plus a re-render function,
+  // since adding/removing a condition changes how many rows (and whether the combinator picker)
+  // need to exist at all.
+  function buildConditionsUI(rule, onChange) {
+    var wrap = el("div", {});
+    function render() {
+      wrap.innerHTML = "";
+      if (rule.conditions.length > 1) {
+        var combSel = el("select", { class: "field-narrow", style: "margin-bottom:6px;" }, [
+          el("option", { value: "and" }, [document.createTextNode("Match ALL of these (AND)")]),
+          el("option", { value: "or" }, [document.createTextNode("Match ANY of these (OR)")]),
+        ]);
+        combSel.value = rule.combinator === "or" ? "or" : "and";
+        combSel.addEventListener("change", function () { rule.combinator = combSel.value; onChange(); });
+        wrap.appendChild(combSel);
+      }
+      rule.conditions.forEach(function (cond, i) {
+        var f = buildMatcherFields(cond, onChange);
+        var pieces = [f.typeSelect, f.textInput, f.regexInput, f.statusSelect, f.weekdayGroup];
+        if (rule.conditions.length > 1) {
+          var rmCond = el("button", { type: "button", class: "small danger" }, [document.createTextNode("Remove")]);
+          rmCond.addEventListener("click", function () { rule.conditions.splice(i, 1); render(); onChange(); });
+          pieces.push(rmCond);
+        }
+        wrap.appendChild(el("div", { class: "sub-entry" }, pieces));
+        if (f.isTitleTestable()) {
+          wrap.appendChild(el("div", { style: "display:flex;gap:6px;align-items:center;margin:2px 0 8px;" }, [f.testInput, f.testResult]));
+        }
+      });
+      var addCond = el("button", { type: "button", class: "small" }, [document.createTextNode("+ Add condition (AND/OR)")]);
+      addCond.addEventListener("click", function () { rule.conditions.push(newMatcher()); render(); onChange(); });
+      wrap.appendChild(addCond);
+    }
+    render();
+    return { wrap: wrap, render: render };
+  }
+  // A "rule" is one or more conditions (chained with a shared AND/OR when there's more than
+  // one — see buildConditionsUI) plus any combination of four effects: assign a person, rewrite
+  // the title, mark the event all-day, hide it — the exact same shape whether it's this
+  // calendar's own rule or a global one, and the exact same shape rules[] in transform.js's
+  // parseConfig expects.
+  function newRule() { return { _id: uid(), conditions: [newMatcher()], combinator: "and", person: [], rename: true, allDay: false, hide: false, rewrite: "", rewriteFull: false }; }
   function ruleFromValue(v) {
-    var r = matcherFromValue(v.match);
+    var c = conditionsFromMatchValue(v.match);
+    var r = { _id: uid(), conditions: c.conditions, combinator: c.combinator };
     r.person = normalizeNames(v.person);
     r.rename = v.rename !== false;
     r.allDay = v.allDay === true;
@@ -460,11 +592,18 @@
     r.rewriteFull = v.rewriteFull === true;
     return r;
   }
+  // Whether this rule's match, as it will actually export, is a single plain word/regex/
+  // contains/exact matcher — the only case where "rename"/a non-full "rewrite" have an actual
+  // piece of matched text to substitute (mirrors applyCalendarRules/compileRule in
+  // transform.js: an and/or/any/status/weekday top-level match has nothing to point at).
+  function ruleHasRenameableMatch(r) {
+    return r.conditions.length === 1 && PLAIN_TEXT_TYPES.concat(["regex"]).indexOf(r.conditions[0].matchType) !== -1;
+  }
   // The JSON value transform.js's parseConfig actually expects for one rule — null when the
-  // rule has no usable match, or matches but does nothing (no person/allDay/hide/rewrite), for
-  // the caller to drop, mirroring compileRule() in transform.js exactly.
+  // rule has no usable condition, or matches but does nothing (no person/allDay/hide/rewrite),
+  // for the caller to drop, mirroring compileRule() in transform.js exactly.
   function ruleValue(r) {
-    var mv = matcherValue(r);
+    var mv = matchValueFromConditions(r);
     if (!mv) return null;
     var out = { match: mv };
     if (r.person && r.person.length) {
@@ -485,37 +624,42 @@
   // re-render function for the "+ Add rule" button to call after pushing a new one.
   //
   // Each rule is laid out as two explicit steps rather than one flat row of controls: Step 1
-  // ("If the title matches") is just the matcher; step 2 ("Then") is every action the match can
-  // trigger (assign a person, rewrite the title, make it all-day, hide it), so it reads as a
-  // sentence instead of a wall of inputs.
+  // ("If...") is one or more conditions (chained with AND/OR — see buildConditionsUI); step 2
+  // ("Then") is every action the match can trigger (assign a person, rewrite the title, make it
+  // all-day, hide it), so it reads as a sentence instead of a wall of inputs.
   function renderRulesList(container, rules) {
     function render() {
       container.innerHTML = "";
       rules.forEach(function (r, i) {
-        var f = buildMatcherFields(r, renderJson);
-
         var personInput = personMultiSelect(r.person);
         personInput.classList.add("field");
 
         function checkboxLabel(checked, text, onChange) {
           var chk = el("input", { type: "checkbox" });
           chk.checked = checked;
-          chk.addEventListener("change", function () { onChange(chk.checked); renderJson(); });
+          chk.addEventListener("change", function () { onChange(chk.checked); refresh(); });
           var lbl = el("label", { style: "display:flex;align-items:center;gap:4px;margin:0;font-size:12px;color:#333;white-space:nowrap;" }, [chk, document.createTextNode(text)]);
           lbl.checkboxEl = chk;
           return lbl;
         }
-        // Meaningless (and, worse, shown checked by default) when no person is assigned at
-        // all — nothing to rename TO — so it lives inside the person-assignment group, not
-        // alongside allDay/hide, and disables itself the moment the person list is empty.
+        // Meaningless (and, worse, shown checked by default) when no person is assigned, or
+        // when this rule's match won't export as a single plain word/regex/contains/exact (an
+        // and/or/any/status/weekday match has no specific text to rename TO — see
+        // ruleHasRenameableMatch) — so it lives inside the person-assignment group, not
+        // alongside allDay/hide, and disables itself whenever either condition isn't met.
         var renameLbl = checkboxLabel(r.rename !== false, "rename match to person name", function (v) { r.rename = v; });
+        var renameHint = el("p", { class: "muted", style: "flex-basis:100%;margin:2px 0 0;font-size:11.5px;" });
         function updateRenameEnabled() {
-          var enabled = r.person && r.person.length > 0;
-          renameLbl.checkboxEl.disabled = !enabled;
-          renameLbl.style.opacity = enabled ? "1" : "0.45";
+          var hasPerson = r.person && r.person.length > 0;
+          var renameable = ruleHasRenameableMatch(r);
+          renameLbl.checkboxEl.disabled = !(hasPerson && renameable);
+          renameLbl.style.opacity = hasPerson && renameable ? "1" : "0.45";
+          renameHint.textContent = hasPerson && !renameable
+            ? "Only works with a single Word/Contains/Exact/Regex condition — this rule's match won't rename anything, but the person/color/badge still apply."
+            : "";
         }
         updateRenameEnabled();
-        personInput.addEventListener("change", function () { r.person = selectedValues(personInput); updateRenameEnabled(); renderJson(); });
+        personInput.addEventListener("change", function () { r.person = selectedValues(personInput); refresh(); });
 
         var allDayLbl = checkboxLabel(!!r.allDay, "make all-day", function (v) { r.allDay = v; });
         var hideLbl = checkboxLabel(!!r.hide, "hide", function (v) { r.hide = v; });
@@ -523,40 +667,60 @@
         // Rewrite has two modes: "Regex replace" (default) only touches the matched substring,
         // so the replacement text can use $1/$2 backreferences into the match's own capture
         // groups; "Full rewrite" discards the rest of the original title outright and replaces
-        // it entirely with the given text.
+        // it entirely with the given text. Regex replace needs the same single-plain-match
+        // condition as rename above — a hint (not a hard block) covers that here too.
         var rewriteInput = el("input", { type: "text", class: "field", placeholder: "replacement text...", value: r.rewrite || "", style: "flex:1 1 160px;" });
-        rewriteInput.addEventListener("input", function () { r.rewrite = rewriteInput.value; renderJson(); });
+        rewriteInput.addEventListener("input", function () { r.rewrite = rewriteInput.value; refresh(); });
         var rewriteModeSel = el("select", { class: "field", style: "flex:0 0 auto;width:auto;" }, [
           el("option", { value: "regex" }, [document.createTextNode("Regex replace")]),
           el("option", { value: "full" }, [document.createTextNode("Full rewrite")]),
         ]);
         rewriteModeSel.value = r.rewriteFull ? "full" : "regex";
-        rewriteModeSel.addEventListener("change", function () { r.rewriteFull = rewriteModeSel.value === "full"; renderJson(); });
+        rewriteModeSel.addEventListener("change", function () { r.rewriteFull = rewriteModeSel.value === "full"; refresh(); });
+        var rewriteHint = el("p", { class: "muted", style: "flex-basis:100%;margin:2px 0 0;font-size:11.5px;" });
         var rewriteRow = el("div", { class: "sub-entry", style: "background:transparent;border:none;padding:4px 0 0;margin:0;" }, [rewriteModeSel, rewriteInput]);
+        function updateRewriteHint() {
+          rewriteHint.textContent = !!r.rewrite && !r.rewriteFull && !ruleHasRenameableMatch(r)
+            ? "\"Regex replace\" needs a single Word/Contains/Exact/Regex condition to know what to replace — switch to \"Full rewrite\", or this has no effect."
+            : "";
+        }
+        updateRewriteHint();
 
         var rm = el("button", { class: "small danger" }, [document.createTextNode("Remove rule")]);
         rm.addEventListener("click", function () { rules.splice(i, 1); render(); renderJson(); });
 
+        var conditionsUI = buildConditionsUI(r, refresh);
         var matchStep = el("div", { class: "rule-step" }, [
-          el("div", { class: "rule-step-label" }, [document.createTextNode("1. If the title matches")]),
-          el("div", { class: "sub-entry" }, [f.typeSelect, f.textInput, f.regexInput]),
-          el("div", { style: "display:flex;gap:6px;align-items:center;" }, [f.testInput, f.testResult]),
+          el("div", { class: "rule-step-label" }, [document.createTextNode("1. If")]),
+          conditionsUI.wrap,
         ]);
         var thenStep = el("div", { class: "rule-step" }, [
           el("div", { class: "rule-step-label" }, [document.createTextNode("2. Then")]),
           el("div", { class: "action-group" }, [
             el("label", { text: "Assign person(s) (optional)" }),
-            el("div", { class: "sub-entry" }, [personInput, renameLbl]),
+            el("div", { class: "sub-entry" }, [personInput, renameLbl, renameHint]),
           ]),
           el("div", { class: "action-group" }, [
             el("label", { text: "Rewrite title (optional)" }),
-            rewriteRow,
+            rewriteRow, rewriteHint,
           ]),
           el("div", { class: "action-group sub-entry" }, [allDayLbl, hideLbl]),
         ]);
 
+        // A rule that matches but triggers nothing usable (e.g. a person picked with no
+        // declared color/badge is still fine — but a blank match, or every action left off) is
+        // silently dropped from the exported JSON by ruleValue — surfaced here instead of
+        // leaving the user to wonder why a rule "disappeared".
+        var noopWarning = el("p", { class: "status err", style: "margin:6px 0 0;" });
+        function updateNoopWarning() {
+          noopWarning.textContent = ruleValue(r) === null ? "⚠ This rule won't be included in the JSON — it either has no usable condition, or does nothing (pick a person, rewrite, all-day, or hide)." : "";
+        }
+        updateNoopWarning();
+
+        function refresh() { updateRenameEnabled(); updateRewriteHint(); updateNoopWarning(); renderJson(); }
+
         container.appendChild(el("div", { class: "rule-card" }, [
-          matchStep, thenStep,
+          matchStep, thenStep, noopWarning,
           el("div", { style: "text-align:right;margin-top:6px;" }, [rm]),
         ]));
       });
