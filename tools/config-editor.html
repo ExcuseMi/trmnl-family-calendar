@@ -28,7 +28,10 @@
     font: inherit; padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; background: #fff; color: #111;
   }
   textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
-  .field-url { flex: 1 1 320px; min-width: 220px; }
+  /* width:100%+border-box matters when this sits in a plain (non-flex) wrapper — e.g. the
+     calendar's own ICS URL field below — where flex-basis has no effect and the input would
+     otherwise fall back to the browser's default ~20-character text input width. */
+  .field-url { flex: 1 1 320px; min-width: 220px; width: 100%; box-sizing: border-box; }
   .field-narrow { flex: 0 0 130px; }
   .field-regex { flex: 1 1 260px; min-width: 180px; }
   button {
