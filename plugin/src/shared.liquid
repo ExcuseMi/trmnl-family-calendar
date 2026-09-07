@@ -28,7 +28,7 @@
 {% template chip %}
   {%- assign border_color = "currentColor" -%}
   {%- if fg == "white" -%}{%- assign border_color = "#888888" -%}{%- endif -%}
-  <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;box-sizing:border-box;{{ size_style }}border-top:1px solid {{ border_color }};border-left:1px solid {{ border_color }};border-bottom:3px solid {{ border_color }};border-right:3px solid {{ border_color }};">
+  <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border-top:1px solid {{ border_color }};border-left:1px solid {{ border_color }};border-bottom:3px solid {{ border_color }};border-right:3px solid {{ border_color }};">
     {%- render "chip_body", title: title, fg: fg, title_cls: title_cls, fit_min: fit_min, clip: clip, pad_x_cls: pad_x_cls -%}
   </div>
 {% endtemplate %}
@@ -155,7 +155,7 @@
 <div class="layout layout--col gap--none relative" id="cal-root" data-days-n="{{ shown_days_n }}">
   {% if data.error and data.has_events == false %}
 
-    <div class="flex flex--col flex--center-x flex--center-y w--full h--full text--center p--6 gap--small" style="box-sizing:border-box;">
+    <div class="flex flex--col flex--center-x flex--center-y w--full h--full text--center p--6 gap--small" >
       <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/event_busy/default/48px.svg" alt="" class="h--auto w--max-8 lg:w--max-12">
       <span class="title title--large">{{ data.unavailable_label }}</span>
       <span class="description text--gray-50 w--max-[85cqw]" data-clamp="3">{{ data.error }}</span>
@@ -187,7 +187,7 @@
 
     <div class="grid gap--none h--[{{ gutter_pct }}cqh] h--min-[{{ gutter_pct }}cqh] bg--black flex-none relative" style="grid-template-columns:repeat({{ header_allday_total_units }}, 1fr);grid-template-rows:{{ header_allday_row_tracks | strip }};overflow:hidden;">
 
-      <div class="col--span-{{ axis_span }} bg--black flex flex--col flex--center-x flex--center-y p--0.5" style="grid-row:1 / span {{ header_allday_rows }};overflow:hidden;box-sizing:border-box;">
+      <div class="col--span-{{ axis_span }} bg--black flex flex--col flex--center-x flex--center-y p--0.5" style="grid-row:1 / span {{ header_allday_rows }};overflow:hidden;">
         {% if show_badge_overlay %}
           {%- assign badge_count = data.people.size -%}
           {%- if badge_count > 8 -%}{%- assign badge_count = 8 -%}{%- endif -%}
@@ -251,7 +251,7 @@
               {%- if d >= bar.start_col and d < allday_fill_bar_end and bar.row == allday_fill_row0 -%}{%- assign allday_fill_has_bar = true -%}{%- endif -%}
             {%- endfor -%}
             {% assign allday_fill_col = day_span | times: d | plus: axis_span | plus: 1 %}
-            <div class="bg--gray-75 border--v-1 cal-allday-fill relative" data-day-idx="{{ d }}" style="grid-column:{{ allday_fill_col }} / span {{ day_span }};grid-row:{{ allday_grid_row }};box-sizing:border-box;">
+            <div class="bg--gray-75 border--v-1 cal-allday-fill relative" data-day-idx="{{ d }}" style="grid-column:{{ allday_fill_col }} / span {{ day_span }};grid-row:{{ allday_grid_row }};">
               {% unless allday_fill_has_bar %}
                 {%- assign allday_hatch_x = d | times: day_width_pct -%}
                 {%- assign allday_hatch_y = r | minus: 1 | times: data.allday_row_pct -%}
@@ -273,7 +273,7 @@
           {% assign allday_row_num = bar.row | plus: 2 %}
           {% assign ad_border_color = "currentColor" %}
           {% if bar.fg == "white" %}{% assign ad_border_color = "#888888" %}{% endif %}
-          <div class="bg--{{ bar.hue }} text--{{ bar.fg }} flex flex--row flex--center-x flex--center-y cal-fit-box rounded--none relative cal-allday-bar-el" data-start-col="{{ bar.start_col }}" data-span="{{ allday_visible_span }}" style="grid-column:{{ allday_col_start }} / span {{ allday_bar_span }};grid-row:{{ allday_row_num }};overflow:hidden;box-sizing:border-box;border-bottom:1px solid {{ ad_border_color }};">
+          <div class="bg--{{ bar.hue }} text--{{ bar.fg }} flex flex--row flex--center-x flex--center-y cal-fit-box rounded--none relative cal-allday-bar-el" data-start-col="{{ bar.start_col }}" data-span="{{ allday_visible_span }}" style="grid-column:{{ allday_col_start }} / span {{ allday_bar_span }};grid-row:{{ allday_row_num }};overflow:hidden;border-bottom:1px solid {{ ad_border_color }};">
             <span class="title {{ chip_title_cls }} text--{{ bar.fg }} cal-fit-text cal-fit-clip cal-allday-title w--min-0" data-fit-min="9" data-fit-max="90">{{ bar.title }}</span>
           </div>
           {% endif %}
@@ -353,11 +353,17 @@
               no room left to grow the chip to match.
             {%- endcomment -%}
             {%- assign event_box_h = event.box_height_pct | default: event.height_pct -%}
-            <div class="absolute px--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});box-sizing:border-box;">
+            <div class="absolute px--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
               {%- assign event_clip = true -%}
               {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
+              {%- comment -%}
+                top--0/left--0 and w--[3px] are real Size/Position utility classes (Position
+                offsets only take the fixed spacing scale, and 0 is on it; Size's bracket syntax
+                takes arbitrary px). height stays inline: it's a computed percentage, and neither
+                system has a class for an arbitrary computed value.
+              {%- endcomment -%}
               {%- assign accent_h_pct = event.height_pct | times: 100.0 | divided_by: event_box_h -%}
-              <div class="absolute bg--{{ event.fg }}" style="top:0;left:0;height:{{ accent_h_pct }}%;width:3px;"></div>
+              <div class="absolute top--0 left--0 w--[3px] bg--{{ event.fg }}" style="height:{{ accent_h_pct }}%;"></div>
             </div>
           {% endfor %}
         </div>

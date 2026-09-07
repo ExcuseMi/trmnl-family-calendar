@@ -1433,9 +1433,9 @@ const FOOTER_PCT = 7;
 const NEWS_PCT = 2;
 const ALLDAY_ROW_PCT = 10;
 const ALERTS_ROW_PCT = 5;
-// The most a short event's readable content chip may opportunistically grow past its own real
-// duration, when there's free room to grow into.
-const READABLE_BOX_CAP_PCT = 10;
+// The most (in real elapsed time, not screen space) a short event's readable content chip may
+// opportunistically grow past its own real duration, when there's free room to grow into.
+const READABLE_BOX_CAP_HOURS = 0.5;
 function hueOf(calIdx, calendarColors) {
   if (calendarColors && calIdx < calendarColors.length && calendarColors[calIdx]) return calendarColors[calIdx];
   return AUTO_HUES[calIdx % AUTO_HUES.length];
@@ -1602,14 +1602,22 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
       // box_height_pct is the readable content chip's height: it may opportunistically grow
       // past the real duration to stay legible, but only into genuinely free room — capped by
       // wherever the next SAME-LANE event's own real (never-moved) start is, so it can never
-      // steal space that event needs, and never below the accurate height either. A lone short
-      // event in an open afternoon gets a sensibly-capped box; two short events back-to-back
-      // each keep their true, non-overlapping slot and just get little to no room to expand.
+      // steal space that event needs, and never below the accurate height either. The growth
+      // itself is capped to READABLE_BOX_CAP_HOURS of REAL elapsed time (run through the same
+      // hour-weighting pctAt() every event's own height uses) rather than a flat percentage of
+      // the grid — a flat percentage looks like a fixed amount of screen space, but a fixed
+      // amount of screen space represents wildly different real durations depending on how
+      // compressed the day's own time axis is, which is exactly the "box lies about how long
+      // this actually is" problem this whole rework exists to prevent. A lone short event in an
+      // open afternoon gets a modestly-capped box (never more than ~READABLE_BOX_CAP_HOURS
+      // worth of real time); two short events back-to-back each keep their true,
+      // non-overlapping slot and just get little to no room to expand.
       let nextTop = gridPct;
       for (let j = idx + 1; j < flatEvents.length; j++) {
         if (flatEvents[j].laneIdx === item.laneIdx) { nextTop = pctAt(flatEvents[j].ev.h0) - gridBase; break; }
       }
-      const boxHeight = Math.max(height, Math.min(READABLE_BOX_CAP_PCT, nextTop - top));
+      const capEnd = pctAt(Math.min(24, ev.h0 + READABLE_BOX_CAP_HOURS)) - gridBase;
+      const boxHeight = Math.max(height, Math.min(capEnd - top, nextTop - top));
       const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);
       events.push({
         top_pct: round4((top / gridPct) * 100),
