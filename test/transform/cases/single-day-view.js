@@ -51,4 +51,32 @@ module.exports = function (test, h) {
     assert(sd.hour_rows[16].pct > 0, 'a fully empty day should still show the configured default core window end');
     assertEqual(sd.days[0].events.length, 0, 'today really has no events');
   });
+
+  test('data.single_day caps a fully empty day to a half-day window centered in the default hours, not the full default range', async () => {
+    const fetchImpl = async () => okText(icsWithEvents([]));
+    const { run } = runTransform(fetchImpl, NOW);
+    // No "hours" override -> DEFAULT_HOURS (7-21, a 14h span) — wider than the half-day cap, and
+    // there's nothing real (no events, no lat_lon so no sunrise/sunset) to anchor a window to.
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
+    const sd = r.data.single_day;
+    assertEqual(sd.hour_rows[7].pct, 0, 'the full default start (7am) should be trimmed — 14h is more than an empty day needs');
+    assertEqual(sd.hour_rows[20].pct, 0, 'the full default end (9pm) should likewise be trimmed');
+    assert(sd.hour_rows[8].pct > 0 && sd.hour_rows[19].pct > 0, 'a 12-hour window centered in the default range (8am-8pm) should remain');
+  });
+
+  test('data.single_day never truncates a day whose own real events already span more than half a day', async () => {
+    const events = [
+      { uid: 1, start: '20260905T060000Z', end: '20260905T063000Z', summary: 'Early Errand' }, // 06:00
+      { uid: 2, start: '20260905T203000Z', end: '20260905T210000Z', summary: 'Late Dinner' }, // 20:30-21:00
+    ];
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
+    const sd = r.data.single_day;
+    // Real span here is 06:00-21:00 = 15h, more than the 12h cap — must be shown in full, not
+    // trimmed down to 12h, since that would hide one of these two real events.
+    assert(sd.hour_rows[6].pct > 0, 'hour 6 must stay visible — Early Errand is real content, never hidden by the cap');
+    assert(sd.hour_rows[20].pct > 0, 'hour 20 must stay visible — Late Dinner is real content, never hidden by the cap');
+    assertEqual(sd.days[0].events.length, 2, 'both real events should still be present');
+  });
 };
