@@ -1286,7 +1286,7 @@ async function fetchRssHeadline(url, label, deadline) {
 const HEADER_PCT = 11;
 const FOOTER_PCT = 7;
 const NEWS_PCT = 2;
-const ALLDAY_ROW_PCT = 10;
+const ALLDAY_ROW_PCT = 7;
 const ALERTS_ROW_PCT = 5;
 const READABLE_BOX_MIN_PCT = 4;
 function hueOf(calIdx, calendarColors) {
