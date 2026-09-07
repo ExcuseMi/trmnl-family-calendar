@@ -232,7 +232,7 @@
           {% assign allday_row_num = bar.row | plus: 2 %}
           {% assign ad_border_color = "currentColor" %}
           {% if bar.fg == "white" %}{% assign ad_border_color = "#888888" %}{% endif %}
-          <div class="bg--{{ bar.hue }} text--{{ bar.fg }} flex flex--row flex--center-x flex--center-y cal-fit-box rounded--none relative cal-allday-bar-el" data-start-col="{{ bar.start_col }}" data-span="{{ allday_visible_span }}" style="grid-column:{{ allday_col_start }} / span {{ allday_bar_span }};grid-row:{{ allday_row_num }};overflow:hidden;border-bottom:1px solid {{ ad_border_color }};">
+          <div class="bg--{{ bar.hue }} text--{{ bar.fg }} flex flex--row flex--center-x flex--center-y cal-fit-box rounded--none relative cal-allday-bar-el" data-start-col="{{ bar.start_col }}" data-span="{{ allday_visible_span }}" style="grid-column:{{ allday_col_start }} / span {{ allday_bar_span }};grid-row:{{ allday_row_num }};overflow:hidden;border-bottom:1px solid {{ ad_border_color }};border-left:1px solid {{ ad_border_color }};">
             <span class="title {{ chip_title_cls }} text--{{ bar.fg }} cal-fit-text cal-fit-clip cal-allday-title w--min-0" data-fit-min="9" data-fit-max="90">{{ bar.title }}</span>
           </div>
           {% endif %}

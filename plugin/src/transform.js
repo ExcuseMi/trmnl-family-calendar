@@ -1404,14 +1404,9 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
     });
   }
 
+  const minBoxHeight = (gridPct * READABLE_BOX_MIN_PCT) / 100;
   const outDays = [];
   days.forEach((d, di) => {
-    let clusters = cluster(d.timed).filter((c) => Math.max(c.h0, 0) < Math.min(c.h1, 24));
-    for (const c of clusters) {
-      c.h0 = Math.max(c.h0, 0);
-      c.h1 = Math.min(c.h1, 24);
-    }
-
     const boundsSet = new Set([0, 24]);
     for (let h = 1; h < 24; h++) boundsSet.add(h);
 
@@ -1445,30 +1440,36 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
       segments.push({ pct, shade, night: isNight(mid), past, weather: dayWeather[Math.trunc(a)] || null });
     }
 
-    const flatEvents = [];
-    for (const c of clusters) {
-      for (const [ev, laneIdx] of c.lanes) flatEvents.push({ ev, laneIdx, nlanes: c.nlanes });
-    }
-    flatEvents.sort((a, b) => a.ev.h0 - b.ev.h0);
-
-    const events = [];
-    flatEvents.forEach((item, idx) => {
-      const ev = item.ev;
+    // Lanes are assigned on each event's READABLE vertical extent — its natural top/height,
+    // with the bottom stretched to at least minBoxHeight — rather than its raw start/end time.
+    // Two events can be sequential (not actually overlapping in time) yet still too close
+    // together for the first one's stretched box to fit before the second starts; assigning
+    // lanes by extent instead of raw time catches that case too and puts them side by side
+    // instead of squishing/hiding one behind the other.
+    const withExtent = d.timed.map((ev) => {
       const top = pctAt(ev.h0) - gridBase;
       const height = pctAt(ev.h1) - gridBase - top;
-      let nextTop = gridPct;
-      for (let j = idx + 1; j < flatEvents.length; j++) {
-        if (flatEvents[j].laneIdx === item.laneIdx) { nextTop = pctAt(flatEvents[j].ev.h0) - gridBase; break; }
-      }
-      const minBoxHeight = gridPct * READABLE_BOX_MIN_PCT / 100;
-      const boxHeight = Math.max(height, Math.min(minBoxHeight, nextTop - top));
+      return { h0: top, h1: top + Math.max(height, minBoxHeight), ev, top, height };
+    });
+    const clusters = cluster(withExtent);
+
+    const flatEvents = [];
+    for (const c of clusters) {
+      for (const [item, laneIdx] of c.lanes) flatEvents.push({ item, laneIdx, nlanes: c.nlanes });
+    }
+    flatEvents.sort((a, b) => a.item.top - b.item.top);
+
+    const events = [];
+    flatEvents.forEach(({ item, laneIdx, nlanes }) => {
+      const ev = item.ev;
+      const boxHeight = item.h1 - item.top;
       const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);
       events.push({
-        top_pct: round4((top / gridPct) * 100),
-        height_pct: round4((height / gridPct) * 100),
+        top_pct: round4((item.top / gridPct) * 100),
+        height_pct: round4((item.height / gridPct) * 100),
         box_height_pct: round4((boxHeight / gridPct) * 100),
-        lane_index: item.laneIdx,
-        nlanes: item.nlanes,
+        lane_index: laneIdx,
+        nlanes: nlanes,
         title: ev.title,
         hue: colorClass(color),
         fg: foregroundFor(color),
