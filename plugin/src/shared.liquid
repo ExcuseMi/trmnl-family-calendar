@@ -359,22 +359,15 @@
 
               {% assign seg_bg = "bg--gray-30" %}
             {% elsif day.is_today and seg.past %}
-              {%- comment -%}
-                gray-75/gray-70 (#EEEEEE/#DDDDDD) used to render here — both nearly identical to
-                white, especially at 16-gray e-ink depth, so "already happened" hours read as no
-                shading at all rather than visibly distinct from upcoming ones. gray-65/gray-45
-                (#CCCCCC/#888888) are clearly darker than white while staying lighter than
-                night's gray-30, so past vs. future is actually visible without being confused
-                for nighttime.
-              {%- endcomment -%}
-              {% assign seg_bg = "bg--gray-65" %}
-              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-45" %}{% endif %}
+
+              {% assign seg_bg = "bg--gray-75" %}
+              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-70" %}{% endif %}
             {% elsif day.is_today %}
               {% assign seg_bg = "" %}
               {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-75" %}{% endif %}
             {% else %}
-              {% assign seg_bg = "bg--gray-65" %}
-              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-45" %}{% endif %}
+              {% assign seg_bg = "bg--gray-75" %}
+              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-70" %}{% endif %}
             {% endif %}
             <div class="h--[{{ seg.pct }}cqh] w--full cal-row {{ seg_bg }} relative" {% if seg.night %}style="border-bottom:1px solid rgba(255,255,255,0.2);"{% endif %}>
               {% if seg.weather == "rain" %}
