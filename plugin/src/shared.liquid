@@ -335,7 +335,7 @@
 
     {% if data.alerts_pct > 0 %}
       <div class="h--[{{ data.alerts_pct }}cqh] h--min-[{{ data.alerts_pct }}cqh] flex-none flex flex--row flex--center-y bg--gray-30 px--2" style="overflow:hidden;">
-        <span class="label label--small font--bold text--white w--min-0" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">⚠ Unavailable for a while: {{ data.calendar_alerts | join: ", " }}</span>
+        <span class="label label--small font--bold text--white w--min-0 block" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">⚠ Unavailable for a while: {{ data.calendar_alerts | join: ", " }}</span>
       </div>
     {% endif %}
 
@@ -440,7 +440,7 @@
     <div class="grid gap--none h--[{{ data.footer_pct }}cqh] h--min-[{{ data.footer_pct }}cqh] bg--black flex flex--center-y" style="overflow:hidden;">
       {% if data.rss_headline %}
         <div class="h--full col--span-{{ shown_days_n | times: day_span | plus: axis_span }} flex flex--row flex--center-y flex--left pl--2 pr--2 w--min-0" style="overflow:hidden;">
-          <span class="label {% if view == 1 %}label--large lg:label--xlarge{% else %}label--base{% endif %} font--bold bg--black text--white w--min-0 w--full" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;letter-spacing:0.5px;">{%- if data.rss_headline.label -%}<span class="text--gray-50">{{ data.rss_headline.label }}</span><span class="text--gray-50">&nbsp;»&nbsp;</span>{%- endif -%}{%- for t in data.rss_headline.titles -%}{{ t }}{%- unless forloop.last -%}<span class="text--gray-50">&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;</span>{%- endunless -%}{%- endfor -%}</span>
+          <span class="label {% if view == 1 %}label--large lg:label--xlarge{% else %}label--base{% endif %} font--bold bg--black text--white w--min-0 w--full block" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;letter-spacing:0.5px;">{%- if data.rss_headline.label -%}<span class="text--gray-50">{{ data.rss_headline.label }}</span><span class="text--gray-50">&nbsp;»&nbsp;</span>{%- endif -%}{%- for t in data.rss_headline.titles -%}{{ t }}{%- unless forloop.last -%}<span class="text--gray-50">&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;</span>{%- endunless -%}{%- endfor -%}</span>
         </div>
       {% else %}
       <div class="col--span-{{ axis_span }} flex flex--center-x">
