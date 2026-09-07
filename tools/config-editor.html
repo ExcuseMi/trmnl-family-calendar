@@ -508,7 +508,7 @@
         // Meaningless (and, worse, shown checked by default) when no person is assigned at
         // all — nothing to rename TO — so it lives inside the person-assignment group, not
         // alongside allDay/hide, and disables itself the moment the person list is empty.
-        var renameLbl = checkboxLabel(r.rename !== false, "rename title to person", function (v) { r.rename = v; });
+        var renameLbl = checkboxLabel(r.rename !== false, "rename match to person name", function (v) { r.rename = v; });
         function updateRenameEnabled() {
           var enabled = r.person && r.person.length > 0;
           renameLbl.checkboxEl.disabled = !enabled;
