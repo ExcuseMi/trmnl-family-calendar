@@ -317,7 +317,13 @@
         {%- endfor -%}
         {%- assign day_is_empty = false -%}
         {%- if day.events.size == 0 and day_has_allday == false -%}{%- assign day_is_empty = true -%}{%- endif -%}
-        <div class="col--span-{{ day_span }} flex flex--col gap--none border--v-1 relative cal-day-cell" data-day-idx="{{ day_idx }}">
+        {%- comment -%}
+          overflow:hidden here clips each event's box-shadow (and anything else that paints
+          outside its own box) to this day's own column — without it, a full-width event's
+          shadow (painted outside the box, so unaffected by the box's OWN overflow setting) can
+          bleed into the next day's column since nothing clips it at that boundary.
+        {%- endcomment -%}
+        <div class="col--span-{{ day_span }} flex flex--col gap--none border--v-1 relative cal-day-cell" data-day-idx="{{ day_idx }}" style="overflow:hidden;">
 
           {% assign seg_cum_pct = 0 %}
           {% for seg in day.segments %}
