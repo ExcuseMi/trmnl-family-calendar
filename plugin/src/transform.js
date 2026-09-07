@@ -1288,7 +1288,7 @@ const FOOTER_PCT = 7;
 const NEWS_PCT = 2;
 const ALLDAY_ROW_PCT = 10;
 const ALERTS_ROW_PCT = 5;
-const READABLE_BOX_CAP_HOURS = 0.5;
+const READABLE_BOX_CAP_HOURS = 0.25;
 function hueOf(calIdx, calendarColors) {
   if (calendarColors && calIdx < calendarColors.length && calendarColors[calIdx]) return calendarColors[calIdx];
   return AUTO_HUES[calIdx % AUTO_HUES.length];

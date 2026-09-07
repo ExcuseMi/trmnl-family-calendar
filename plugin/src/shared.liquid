@@ -21,7 +21,7 @@
   {%- if accent_h_pct -%}{%- assign chip_extra_style = "padding-left:14px;" -%}{%- endif -%}
   <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}{{ chip_extra_style }}border:2px solid {{ border_color }};box-shadow:2px 2px 0 0 {{ border_color }};">
     {%- if accent_h_pct -%}
-      <div class="absolute top--0 left--0 w--[10px] h--full bg--{{ hue }}" style="background-image:repeating-linear-gradient(45deg, transparent, transparent 3px, {{ border_color }} 3px, {{ border_color }} 6px);height:{{ accent_h_pct }}%;border-right:2px solid {{ border_color }};"></div>
+      <div class="absolute top--0 left--0 w--[10px] h--full bg--{{ hue }}" style="background-image:repeating-linear-gradient(45deg, transparent, transparent 3px, var(--gray-20) 3px, var(--gray-20) 5px, var(--gray-45) 5px, var(--gray-45) 7px, var(--gray-70) 7px, var(--gray-70) 9px);height:{{ accent_h_pct }}%;border-right:2px solid {{ border_color }};"></div>
     {%- endif -%}
     {%- render "chip_body", title: title, fg: fg, title_cls: title_cls, fit_min: fit_min, clip: clip, pad_x_cls: pad_x_cls -%}
   </div>

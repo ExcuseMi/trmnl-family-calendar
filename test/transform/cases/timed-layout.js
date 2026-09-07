@@ -63,7 +63,7 @@ module.exports = function (test, h) {
   test('box_height_pct: the readable chip may grow into free room but never past the next same-lane event\'s real start', async () => {
     const events = [
       { uid: 1, start: '20260905T092000Z', end: '20260905T101000Z', summary: 'Extra turnen' },
-      { uid: 2, start: '20260905T101500Z', end: '20260905T103000Z', summary: 'Standup' },
+      { uid: 2, start: '20260905T101500Z', end: '20260905T102000Z', summary: 'Standup' }, // 5 min
     ];
     const fetchImpl = async () => okText(icsWithEvents(events));
     const { run } = runTransform(fetchImpl, NOW);
@@ -73,10 +73,10 @@ module.exports = function (test, h) {
     assert(turnen.box_height_pct >= turnen.height_pct, 'the readable box must never be shorter than the real duration');
     assert(turnen.top_pct + turnen.box_height_pct <= standup.top_pct + 0.01, 'the readable box must not grow past the next event\'s true (unmoved) start: turnen box bottom=' + (turnen.top_pct + turnen.box_height_pct) + ' standup top=' + standup.top_pct);
     // Standup has the whole rest of the day free after it, so its box should be able to grow
-    // past its own tiny 15-min duration — but the growth itself is capped to a fixed amount of
-    // REAL TIME (READABLE_BOX_CAP_HOURS = 0.5h), not a flat percentage of the grid, so a 15-min
-    // event should grow to roughly (at most) a 30-min-equivalent box, not something open-ended.
-    assert(standup.box_height_pct >= standup.height_pct * 1.9, 'a short event with free room after it should get a noticeably taller readable box than its bare duration: height=' + standup.height_pct + ' box=' + standup.box_height_pct);
-    assert(standup.box_height_pct <= standup.height_pct * 2.2, 'the readable box must not grow open-endedly just because room is free — it should track a fixed real-time cap (~30 min here), not balloon into something that visually misrepresents duration: height=' + standup.height_pct + ' box=' + standup.box_height_pct);
+    // past its own tiny 5-min duration — but the growth itself is capped to a fixed amount of
+    // REAL TIME (READABLE_BOX_CAP_HOURS = 0.25h), not a flat percentage of the grid, so a 5-min
+    // event should grow to roughly (at most) a 15-min-equivalent box, not something open-ended.
+    assert(standup.box_height_pct >= standup.height_pct * 2.7, 'a short event with free room after it should get a noticeably taller readable box than its bare duration: height=' + standup.height_pct + ' box=' + standup.box_height_pct);
+    assert(standup.box_height_pct <= standup.height_pct * 3.3, 'the readable box must not grow open-endedly just because room is free — it should track a fixed real-time cap (~15 min here), not balloon into something that visually misrepresents duration: height=' + standup.height_pct + ' box=' + standup.box_height_pct);
   });
 };
