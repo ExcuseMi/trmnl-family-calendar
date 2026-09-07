@@ -63,7 +63,8 @@ hand — see [Configuration Editor](#configuration-editor) below.
 1. In TRMNL: **Plugins → Private Plugins → New**, name it, **Save**.
 2. Push this repo with `trmnlp push` (see below); it uploads `settings.yml`, the `.liquid`
    templates, and `transform.js` in one go.
-3. Add your calendar link(s) to **Easy ICS** — one per entry, nothing else needed. Each
+3. Add your calendar link(s) (see [Getting your calendar's ICS link](#getting-your-calendars-ics-link)
+   if you're not sure where to find one) to **Easy ICS** — one per entry, nothing else needed. Each
    calendar's name is read automatically from the feed itself, and colors auto-assign. If you
    want per-calendar colors, filtering, or to attach specific people to specific events, flip
    **Advanced Configuration** to On (it's hidden by default) to reveal a JSON field, and build
@@ -88,6 +89,51 @@ hand — see [Configuration Editor](#configuration-editor) below.
      render compressed instead of disappearing or diluting the rest of the grid.
    - **News Feed** (Advanced): off by default — flip it on to reveal the feed URL and an optional
      label field underneath.
+
+## Getting your calendar's ICS link
+
+Any calendar that can produce a private ICS/iCal feed URL works — here's where to find it for
+the popular ones. All of these are private, secret-token links: anyone who has the link can
+*view* your calendar, so treat it like a password (don't post it publicly), but it can't be used
+to edit anything.
+
+**Google Calendar**
+1. [calendar.google.com](https://calendar.google.com) → **Settings** (gear icon, top right)
+2. Left sidebar, under "Settings for my calendars" → click the calendar's name
+3. Click **Integrate calendar**
+4. Copy the **Secret address in iCal format**
+
+If you don't see that option, a Google Workspace admin may have disabled it for your account.
+
+**Outlook.com** (personal Microsoft account)
+1. Calendar view → **Settings** (gear icon) → **Shared calendars**
+2. Under **Publish a calendar**, pick the calendar and a permission level, then **Publish**
+3. Copy the **ICS link** that appears below (not the HTML link — that's a browser-only view)
+
+**Microsoft 365 / Outlook on the web** (work or school account)
+
+Same steps as Outlook.com above — Calendar → Settings → Shared calendars → Publish a calendar.
+The published ICS link is public (works outside your organization), which is what lets this
+plugin's servers fetch it.
+
+**Microsoft Teams**
+
+Teams doesn't have its own calendar — its Calendar tab is just a live view of the same
+Outlook/Exchange calendar. Use the Microsoft 365 steps above.
+
+**Apple iCloud Calendar**
+1. [icloud.com/calendar](https://icloud.com/calendar) (or the Calendar app) → click the ⓘ next
+   to the calendar's name in the sidebar
+2. Turn on **Public Calendar**
+3. Click **Copy Link** (**Share Link** on iPhone/iPad)
+
+The link starts with `webcal://` — this plugin (and the Configuration Editor) handles that
+automatically, no need to change it to `https://` yourself.
+
+**Yahoo Calendar**
+1. Open Yahoo Calendar → **Actions** → **Share** (pick a calendar first if you have more than one)
+2. Turn on **Enable my public calendar**, then **Get shareable link**
+3. Copy the link under **To import into a Calendar app (ICS)**
 
 ## Try it with the demo calendar
 
@@ -146,8 +192,9 @@ The JSON shape it produces:
 ```
 
 - `calendars[].url` — required. Any ICS source works, including Nextcloud, Google Calendar,
-  Outlook, and Apple Calendar, all of which have a private/secret ICS link tucked away in their
-  calendar settings. `webcal://` links are handled automatically.
+  Outlook/Microsoft 365, Apple Calendar, and Yahoo Calendar — see
+  [Getting your calendar's ICS link](#getting-your-calendars-ics-link) for exact steps per
+  provider. `webcal://` links are handled automatically.
 - `calendars[].color` — optional, one of `red` `orange` `yellow` `lime` `green` `cyan` `blue`
   `violet` `purple` `pink`, an explicit `gray-10`..`gray-75` shade, or literal `black`/`white`.
   Pins that calendar's color instead of auto-assigning by position. What the Configuration
