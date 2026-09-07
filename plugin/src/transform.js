@@ -1433,7 +1433,9 @@ const FOOTER_PCT = 7;
 const NEWS_PCT = 2;
 const ALLDAY_ROW_PCT = 10;
 const ALERTS_ROW_PCT = 5;
-const MIN_EVENT_PCT = 10;
+// The most a short event's readable content chip may opportunistically grow past its own real
+// duration, when there's free room to grow into.
+const READABLE_BOX_CAP_PCT = 10;
 function hueOf(calIdx, calendarColors) {
   if (calendarColors && calIdx < calendarColors.length && calendarColors[calIdx]) return calendarColors[calIdx];
   return AUTO_HUES[calIdx % AUTO_HUES.length];
@@ -1594,23 +1596,25 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
     flatEvents.forEach((item, idx) => {
       const ev = item.ev;
       const top = pctAt(ev.h0) - gridBase;
-      let height = pctAt(ev.h1) - gridBase - top;
-      if (height < MIN_EVENT_PCT) {
-        // Only a later event in this SAME lane can actually collide with this one visually —
-        // events in other lanes sit in their own horizontal slot, so constraining this event's
-        // height against the next one chronologically (regardless of lane) collapsed short
-        // events into an unreadable sliver whenever something else just happened to start soon
-        // after, even side-by-side in a different lane entirely.
-        let nextTop = gridPct;
-        for (let j = idx + 1; j < flatEvents.length; j++) {
-          if (flatEvents[j].laneIdx === item.laneIdx) { nextTop = pctAt(flatEvents[j].ev.h0) - gridBase; break; }
-        }
-        height = Math.min(MIN_EVENT_PCT, Math.max(0, nextTop - top));
+      // height_pct always reflects the event's real start/end time — never inflated. This is
+      // what the accent bar (the true time indicator) is drawn against.
+      const height = pctAt(ev.h1) - gridBase - top;
+      // box_height_pct is the readable content chip's height: it may opportunistically grow
+      // past the real duration to stay legible, but only into genuinely free room — capped by
+      // wherever the next SAME-LANE event's own real (never-moved) start is, so it can never
+      // steal space that event needs, and never below the accurate height either. A lone short
+      // event in an open afternoon gets a sensibly-capped box; two short events back-to-back
+      // each keep their true, non-overlapping slot and just get little to no room to expand.
+      let nextTop = gridPct;
+      for (let j = idx + 1; j < flatEvents.length; j++) {
+        if (flatEvents[j].laneIdx === item.laneIdx) { nextTop = pctAt(flatEvents[j].ev.h0) - gridBase; break; }
       }
+      const boxHeight = Math.max(height, Math.min(READABLE_BOX_CAP_PCT, nextTop - top));
       const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);
       events.push({
         top_pct: round4((top / gridPct) * 100),
         height_pct: round4((height / gridPct) * 100),
+        box_height_pct: round4((boxHeight / gridPct) * 100),
         lane_index: item.laneIdx,
         nlanes: item.nlanes,
         title: ev.title,

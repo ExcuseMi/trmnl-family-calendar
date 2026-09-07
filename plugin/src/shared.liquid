@@ -165,12 +165,62 @@
     {%- assign show_badge_overlay = false -%}
     {%- if data.people.size > 0 -%}{%- assign show_badge_overlay = true -%}{%- endif -%}
 
-    <div class="grid gap--none h--[{{ header_pct }}cqh] h--min-[{{ header_pct }}cqh] bg--black flex-none" style="overflow:hidden;">
+    {%- comment -%}
+      Header (day labels) and the all-day-bars area are ONE combined grid, not two separate
+      grids with a THIRD, absolutely-positioned overlay layered on top for badges. The overlay
+      approach needed its own manually-computed height (header_pct + allday_pct) to
+      coincidentally match the sum of the two separately-rendered sections beneath it, AND
+      position:absolute combined with cqw/cqh sizing measurably broke on real non-full-view
+      devices even though the same sizing was correct in a real local mashup test outside an
+      absolutely-positioned ancestor — so badges (and the all-day "today" icon fallback) are
+      now a genuine grid item in normal flow, spanning every row via `grid-row: span N`, exactly
+      like the all-day axis cell already did correctly on its own before this merge.
+    {%- endcomment -%}
+    {%- assign gutter_pct = header_pct | plus: allday_pct -%}
+    {%- assign header_allday_rows = 1 -%}
+    {%- if allday_pct > 0 -%}{%- assign header_allday_rows = allday_max_rows | plus: 1 -%}{%- endif -%}
+    {%- assign header_allday_total_units = day_span | times: shown_days_n | plus: axis_span -%}
+    {%- capture header_allday_row_tracks -%}
+      {{- header_pct }}cqh
+      {%- if allday_pct > 0 -%}{% for r in (1..allday_max_rows) %} {{ data.allday_row_pct }}cqh{% endfor %}{%- endif -%}
+    {%- endcapture -%}
 
-      <div class="col--span-{{ axis_span }}" style="overflow:hidden;box-sizing:border-box;"></div>
+    <div class="grid gap--none h--[{{ gutter_pct }}cqh] h--min-[{{ gutter_pct }}cqh] bg--black flex-none relative" style="grid-template-columns:repeat({{ header_allday_total_units }}, 1fr);grid-template-rows:{{ header_allday_row_tracks | strip }};overflow:hidden;">
+
+      <div class="col--span-{{ axis_span }} bg--black flex flex--col flex--center-x flex--center-y p--0.5" style="grid-row:1 / span {{ header_allday_rows }};overflow:hidden;box-sizing:border-box;">
+        {% if show_badge_overlay %}
+          {%- assign badge_count = data.people.size -%}
+          {%- if badge_count > 8 -%}{%- assign badge_count = 8 -%}{%- endif -%}
+          {%- comment -%}
+            Column count follows the axis column's own width (axis_span: 1 unit is a narrow
+            single column, 2 units is roughly double that) — a fixed 2-column grid overflowed
+            the narrow 1-unit case on a real device, even with small fixed-size badges, since
+            two of them plus a gap simply don't fit a column only as wide as one.
+          {%- endcomment -%}
+          {%- assign badge_cols = 1 -%}
+          {%- if axis_span >= 2 -%}{%- assign badge_cols = 2 -%}{%- endif -%}
+          {%- assign badge_rows = badge_count | plus: badge_cols | minus: 1 | divided_by: badge_cols -%}
+          {%- assign badge_cols_x_rows = badge_cols | times: badge_rows -%}
+          {%- assign badge_is_odd = true -%}
+          {%- if badge_cols_x_rows == badge_count -%}{%- assign badge_is_odd = false -%}{%- endif -%}
+          {%- assign axis_width_pct = axis_span | times: 100.0 | divided_by: total_cols -%}
+          {%- assign badge_w_pct = axis_width_pct | divided_by: badge_cols | times: 0.85 -%}
+          {%- assign badge_h_pct = gutter_pct | times: 1.0 | divided_by: badge_rows | times: 0.85 -%}
+          <div class="grid w--auto gap--xsmall grid--cols-{{ badge_cols }} flex--center-x" style="justify-items:center;">
+            {%- for b in data.people limit: 8 -%}
+              {%- assign badge_extra_cls = "" -%}
+              {%- if forloop.last and badge_is_odd and badge_cols == 2 -%}{%- assign badge_extra_cls = "col--span-2" -%}{%- endif -%}
+              {%- render "badge_circle", badge_w_pct: badge_w_pct, badge_h_pct: badge_h_pct, b: b, hue: b.hue, fg: b.fg, extra_cls: badge_extra_cls -%}
+            {%- endfor -%}
+          </div>
+        {% elsif allday_pct > 0 %}
+          <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/today/default/48px.svg" alt="{{ data.all_day_label }}" class="w--3 h--3 lg:w--5 lg:h--5" style="filter:invert(1);">
+        {% endif %}
+      </div>
+
       {% for day in data.days limit: shown_days_n %}
 
-        <div class="col--span-{{ day_span }} flex flex--col flex--center-x flex--center-y border--v-1 cal-day-cell" data-day-idx="{{ forloop.index0 }}">
+        <div class="col--span-{{ day_span }} flex flex--col flex--center-x flex--center-y border--v-1 cal-day-cell" data-day-idx="{{ forloop.index0 }}" style="grid-row:1;">
 
           <div class="rounded--small px--2.5 py--0.5 w--max-full flex {% if shown_days_n == 1 %}flex--row flex--center-y flex--center-x gap--small{% else %}flex--col flex--center-x gap--xsmall{% endif %} w--min-0" style="overflow:hidden;">
 
@@ -188,62 +238,20 @@
           </div>
         </div>
       {% endfor %}
-    </div>
 
-    {%- if show_badge_overlay -%}
-      {%- assign gutter_pct = header_pct | plus: allday_pct -%}
-      {%- assign badge_count = data.people.size -%}
-      {%- if badge_count > 8 -%}{%- assign badge_count = 8 -%}{%- endif -%}
-      {%- comment -%}
-        Column count follows the axis column's own width (axis_span: 1 unit is a narrow single
-        column, 2 units is roughly double that) — a fixed 2-column grid overflowed the narrow
-        1-unit case on a real device (half_horizontal, and full view's own multi-day case),
-        even with small fixed-size badges, since two of them plus a gap simply don't fit a
-        column only as wide as one.
-      {%- endcomment -%}
-      {%- assign badge_cols = 1 -%}
-      {%- if axis_span >= 2 -%}{%- assign badge_cols = 2 -%}{%- endif -%}
-      {%- assign badge_rows = badge_count | plus: badge_cols | minus: 1 | divided_by: badge_cols -%}
-      {%- assign badge_cols_x_rows = badge_cols | times: badge_rows -%}
-      {%- assign badge_is_odd = true -%}
-      {%- if badge_cols_x_rows == badge_count -%}{%- assign badge_is_odd = false -%}{%- endif -%}
-      {%- assign axis_width_pct = axis_span | times: 100.0 | divided_by: total_cols -%}
-      {%- assign badge_w_pct = axis_width_pct | divided_by: badge_cols | times: 0.85 -%}
-      {%- assign badge_h_pct = gutter_pct | times: 1.0 | divided_by: badge_rows | times: 0.85 -%}
-      <div class="absolute left--0 top--0 grid gap--none z--1" style="height:{{ gutter_pct }}cqh;width:100%;grid-template-columns:repeat({{ day_span | times: shown_days_n | plus: axis_span }}, 1fr);overflow:hidden;">
-        <div class="col--span-{{ axis_span }} bg--black flex flex--col flex--center-x flex--center-y p--0.5" style="overflow:hidden;box-sizing:border-box;">
-          <div class="grid w--auto gap--xsmall grid--cols-{{ badge_cols }} flex--center-x" style="justify-items:center;">
-            {%- for b in data.people limit: 8 -%}
-              {%- assign badge_extra_cls = "" -%}
-              {%- if forloop.last and badge_is_odd and badge_cols == 2 -%}{%- assign badge_extra_cls = "col--span-2" -%}{%- endif -%}
-              {%- render "badge_circle", badge_w_pct: badge_w_pct, badge_h_pct: badge_h_pct, b: b, hue: b.hue, fg: b.fg, extra_cls: badge_extra_cls -%}
-            {%- endfor -%}
-          </div>
-        </div>
-      </div>
-    {%- endif -%}
-
-    {% if allday_pct > 0 %}
-
-      {%- assign allday_total_units = day_span | times: shown_days_n | plus: axis_span -%}
-      {%- assign allday_days_last_idx = shown_days_n | minus: 1 -%}
-      <div class="grid gap--none h--[{{ allday_pct }}cqh] h--min-[{{ allday_pct }}cqh] flex-none relative" style="grid-template-columns:repeat({{ allday_total_units }}, 1fr);overflow:hidden;">
-
-        <div class="col--span-{{ axis_span }} flex flex--col flex--center-x flex--center-y px--0.5 bg--black" style="grid-row:1 / span {{ allday_max_rows }};overflow:hidden;box-sizing:border-box;">
-          {% unless show_badge_overlay %}
-            <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/today/default/48px.svg" alt="{{ data.all_day_label }}" class="w--3 h--3 lg:w--5 lg:h--5" style="filter:invert(1);">
-          {% endunless %}
-        </div>
+      {% if allday_pct > 0 %}
+        {%- assign allday_days_last_idx = shown_days_n | minus: 1 -%}
         {% for r in (1..allday_max_rows) %}
+          {%- assign allday_grid_row = r | plus: 1 -%}
+          {%- assign allday_fill_row0 = r | minus: 1 -%}
           {% for d in (0..allday_days_last_idx) %}
-            {%- assign allday_fill_row0 = r | minus: 1 -%}
             {%- assign allday_fill_has_bar = false -%}
             {%- for bar in data.allday_bars -%}
               {%- assign allday_fill_bar_end = bar.start_col | plus: bar.span -%}
               {%- if d >= bar.start_col and d < allday_fill_bar_end and bar.row == allday_fill_row0 -%}{%- assign allday_fill_has_bar = true -%}{%- endif -%}
             {%- endfor -%}
             {% assign allday_fill_col = day_span | times: d | plus: axis_span | plus: 1 %}
-            <div class="bg--gray-75 border--v-1 cal-allday-fill relative" data-day-idx="{{ d }}" style="grid-column:{{ allday_fill_col }} / span {{ day_span }};grid-row:{{ r }};box-sizing:border-box;">
+            <div class="bg--gray-75 border--v-1 cal-allday-fill relative" data-day-idx="{{ d }}" style="grid-column:{{ allday_fill_col }} / span {{ day_span }};grid-row:{{ allday_grid_row }};box-sizing:border-box;">
               {% unless allday_fill_has_bar %}
                 {%- assign allday_hatch_x = d | times: day_width_pct -%}
                 {%- assign allday_hatch_y = r | minus: 1 | times: data.allday_row_pct -%}
@@ -262,7 +270,7 @@
 
           {% assign allday_col_start = day_span | times: bar.start_col | plus: axis_span | plus: 1 %}
           {% assign allday_bar_span = day_span | times: allday_visible_span %}
-          {% assign allday_row_num = bar.row | plus: 1 %}
+          {% assign allday_row_num = bar.row | plus: 2 %}
           {% assign ad_border_color = "currentColor" %}
           {% if bar.fg == "white" %}{% assign ad_border_color = "#888888" %}{% endif %}
           <div class="bg--{{ bar.hue }} text--{{ bar.fg }} flex flex--row flex--center-x flex--center-y cal-fit-box rounded--none relative cal-allday-bar-el" data-start-col="{{ bar.start_col }}" data-span="{{ allday_visible_span }}" style="grid-column:{{ allday_col_start }} / span {{ allday_bar_span }};grid-row:{{ allday_row_num }};overflow:hidden;box-sizing:border-box;border-bottom:1px solid {{ ad_border_color }};">
@@ -270,8 +278,8 @@
           </div>
           {% endif %}
         {% endfor %}
-      </div>
-    {% endif %}
+      {% endif %}
+    </div>
 
     {% if data.alerts_pct > 0 %}
       <div class="h--[{{ data.alerts_pct }}cqh] h--min-[{{ data.alerts_pct }}cqh] flex-none flex flex--row flex--center-y bg--gray-30 px--2" style="overflow:hidden;">
@@ -336,18 +344,20 @@
           {% endif %}
           {% for event in day.events %}
 
-            <div class="absolute px--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event.height_pct }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});box-sizing:border-box;">
-              {%- comment -%}
-                clip:false (overflow allowed) is only safe when this event has the full width to
-                itself — overflow just spills onto the page background. In a shared/narrow lane
-                (nlanes > 1) there's a neighboring event's box right there for it to bleed into,
-                and since chips paint in start-time order, a later sibling's opaque background
-                paints OVER the overflow, silently hiding it instead of just looking a bit
-                crowded — worse than a clean ellipsis. So narrow-lane events clip properly.
-              {%- endcomment -%}
-              {%- assign event_clip = false -%}
-              {%- if event.nlanes > 1 -%}{%- assign event_clip = true -%}{%- endif -%}
+            {%- comment -%}
+              top_pct/height_pct is the event's real, never-inflated start/end time — box_height_pct
+              is how tall the readable content chip is allowed to grow (only into genuinely free
+              room, see transform.js). The wrapper below uses box_height_pct so the chip stays
+              legible; the accent bar nested inside it marks the TRUE span so a short event
+              squeezed against a neighbor still shows exactly when it really is, even if there's
+              no room left to grow the chip to match.
+            {%- endcomment -%}
+            {%- assign event_box_h = event.box_height_pct | default: event.height_pct -%}
+            <div class="absolute px--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});box-sizing:border-box;">
+              {%- assign event_clip = true -%}
               {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
+              {%- assign accent_h_pct = event.height_pct | times: 100.0 | divided_by: event_box_h -%}
+              <div class="absolute bg--{{ event.fg }}" style="top:0;left:0;height:{{ accent_h_pct }}%;width:3px;"></div>
             </div>
           {% endfor %}
         </div>
