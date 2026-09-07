@@ -34,12 +34,12 @@
 .cal-axis-period { font-weight: normal; white-space: nowrap; }
 .cal-day-underline { border-bottom: 1px solid #888888; padding-bottom: 1px; }
 .cal-day-underline--today { border-bottom: 1px solid #ffffff; padding-bottom: 1px; }
-.screen:not(.screen--lg) .view--half_vertical .cal-axis-col [data-hour-shade="1"],
-.screen:not(.screen--lg) .view--quadrant .cal-axis-col [data-hour-shade="1"],
-.screen:not(.screen--lg) .view--half_horizontal .cal-axis-col [data-hour-shade="1"] { display: none; }
-.screen:not(.screen--lg) .view--half_vertical .cal-axis-col [data-hour-shade="0"],
-.screen:not(.screen--lg) .view--quadrant .cal-axis-col [data-hour-shade="0"],
-.screen:not(.screen--lg) .view--half_horizontal .cal-axis-col [data-hour-shade="0"] { grid-row: span 2; }
+.view--half_vertical .cal-axis-col [data-hour-shade="1"],
+.view--quadrant .cal-axis-col [data-hour-shade="1"],
+.view--half_horizontal .cal-axis-col [data-hour-shade="1"] { display: none; }
+.view--half_vertical .cal-axis-col [data-hour-shade="0"],
+.view--quadrant .cal-axis-col [data-hour-shade="0"],
+.view--half_horizontal .cal-axis-col [data-hour-shade="0"] { grid-row: span 2; }
 </style>
 {%- assign header_pct_scale = 1 -%}
 {%- if view == 4 -%}
