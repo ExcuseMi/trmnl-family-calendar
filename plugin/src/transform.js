@@ -565,6 +565,18 @@ function compileMatcherList(raw) {
   return rxs;
 }
 
+// String.replace with a global flag re-matches a zero-length match right after a real one too —
+// /.*/g on "Ward" matches "Ward" itself, then an empty string at the very end, so a naive
+// `.replace(/.*/g, "Ward")` produces "WardWard", not "Ward". A catch-all matcher (".*", used for
+// "always assign this person, don't rename anything specific") is exactly the case that can
+// match empty, so it needs a single, non-global replace instead; anything that can only ever
+// match non-empty text keeps replacing every occurrence as before (e.g. the same word appearing
+// twice in a title).
+function replaceMatch(text, rx, replacement) {
+  if (rx.test("")) return text.replace(new RegExp(rx.source, rx.flags.replace("g", "")), replacement);
+  return text.replace(new RegExp(rx.source, rx.flags.includes("g") ? rx.flags : rx.flags + "g"), replacement);
+}
+
 // Global rules run first (a calendar-specific match below can still override person/allDay,
 // since whichever rule runs last wins for those two), then this calendar's own rules. `hide`
 // and `allDay` are OR'd across every matching rule instead — one rule flagging either is enough,
@@ -596,9 +608,9 @@ function applyCalendarRules(title, cal, people, globalRules, everyonePerson) {
   if (rewriteRule) {
     title = rewriteRule.rewriteFull
       ? rewriteRule.rewrite
-      : originalTitle.replace(new RegExp(rewriteRule.rx.source, "gi"), rewriteRule.rewrite);
+      : replaceMatch(originalTitle, rewriteRule.rx, rewriteRule.rewrite);
   } else if (renameRule) {
-    title = originalTitle.replace(new RegExp(renameRule.rx.source, "gi"), renameRule.person.join(" & "));
+    title = replaceMatch(originalTitle, renameRule.rx, renameRule.person.join(" & "));
   }
   if (personNames === null && everyonePerson) personNames = [everyonePerson];
 

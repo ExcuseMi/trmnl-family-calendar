@@ -10,27 +10,27 @@
     {
       "name": "Alex",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/alex.ics",
-      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Alex" }]
+      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Alex", "rename": false }]
     },
     {
       "name": "Jordan",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/jordan.ics",
-      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Jordan" }]
+      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Jordan", "rename": false }]
     },
     {
       "name": "Mia",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/mia.ics",
-      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Mia" }]
+      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Mia", "rename": false }]
     },
     {
       "name": "Leo",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/leo.ics",
-      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Leo" }]
+      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Leo", "rename": false }]
     },
     {
       "name": "Work",
       "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/sam.ics",
-      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Sam" }]
+      "rules": [{ "match": { "type": "regex", "value": ".*" }, "person": "Sam", "rename": false }]
     },
     {
       "name": "School",

@@ -44,6 +44,35 @@ module.exports = function (test, h) {
     assertEqual(titles, ['Lesson 6 Swim Class']);
   });
 
+  test('a catch-all ".*" match with rename does not duplicate the title (WardWard bug)', async () => {
+    // A regex that can match an empty string (like ".*") makes a naive `.replace(/re/g, ...)`
+    // match twice: once consuming the real title, then again on the empty string right after
+    // it — "Ward" would come out "WardWard". This is the exact pattern a per-calendar "always
+    // assign this person" rule uses (see calendar-config.json/demo-config.json).
+    const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Schoolfotografie' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'regex', value: '.*' }, person: 'Ward' }] }],
+    })));
+    const r = await run(input);
+    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
+    assertEqual(titles, ['Ward'], 'a single non-global replace should produce "Ward", never "WardWard"');
+  });
+
+  test('a catch-all ".*" match with rename:false assigns the person without touching the title', async () => {
+    const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Schoolfotografie' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput(Object.assign({ view_days: '3' }, cfgWith({
+      people: [{ name: 'Ward' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'regex', value: '.*' }, person: 'Ward', rename: false }] }],
+    })));
+    const r = await run(input);
+    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
+    assertEqual(titles, ['Schoolfotografie'], 'rename:false on a catch-all rule should badge the event without changing its title');
+  });
+
   test('rewriteFull replaces the whole title, not just the matched substring', async () => {
     const ev = { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'L6 Swim Class with Jane' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
