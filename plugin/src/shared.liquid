@@ -356,7 +356,12 @@
             {%- assign accent_h_pct = event.height_pct | times: 100.0 | divided_by: event_box_h -%}
             <div class="absolute px--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
               {%- assign event_clip = true -%}
-              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
+              {%- comment -%}
+                rounded-r--xsmall (right side only, per the framework's side-rounding utility)
+                instead of all-corners rounded--xsmall — the left edge is square so it lines up
+                cleanly with the accent bar's own square corners instead of curving away from it.
+              {%- endcomment -%}
+              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded-r--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
               {%- comment -%}
                 Deliberately a SIBLING of the chip, not a child of it: the chip has its own
                 border (1px top/left, 3px bottom/right), and CSS resolves a position:absolute
@@ -390,7 +395,7 @@
                 chip's own edges already ARE the accurate time, so no separate marker is needed.
               {%- endcomment -%}
               {%- if accent_h_pct < 99.5 -%}
-                <div class="absolute top--0 w--[18px] bg--{{ event.fg }}" style="left:3px;height:{{ accent_h_pct }}%;"></div>
+                <div class="absolute top--0 w--[10px] bg--{{ event.fg }}" style="left:3px;height:{{ accent_h_pct }}%;"></div>
               {%- endif -%}
             </div>
           {% endfor %}
