@@ -668,7 +668,7 @@
     if (templateCache) return Promise.resolve(templateCache);
     return realFetch("../plugin/src/shared.liquid").then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); }).then(function (src) {
       var si = src.indexOf("<script>\n(function");
-      var script = src.slice(si + 8, src.indexOf("</script>", si));
+      var script = src.slice(si + 8, src.indexOf("<\/script>", si));
       var st = src.indexOf("<style>");
       var style = src.slice(st + 7, src.indexOf("</style>", st));
       templateCache = { script: script, style: style };
