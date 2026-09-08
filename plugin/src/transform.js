@@ -48,6 +48,7 @@ async function run(input) {
   const rssUrl = newsFeedEnabled ? cf(input, "rss_url").trim() : "";
   const rssLabel = cf(input, "rss_label").trim() || "NEWS";
   const daysN = toInt(cf(input, "view_days"), DEFAULT_DAYS, 1, 3);
+  const fullViewGrid = cf(input, "full_view_style").trim().toLowerCase() === "grid";
 
   const tz = resolveTz(tzname, input);
 
@@ -335,6 +336,7 @@ async function run(input) {
 
   const data = Object.assign({}, grid, {
     single_day: { agenda: agendaItems },
+    full_view_grid: fullViewGrid,
     people: viewPeople,
     generated_at: Math.floor(nowEpoch / 1000),
     tz: tzname,
@@ -403,6 +405,7 @@ function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
   const grid = layoutNative(days, [], 8, 22, null, null, null, null, HEADER_PCT, is12h);
   const data = Object.assign({}, grid, {
     single_day: { agenda: [] },
+    full_view_grid: false,
     people: [],
     generated_at: Math.floor(nowEpoch / 1000),
     tz: tzname,

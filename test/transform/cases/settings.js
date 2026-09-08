@@ -31,6 +31,20 @@ module.exports = function (test, h) {
     assertEqual(r.data.days.length, 3, 'unparseable view_days should fall back to the plugin default (3)');
   });
 
+  test('full_view_style: defaults to the agenda list (data.full_view_grid false) when unset', async () => {
+    const fetchImpl = async () => okText(icsWithEvents([EVENT]));
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
+    assertEqual(r.data.full_view_grid, false, 'agenda list should be the default');
+  });
+
+  test('full_view_style: "grid" selects the timeline grid (data.full_view_grid true)', async () => {
+    const fetchImpl = async () => okText(icsWithEvents([EVENT]));
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics', full_view_style: 'grid' }));
+    assertEqual(r.data.full_view_grid, true, '"grid" should select the timeline grid');
+  });
+
   test('time_format: 24h shows raw 0-23 hours with no AM/PM period', async () => {
     const fetchImpl = async () => okText(icsWithEvents([EVENT]));
     const { run } = runTransform(fetchImpl, NOW);

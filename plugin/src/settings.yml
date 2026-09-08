@@ -95,6 +95,14 @@ custom_fields:
   - 2 days: '2'
   - 3 days: '3'
   default: '3'
+- keyname: full_view_style
+  field_type: select
+  name: Full View Style
+  description: How the full-size layout shows events. Agenda List is a compact time+title list per day (matches the smaller layouts). Timeline Grid is the original hour-by-hour visual schedule. Quadrant/half views always use the agenda list.
+  options:
+  - Agenda list: agenda
+  - Timeline grid: grid
+  default: agenda
 - keyname: lat_lon
   field_type: lat_lon
   name: Location (for sunrise/sunset and weather)
