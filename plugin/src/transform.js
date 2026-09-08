@@ -907,7 +907,17 @@ function applyCalendarRules(title, desc, status, weekday, cal, globalRules, ever
   } else if (renameRule && renameRule.rx) {
     finalTitle = replaceMatch(originalTitle, renameRule.rx, renameRule.person.join(' & '));
   }
-  if (personNames === null && everyonePerson) personNames = [everyonePerson];
+  // NOTE: everyonePerson is deliberately NOT applied here — a calendar's
+  // own name is meant to be the fallback for one that has no rule
+  // assigning anyone (see buildFromConfig), and everyonePerson is the
+  // last resort after THAT. Applying it here unconditionally used to make
+  // the calendar-name fallback unreachable dead code: with people[] set,
+  // EVERY unnamed-by-rule event (i.e. every event from any calendar with
+  // no rules at all, or whose rules didn't match this one) landed on
+  // everyonePerson instead of that calendar's own name — so calendars
+  // literally named after a person (a common real setup: one calendar per
+  // family member, no rules needed) never got their events attributed to
+  // themselves at all.
 
   return { title: finalTitle, personNames: personNames, allDay: allDay, hide: hide };
 }
@@ -1029,7 +1039,7 @@ async function buildFromConfig(input, parsed, weather, extra) {
       parsedIcs.timed.forEach(function (ev) {
         var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyonePerson);
         if (resolved.hide) return;
-        var personNames = resolved.personNames || (cal.name ? [cal.name] : null);
+        var personNames = resolved.personNames || (cal.name ? [cal.name] : null) || (parsed.everyonePerson ? [parsed.everyonePerson] : null);
         if (!personNames || !personNames.length) return;
         // A rule can mark an otherwise-timed event allDay (e.g. a calendar
         // that lists "Public Holiday" as a timed 00:00 entry) — that now
@@ -1053,7 +1063,7 @@ async function buildFromConfig(input, parsed, weather, extra) {
       parsedIcs.allDay.forEach(function (ev) {
         var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyonePerson);
         if (resolved.hide) return;
-        var personNames = resolved.personNames || (cal.name ? [cal.name] : null);
+        var personNames = resolved.personNames || (cal.name ? [cal.name] : null) || (parsed.everyonePerson ? [parsed.everyonePerson] : null);
         if (!personNames || !personNames.length) return;
         allDayEvents.push({ person: registry.add(personNames[0], 0.25).key, title: resolved.title });
       });

@@ -168,6 +168,18 @@ module.exports = function (test, h) {
     assertEqual(r.metro.legend.map((p) => p.name), ['Everyone']);
   });
 
+  test('an unruled calendar named after a configured person falls back to that person, not everyonePerson (Kato/Nala real-world bug)', async () => {
+    const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Extra turnen' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
+      people: [{ name: 'Familie', badge: '★' }, { name: 'Kato', badge: 'K' }],
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Kato' }],
+    })));
+    const ev0 = eventItems(r.metro)[0];
+    const katoTrack = r.metro.legend.find((p) => p.name === 'Kato');
+    assertEqual(ev0.hue, katoTrack.hue, 'a calendar with no rules should fall back to its own name, not the first people[] entry');
+  });
+
   test('a rule\'s own person assignment still wins over the everyonePerson fallback', async () => {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Alex event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
