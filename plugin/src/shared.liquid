@@ -247,7 +247,7 @@
     var LINE_GAP = 6 * S, LANE_GAP = 12 * S, LANE_BASE = 14 * S + Math.min(24 * S, crossPx * 0.025), EDGE = 8 * S;
     var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 9 * S, MIN_DIAG = 10 * S;
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
-    var STATION_RAISE = 34 * S; // how far a track's own line kinks out to "station level" — tall enough that the caption fits inside the gap the kink opens up, not squeezed against it
+    var STATION_RAISE = 44 * S; // how far a track's own line kinks out to "station level" — tall enough that a real label (same size as an event's) fits centered inside the gap the kink opens up
 
     function toXY(a, c) { return horizontal ? [a, c] : [c, a]; }
 
@@ -333,7 +333,7 @@
     // read at all. Give it a short, fixed-width flag at the start of the
     // axis instead — same visual language as a real station, sized to
     // actually look like one regardless of how wide the visible window is.
-    var ALLDAY_STATION_LEN = 90 * S;
+    var ALLDAY_STATION_LEN = 160 * S; // wide enough to leave a real flat plateau once STATION_RAISE's own ramp is subtracted from each end
     LEGEND.forEach(function (p) {
       p._stations = p._stations.map(function (st) {
         var a0, a1;
@@ -606,7 +606,11 @@
           var seg = [Math.min(f(t0), f(t1)), Math.max(f(t0), f(t1))];
           for (var i = 0; i < lanes[j].items.length; i++) {
             var it = lanes[j].items[i];
-            if (it.kind === 'text' && itemOverlaps(it, seg)) return true;
+            // a diagonal visibly crossing straight through another line's
+            // own flat run reads just as badly as crossing through its
+            // text — both get flagged and scored the same way, not just
+            // the text case
+            if ((it.kind === 'text' || it.kind === 'line') && itemOverlaps(it, seg)) return true;
           }
         }
         return false;
@@ -881,28 +885,40 @@
     });
     // ---- station markers: a hollow ring at each end, sitting exactly where
     // the kink itself starts/ends (the true, unmoved boundary time — same
-    // convention as every other ring in this design), plus a caption tucked
-    // just inside the gap the kink opens up — between the flat baseline and
-    // the raised peak, not beyond the peak into lane territory — so a big
-    // enough jump comfortably fits the label under (or over) it
+    // convention as every other ring in this design), plus a caption built
+    // the SAME way a real event's label is (title + location, current text
+    // tier, opaque white background) — so it matches everything else on the
+    // map instead of reading as an afterthought, and its own white
+    // background masks any line that happens to run underneath it rather
+    // than showing it crossing through readable text. Centered in the gap
+    // the kink opens up, clear of both the flat baseline and the peak/ring
+    // a real branch's diagonal actually starts from.
     LEGEND.forEach(function (p) {
       var baseC = spineC + p._c;
       p._stations.forEach(function (s) {
         var raise = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
-        var peakC = baseC + p._sign * raise;
         [s.a0, s.a1].forEach(function (a) {
           var xy = toXY(a, baseC);
           svg.appendChild(svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R * 0.7, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8 }));
         });
-        var capA = s.a0 + raise + 4 * S;
-        var capC = peakC - p._sign * (3 * S); // just inside the peak line, reading back down/up toward the base
-        var cxy = toXY(capA, capC);
-        var label = s.title + (s.location ? ' — ' + s.location : '');
-        var t = svgEl('text', horizontal
-          ? { x: cxy[0], y: cxy[1], 'text-anchor': 'start', 'dominant-baseline': p._sign < 0 ? 'hanging' : 'auto', 'font-size': (11 * S) + 'px', 'font-style': 'italic', fill: '#666' }
-          : { x: cxy[0], y: cxy[1], 'text-anchor': p._sign < 0 ? 'end' : 'start', 'dominant-baseline': 'middle', 'font-size': (11 * S) + 'px', 'font-style': 'italic', fill: '#666' });
-        t.textContent = label;
-        svg.appendChild(t);
+        var box = el('div', 'metro-gen metro-label absolute bg--white');
+        var availW = clamp((s.a1 - s.a0) - raise * 2, 70 * S, maxTitle);
+        var t = labelRow('metro-title-text ' + titleClass + ' font--bold text--black');
+        t.textContent = s.title;
+        t.style.maxWidth = availW + 'px'; t.style.overflow = 'hidden'; t.style.textOverflow = 'ellipsis';
+        box.appendChild(t);
+        if (s.location) {
+          var loc = labelRow(tagClass + ' text--gray-45');
+          loc.textContent = s.location;
+          loc.style.maxWidth = (availW * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
+          box.appendChild(loc);
+        }
+        canvas.appendChild(box);
+        var bm = measure(box);
+        var capA = s.a0 + raise + 3 * S;
+        var midC = baseC + p._sign * (raise * 0.5);
+        if (horizontal) { box.style.left = capA + 'px'; box.style.top = (midC - bm.h / 2) + 'px'; }
+        else { box.style.top = capA + 'px'; box.style.left = (midC - bm.w / 2) + 'px'; }
       });
     });
     if (!fan) {
