@@ -12,18 +12,28 @@
   </span>
 {% endtemplate %}
 
-{% template chip_body %}
-
-  <div class="w--full h--full flex flex--row flex--center-x flex--center-y w--min-0">
-    <span class="title {{ title_cls }} text--center cal-fit-text{% if clip %} cal-fit-clip{% endif %} {{ pad_x_cls }} w--min-0" style="color:{{ fg }};" data-fit-min="{{ fit_min }}" data-fit-max="60">{{ title }}</span>
-  </div>
-{% endtemplate %}
-
-{% template chip %}
-  {%- assign border_color = "currentColor" -%}
-  {%- if fg == "white" -%}{%- assign border_color = "#888888" -%}{%- endif -%}
-  <div class="{{ size_class }} bg--{{ hue }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border:2px solid {{ border_color }};box-shadow:2px 2px 0 0 {{ border_color }};color:{{ fg }};">
-    {%- render "chip_body", title: title, fg: fg, title_cls: title_cls, fit_min: fit_min, clip: clip, pad_x_cls: pad_x_cls -%}
+{%- comment -%}
+  One agenda row (time/all-day + title + up to 2 person badges), shared by the single-day
+  agenda-list views (data.single_day.agenda) and the full view's own per-day agenda columns
+  (day.agenda) — same row markup either way, just fed a different list. The border+offset
+  box-shadow is the same "sticker" treatment `chip` uses; it's what keeps a chip's contents
+  legible on-device, so it's applied here too rather than relying on bg/text contrast alone.
+{%- endcomment -%}
+{% template agenda_row %}
+  {%- assign row_border_color = "currentColor" -%}
+  {%- if item.fg == "white" -%}{%- assign row_border_color = "#888888" -%}{%- endif -%}
+  <div class="item w--full bg--{{ item.hue }} rounded--xsmall relative" style="overflow:hidden;flex-shrink:0;border:2px solid {{ row_border_color }};box-shadow:2px 2px 0 0 {{ row_border_color }};{% if item.current %}outline:2px solid {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};outline-offset:1px;{% endif %}">
+    <div class="w--full flex flex--row flex--center-y gap--small px--2 py--1" style="min-width:0;color:{{ item.fg }};">
+      {% if item.time %}<span class="label {{ axis_cls }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
+      <span class="title {{ event_title_cls }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
+      {% if item.badges and item.badges.size > 0 %}
+        <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;">
+          {% for badge in item.badges limit: 2 %}
+            {%- render "badge_circle", badge_w_expr: "22px", badge_h_expr: "22px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
+          {% endfor %}
+        </span>
+      {% endif %}
+    </div>
   </div>
 {% endtemplate %}
 
@@ -48,34 +58,26 @@
   {%- assign head_title_cls = "title--small" -%}
   {%- assign chip_title_cls = "title--small" -%}
   {%- assign axis_cls = "label--small" -%}
-  {%- assign event_pad_cls = "pt--0 pb--1" -%}
   {%- assign event_title_cls = "title--small" -%}
-  {%- assign pad_x_cls = "px--1" -%}
 {%- elsif view == 3 -%}
 
   {%- assign head_title_cls = "title--base lg:title--large" -%}
   {%- assign chip_title_cls = "title--small" -%}
   {%- assign axis_cls = "label--base lg:label--large" -%}
-  {%- assign event_pad_cls = "pt--0 pb--1" -%}
   {%- assign event_title_cls = "title--small" -%}
-  {%- assign pad_x_cls = "px--1" -%}
   {%- assign header_pct_scale = 0.6 -%}
 {%- elsif view == 2 -%}
 
   {%- assign head_title_cls = "title--small" -%}
   {%- assign chip_title_cls = "title--small lg:title--base" -%}
   {%- assign axis_cls = "label--base lg:label--large" -%}
-  {%- assign event_pad_cls = "pt--1 pb--2" -%}
   {%- assign event_title_cls = "title--small" -%}
-  {%- assign pad_x_cls = "px--2" -%}
 {%- else -%}
 
   {%- assign head_title_cls = "title--large lg:title--large lg:portrait:title--xlarge" -%}
   {%- assign chip_title_cls = "title--base lg:title--large lg:portrait:title--xlarge" -%}
   {%- assign axis_cls = "label--large lg:label--xxlarge" -%}
-  {%- assign event_pad_cls = "pt--1 pb--2" -%}
   {%- assign event_title_cls = "title--base" -%}
-  {%- assign pad_x_cls = "px--2" -%}
 {%- endif -%}
 
 {%- if view == 1 -%}
@@ -284,29 +286,7 @@
         <div class="flex flex--col gap--xsmall w--full h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none p--2" data-overflow="true" data-overflow-max-height="auto" data-overflow-counter="true" style="box-sizing:border-box;">
       {%- endif -%}
         {% for item in data.single_day.agenda %}
-          {%- comment -%}
-            bg-- and text-- on the exact same element didn't reliably render together here — an
-            outer div carrying the background/shape/border wraps an inner div carrying the text
-            color and the actual flex row, matching the working chip/chip_body split elsewhere in
-            this file. The border+offset box-shadow is the same "sticker" treatment chip uses —
-            it's what keeps a chip's contents legible on-device regardless of fill color, so it's
-            applied here too rather than relying on bg/text contrast alone.
-          {%- endcomment -%}
-          {%- assign row_border_color = "currentColor" -%}
-          {%- if item.fg == "white" -%}{%- assign row_border_color = "#888888" -%}{%- endif -%}
-          <div class="item w--full bg--{{ item.hue }} rounded--xsmall relative" style="overflow:hidden;flex-shrink:0;border:2px solid {{ row_border_color }};box-shadow:2px 2px 0 0 {{ row_border_color }};{% if item.current %}outline:2px solid {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};outline-offset:1px;{% endif %}">
-            <div class="w--full flex flex--row flex--center-y gap--small px--2 py--1" style="min-width:0;color:{{ item.fg }};">
-              {% if item.time %}<span class="label {{ axis_cls }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
-              <span class="title {{ event_title_cls }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
-              {% if item.badges and item.badges.size > 0 %}
-                <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;">
-                  {% for badge in item.badges limit: 2 %}
-                    {%- render "badge_circle", badge_w_expr: "22px", badge_h_expr: "22px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
-                  {% endfor %}
-                </span>
-              {% endif %}
-            </div>
-          </div>
+          {%- render "agenda_row", item: item, axis_cls: axis_cls, event_title_cls: event_title_cls -%}
         {% else %}
           <div class="w--full h--full flex flex--center-x flex--center-y">
             <span class="label {{ axis_cls }} text--gray-50">Nothing scheduled</span>
@@ -320,82 +300,23 @@
       {%- endif -%}
     {%- else -%}
     {%- comment -%}
-      Only the full view reaches here now (view == 2/3/4 all take the agenda list branch above)
-      — its shared multi-day data.hour_rows/data.days correctly stays wide enough to cover every
-      visible day at once.
+      Full view: one agenda-list column per visible day (up to 3), each with its own overflow —
+      same row markup as the single-day views (agenda_row), just fed day.agenda instead of
+      data.single_day.agenda. The day headers immediately above (date/weather) already label
+      each column, so nothing is repeated here. Each day's own list shows its WHOLE schedule
+      (not just what's left) — see the comment next to where day.agenda is built in
+      transform.js. The leading axis_span placeholder keeps these columns aligned under the
+      header row above, which reserves that same width for the badge legend/corner icon.
     {%- endcomment -%}
-    {%- assign grid_hour_rows = data.hour_rows -%}
-    {%- assign grid_days = data.days -%}
-
-    {%- capture axis_row_tracks -%}{% for row in grid_hour_rows %}{{ row.pct }}fr {% endfor %}{%- endcapture -%}
     <div class="grid gap--none h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none relative">
-      <div class="col--span-{{ axis_span }} cal-axis-col" style="display:grid;grid-template-rows:{{ axis_row_tracks | strip }};">
-        {% for row in grid_hour_rows %}
-
-          <div class="w--full flex flex--row {% if row.period %}gap--distribute{% else %}flex--right{% endif %} cal-row cal-fit-box relative pr--2 {% if row.current %}bg--black{% elsif row.shade == 1 %}bg--gray-65{% endif %}" data-hour-shade="{{ row.shade }}" data-hour-current="{{ row.current }}" {% if row.current %}style="border-top:1px solid #888888;"{% endif %}>
-
-              {% if row.period %}<span class="cal-axis-period {% if row.current %}text--gray-70{% else %}text--gray-15{% endif %} ml--1 mr--1">{{ row.period }}</span>{% endif %}<span class="label {{ axis_cls }} {% if row.bold %}font--bold {% endif %}{% if row.current %}text--white {% endif %}cal-fit-text cal-axis-text{% if row.important %} cal-axis-important{% endif %} inline-block text--right hours" data-fit-min="8" data-fit-max="40">{{ row.hour }}</span>
-          </div>
-        {% endfor %}
-      </div>
-      {% for day in grid_days limit: shown_days_n %}
-        {%- assign day_idx = forloop.index0 -%}
-        {%- assign day_has_allday = false -%}
-        {%- for bar in data.allday_bars -%}
-          {%- assign bar_end_col = bar.start_col | plus: bar.span -%}
-          {%- if day_idx >= bar.start_col and day_idx < bar_end_col -%}{%- assign day_has_allday = true -%}{%- endif -%}
-        {%- endfor -%}
-        {%- assign day_is_empty = false -%}
-        {%- if day.events.size == 0 and day_has_allday == false -%}{%- assign day_is_empty = true -%}{%- endif -%}
-        <div class="col--span-{{ day_span }} flex flex--col gap--none border--v-1 relative cal-day-cell" data-day-idx="{{ day_idx }}" style="overflow:hidden;">
-
-          {% assign seg_cum_pct = 0 %}
-          {% for seg in day.segments %}
-            {% if seg.night %}
-
-              {% assign seg_bg = "bg--gray-30" %}
-            {% elsif day.is_today and seg.past %}
-
-              {% assign seg_bg = "bg--gray-75" %}
-              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-70" %}{% endif %}
-            {% elsif day.is_today %}
-              {% assign seg_bg = "" %}
-              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-75" %}{% endif %}
-            {% else %}
-              {% assign seg_bg = "bg--gray-75" %}
-              {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-70" %}{% endif %}
-            {% endif %}
-            {%- comment -%}
-              grid_pct here is the LOCAL variable (assigned above near allday_max_rows), not
-              data.grid_pct directly — for single-day views it's already been recomputed against
-              that day's own allday-bar rows, matching the gridPct data.single_day's events were
-              positioned against. Using data.grid_pct here instead would silently misscale every
-              segment's height whenever some other visible day has more allday rows than this one.
-            {%- endcomment -%}
-            {%- assign seg_pct_of_cell = seg.pct | times: 100.0 | divided_by: grid_pct -%}
-            <div class="w--full cal-row {{ seg_bg }} relative" style="height:{{ seg_pct_of_cell }}%;{% if seg.night %}border-bottom:1px solid rgba(255,255,255,0.2);{% endif %}">
-              {% if seg.weather == "rain" %}
-                <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2714%27 height=%2714%27 viewBox=%270 0 14 14%27%3E%3Cg stroke=%27%23888888%27 stroke-width=%271.6%27 stroke-linecap=%27round%27%3E%3Cline x1=%2711%27 y1=%271%27 x2=%278%27 y2=%277%27/%3E%3Cline x1=%274%27 y1=%278%27 x2=%271%27 y2=%2714%27/%3E%3C/g%3E%3C/svg%3E');image-rendering:-moz-crisp-edges;image-rendering:pixelated;background-position:0 -{{ seg_cum_pct }}cqh;"></div>
-              {% elsif seg.weather == "storm" %}
-                <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2728%27 height=%2728%27 viewBox=%270 0 28 28%27%3E%3Cpath fill=%27%23555555%27 d=%27M6 2c-1.8 2.4-3 4.5-3 6.1 0 2.1 1.3 3.9 3 3.9s3-1.8 3-3.9C9 6.5 7.8 4.4 6 2z%27 transform=%27rotate(15 6 6)%27/%3E%3Cpath fill=%27%23555555%27 d=%27M20 2c-1.8 2.4-3 4.5-3 6.1 0 2.1 1.3 3.9 3 3.9s3-1.8 3-3.9C23 6.5 21.8 4.4 20 2z%27 transform=%27rotate(15 20 6)%27/%3E%3Cpath fill=%27%23555555%27 d=%27M13 14c-1.8 2.4-3 4.5-3 6.1 0 2.1 1.3 3.9 3 3.9s3-1.8 3-3.9c0-1.6-1.2-3.7-3-6.1z%27 transform=%27rotate(15 13 18)%27/%3E%3C/svg%3E');image-rendering:-moz-crisp-edges;image-rendering:pixelated;background-position:0 -{{ seg_cum_pct }}cqh;"></div>
-              {% elsif seg.weather == "snow" %}
-                <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2728%27 height=%2728%27 viewBox=%270 0 28 28%27%3E%3Cg stroke=%27%23999999%27 stroke-width=%271%27 stroke-linecap=%27round%27%3E%3Cg transform=%27translate(7,7)%27%3E%3Cline x1=%27-3%27 y1=%270%27 x2=%273%27 y2=%270%27/%3E%3Cline x1=%270%27 y1=%27-3%27 x2=%270%27 y2=%273%27/%3E%3Cline x1=%27-2.1%27 y1=%27-2.1%27 x2=%272.1%27 y2=%272.1%27/%3E%3Cline x1=%27-2.1%27 y1=%272.1%27 x2=%272.1%27 y2=%27-2.1%27/%3E%3C/g%3E%3Cg transform=%27translate(20,18)%27%3E%3Cline x1=%27-3%27 y1=%270%27 x2=%273%27 y2=%270%27/%3E%3Cline x1=%270%27 y1=%27-3%27 x2=%270%27 y2=%273%27/%3E%3Cline x1=%27-2.1%27 y1=%27-2.1%27 x2=%272.1%27 y2=%272.1%27/%3E%3Cline x1=%27-2.1%27 y1=%272.1%27 x2=%272.1%27 y2=%27-2.1%27/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');image-rendering:-moz-crisp-edges;image-rendering:pixelated;background-position:0 -{{ seg_cum_pct }}cqh;"></div>
-              {% elsif seg.weather %}
-                <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2728%27 height=%2728%27 viewBox=%270 0 28 28%27%3E%3Crect x=%270%27 y=%277%27 width=%2714%27 height=%272.5%27 rx=%271.25%27 fill=%27%23aaaaaa%27/%3E%3Crect x=%2714%27 y=%2718%27 width=%2714%27 height=%272.5%27 rx=%271.25%27 fill=%27%23aaaaaa%27/%3E%3C/svg%3E');image-rendering:-moz-crisp-edges;image-rendering:pixelated;background-position:0 -{{ seg_cum_pct }}cqh;"></div>
-              {% endif %}
-            </div>
-            {% assign seg_cum_pct = seg_cum_pct | plus: seg.pct %}
-          {% endfor %}
-          {% if day_is_empty %}
-            {%- assign hatch_offset_pct = day_idx | times: day_width_pct -%}
-            <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%2710%27%3E%3Cpath d=%27M0 10L10 0M-2.5 2.5L2.5 -2.5M7.5 12.5L12.5 7.5%27 stroke=%27%23888888%27 stroke-width=%273%27/%3E%3C/svg%3E');image-rendering:-moz-crisp-edges;image-rendering:pixelated;background-position:-{{ hatch_offset_pct }}cqw 0;pointer-events:none;"></div>
-          {% endif %}
-          {% for event in day.events %}
-
-            {%- assign event_box_h = event.box_height_pct | default: event.height_pct -%}
-            <div class="absolute pr--0.5 pb--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
-              {%- assign event_clip = true -%}
-              {% render "chip", hue: event.hue, fg: event.fg, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
+      <div class="col--span-{{ axis_span }}"></div>
+      {% for day in data.days limit: shown_days_n %}
+        <div class="col--span-{{ day_span }} flex flex--col gap--xsmall border--v-1 relative cal-day-cell p--1" data-day-idx="{{ forloop.index0 }}" data-overflow="true" data-overflow-max-height="auto" data-overflow-counter="true" style="overflow:hidden;box-sizing:border-box;">
+          {% for item in day.agenda %}
+            {%- render "agenda_row", item: item, axis_cls: axis_cls, event_title_cls: event_title_cls -%}
+          {% else %}
+            <div class="w--full h--full flex flex--center-x flex--center-y">
+              <span class="label {{ axis_cls }} text--gray-50">Nothing scheduled</span>
             </div>
           {% endfor %}
         </div>

@@ -96,4 +96,25 @@ module.exports = function (test, h) {
     assertEqual(item.badges[0].text, 'M', 'the badge should be Mom\'s configured badge text');
     assertEqual(item.badges[0].hue, 'pink-65', 'the badge should use Mom\'s configured color');
   });
+
+  test('data.days[i].agenda (the full view\'s per-day list) shows the WHOLE day, unlike data.single_day.agenda which hides past events', async () => {
+    const events = [
+      { uid: 1, allDay: true, start: '20260905', end: '20260906', summary: 'Holiday' },
+      { uid: 2, start: '20260905T090000Z', end: '20260905T093000Z', summary: 'Past Standup' }, // ended before noon
+      { uid: 3, start: '20260905T140000Z', end: '20260905T150000Z', summary: 'Client Call' },
+      { uid: 4, start: '20260906T100000Z', end: '20260906T103000Z', summary: 'Tomorrow Meeting' },
+    ];
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics', view_days: '2' }));
+
+    const todayAgenda = r.data.days[0].agenda;
+    // No "Holiday" here — the full view's own all-day bars (header, not this list) already
+    // show it, with proper multi-day continuation styling a per-day list entry can't convey.
+    assertEqual(todayAgenda.map((i) => i.title), ['Past Standup', 'Client Call'], 'today\'s full-view agenda keeps Past Standup (unlike data.single_day.agenda) but excludes the all-day item');
+    assertEqual(r.data.single_day.agenda.map((i) => i.title), ['Holiday', 'Client Call'], 'the single-day agenda drops the past event but DOES include the all-day item, for contrast');
+
+    const tomorrowAgenda = r.data.days[1].agenda;
+    assertEqual(tomorrowAgenda.map((i) => i.title), ['Tomorrow Meeting'], 'day 1\'s own agenda has its own event, not today\'s');
+  });
 };

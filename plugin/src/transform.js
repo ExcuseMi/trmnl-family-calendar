@@ -1511,12 +1511,33 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
       });
     });
 
+    // Agenda variant of this same day, for the full view's own list-with-overflow rendering
+    // (an alternative to the segments/events timeline above) — two differences from the
+    // single-day views' agenda (data.single_day.agenda): it shows the WHOLE day's schedule, not
+    // just what's still ahead of "now" (this is a multi-day at-a-glance overview, where hiding a
+    // day's earlier events would look inconsistent next to neighboring days that show
+    // everything), and it excludes all-day items — the full view's own all-day bars (above,
+    // spanning multiple days with continuation styling) are the right tool for those already;
+    // repeating them per-day here would just duplicate them without showing that continuity.
+    const agenda = [...d.timed]
+      .sort((a, b) => a.h0 - b.h0)
+      .map((ev) => {
+        const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);
+        return {
+          time: ev.label, title: ev.title,
+          hue: colorClass(color), fg: foregroundFor(color),
+          current: hasNow && ev.h0 <= nowH && ev.h1 > nowH,
+          badges: ev.personBadges || [],
+        };
+      })
+      .slice(0, AGENDA_SANITY_CAP);
+
     outDays.push({
       label: d.label, label_short: d.labelShort,
       label_short_weekday: d.labelShortWeekday, label_short_rest: d.labelShortRest,
       is_today: d.isToday,
       temp: d.temp || null, icon: d.icon || null,
-      segments, events,
+      segments, events, agenda,
     });
   });
 
