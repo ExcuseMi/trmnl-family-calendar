@@ -298,6 +298,27 @@ function buildMetro(people, events, weatherMilestones, headerWeather, nowMin, wi
   var peopleByKey = {};
   people.forEach(function (p) { peopleByKey[p.key] = p; });
 
+  // A configured person with nothing on today's board gets no line and no
+  // legend entry — otherwise every day carries every ever-configured
+  // person's empty track, permanently eating spine width. Side/hue/style
+  // stay whatever finalize() decided from the FULL registered set (so a
+  // person's color/side identity doesn't shift day to day depending on
+  // who else happens to be busy); only the per-side offset is repacked
+  // against just today's active people, closing the gaps a filtered-out
+  // person would otherwise leave.
+  var activeKeys = {};
+  events.forEach(function (ev) {
+    if (!peopleByKey[ev.person]) return;
+    activeKeys[ev.person] = true;
+    (ev.interchange_with || []).forEach(function (key) { if (peopleByKey[key]) activeKeys[key] = true; });
+  });
+  (allDayEvents || []).forEach(function (ev) { if (peopleByKey[ev.person]) activeKeys[ev.person] = true; });
+  people = people.filter(function (p) { return activeKeys[p.key]; });
+  var sideIdx = { left: 0, right: 0 };
+  people.forEach(function (p) { p.track_offset = TRACK_STEP * (++sideIdx[p.side]) * (p.side === 'left' ? -1 : 1); });
+  peopleByKey = {};
+  people.forEach(function (p) { peopleByKey[p.key] = p; });
+
   var items = [];
 
   events.forEach(function (ev) {

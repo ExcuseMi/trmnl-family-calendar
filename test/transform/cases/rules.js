@@ -229,6 +229,27 @@ module.exports = function (test, h) {
     assert(eventItems(r.metro).length > 0, 'demo data should have kicked in');
   });
 
+  test('a configured person with no events today gets no legend entry (no empty track)', async () => {
+    const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Busy person only' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
+      people: [{ name: 'Idle', side: 'left' }, { name: 'Busy', side: 'left' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, person: 'Busy' }] }],
+    })));
+    assertEqual(r.metro.legend.map((p) => p.name), ['Busy'], 'Idle has nothing today, so it should not get a track at all');
+  });
+
+  test('removing an empty track compacts the remaining offsets on that side, no gap left behind', async () => {
+    const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'C event' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
+      people: [{ name: 'A', side: 'left' }, { name: 'B', side: 'left' }, { name: 'C', side: 'left' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, person: 'C' }] }],
+    })));
+    assertEqual(r.metro.legend.length, 1);
+    assertEqual(r.metro.legend[0].track_offset, -10, 'C should sit at the first left slot, not the third, since A and B left no gap');
+  });
+
   test('an emoji badge does not get mangled by taking only half its UTF-16 surrogate pair', async () => {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
