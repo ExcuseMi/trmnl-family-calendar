@@ -250,7 +250,7 @@
       winEnd = winStart + visHours * 60;
     }
     var winLabel = ROOT.querySelector('.metro-window');
-    if (winLabel) winLabel.textContent = timeLabel(winStart) + ' – ' + timeLabel(winEnd);
+    if (winLabel) winLabel.textContent = timeLabel(winStart) + ' ' + timeLabel(winEnd);
     var axisStart = NODE_R + 2 * S, axisEnd = axisPx - NODE_R - 2 * S; // rings at the window edges stay whole; tracks still run full bleed
     function aFor(min) { return axisStart + (min - winStart) / (winEnd - winStart) * (axisEnd - axisStart); }
     var pxPerHour = aFor(60) - aFor(0);
@@ -316,7 +316,7 @@
       if (!horizontal) box.style.textAlign = p._sign < 0 ? 'right' : 'left';
       if (showTime) {
         var tm = labelRow('metro-time-tag ' + tagClass + ' text--gray-40');
-        tm.textContent = timeLabel(e.start_min) + '–' + timeLabel(e.end_min);
+        tm.textContent = timeLabel(e.start_min) + ' ' + timeLabel(e.end_min);
         box.appendChild(tm);
       }
       var t = labelRow('metro-title-text ' + titleClass + ' font--bold text--black');
@@ -520,9 +520,17 @@
           var moved = false;
           for (var i = 0; i < L.items.length && !moved; i++) {
             var it = L.items[i];
-            if (it.owner === e.owner && it.kind === 'text' && itemOverlaps(it, [ts, ts + len])) {
+            // Same owner AND same direction: this is a continuation of that
+            // owner's own spur, so slide past it and keep riding the same
+            // line. Same owner but the OPPOSITE direction (a backward branch
+            // forced near the end of the axis, reaching back toward an
+            // earlier forward-going event of the same person) is NOT that —
+            // sliding through it would drag the label far from its own true
+            // time and read as visually out of order, so treat it as a
+            // foreign obstacle to route around instead.
+            if (it.owner === e.owner && it.dir === dir && it.kind === 'text' && itemOverlaps(it, [ts, ts + len])) {
               ts = dir > 0 ? it.a1 + LANE_GAP : it.a0 - LANE_GAP - len; moved = true;
-            } else if (it.owner !== e.owner && itemOverlaps(it, span(ts))) {
+            } else if ((it.owner !== e.owner || it.dir !== dir) && itemOverlaps(it, span(ts))) {
               elbow = dir > 0 ? it.a1 + CORNER + LANE_GAP : it.a0 - CORNER - LANE_GAP;
               ts = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len; moved = true;
             }
@@ -547,6 +555,18 @@
           if (avail >= e._minLen) { trunc = avail; fits = true; }
         }
         if (!fits) return null;
+        // Two diagonals sharing this lane but running OPPOSITE directions
+        // (one forward, one backward) cross each other in the lane's own
+        // channel wherever their ring-to-elbow spans overlap — a real visual
+        // fault distinct from text/line occupancy, since neither box has to
+        // move for it to happen. Reject the lane outright rather than
+        // scoring it, so an already-placed forward event never gets a
+        // crossing partner routed on top of it.
+        var diagLo = Math.min(e._nodeA, elbow), diagHi = Math.max(e._nodeA, elbow);
+        for (var dgi = 0; dgi < L.items.length; dgi++) {
+          var dg = L.items[dgi];
+          if (dg.kind === 'diag' && dg.dir !== dir && dg.a0 < diagHi && diagLo < dg.a1) return null;
+        }
         var crossing = diagonalCrosses(e._nodeA, e._trackDist, elbow, ld, k);
         if (crossing && !allowCross) return null;
         var shift = Math.abs(ts - (dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len)) + elbowShift;
@@ -576,6 +596,7 @@
         e._lane = best.k; e._elbow = best.elbow; e._laneDist = best.ld; e._dir = best.dir; e._joined = best.joined;
         e._crossing = best.crossing; e._elbowShift = best.elbowShift;
         e._textStart = best.textStart;
+        lane(best.k).items.push({ a0: Math.min(e._nodeA, best.elbow), a1: Math.max(e._nodeA, best.elbow), owner: null, kind: 'diag', dir: best.dir });
         if (best.trunc && best.trunc < e._textLen) {
           // shorten: first lose the time tag, then ellipsise the title
           var tm = e._box.querySelector('.metro-time-tag');
@@ -604,8 +625,8 @@
         }
         e._lineFrom = lineA; e._lineTo = lineB;
         // a merged loop is closed: nobody else may ride it (owner null)
-        lane(best.k).items.push({ a0: lineA, a1: lineB + (e._merge ? CORNER : 0), owner: e._merge ? null : e.owner, kind: 'line' });
-        lane(best.k).items.push({ a0: e._textStart, a1: e._textStart + e._textLen, owner: e.owner, kind: 'text' });
+        lane(best.k).items.push({ a0: lineA, a1: lineB + (e._merge ? CORNER : 0), owner: e._merge ? null : e.owner, kind: 'line', dir: best.dir });
+        lane(best.k).items.push({ a0: e._textStart, a1: e._textStart + e._textLen, owner: e.owner, kind: 'text', dir: best.dir });
       });
       var used = 0;
       evs.forEach(function (e) { if (!e._dropped) used = Math.max(used, e._lane + 1); });
@@ -749,7 +770,7 @@
     var chains = {};
     placed.forEach(function (e) {
       if (e._merge) return;
-      var key = e._sideKey + '|' + e._lane + '|' + e.owner;
+      var key = e._sideKey + '|' + e._lane + '|' + e.owner + '|' + e._dir; // direction too — a chain's bridge-drawing assumes one consistent direction
       (chains[key] = chains[key] || []).push(e);
     });
     function terminus(a, laneC, p) {

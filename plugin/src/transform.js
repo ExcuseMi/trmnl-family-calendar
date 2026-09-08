@@ -406,7 +406,7 @@ function buildFromDemo(weather, nowMin, extra) {
     w.milestones || [],
     w.header || demo.header,
     nowMin != null ? nowMin : DEMO_NOW_MIN,
-    timeLabel(DAY_START_MIN) + ' – ' + timeLabel(DAY_END_MIN),
+    timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     Object.assign({}, extra || {}, { sun: (w.sun && w.sun.length) ? w.sun : DEMO_SUN })
   );
 }
@@ -979,7 +979,7 @@ async function buildFromConfig(input, parsed, weather, extra) {
     (weather && weather.milestones) || [],
     (weather && weather.header) || { hi: null, lo: null, condition: null, rain_chance: null },
     nowMin,
-    timeLabel(DAY_START_MIN) + ' – ' + timeLabel(DAY_END_MIN),
+    timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     Object.assign({}, extra, { dateLabel: dateLabel(today, extra.locale), sun: (weather && weather.sun) || [] })
   );
 }

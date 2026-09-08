@@ -29,7 +29,7 @@ variables:
       "day_start_min": 420,
       "day_end_min": 1260,
       "secondary_threshold_min": 30,
-      "window_label": "07:00 – 21:00",
+      "window_label": "07:00 21:00",
       "date_label": "Tue, Sep 8",
       "now_min": 870,
       "orientation": "auto",
