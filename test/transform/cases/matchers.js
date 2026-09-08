@@ -146,6 +146,38 @@ module.exports = function (test, h) {
     assert(!m(ctx({ title: 'Team Sync', status: 'CONFIRMED' })));
   });
 
+  test('"not" matcher inverts its single sub-matcher', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{
+        match: { type: 'not', matcher: { type: 'word', value: 'L2' } },
+        hide: true,
+      }] }],
+    });
+    const m = cfg.calendars[0].rules[0].match;
+    assert(m(ctx({ title: 'L1 Trip' })), 'no "L2" present, so the negation matches');
+    assert(!m(ctx({ title: 'L2 Trip' })), '"L2" present, so the negation does not match');
+  });
+
+  test('"not" combines with "and"/"or" to express "one of these, except that one" with no regex at all', () => {
+    // The scenario that used to require a regex negative lookahead
+    // (\b(?:L1|L3)\b)(?!.*\bL2\b) — a real source of bugs when the JSON is
+    // hand-edited or pasted through something that mangles backslashes.
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{
+        match: { type: 'and', matchers: [
+          { type: 'or', matchers: [{ type: 'word', value: 'L1' }, { type: 'word', value: 'L3' }] },
+          { type: 'not', matcher: { type: 'word', value: 'L2' } },
+        ] },
+        hide: true,
+      }] }],
+    });
+    const m = cfg.calendars[0].rules[0].match;
+    assert(m(ctx({ title: 'L1 - Gym' })), 'L1 alone should hide');
+    assert(m(ctx({ title: 'L3 - Gym' })), 'L3 alone should hide');
+    assert(!m(ctx({ title: 'L2 - Gym' })), 'L2 is not in the or-list, so it never matches');
+    assert(!m(ctx({ title: 'L4 - Gym' })), 'L4 is not in the or-list either');
+  });
+
   test('"status" matcher compares case-insensitively against the event\'s ICS STATUS', () => {
     const cfg = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'status', value: 'tentative' }, hide: true }] }] });
     const m = cfg.calendars[0].rules[0].match;
@@ -182,5 +214,48 @@ module.exports = function (test, h) {
     const WEDNESDAY = Date.parse('2026-09-09T12:00:00Z');
     const rWed = await runTransform(fetchImpl, WEDNESDAY).run(baseInput(WEDNESDAY, { config_json: cfg }));
     assertEqual(eventItems(rWed.metro).length, 1, 'Wednesday occurrence should still show — the rule only targets Monday');
+  });
+
+  test('"hide these class codes except two" works end to end with no regex (real-world config)', async () => {
+    const { runTransform, icsWithEvents, okText, baseInput, eventItems, assertEqual } = h;
+    // Mirrors a real reported config: a shared calendar lists every class's
+    // activity (L1/L3/L4/L5/K1-3/Kleuter) under one feed; only L2 and L6
+    // are this account's own kids, renamed to their names; everything else
+    // should be hidden. The regex-based version of this rule
+    // ((?=.*\b(?:L1345|K123|Kleuter)\b)(?!.*\b(?:L2|L6)\b)) is exactly the
+    // kind of thing that gets mangled by a stray backslash when hand-typed
+    // or pasted through something that re-escapes it — this and/or/not form
+    // has no backslashes to mangle.
+    const events = [
+      { uid: 1, start: '20260908T083000Z', end: '20260908T092000Z', summary: 'L1 - Extra turnen' },
+      { uid: 2, start: '20260908T083000Z', end: '20260908T092000Z', summary: 'L5 - Extra turnen' },
+      { uid: 3, start: '20260908T092000Z', end: '20260908T101000Z', summary: 'L6 - Extra turnen' },
+      { uid: 4, start: '20260908T092000Z', end: '20260908T101000Z', summary: 'L2 - Extra turnen' },
+      { uid: 5, start: '20260908T130000Z', end: '20260908T144000Z', summary: 'L4 - Zwemmen' },
+      { uid: 6, start: '20260908T130000Z', end: '20260908T144000Z', summary: 'L1 - Zwemmen' },
+    ];
+    const fetchImpl = async () => okText(icsWithEvents(events));
+    const cfg = JSON.stringify({
+      people: [{ name: 'Familie' }, { name: 'Kato' }, { name: 'Nala' }],
+      calendars: [{
+        url: 'https://example.com/familie.ics', name: 'Familie',
+        rules: [
+          {
+            match: { type: 'and', matchers: [
+              { type: 'or', matchers: ['L1', 'L3', 'L4', 'L5', 'K1', 'K2', 'K3', 'Kleuter'].map((v) => ({ type: 'word', value: v })) },
+              { type: 'not', matcher: { type: 'word', value: 'L2' } },
+              { type: 'not', matcher: { type: 'word', value: 'L6' } },
+            ] },
+            hide: true,
+          },
+          { match: { type: 'word', value: 'L2' }, person: 'Kato' },
+          { match: { type: 'word', value: 'L6' }, person: 'Nala' },
+        ],
+      }],
+    });
+    const NOW = Date.parse('2026-09-08T12:00:00Z');
+    const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, { config_json: cfg }));
+    const titles = eventItems(r.metro).map((e) => e.title).sort();
+    assertEqual(titles, ['Kato - Extra turnen', 'Nala - Extra turnen'], 'only L2/L6 should survive the hide rule, each renamed to its person by the later word rules');
   });
 };

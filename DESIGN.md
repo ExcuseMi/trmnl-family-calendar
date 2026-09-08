@@ -18,9 +18,12 @@ and top-to-bottom otherwise. All geometry is written in axis coordinates
 (`a` along time, `c` across) and mapped to x/y at draw time, so both
 orientations share one algorithm.
 
-Work (the calendar named "Work", or the first configured person) is side A:
-above the bundle in horizontal mode, left of it in vertical mode. Everyone
-else is side B.
+Side A runs above the bundle in horizontal mode, left of it in vertical
+mode; side B is the other side. An explicit `person.side` in config puts
+that person on the side they asked for; everyone else is assigned once
+every calendar has been fetched and every event tallied — heaviest event
+count first, each person going to whichever side is currently lighter — so
+the split reflects the actual day's data rather than any fixed convention.
 
 ## Spine
 

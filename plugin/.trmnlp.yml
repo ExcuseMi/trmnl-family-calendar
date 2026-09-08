@@ -85,6 +85,14 @@ variables:
           "line_style": "dotted"
         }
       ],
+      "all_day": [
+        {
+          "title": "School Holiday",
+          "owner": "kids",
+          "hue": "purple-40",
+          "track_style": "dotted"
+        }
+      ],
       "items": [
         {
           "type": "sun",

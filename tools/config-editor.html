@@ -128,7 +128,7 @@
 
   <section class="station" id="station-people">
     <h2>People <small>one line on the map per person</small></h2>
-    <p class="lede">Every person is a line. The work side of the map (top, or left in portrait) is for you; everyone else runs on the family side. The first person is also who gets any event no rule claims.</p>
+    <p class="lede">Every person is a line. Which side of the map each one runs on is balanced automatically once you draw the map &mdash; busiest person first, evenly split &mdash; unless you pin one below. The first person is also who gets any event no rule claims.</p>
     <div id="people"></div>
     <div class="toolbar"><button id="addPerson">+ Add a person</button></div>
   </section>
@@ -264,48 +264,50 @@
   function newPerson() { return { _id: uid(), name: "", color: "", side: "" }; }
   function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false }; }
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
-  function newCondition() { return { _id: uid(), type: "word", value: "", status: "confirmed", weekdays: [] }; }
+  function newCondition() { return { _id: uid(), type: "word", value: "", status: "confirmed", weekdays: [], negate: false }; }
   function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], persons: [], rename: true, rewrite: "", rewriteFull: false, hide: false }; }
 
   var MATCH_TYPES = [["word", "has the word"], ["contains", "contains"], ["exact", "is exactly"], ["regex", "matches regex"], ["any", "any event"], ["status", "has status"], ["weekday", "is on weekday"]];
   var WEEKDAYS = [["MO", "Mon"], ["TU", "Tue"], ["WE", "Wed"], ["TH", "Thu"], ["FR", "Fri"], ["SA", "Sat"], ["SU", "Sun"]];
 
-  // Which side, colour, dash pattern and width the plugin will give each person — the same
-  // decisions makePeopleRegistry() in transform.js makes, so the swatches here match the map.
+  // Which side, colour, dash pattern and width the plugin will give each person. The real
+  // plugin only decides sides once it has fetched every calendar and counted today's events
+  // (busiest side balanced against lightest) — this static list can't know that yet, so
+  // anyone without an explicit side is shown as a rough guess (first person left, the rest
+  // right); use "Draw the map" below to see the real, event-count-balanced result.
   function lineLook() {
-    var work = workPersonName();
     var buckets = { left: [], right: [] };
     var out = {};
+    var firstName = null;
     state.people.forEach(function (p) {
       var name = p.name.trim();
       if (!name) return;
-      var side = p.side === "left" || p.side === "right" ? p.side : (name === work ? "left" : "right");
+      if (firstName === null) firstName = name;
+      var side = p.side === "left" || p.side === "right" ? p.side : (name === firstName ? "left" : "right");
       var b = buckets[side];
       out[p._id] = { side: side, style: LINE_STYLES[b.length % LINE_STYLES.length], width: (side === "left" && b.length === 0) ? 4 : 3, color: p.color || ((side === "left" && b.length === 0) ? "black" : "") };
       b.push(name);
     });
     return out;
   }
-  // The person a calendar named "Work" assigns (via its own rules or a global one) — the
-  // plugin's fallback for who sits on the work side when nobody has an explicit side.
-  function workPersonName() {
-    var cal = state.calendars.filter(function (c) { return /^work$/i.test(c.name.trim()); })[0];
-    if (cal) {
-      if (cal.assign.length) return cal.assign[0];
-      var r = cal.rules.concat(state.rules).filter(function (r) { return r.persons.length; })[0];
-      if (r) return r.persons[0];
-    }
-    var first = state.people.filter(function (p) { return p.name.trim(); })[0];
-    return first ? first.name.trim() : null;
-  }
 
   // ------------------------------------------------------------ export
-  function conditionValue(c) {
+  // word/contains/exact accept a comma-separated list of values, compiling
+  // to an "or" of that type when there's more than one — a plain-language
+  // way to write "matches any of these" without a nested condition.
+  function conditionValueInner(c) {
     if (c.type === "any") return { type: "any" };
     if (c.type === "status") return { type: "status", value: c.status || "confirmed" };
     if (c.type === "weekday") return c.weekdays.length ? { type: "weekday", value: c.weekdays.slice() } : null;
-    var v = (c.value || "").trim();
-    return v ? { type: c.type, value: v } : null;
+    var values = (c.value || "").split(",").map(function (v) { return v.trim(); }).filter(Boolean);
+    if (!values.length) return null;
+    if (values.length === 1) return { type: c.type, value: values[0] };
+    return { type: "or", matchers: values.map(function (v) { return { type: c.type, value: v }; }) };
+  }
+  function conditionValue(c) {
+    var inner = conditionValueInner(c);
+    if (!inner) return null;
+    return c.negate ? { type: "not", matcher: inner } : inner;
   }
   function ruleValue(r) {
     var conds = r.conditions.map(conditionValue).filter(Boolean);
@@ -353,9 +355,19 @@
   function conditionFrom(m) {
     var c = newCondition();
     if (!m || typeof m !== "object") return c;
+    if (m.type === "not" && m.matcher) { c = conditionFrom(m.matcher); c.negate = true; return c; }
     if (m.type === "any" || m.type === "all") { c.type = "any"; return c; }
     if (m.type === "status") { c.type = "status"; c.status = String(m.value || "confirmed").toLowerCase(); return c; }
     if (m.type === "weekday") { c.type = "weekday"; c.weekdays = (Array.isArray(m.value) ? m.value : [m.value]).map(function (v) { return String(v || "").toUpperCase().slice(0, 2); }).filter(function (v) { return WEEKDAYS.some(function (w) { return w[0] === v; }); }); return c; }
+    // an "or" of several plain matchers, all the SAME type with a string
+    // value (exactly what conditionValue above builds for a comma-separated
+    // list), collapses back into one multi-value condition rather than
+    // being lost or shown as separate rows.
+    if (m.type === "or" && Array.isArray(m.matchers) && m.matchers.length && m.matchers.every(function (sm) { return sm && ["word", "contains", "exact"].indexOf(sm.type) !== -1 && sm.type === m.matchers[0].type && typeof sm.value === "string"; })) {
+      c.type = m.matchers[0].type;
+      c.value = m.matchers.map(function (sm) { return sm.value; }).join(", ");
+      return c;
+    }
     c.type = ["word", "contains", "exact", "regex"].indexOf(m.type) !== -1 ? m.type : "word";
     c.value = typeof m.value === "string" ? m.value : "";
     return c;
@@ -433,7 +445,7 @@
       var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "You (e.g. Sam)" : "Name", value: p.name });
       name.addEventListener("input", function () { p.name = name.value; renderJson(); renderCalendars(); renderGlobalRules(); });
       name.addEventListener("change", function () { renderPeople(); });
-      var side = el("select", {}, [el("option", { value: "", text: "auto" }), el("option", { value: "left", text: "Work side" }), el("option", { value: "right", text: "Family side" })]);
+      var side = el("select", {}, [el("option", { value: "", text: "auto — balanced by event count" }), el("option", { value: "left", text: "Left" }), el("option", { value: "right", text: "Right" })]);
       side.value = p.side;
       side.addEventListener("change", function () { p.side = side.value; renderJson(); renderPeople(); });
       var color = colorSelect(p.color);
@@ -466,10 +478,13 @@
         comb.addEventListener("change", function () { rule.combinator = comb.value; onChange(); });
         row.appendChild(comb);
       } else row.appendChild(el("span", { class: "chip", text: "If the event" }));
+      var notBtn = el("button", { class: "small" + (c.negate ? " primary" : ""), type: "button", title: "Invert this condition (does NOT match)", text: "not" });
+      notBtn.addEventListener("click", function () { c.negate = !c.negate; notBtn.className = "small" + (c.negate ? " primary" : ""); onChange(); });
+      row.appendChild(notBtn);
       var type = el("select", {}, MATCH_TYPES.map(function (t) { return el("option", { value: t[0], text: t[1] }); }));
       type.value = c.type;
       row.appendChild(type);
-      var value = el("input", { type: "text", placeholder: c.type === "regex" ? "^Piano.*" : "Dentist", value: c.value, style: "width:200px" });
+      var value = el("input", { type: "text", placeholder: c.type === "regex" ? "^Piano.*" : "Dentist, or Dentist, Checkup for any of several", value: c.value, style: "width:220px" });
       value.addEventListener("input", function () { c.value = value.value; onChange(); });
       var status = el("select", {}, ["confirmed", "tentative", "cancelled"].map(function (s) { return el("option", { value: s, text: s }); }));
       status.value = c.status;
@@ -573,7 +588,7 @@
         el("summary", { text: "Rules, headers & description matching" }),
         el("div", { class: "adv-body" }, [
           el("div", { class: "rule-step", text: "Rules for this calendar" }),
-          el("p", { class: "hint", text: "Checked in order; the last matching rule wins for each effect. Use these when one calendar holds several people's events, or to rename class codes and hide noise." }),
+          el("p", { class: "hint", text: "Checked in order; the last matching rule wins for each effect. Use these when one calendar holds several people's events, or to rename class codes and hide noise. Comma-separate a value to match any of several (\"L1, L3, L4\"); click \"not\" to invert a condition — combine both for \"one of these, except that one\", with no regex needed." }),
           rulesWrap, addRule,
           el("div", { class: "rule-step", style: "margin-top:14px", text: "HTTP headers for this feed" }),
           headersWrap, addHeader,
@@ -586,7 +601,7 @@
           el("div", { class: "field grow" }, [el("label", { text: "ICS link" }), url]),
           el("div", { class: "field" }, [el("label", { text: "Whose line" }), assign]),
         ]),
-        idx === 0 && !c.name.trim() ? el("p", { class: "hint", style: "margin:8px 0 0", text: "Tip: name your own calendar \"Work\" — its person gets the work side of the map unless a person has an explicit side." }) : null,
+        null,
         adv,
       ]));
     });

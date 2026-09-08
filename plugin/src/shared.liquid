@@ -41,18 +41,30 @@
 
 <div class="layout layout--col gap--none metro-root">
 
-  <div class="metro-header flex flex--row flex--center-y flex--wrap gap--medium px--3 py--2 flex-none">
-    <span class="metro-title title title--large font--bold">{{ metro.i18n.today | default: "Today" }}</span>
-    {% if metro.date_label %}<span class="metro-date label label--base text--gray-40">{{ metro.date_label }}</span>{% endif %}
-    <span class="metro-window label label--small text--gray-40">{{ metro.window_label }}</span>
-    <div class="grow"></div>
-    {% if metro.header_weather.hi %}
-      <span class="metro-weather flex flex--row flex--center-y gap--xsmall">
-        {% if metro.header_weather.icon %}<img class="metro-wicon image--adaptive" src="{{ metro.header_weather.icon }}">{% endif %}
-        <span class="metro-temp title title--base">{{ metro.header_weather.hi }}&deg;<span class="text--gray-40"> / {{ metro.header_weather.lo }}&deg;</span></span>
-        {% assign rain_pct = metro.i18n.rain_pct | default: "{n}% rain" | replace: "{n}", metro.header_weather.rain_chance %}
-        <span class="metro-cond label label--small text--gray-40">{{ metro.header_weather.condition }} &middot; {{ rain_pct }}</span>
-      </span>
+  <div class="metro-header flex flex--col gap--xsmall px--3 py--2 flex-none">
+    <div class="metro-header-top flex flex--row flex--center-y flex--wrap gap--medium">
+      <span class="metro-title title title--large font--bold">{{ metro.i18n.today | default: "Today" }}</span>
+      {% if metro.date_label %}<span class="metro-date label label--base text--gray-40">{{ metro.date_label }}</span>{% endif %}
+      <span class="metro-window label label--small text--gray-40">{{ metro.window_label }}</span>
+      <div class="grow"></div>
+      {% if metro.header_weather.hi %}
+        <span class="metro-weather flex flex--row flex--center-y gap--xsmall">
+          {% if metro.header_weather.icon %}<img class="metro-wicon image--adaptive" src="{{ metro.header_weather.icon }}">{% endif %}
+          <span class="metro-temp title title--base">{{ metro.header_weather.hi }}&deg;<span class="text--gray-40"> / {{ metro.header_weather.lo }}&deg;</span></span>
+          {% assign rain_pct = metro.i18n.rain_pct | default: "{n}% rain" | replace: "{n}", metro.header_weather.rain_chance %}
+          <span class="metro-cond label label--small text--gray-40">{{ metro.header_weather.condition }} &middot; {{ rain_pct }}</span>
+        </span>
+      {% endif %}
+    </div>
+    {% if metro.all_day and metro.all_day.size > 0 %}
+      <div class="metro-allday flex flex--row flex--center-y gap--small flex--wrap">
+        {% for a in metro.all_day %}
+          <span class="flex flex--row flex--center-y gap--xsmall">
+            <svg class="metro-allday-swatch no-shrink" data-hue="{{ a.hue }}" data-style="{{ a.track_style }}" width="20" height="8" viewBox="0 0 20 8"></svg>
+            <span class="label label--small font--bold">{{ a.title }}</span>
+          </span>
+        {% endfor %}
+      </div>
     {% endif %}
   </div>
 
@@ -131,6 +143,20 @@
     if (style === 'dashdot') return (11 * S) + ' ' + (5 * S) + ' ' + (0.1 * S) + ' ' + (5 * S);
     return null;
   }
+  // The map's own dash periods are tuned for long track lines — over a
+  // short, fixed-length legend swatch the same period leaves a visible gap
+  // before the swatch's own right edge (worst on 'dotted': a handful of
+  // widely-spaced dots trail off well short of it), making that row read as
+  // less aligned with the others even though the text starts at the same
+  // fixed offset. These periods are tuned instead to complete a whole
+  // number of repeats across the swatch's own length, so every line style
+  // reads as an equally "full" swatch.
+  function legendDashFor(style, S) {
+    if (style === 'dashed') return (5 * S) + ' ' + (3 * S);
+    if (style === 'dotted') return (0.1 * S) + ' ' + (4 * S);
+    if (style === 'dashdot') return (6 * S) + ' ' + (2 * S) + ' ' + (0.1 * S) + ' ' + (2 * S);
+    return null;
+  }
   function styleStroke(node, p, S) {
     node.setAttribute('stroke', colorFor(p.hue));
     node.setAttribute('stroke-width', p.line_width * S);
@@ -202,6 +228,17 @@
       swap('.metro-date', large ? 'label--large' : 'label--base');
       swap('.metro-temp', large ? 'title--large' : compact ? 'title--small' : 'title--base');
       swap('.metro-cond', large ? 'label--base' : 'label--small');
+      header.querySelectorAll('.metro-allday-swatch').forEach(function (sw) {
+        while (sw.firstChild) sw.removeChild(sw.firstChild);
+        var abw = 20 * S, abh = 8 * S;
+        sw.setAttribute('width', abw); sw.setAttribute('height', abh); sw.setAttribute('viewBox', '0 0 ' + abw + ' ' + abh);
+        var p = { hue: sw.getAttribute('data-hue'), line_style: sw.getAttribute('data-style'), line_width: 3 };
+        var ln = svgEl('line', { x1: 2 * S, y1: abh / 2, x2: abw - 2 * S, y2: abh / 2 });
+        styleStroke(ln, p, S);
+        var ld = legendDashFor(p.line_style, S);
+        if (ld) ln.setAttribute('stroke-dasharray', ld); else ln.removeAttribute('stroke-dasharray');
+        sw.appendChild(ln);
+      });
     }
 
     // geometry constants (device-scaled)
@@ -427,9 +464,12 @@
     // vertical mode (side A renders on the left, the axis end is the bottom).
     var legend = el('div', 'metro-gen metro-corner-legend absolute bg--white flex flex--col gap--xsmall');
     LEGEND.forEach(function (p) {
-      var sw = svgEl('svg', { width: 28, height: 9, viewBox: '0 0 28 9' });
-      var ln = svgEl('line', { x1: 2, y1: 4.5, x2: 26, y2: 4.5 });
+      var boxW = 28 * S, boxH = 9 * S;
+      var sw = svgEl('svg', { width: boxW, height: boxH, viewBox: '0 0 ' + boxW + ' ' + boxH });
+      var ln = svgEl('line', { x1: 2 * S, y1: boxH / 2, x2: boxW - 2 * S, y2: boxH / 2 });
       styleStroke(ln, p, S);
+      var ld = legendDashFor(p.line_style, S);
+      if (ld) ln.setAttribute('stroke-dasharray', ld); else ln.removeAttribute('stroke-dasharray');
       sw.appendChild(ln);
       var name = el('span', 'label label--small font--bold text--black');
       name.style.whiteSpace = 'nowrap';
@@ -521,7 +561,18 @@
       // take it.
       function settle(e, k, dir, allowCross) {
         var ld = laneDist(k);
-        var dy = Math.max(ld - e._trackDist, MIN_DIAG);
+        // dy (the diagonal's axis reach) depends only on the lane index, not
+        // on which track this event's ring sits on — otherwise two people's
+        // simultaneous events, on different tracks, land on the same lane at
+        // DIFFERENT axis positions (their branches travel different cross-
+        // distances to reach the same nominal lane, so a same-45°-angle
+        // elbow ends up at a different X), which reads as staggered even
+        // though the times are identical. This event's own row distance
+        // (rowDist) is then its OWN track's distance plus that same reach,
+        // so simultaneous events sharing a lane index align in X while each
+        // still gets a genuinely-45° diagonal and its own row.
+        var dy = Math.max(LANE_BASE + k * step, MIN_DIAG);
+        var rowDist = e._trackDist + dy;
         var elbow = e._nodeA + dir * dy;
         var L = lane(k), len = e._textLen;
         var elbow0 = elbow;
@@ -583,11 +634,11 @@
           var dg = L.items[dgi];
           if (dg.kind === 'diag' && dg.dir !== dir && dg.a0 < diagHi && diagLo < dg.a1) return null;
         }
-        var crossing = diagonalCrosses(e._nodeA, e._trackDist, elbow, ld, k);
+        var crossing = diagonalCrosses(e._nodeA, e._trackDist, elbow, rowDist, k);
         if (crossing && !allowCross) return null;
         var shift = Math.abs(ts - (dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len)) + elbowShift;
         if (shift > (dir > 0 ? MAX_SHIFT : MAX_SHIFT * 0.5)) return null;
-        return { k: k, dir: dir, elbow: elbow, shift: shift, ld: ld, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift,
+        return { k: k, dir: dir, elbow: elbow, shift: shift, ld: rowDist, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift,
                  score: shift + elbowShift * 1.5 + (elbowShift ? 30 * S : 0) + k * step * 0.15 + (dir < 0 ? 40 * S : 0) + (crossing ? 50 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
       }
       evs.forEach(function (e, idx) {

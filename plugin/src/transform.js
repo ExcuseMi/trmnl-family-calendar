@@ -294,7 +294,7 @@ function resolveTz(explicitTzname, input) {
 // itself. See that file's own header comment for the full breakdown.
 // ---------------------------------------------------------------------
 
-function buildMetro(people, events, weatherMilestones, headerWeather, nowMin, windowLabel, extra) {
+function buildMetro(people, events, weatherMilestones, headerWeather, nowMin, windowLabel, allDayEvents, extra) {
   var peopleByKey = {};
   people.forEach(function (p) { peopleByKey[p.key] = p; });
 
@@ -321,6 +321,17 @@ function buildMetro(people, events, weatherMilestones, headerWeather, nowMin, wi
     });
   });
 
+  var allDayOut = [];
+  var seenAllDay = {};
+  (allDayEvents || []).forEach(function (ev) {
+    var person = peopleByKey[ev.person];
+    if (!person) return;
+    var key = ev.title + '|' + person.key;
+    if (seenAllDay[key]) return;
+    seenAllDay[key] = true;
+    allDayOut.push({ title: ev.title, owner: person.key, hue: person.hue, track_style: person.line_style });
+  });
+
   (weatherMilestones || []).forEach(function (w) {
     items.push({ type: 'weather', _sortMin: w.atMin, at_min: w.atMin, icon: w.icon, label: w.label });
   });
@@ -345,6 +356,7 @@ function buildMetro(people, events, weatherMilestones, headerWeather, nowMin, wi
     i18n: (function (st) { return { today: tr(st, 'today'), more: tr(st, 'more'), earlier: tr(st, 'earlier'), rain_pct: tr(st, 'rain_pct') }; })((extra && extra.strings) || I18N.en),
     header_weather: headerWeather,
     legend: people,
+    all_day: allDayOut,
     items: items,
   };
 }
@@ -382,6 +394,10 @@ var DEMO_EVENTS = [
   { person: 'sam', title: 'Book Club', startMin: 19 * 60 + 45, endMin: 21 * 60 },
 ];
 
+var DEMO_ALLDAY = [
+  { person: 'kids', title: 'School Holiday' },
+];
+
 var DEMO_WEATHER_MILESTONES = [
   { atMin: 15 * 60, icon: 'https://trmnl.com/images/plugins/weather/wi-rain.svg', label: 'Rain Starts 15:00' },
 ];
@@ -407,6 +423,7 @@ function buildFromDemo(weather, nowMin, extra) {
     w.header || demo.header,
     nowMin != null ? nowMin : DEMO_NOW_MIN,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
+    DEMO_ALLDAY,
     Object.assign({}, extra || {}, { sun: (w.sun && w.sun.length) ? w.sun : DEMO_SUN })
   );
 }
@@ -538,7 +555,10 @@ function unescapeIcsText(v) {
 // separate from "does that land on today" so the same parsed value can
 // be reused for both a direct hit and the weekly-recurrence check below.
 function parseIcsDateTime(paramsStr, value, fallbackTz) {
-  if (/VALUE=DATE\b/i.test(paramsStr) || /^\d{8}$/.test(value)) return { isAllDay: true };
+  if (/VALUE=DATE\b/i.test(paramsStr) || /^\d{8}$/.test(value)) {
+    var dm = /^(\d{4})(\d{2})(\d{2})/.exec(value);
+    return dm ? { isAllDay: true, y: +dm[1], mo: +dm[2], d: +dm[3] } : { isAllDay: true };
+  }
 
   var m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/.exec(value);
   if (!m) return null;
@@ -593,6 +613,10 @@ function weeklyRruleMatchesToday(rruleValue, dtstartCivil, todayY, todayMo, toda
 // `includeDescription` (a per-calendar config flag, off by default) is the
 // only thing that makes parseIcs pay for DESCRIPTION at all — it's usually
 // a large multi-line blob and most calendars' rules never need it.
+//
+// Returns { timed, allDay } — allDay entries carry no time-of-day (they're
+// {title, desc, status} only): only whole-day coverage decides whether one
+// applies today, matched to the day's own civil date, not a UTC one.
 function parseIcs(text, tz, today, includeDescription) {
   var lines = unfoldIcs(text);
   var raw = [];
@@ -620,6 +644,8 @@ function parseIcs(text, tz, today, includeDescription) {
 
   var todayWeekday = (new Date(Date.UTC(today.y, today.mo - 1, today.d)).getUTCDay() + 6) % 7;
   var todayKey = today.y + '-' + today.mo + '-' + today.d;
+  var todayOrdinal = Date.UTC(today.y, today.mo - 1, today.d);
+  var DAY_MS = 24 * 60 * 60 * 1000;
 
   // A RECURRENCE-ID override (same UID, own DTSTART/SUMMARY) REPLACES the
   // master's occurrence on that specific date — without this, an edited
@@ -628,16 +654,33 @@ function parseIcs(text, tz, today, includeDescription) {
   // own direct-hit DTSTART. Suppress the master on any date an override
   // for its UID targets, keyed by civil date (not exact minute) since
   // that's what RECURRENCE-ID identifies — "which occurrence", not "what
-  // time it now is".
+  // time it now is". Applies equally to timed and all-day masters.
   var overriddenDates = {};
   raw.forEach(function (ev) {
-    if (!ev.uid || !ev.recurrenceId || ev.recurrenceId.isAllDay) return;
+    if (!ev.uid || !ev.recurrenceId) return;
     overriddenDates[ev.uid + '|' + ev.recurrenceId.y + '-' + ev.recurrenceId.mo + '-' + ev.recurrenceId.d] = true;
   });
 
-  var out = [];
+  var out = [], allDay = [];
   raw.forEach(function (ev) {
-    if (!ev.title || !ev.dtstart || ev.dtstart.isAllDay) return;
+    if (!ev.title || !ev.dtstart) return;
+
+    if (ev.dtstart.isAllDay) {
+      // Whole-day coverage: DTEND is EXCLUSIVE per RFC5545 (a single-day
+      // all-day event has DTEND the day AFTER DTSTART) — no DTEND means a
+      // single day. A bounded weekly RRULE only applies to a single-day
+      // all-day event; a genuine multi-day span (a real vacation/trip) has
+      // no recurrence support here, same "bounded subset" limit as timed.
+      var startOrd = Date.UTC(ev.dtstart.y, ev.dtstart.mo - 1, ev.dtstart.d);
+      var endOrd = (ev.dtend && ev.dtend.isAllDay) ? Date.UTC(ev.dtend.y, ev.dtend.mo - 1, ev.dtend.d) : startOrd + DAY_MS;
+      var isDirectSpan = todayOrdinal >= startOrd && todayOrdinal < endOrd;
+      var isWeeklySpan = !isDirectSpan && ev.rrule && (endOrd - startOrd) <= DAY_MS
+        && weeklyRruleMatchesToday(ev.rrule, ev.dtstart, today.y, today.mo, today.d, todayWeekday, tz);
+      if (!isDirectSpan && !isWeeklySpan) return;
+      if (!ev.recurrenceId && ev.uid && overriddenDates[ev.uid + '|' + todayKey]) return;
+      allDay.push({ title: ev.title, desc: ev.desc || '', status: ev.status || '' });
+      return;
+    }
 
     var durationMin = null;
     if (ev.dtend && !ev.dtend.isAllDay) {
@@ -661,7 +704,7 @@ function parseIcs(text, tz, today, includeDescription) {
       endMin: durationMin != null ? startMin + durationMin : null,
     });
   });
-  return out;
+  return { timed: out, allDay: allDay };
 }
 
 // ---------------------------------------------------------------------
@@ -694,6 +737,16 @@ function compileMatcher(spec) {
     return { rx: null, test: function (ctx) {
       return isAnd ? subs.every(function (m) { return m.test(ctx); }) : subs.some(function (m) { return m.test(ctx); });
     } };
+  }
+  // Negation — the only way to express "everything except X" without this
+  // used to be a regex negative lookahead, which meant hand-writing
+  // backslash-heavy JSON (\\b) that's easy to mis-escape when copying
+  // through a browser field. {"type":"not","matcher":{...}} covers the
+  // common case with zero backslashes.
+  if (spec.type === 'not') {
+    var negated = compileMatcher(spec.matcher);
+    if (!negated) return null;
+    return { rx: null, test: function (ctx) { return !negated.test(ctx); } };
   }
   if (spec.type === 'status') {
     var want = typeof spec.value === 'string' ? spec.value.trim().toUpperCase() : '';
@@ -870,62 +923,79 @@ function hueTokenForColor(color) {
   return null;
 }
 
-// Finds which config.people name should sit on the LEFT (the "own"/work
-// side) — whichever person a calendar literally named "Work" assigns via
-// its own rules or a global rule; falls back to everyonePerson, then the
-// first configured person.
-function findWorkPersonName(parsed) {
-  var workCal = (parsed.calendars || []).filter(function (c) { return /^work$/i.test(c.name || ''); })[0];
-  if (workCal) {
-    var rule = workCal.rules.concat(parsed.globalRules).filter(function (r) { return r.person && r.person.length; })[0];
-    if (rule) return rule.person[0];
-  }
-  if (parsed.everyonePerson) return parsed.everyonePerson;
-  var firstKey = Object.keys(parsed.people)[0];
-  return firstKey ? parsed.people[firstKey].name : null;
-}
-
 // A small, growable people/track registry — seeded from parsed.people,
 // but calendars with no person-assigning rule (e.g. a shared "Family"
 // calendar) fall back to using the CALENDAR's own name as an implicit
 // person, added here the first time it's encountered, so those events
 // still get a track instead of silently vanishing.
+//
+// Which SIDE each person ends up on is decided once, in finalize() —
+// called after every calendar has been fetched and every event tallied —
+// not by any calendar's name. A person's `side` in config (if set) is
+// honored; everyone else is balanced across the two sides by their own
+// event count (heaviest first, each going to whichever side is currently
+// lighter), so the split reflects the actual day's data instead of a
+// fixed "Work calendar" convention.
 function makePeopleRegistry(parsed) {
-  var workName = findWorkPersonName(parsed);
-  var left = [];
-  var right = [];
+  var order = [];
   var byName = {};
-  var hueIdx = 0;
+  var counts = {};
+  var keyIdx = 0;
 
-  function add(name) {
-    if (byName[name]) return byName[name];
-    var configuredSide = parsed.people[name.toLowerCase()] && parsed.people[name.toLowerCase()].side;
-    var side = configuredSide || ((name === workName) ? 'left' : 'right');
-    var bucket = side === 'left' ? left : right;
-    var offset = TRACK_STEP * (bucket.length + 1) * (side === 'left' ? -1 : 1);
-    var configured = parsed.people[name.toLowerCase()];
-    // the work/own line is the map's trunk: black unless a color is configured; everyone else cycles hues
-    var hue = (configured && hueTokenForColor(configured.color)) || (side === 'left' && left.length === 0 ? 'black' : HUE_CYCLE[hueIdx % HUE_CYCLE.length]);
-    var initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
-    var p = {
-      key: 'p' + hueIdx,
-      name: name,
-      side: side,
-      hue: hue,
-      track_offset: offset,
-      line_width: (side === 'left' && bucket.length === 0) ? 4 : 3,
-      line_style: LINE_STYLES[bucket.length % LINE_STYLES.length],
-      initial: initial,
-    };
-    hueIdx++;
-    bucket.push(p);
-    byName[name] = p;
-    return p;
+  function add(name, weight) {
+    if (!byName[name]) {
+      byName[name] = { key: 'p' + (keyIdx++), name: name, side: null, hue: null, track_offset: null, line_width: null, line_style: null, initial: null };
+      order.push(name);
+      counts[name] = 0;
+    }
+    counts[name] += (weight == null ? 1 : weight);
+    return byName[name];
   }
 
-  Object.keys(parsed.people).forEach(function (key) { add(parsed.people[key].name); });
+  function explicitSide(name) {
+    var c = parsed.people[name.toLowerCase()];
+    return (c && (c.side === 'left' || c.side === 'right')) ? c.side : null;
+  }
 
-  return { add: add, byName: byName, all: function () { return left.concat(right); } };
+  function finalize() {
+    var loadLeft = 0, loadRight = 0;
+    var decided = {};
+    order.forEach(function (name) {
+      var s = explicitSide(name);
+      if (s) { decided[name] = s; if (s === 'left') loadLeft += counts[name]; else loadRight += counts[name]; }
+    });
+    order.filter(function (name) { return !decided[name]; })
+      .sort(function (a, b) { return counts[b] - counts[a]; }) // heaviest first — best balance from a greedy assignment
+      .forEach(function (name) {
+        var s = loadLeft <= loadRight ? 'left' : 'right';
+        decided[name] = s;
+        if (s === 'left') loadLeft += counts[name]; else loadRight += counts[name];
+      });
+
+    var sideIdx = { left: 0, right: 0 };
+    order.forEach(function (name, i) {
+      var p = byName[name], side = decided[name], idx = sideIdx[side]++;
+      var configured = parsed.people[name.toLowerCase()];
+      p.side = side;
+      p.track_offset = TRACK_STEP * (idx + 1) * (side === 'left' ? -1 : 1);
+      // the side's anchor line (first-placed, whichever side that ends up
+      // being) is black/bold; everyone else cycles hues in registration order
+      p.hue = (configured && hueTokenForColor(configured.color)) || (side === 'left' && idx === 0 ? 'black' : HUE_CYCLE[i % HUE_CYCLE.length]);
+      p.line_width = (side === 'left' && idx === 0) ? 4 : 3;
+      p.line_style = LINE_STYLES[idx % LINE_STYLES.length];
+      p.initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
+    });
+  }
+
+  return {
+    add: add,
+    byName: byName,
+    finalize: finalize,
+    all: function () {
+      var arr = order.map(function (n) { return byName[n]; });
+      return arr.filter(function (p) { return p.side === 'left'; }).concat(arr.filter(function (p) { return p.side === 'right'; }));
+    },
+  };
 }
 
 async function buildFromConfig(input, parsed, weather, extra) {
@@ -936,10 +1006,15 @@ async function buildFromConfig(input, parsed, weather, extra) {
   var todayWeekday = (new Date(Date.UTC(today.y, today.mo - 1, today.d)).getUTCDay() + 6) % 7;
 
   var registry = makePeopleRegistry(parsed);
+  // Every explicitly-configured person is registered up front, even with
+  // zero events today, so they still get a line and (if they set an
+  // explicit side) it's honored regardless of load.
+  Object.keys(parsed.people).forEach(function (key) { registry.add(parsed.people[key].name, 0); });
 
   var DEADLINE_MS = 4200;
   var deadline = Date.now() + DEADLINE_MS;
   var events = [];
+  var allDayEvents = [];
 
   await Promise.all((parsed.calendars || []).map(async function (cal) {
     var url = cal.url;
@@ -950,14 +1025,22 @@ async function buildFromConfig(input, parsed, weather, extra) {
       var resp = await fetchWithTimeout(url, Math.min(budget, 4000), cal.headers);
       if (!resp.ok) return;
       var text = await resp.text();
-      var rawEvents = parseIcs(text, tz, today, cal.includeDescription);
-      rawEvents.forEach(function (ev) {
+      var parsedIcs = parseIcs(text, tz, today, cal.includeDescription);
+      parsedIcs.timed.forEach(function (ev) {
         var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyonePerson);
-        if (resolved.hide || resolved.allDay) return;
+        if (resolved.hide) return;
         var personNames = resolved.personNames || (cal.name ? [cal.name] : null);
         if (!personNames || !personNames.length) return;
-        var primary = registry.add(personNames[0]);
-        var interchangeWith = personNames.slice(1).map(function (n) { return registry.add(n).key; });
+        // A rule can mark an otherwise-timed event allDay (e.g. a calendar
+        // that lists "Public Holiday" as a timed 00:00 entry) — that now
+        // routes into the all-day strip instead of the timeline, same as a
+        // genuine ICS all-day entry, rather than being silently dropped.
+        if (resolved.allDay) { allDayEvents.push({ person: registry.add(personNames[0], 0.25).key, title: resolved.title }); return; }
+        var primary = registry.add(personNames[0], 1);
+        // a co-owner on a shared/interchange event gets a smaller weight
+        // toward side balancing — they have a ring there too, but it's not
+        // "their" event the way the primary owner's is
+        var interchangeWith = personNames.slice(1).map(function (n) { return registry.add(n, 0.5).key; });
         events.push({
           person: primary.key,
           interchange_with: interchangeWith.length ? interchangeWith : undefined,
@@ -967,12 +1050,20 @@ async function buildFromConfig(input, parsed, weather, extra) {
           location: ev.location || null,
         });
       });
+      parsedIcs.allDay.forEach(function (ev) {
+        var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyonePerson);
+        if (resolved.hide) return;
+        var personNames = resolved.personNames || (cal.name ? [cal.name] : null);
+        if (!personNames || !personNames.length) return;
+        allDayEvents.push({ person: registry.add(personNames[0], 0.25).key, title: resolved.title });
+      });
     } catch (e) {
       // one calendar failing shouldn't blank the whole render — skip it
     }
   }));
 
   events.sort(function (a, b) { return a.startMin - b.startMin; });
+  registry.finalize(); // every calendar is in and every event tallied — decide sides now
 
   return buildMetro(
     registry.all(), events,
@@ -980,6 +1071,7 @@ async function buildFromConfig(input, parsed, weather, extra) {
     (weather && weather.header) || { hi: null, lo: null, condition: null, rain_chance: null },
     nowMin,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
+    allDayEvents,
     Object.assign({}, extra, { dateLabel: dateLabel(today, extra.locale), sun: (weather && weather.sun) || [] })
   );
 }
