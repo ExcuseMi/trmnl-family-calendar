@@ -3,8 +3,14 @@
 {% template badge_circle %}
   {%- assign badge_border_color = "currentColor" -%}
   {%- if fg == "white" -%}{%- assign badge_border_color = "#888888" -%}{%- endif -%}
-  <span class="rounded--small no-shrink flex flex--center-x flex--center-y bg--{{ hue }} font--bold w--min-0 h--min-0 {{ extra_cls }}" style="width:min({{ badge_w_expr }}, {{ badge_h_expr }});height:min({{ badge_w_expr }}, {{ badge_h_expr }});font-size:calc(min({{ badge_w_expr }}, {{ badge_h_expr }}) * 0.55);line-height:1;border:2px solid {{ badge_border_color }};box-sizing:border-box;">
-    <span class="text--{{ fg }} flex flex--center-x flex--center-y w--full h--full">
+  {%- comment -%}
+    contrast_ring adds a white-then-black double ring around the badge — since a badge's own
+    color is the assigned person's color, it can otherwise end up nearly the same color as the
+    row/background it sits on (e.g. an event auto-colored by that same person). One of the two
+    rings is guaranteed to contrast against any background color, unlike a single fixed color.
+  {%- endcomment -%}
+  <span class="rounded--small no-shrink flex flex--center-x flex--center-y bg--{{ hue }} font--bold w--min-0 h--min-0 {{ extra_cls }}" style="width:min({{ badge_w_expr }}, {{ badge_h_expr }});height:min({{ badge_w_expr }}, {{ badge_h_expr }});font-size:calc(min({{ badge_w_expr }}, {{ badge_h_expr }}) * 0.55);line-height:1;border:2px solid {{ badge_border_color }};box-sizing:border-box;{% if contrast_ring %}box-shadow:0 0 0 2px #ffffff, 0 0 0 4px #000000;{% endif %}">
+    <span class="text--{{ fg }} flex flex--center-x flex--center-y w--full h--full" {% if uppercase %}style="text-transform:uppercase;"{% endif %}>
     {%- if b.is_everyone -%}
       <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/group/default/48px.svg" alt="{{ b.person }}" style="width:65%;height:65%;{% if fg == 'white' %}filter:invert(1);{% endif %}">
     {%- else -%}
@@ -55,9 +61,9 @@
           {% if item.time %}<span class="label {{ axis_cls }} text--{{ item.fg }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
           {% if item.icon_url %}<img src="{{ item.icon_url }}" class="w--[20px] h--[20px] no-shrink" style="margin-left:auto;{% if item.fg == 'white' %}filter:invert(1);{% endif %}">{% endif %}
           {% if item.badges and item.badges.size > 0 %}
-            <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;{% unless item.icon_url %}margin-left:auto;{% endunless %}">
+            <span class="flex flex--row gap--small no-shrink" style="flex:0 0 auto;{% unless item.icon_url %}margin-left:auto;{% endunless %}">
               {% for badge in item.badges limit: 2 %}
-                {%- render "badge_circle", badge_w_expr: "22px", badge_h_expr: "22px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
+                {%- render "badge_circle", badge_w_expr: "32px", badge_h_expr: "32px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "", uppercase: true, contrast_ring: true -%}
               {% endfor %}
             </span>
           {% endif %}
@@ -72,7 +78,7 @@
         {% if item.badges and item.badges.size > 0 %}
           <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;">
             {% for badge in item.badges limit: 2 %}
-              {%- render "badge_circle", badge_w_expr: "22px", badge_h_expr: "22px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
+              {%- render "badge_circle", badge_w_expr: "22px", badge_h_expr: "22px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "", contrast_ring: true -%}
             {% endfor %}
           </span>
         {% endif %}
@@ -153,6 +159,13 @@
     {%- assign day_span = 11 -%}
   {%- endif -%}
 {%- endif -%}
+{%- comment -%}
+  The Agenda List full view has no hour axis and, since per-event badges already show people
+  inline, no need for the corner legend either — the left gutter that reserves space for both is
+  dropped entirely (axis_span 0) so the day columns use the full width. The Timeline Grid still
+  needs that space (hour labels + corner legend, since it has no per-event badges of its own).
+{%- endcomment -%}
+{%- if view == 1 -%}{%- unless data.full_view_grid -%}{%- assign axis_span = 0 -%}{%- endunless -%}{%- endif -%}
 
 {%- assign header_pct = data.header_pct | times: header_pct_scale -%}
 
@@ -195,13 +208,13 @@
   {% else %}
 
     {%- comment -%}
-      The person-badge legend in the top-left corner is redundant on the views that now render
-      the agenda list (view 2/3/4) — each event already carries its own badge there. Only the
-      full view (a real multi-day grid, where per-event badges are much smaller/less prominent)
-      still shows it.
+      The person-badge legend in the top-left corner is redundant on any view that renders the
+      agenda list (view 2/3/4, and now the full view's own Agenda List style) — each event
+      already carries its own (bigger) badge there. Only the Timeline Grid still shows it, since
+      its chip/chip_body rendering has no per-event badges of its own.
     {%- endcomment -%}
     {%- assign show_badge_overlay = false -%}
-    {%- if data.people.size > 0 and view == 1 -%}{%- assign show_badge_overlay = true -%}{%- endif -%}
+    {%- if data.people.size > 0 and view == 1 and data.full_view_grid -%}{%- assign show_badge_overlay = true -%}{%- endif -%}
 
     {%- assign gutter_pct = header_pct | plus: allday_pct -%}
     {%- assign header_allday_rows = 1 -%}
@@ -214,6 +227,7 @@
 
     <div class="grid gap--none h--[{{ gutter_pct }}cqh] h--min-[{{ gutter_pct }}cqh] bg--black flex-none relative" style="grid-template-columns:repeat({{ header_allday_total_units }}, 1fr);grid-template-rows:{{ header_allday_row_tracks | strip }};overflow:hidden;">
 
+      {% if axis_span > 0 %}
       <div class="col--span-{{ axis_span }} bg--black flex flex--col flex--center-x flex--center-y p--0.5" style="grid-row:1 / span {{ header_allday_rows }};overflow:hidden;">
         {% if show_badge_overlay %}
           {%- assign badge_count = data.people.size -%}
@@ -240,6 +254,7 @@
           <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/today/default/48px.svg" alt="{{ data.all_day_label }}" class="w--3 h--3 lg:w--5 lg:h--5" style="filter:invert(1);">
         {% endif %}
       </div>
+      {% endif %}
 
       {% for day in data.days limit: shown_days_n %}
 
@@ -424,11 +439,12 @@
       data.single_day.agenda. The day headers immediately above (date/weather) already label
       each column, so nothing is repeated here. Each day's own list shows its WHOLE schedule
       (not just what's left) — see the comment next to where day.agenda is built in
-      transform.js. The leading axis_span placeholder keeps these columns aligned under the
-      header row above, which reserves that same width for the badge legend/corner icon.
+      transform.js. axis_span is 0 here (see its assignment above) — no leading gutter, no
+      corner legend/icon (per-event badges already show people inline) — so no placeholder is
+      needed; the day columns auto-place starting at column 1, matching the header row above
+      (which also drops its own corner reservation when axis_span is 0).
     {%- endcomment -%}
       <div class="grid gap--none h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none relative">
-        <div class="col--span-{{ axis_span }}"></div>
         {% for day in data.days limit: shown_days_n %}
           <div class="col--span-{{ day_span }} flex flex--col gap--xsmall border--v-1 relative cal-day-cell p--1" data-day-idx="{{ forloop.index0 }}" data-overflow="true" data-overflow-max-height="auto" data-overflow-counter="true" style="overflow:hidden;box-sizing:border-box;">
             {% for item in day.agenda %}
@@ -450,12 +466,14 @@
           <span class="label {% if view == 1 %}label--large lg:label--xlarge{% else %}label--base{% endif %} font--bold bg--black text--white w--min-0 w--full block" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;letter-spacing:0.5px;">{%- if data.rss_headline.label -%}<span class="text--gray-50">{{ data.rss_headline.label }}</span><span class="text--gray-50">&nbsp;»&nbsp;</span>{%- endif -%}{%- for t in data.rss_headline.titles -%}{{ t }}{%- unless forloop.last -%}<span class="text--gray-50">&nbsp;•&nbsp;</span>{%- endunless -%}{%- endfor -%}</span>
         </div>
       {% else %}
+      {% if axis_span > 0 %}
       <div class="col--span-{{ axis_span }} flex flex--center-x">
         <svg class="{% if view == 1 %} w--6 h--6  lg:w--10 lg:h--10 {% else if view == 2 or view == 4 %} hidden {% else %} w--4 h--4 {% endif %} image" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M7.75 2.5C7.75 2.08579 7.41421 1.75 7 1.75C6.58579 1.75 6.25 2.08579 6.25 2.5V4.07926C4.81067 4.19451 3.86577 4.47737 3.17157 5.17157C2.47737 5.86577 2.19451 6.81067 2.07926 8.25H21.9207C21.8055 6.81067 21.5226 5.86577 20.8284 5.17157C20.1342 4.47737 19.1893 4.19451 17.75 4.07926V2.5C17.75 2.08579 17.4142 1.75 17 1.75C16.5858 1.75 16.25 2.08579 16.25 2.5V4.0129C15.5847 4 14.839 4 14 4H10C9.16097 4 8.41527 4 7.75 4.0129V2.5Z" fill="white"/>
 <path fill-rule="evenodd" clip-rule="evenodd" d="M2 12C2 11.161 2 10.4153 2.0129 9.75H21.9871C22 10.4153 22 11.161 22 12V14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14V12ZM17 14C17.5523 14 18 13.5523 18 13C18 12.4477 17.5523 12 17 12C16.4477 12 16 12.4477 16 13C16 13.5523 16.4477 14 17 14ZM17 18C17.5523 18 18 17.5523 18 17C18 16.4477 17.5523 16 17 16C16.4477 16 16 16.4477 16 17C16 17.5523 16.4477 18 17 18ZM13 13C13 13.5523 12.5523 14 12 14C11.4477 14 11 13.5523 11 13C11 12.4477 11.4477 12 12 12C12.5523 12 13 12.4477 13 13ZM13 17C13 17.5523 12.5523 18 12 18C11.4477 18 11 17.5523 11 17C11 16.4477 11.4477 16 12 16C12.5523 16 13 16.4477 13 17ZM7 14C7.55228 14 8 13.5523 8 13C8 12.4477 7.55228 12 7 12C6.44772 12 6 12.4477 6 13C6 13.5523 6.44772 14 7 14ZM7 18C7.55228 18 8 17.5523 8 17C8 16.4477 7.55228 16 7 16C6.44772 16 6 16.4477 6 17C6 17.5523 6.44772 18 7 18Z" fill="white"/>
 </svg>
       </div>
+      {% endif %}
         {% for day in data.days limit: shown_days_n %}
           <div class="h--full  col--span-{{ day_span }} flex flex--row flex--center-x flex--center-y gap--xsmall border--v-1 cal-day-cell" data-day-idx="{{ forloop.index0 }}" style="overflow:hidden;">
             {% if day.icon %}
