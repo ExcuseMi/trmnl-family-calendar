@@ -109,9 +109,12 @@ module.exports = function (test, h) {
     const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics', view_days: '2' }));
 
     const todayAgenda = r.data.days[0].agenda;
-    // No "Holiday" here — the full view's own all-day bars (header, not this list) already
-    // show it, with proper multi-day continuation styling a per-day list entry can't convey.
-    assertEqual(todayAgenda.map((i) => i.title), ['Past Standup', 'Client Call'], 'today\'s full-view agenda keeps Past Standup (unlike data.single_day.agenda) but excludes the all-day item');
+    // "Holiday" leads the list, same agenda_row treatment (no time label) as the single-day
+    // views already give all-day items — the Agenda List full view style suppresses its own
+    // all-day bars in favor of this, so it doesn't duplicate them (Timeline Grid still uses them).
+    assertEqual(todayAgenda.map((i) => i.title), ['Holiday', 'Past Standup', 'Client Call'], 'today\'s full-view agenda keeps Past Standup (unlike data.single_day.agenda) and leads with the all-day item');
+    assertEqual(todayAgenda[0].all_day, true, 'the all-day item is flagged all_day, like data.single_day.agenda\'s');
+    assertEqual(todayAgenda[0].time, null, 'the all-day item has no time label, same as a real event with no time would');
     assertEqual(r.data.single_day.agenda.map((i) => i.title), ['Holiday', 'Client Call'], 'the single-day agenda drops the past event but DOES include the all-day item, for contrast');
 
     const tomorrowAgenda = r.data.days[1].agenda;

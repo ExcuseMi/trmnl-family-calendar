@@ -326,6 +326,45 @@ variables:
       now_marker:
         top_pct: 89.9439
         night: false
+      agenda:
+      - time: null
+        all_day: true
+        title: Grandparents Visiting
+        hue: blue-65
+        fg: black
+        current: false
+        badges: []
+      - time: null
+        all_day: true
+        title: Verjaardag Alex
+        hue: pink-65
+        fg: black
+        current: false
+        badges:
+        - text: A
+          person: Alex
+          hue: orange-65
+          fg: black
+      - time: "09:00"
+        title: Grocery Shopping
+        hue: gray-70
+        fg: black
+        current: false
+        badges:
+        - text: W
+          person: Ward
+          hue: gray-70
+          fg: white
+      - time: "10:30"
+        title: Dentist
+        hue: green-65
+        fg: black
+        current: false
+        badges:
+        - text: M
+          person: Mama
+          hue: pink-65
+          fg: black
     - label: Zo 5 Juli
       label_short: Zo 5 Jul
       label_short_weekday: Zo

@@ -194,7 +194,7 @@ async function run(input) {
         calIdx: e.calIdx,
         hueOverride: e.hueOverride,
         personBadges: e.personBadges,
-        label: fmtTime(vs, tz, is12h) + "–" + fmtTime(ve, tz, is12h),
+        label: fmtTime(vs, tz, is12h) + "-" + fmtTime(ve, tz, is12h),
       });
     }
     timed.sort((a, b) => a.h0 - b.h0);
@@ -1584,13 +1584,20 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
     });
 
     // Agenda variant of this same day, for the full view's own list-with-overflow rendering
-    // (an alternative to the segments/events timeline above) — two differences from the
+    // (an alternative to the segments/events timeline above) — one difference from the
     // single-day views' agenda (data.single_day.agenda): it shows the WHOLE day's schedule, not
     // just what's still ahead of "now" (this is a multi-day at-a-glance overview, where hiding a
     // day's earlier events would look inconsistent next to neighboring days that show
-    // everything), and it excludes all-day items — the full view's own all-day bars (above,
-    // spanning multiple days with continuation styling) are the right tool for those already;
-    // repeating them per-day here would just duplicate them without showing that continuity.
+    // everything). All-day items covering this day are prepended using the same agenda_row
+    // treatment as a timed event (no time label) — matching how the single-day views already
+    // show them — instead of this style's own bars, which shared.liquid suppresses (allday_pct
+    // forced to 0) so the list reclaims that header space instead of duplicating them.
+    const dayAlldayBars = alldayBars.filter((b) => di >= b.startCol && di < b.startCol + b.span);
+    const agendaAllDay = dayAlldayBars.map((b) => ({
+      time: null, all_day: true, title: b.title,
+      hue: colorClass(b.hue), fg: foregroundFor(b.hue), current: false,
+      badges: b.personBadges || [],
+    }));
     const agendaEvents = d.timed.map((ev) => {
       const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);
       return {
@@ -1611,10 +1618,9 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
       const timeLabel = hourDisplay + ":00" + period;
       return { sortH: m.h, item: weatherMarkerItem(m.kind, m.starting, timeLabel, weatherI18n) };
     });
-    const agenda = agendaEvents.concat(agendaWeather)
-      .sort((a, b) => a.sortH - b.sortH)
-      .map((x) => x.item)
-      .slice(0, AGENDA_SANITY_CAP);
+    const agenda = agendaAllDay.concat(
+      agendaEvents.concat(agendaWeather).sort((a, b) => a.sortH - b.sortH).map((x) => x.item)
+    ).slice(0, AGENDA_SANITY_CAP);
 
     outDays.push({
       label: d.label, label_short: d.labelShort,
