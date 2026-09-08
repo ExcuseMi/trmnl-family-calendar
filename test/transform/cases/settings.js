@@ -31,18 +31,18 @@ module.exports = function (test, h) {
     assertEqual(r.data.days.length, 3, 'unparseable view_days should fall back to the plugin default (3)');
   });
 
-  test('full_view_style: defaults to the agenda list (data.full_view_grid false) when unset', async () => {
+  test('full_view_style: defaults to the timeline grid (data.full_view_grid true) when unset', async () => {
     const fetchImpl = async () => okText(icsWithEvents([EVENT]));
     const { run } = runTransform(fetchImpl, NOW);
     const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics' }));
-    assertEqual(r.data.full_view_grid, false, 'agenda list should be the default');
+    assertEqual(r.data.full_view_grid, true, 'timeline grid should be the default, matching settings.yml\'s own default: grid');
   });
 
-  test('full_view_style: "grid" selects the timeline grid (data.full_view_grid true)', async () => {
+  test('full_view_style: "agenda" selects the agenda list (data.full_view_grid false)', async () => {
     const fetchImpl = async () => okText(icsWithEvents([EVENT]));
     const { run } = runTransform(fetchImpl, NOW);
-    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics', full_view_style: 'grid' }));
-    assertEqual(r.data.full_view_grid, true, '"grid" should select the timeline grid');
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics', full_view_style: 'agenda' }));
+    assertEqual(r.data.full_view_grid, false, '"agenda" should select the agenda list');
   });
 
   test('time_format: 24h shows raw 0-23 hours with no AM/PM period', async () => {

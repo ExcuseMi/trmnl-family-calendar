@@ -48,7 +48,7 @@ async function run(input) {
   const rssUrl = newsFeedEnabled ? cf(input, "rss_url").trim() : "";
   const rssLabel = cf(input, "rss_label").trim() || "NEWS";
   const daysN = toInt(cf(input, "view_days"), DEFAULT_DAYS, 1, 3);
-  const fullViewGrid = cf(input, "full_view_style").trim().toLowerCase() === "grid";
+  const fullViewGrid = cf(input, "full_view_style").trim().toLowerCase() !== "agenda";
 
   const tz = resolveTz(tzname, input);
 
