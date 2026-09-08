@@ -44,21 +44,38 @@
   {%- assign row_border_color = "currentColor" -%}
   {%- if item.fg == "white" -%}{%- assign row_border_color = "#888888" -%}{%- endif -%}
   <div class="item w--full bg--{{ item.hue }} rounded--xsmall relative" style="overflow:hidden;flex-shrink:0;border:2px solid {{ row_border_color }};box-shadow:2px 2px 0 0 {{ row_border_color }};{% if item.current %}outline:2px solid {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};outline-offset:1px;{% endif %}">
-    <div class="w--full flex flex--row flex--center-y gap--small text--{{ item.fg }} px--2 py--1" style="min-width:0;">
-      {% if item.time %}<span class="label {{ axis_cls }} text--{{ item.fg }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
-      {%- if title_clamp and title_clamp > 1 -%}
-        <span class="title {{ event_title_cls }} text--{{ item.fg }}" style="flex:1 1 auto;min-width:0;overflow-wrap:anywhere;" data-clamp="{{ title_clamp }}">{{ item.title }}</span>
-      {%- else -%}
+    {%- if title_clamp and title_clamp > 1 -%}
+      {%- comment -%}
+        Stacked layout: time (+ badges) on their own first line, title wrapping below on its
+        own line(s) — requested specifically for the full view's narrower columns, where titles
+        need real width to wrap into rather than competing with the time for horizontal space.
+      {%- endcomment -%}
+      <div class="w--full flex flex--col gap--xsmall text--{{ item.fg }} px--2 py--1" style="min-width:0;">
+        <div class="w--full flex flex--row flex--center-y gap--small" style="min-width:0;">
+          {% if item.time %}<span class="label {{ axis_cls }} text--{{ item.fg }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
+          {% if item.badges and item.badges.size > 0 %}
+            <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;margin-left:auto;">
+              {% for badge in item.badges limit: 2 %}
+                {%- render "badge_circle", badge_w_expr: "22px", badge_h_expr: "22px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
+              {% endfor %}
+            </span>
+          {% endif %}
+        </div>
+        <span class="title {{ event_title_cls }} text--{{ item.fg }}" style="min-width:0;overflow-wrap:anywhere;" data-clamp="{{ title_clamp }}">{{ item.title }}</span>
+      </div>
+    {%- else -%}
+      <div class="w--full flex flex--row flex--center-y gap--small text--{{ item.fg }} px--2 py--1" style="min-width:0;">
+        {% if item.time %}<span class="label {{ axis_cls }} text--{{ item.fg }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
         <span class="title {{ event_title_cls }} text--{{ item.fg }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
-      {%- endif -%}
-      {% if item.badges and item.badges.size > 0 %}
-        <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;">
-          {% for badge in item.badges limit: 2 %}
-            {%- render "badge_circle", badge_w_expr: "22px", badge_h_expr: "22px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
-          {% endfor %}
-        </span>
-      {% endif %}
-    </div>
+        {% if item.badges and item.badges.size > 0 %}
+          <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;">
+            {% for badge in item.badges limit: 2 %}
+              {%- render "badge_circle", badge_w_expr: "22px", badge_h_expr: "22px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
+            {% endfor %}
+          </span>
+        {% endif %}
+      </div>
+    {%- endif -%}
   </div>
 {% endtemplate %}
 
