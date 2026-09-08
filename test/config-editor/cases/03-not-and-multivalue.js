@@ -1,13 +1,13 @@
 module.exports = function (test, h) {
   const { loadEditor, fireInput, fireChange, click, buttonByText, jsonOut, selectMulti, assert, assertEqual } = h;
 
-  // Setting up the person BEFORE the rule/condition matters: naming a
-  // person re-renders #globalRules (so every rule can offer them in its
-  // person picker), which would detach any rule/condition DOM reference
+  // Setting up the track BEFORE the rule/condition matters: naming a
+  // track re-renders #globalRules (so every rule can offer them in its
+  // track picker), which would detach any rule/condition DOM reference
   // grabbed beforehand.
   function ruleWithCondition(document, value, negate) {
-    fireInput(document.querySelector('#people .card .title-input'), 'Sam');
-    fireChange(document.querySelector('#people .card .title-input'));
+    fireInput(document.querySelector('#tracks .card .title-input'), 'Sam');
+    fireChange(document.querySelector('#tracks .card .title-input'));
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), value);
@@ -53,7 +53,7 @@ module.exports = function (test, h) {
   test('importing not(or(word...)) round-trips back into one negated, comma-joined condition', () => {
     const { document } = loadEditor();
     const cfg = {
-      people: [{ name: 'Familie' }, { name: 'Kato' }],
+      tracks: [{ name: 'Familie' }, { name: 'Kato' }],
       rules: [{
         match: { type: 'and', matchers: [
           { type: 'or', matchers: [{ type: 'word', value: 'L1' }, { type: 'word', value: 'L3' }] },

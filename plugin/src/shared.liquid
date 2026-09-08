@@ -10,7 +10,7 @@
     2. Time window — if the canvas can't give every hour enough pixels, the
        visible window narrows around "now" and events outside it are
        summarised as "+N earlier / +N later" at the ends of the line.
-    3. Spine — every person's line runs the full length of the canvas in
+    3. Spine — every track's line runs the full length of the canvas in
        one bundle. The hour axis runs down the MIDDLE of the bundle (work
        lines on one side of it, family lines on the other), so no branch
        ever has to cross the hour labels.
@@ -100,6 +100,7 @@
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var LEGEND = METRO.legend || [];
+  var STATIONS = METRO.stations || [];
   var DAY_START = METRO.day_start_min, DAY_END = METRO.day_end_min;
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -124,7 +125,7 @@
   }
   // On a 1-bit panel every line is solid black and the dash patterns tell
   // them apart — a dithered gray 3px line is just speckle. Grayscale panels
-  // get the framework-resolved shade for each person's hue.
+  // get the framework-resolved shade for each track's hue.
   var screenEl = canvas.closest('.screen');
   var ONE_BIT = !!(screenEl && screenEl.classList.contains('screen--1bit'));
   var colorCache = {};
@@ -246,6 +247,7 @@
     var LINE_GAP = 6 * S, LANE_GAP = 12 * S, LANE_BASE = 14 * S + Math.min(24 * S, crossPx * 0.025), EDGE = 8 * S;
     var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 9 * S, MIN_DIAG = 10 * S;
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
+    var STATION_RAISE = 34 * S; // how far a track's own line kinks out to "station level" — tall enough that the caption fits inside the gap the kink opens up, not squeezed against it
 
     function toXY(a, c) { return horizontal ? [a, c] : [c, a]; }
 
@@ -270,10 +272,18 @@
         p._c = sign * p._dist;
         p._sign = sign;
         p._sideKey = s;
+        // raw minute-range stations for this track — converted to axis-unit
+        // segments once aFor() exists, below
+        p._stations = STATIONS.filter(function (st) { return st.owner === p.key; }).sort(function (a, b) { return a.start_min - b.start_min; });
         trackByKey[p.key] = p;
       });
     });
-    function bundleHalf(s) { return gutterHalf + TRACK_STEP * sides[s].length + (sides[s].length ? NODE_R : 0); }
+    function bundleHalf(s) {
+      // a track passing through a station kinks its own line outward, so
+      // that side needs a little extra room before the first real lane
+      var stationRoom = sides[s].some(function (p) { return p._stations.length; }) ? STATION_RAISE : 0;
+      return gutterHalf + TRACK_STEP * sides[s].length + (sides[s].length ? NODE_R : 0) + stationRoom;
+    }
 
     // ---- time window: first fit to where the day's actual content is (so a
     // quiet day doesn't stretch its few events across a mostly-empty
@@ -284,6 +294,11 @@
     var MIN_SPAN = 6 * 60;  // never fit tighter than this, even on a nearly-empty day
     var contentTimes = [];
     METRO.items.forEach(function (i) { if (i.type === 'event') { contentTimes.push(i.start_min); contentTimes.push(i.end_min); } });
+    // an all-day-derived station is deliberately full-day-wide — it must
+    // not drag the content-fit window out to match it, or a single
+    // all-day event would defeat the whole "narrow around what's actually
+    // busy" feature for everyone else on a quiet day
+    STATIONS.forEach(function (st) { if (st.all_day) return; contentTimes.push(st.start_min); contentTimes.push(st.end_min); });
     if (nowMin != null) contentTimes.push(nowMin);
     var winStart = DAY_START, winEnd = DAY_END;
     if (contentTimes.length) {
@@ -307,6 +322,31 @@
     var axisStart = NODE_R + 2 * S, axisEnd = axisPx - NODE_R - 2 * S; // rings at the window edges stay whole; tracks still run full bleed
     function aFor(min) { return axisStart + (min - winStart) / (winEnd - winStart) * (axisEnd - axisStart); }
     var pxPerHour = aFor(60) - aFor(0);
+
+    // ---- stations: convert each track's raw minute ranges to clamped
+    // axis-unit segments now that aFor()/axisStart/axisEnd exist
+    LEGEND.forEach(function (p) {
+      p._stations = p._stations.map(function (st) {
+        return { a0: clamp(aFor(st.start_min), axisStart, axisEnd), a1: clamp(aFor(st.end_min), axisStart, axisEnd), title: st.title, location: st.location || null };
+      }).filter(function (s) { return s.a1 > s.a0; });
+    });
+    // the raise (in c-units) a track's own line sits at, at a given axis
+    // position — 0 outside any station, ramping up/down across the same
+    // 45° kink stationPath() actually draws (not a flat step), so an
+    // event whose ring lands inside the kink itself — not just the flat
+    // middle — still sits exactly on the drawn line, not floating off it
+    function stationRaiseAt(p, a) {
+      var segs = p._stations;
+      for (var i = 0; i < segs.length; i++) {
+        var s = segs[i];
+        if (a < s.a0 || a > s.a1) continue;
+        var rr = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
+        if (a < s.a0 + rr) return a - s.a0;
+        if (a > s.a1 - rr) return s.a1 - a;
+        return rr;
+      }
+      return 0;
+    }
 
     // ---- events
     var all = dedupe(METRO.items.filter(function (i) { return i.type === 'event'; }));
@@ -456,7 +496,7 @@
     }
     if (!fan) LEGEND.forEach(function (p) { p._nameEl.remove(); p._nameEl = null; });
 
-    // ---- corner legend: one swatch + name per person, drawn at the canvas's
+    // ---- corner legend: one swatch + name per track, drawn at the canvas's
     // visual bottom-left. Built and measured now (fixed size, independent of
     // the text tier) so it can reserve real lane space instead of floating
     // over content: "bottom-left" is side B at the axis start in horizontal
@@ -501,8 +541,12 @@
       e._involved = involved;
       var outer = p._dist;
       involved.forEach(function (q) { if (q._sign === p._sign) outer = Math.max(outer, q._dist); });
-      e._trackDist = outer + NODE_R;       // branch origin (edge of the ring/capsule)
-      e._trackDistEnd = p._dist + NODE_R;  // merge target (owner's own line)
+      // if this event's start (or end) falls inside one of the owner's own
+      // stations, its ring sits on the raised "station level" segment of
+      // the line, not the flat baseline — so the branch has to originate
+      // (or merge back) from that raised height too
+      e._trackDist = outer + stationRaiseAt(p, e._nodeA) + NODE_R;       // branch origin (edge of the ring/capsule)
+      e._trackDistEnd = p._dist + stationRaiseAt(p, e._endA) + NODE_R;   // merge target (owner's own line)
     });
 
     var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped;
@@ -562,7 +606,7 @@
       function settle(e, k, dir, allowCross) {
         var ld = laneDist(k);
         // dy (the diagonal's axis reach) depends only on the lane index, not
-        // on which track this event's ring sits on — otherwise two people's
+        // on which track this event's ring sits on — otherwise two tracks'
         // simultaneous events, on different tracks, land on the same lane at
         // DIFFERENT axis positions (their branches travel different cross-
         // distances to reach the same nominal lane, so a same-45°-angle
@@ -591,7 +635,7 @@
             // owner's own spur, so slide past it and keep riding the same
             // line. Same owner but the OPPOSITE direction (a backward branch
             // forced near the end of the axis, reaching back toward an
-            // earlier forward-going event of the same person) is NOT that —
+            // earlier forward-going event of the same track) is NOT that —
             // sliding through it would drag the label far from its own true
             // time and read as visually out of order, so treat it as a
             // foreign obstacle to route around instead.
@@ -784,6 +828,21 @@
       else svg.appendChild(svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1], stroke: '#333', 'stroke-width': 1.5 * S, 'stroke-dasharray': (6 * S) + ' ' + (4 * S) }));
     });
 
+    // a track's own line/rings kink out to "station level" for the span of
+    // any station it passes through, then back to the flat baseline —
+    // waypoints in [fromA,toA] order, ready for roundedPath
+    function stationPath(baseC, sign, fromA, toA, p) {
+      var pts = [[fromA, baseC]];
+      p._stations.forEach(function (s) {
+        var s0 = Math.max(s.a0, fromA), s1 = Math.min(s.a1, toA);
+        if (s1 <= s0) return;
+        var rr = Math.min(STATION_RAISE, (s1 - s0) / 2);
+        var peak = baseC + sign * rr;
+        pts.push([s0, baseC], [s0 + rr, peak], [s1 - rr, peak], [s1, baseC]);
+      });
+      pts.push([toA, baseC]);
+      return pts;
+    }
     // ---- tracks (full bleed), each starting at its named terminus when fanned
     LEGEND.forEach(function (p) {
       var c = spineC + p._c;
@@ -797,15 +856,42 @@
         p._nameEl.style.left = (d > 0 ? 2 * S : axisPx - 2 * S - p._nameW) + 'px';
         p._nameEl.style.top = (spreadC - p._nameH / 2) + 'px';
         var far = d > 0 ? axisEnd : axisStart;
-        var path = svgEl('path', { d: roundedPath([[nameEnd, spreadC], [fanStart, spreadC], [merge, c], [far, c]], CORNER) });
+        var legPts = stationPath(c, p._sign, Math.min(merge, far), Math.max(merge, far), p);
+        if (d < 0) legPts = legPts.slice().reverse();
+        var path = svgEl('path', { d: roundedPath([[nameEnd, spreadC], [fanStart, spreadC]].concat(legPts), CORNER) });
         styleStroke(path, p, S);
         svg.appendChild(path);
       } else {
-        var t0 = toXY(axisStart, c), t1 = toXY(axisEnd, c);
-        var ln = svgEl('line', { x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1] });
+        var ln = svgEl('path', { d: roundedPath(stationPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
         styleStroke(ln, p, S);
         svg.appendChild(ln);
       }
+    });
+    // ---- station markers: a hollow ring at each end, sitting exactly where
+    // the kink itself starts/ends (the true, unmoved boundary time — same
+    // convention as every other ring in this design), plus a caption tucked
+    // just inside the gap the kink opens up — between the flat baseline and
+    // the raised peak, not beyond the peak into lane territory — so a big
+    // enough jump comfortably fits the label under (or over) it
+    LEGEND.forEach(function (p) {
+      var baseC = spineC + p._c;
+      p._stations.forEach(function (s) {
+        var raise = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
+        var peakC = baseC + p._sign * raise;
+        [s.a0, s.a1].forEach(function (a) {
+          var xy = toXY(a, baseC);
+          svg.appendChild(svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R * 0.7, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8 }));
+        });
+        var capA = s.a0 + raise + 4 * S;
+        var capC = peakC - p._sign * (3 * S); // just inside the peak line, reading back down/up toward the base
+        var cxy = toXY(capA, capC);
+        var label = s.title + (s.location ? ' — ' + s.location : '');
+        var t = svgEl('text', horizontal
+          ? { x: cxy[0], y: cxy[1], 'text-anchor': 'start', 'dominant-baseline': p._sign < 0 ? 'hanging' : 'auto', 'font-size': (11 * S) + 'px', 'font-style': 'italic', fill: '#666' }
+          : { x: cxy[0], y: cxy[1], 'text-anchor': p._sign < 0 ? 'end' : 'start', 'dominant-baseline': 'middle', 'font-size': (11 * S) + 'px', 'font-style': 'italic', fill: '#666' });
+        t.textContent = label;
+        svg.appendChild(t);
+      });
     });
     if (!fan) {
       // lettered bullets, staggered along the line starts
@@ -909,7 +995,7 @@
         r.setAttribute('fill', '#fff'); r.setAttribute('stroke', '#000'); r.setAttribute('stroke-width', NODE_STROKE);
         svg.appendChild(r);
       } else {
-        var cxy = toXY(e._nodeA, spineC + p._c);
+        var cxy = toXY(e._nodeA, spineC + p._c + p._sign * stationRaiseAt(p, e._nodeA));
         var ring = svgEl('circle', { cx: cxy[0], cy: cxy[1], r: NODE_R, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE });
         svg.appendChild(ring);
       }

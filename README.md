@@ -1,6 +1,6 @@
 # Metro Calendar for TRMNL
 
-Your family's day drawn as a transit map. One line per person runs along a
+Your family's day drawn as a transit map. One line per track runs along a
 central spine with the hour axis down its middle; events are stations,
 labels sit on 45° branches, long events loop out and rejoin their line, and
 the whole thing lays itself out to the screen it lands on: TRMNL OG, OG V2,
@@ -16,7 +16,7 @@ No server of your own.
 
 - Today, 07:00–21:00 (narrowed around now on small views), with "+N earlier"
   and "+N more" counts at the ends of the line.
-- Work on one side of the spine, family on the other. Each person's line has
+- Work on one side of the spine, family on the other. Each track's line has
   its own dash pattern (and shade on grayscale panels), is named where it
   enters the map, and appears in the legend.
 - Events as rings at their true start time; shared events as capsules across
@@ -51,22 +51,22 @@ No server of your own.
 
 ```json
 {
-  "people": [
+  "tracks": [
     { "name": "Sam", "side": "work" },
     { "name": "Alex" },
     { "name": "Kids", "color": "gray-40" }
   ],
   "calendars": [
-    { "name": "Work", "url": "https://…/work.ics", "rules": [{ "match": { "type": "any" }, "person": "Sam" }] },
-    { "name": "Alex", "url": "https://…/alex.ics", "rules": [{ "match": { "type": "any" }, "person": "Alex" }] },
+    { "name": "Work", "url": "https://…/work.ics", "rules": [{ "match": { "type": "any" }, "track": "Sam" }] },
+    { "name": "Alex", "url": "https://…/alex.ics", "rules": [{ "match": { "type": "any" }, "track": "Alex" }] },
     { "name": "School", "url": "https://…/school.ics",
-      "rules": [{ "match": { "type": "word", "value": "L2" }, "person": "Kids" }, { "match": { "type": "contains", "value": "staff" }, "hide": true }] }
+      "rules": [{ "match": { "type": "word", "value": "L2" }, "track": "Kids" }, { "match": { "type": "contains", "value": "staff" }, "hide": true }] }
   ]
 }
 ```
 
 Rules match on the title (`word`, `contains`, `exact`, `regex`, `status`,
-`weekday`, `any`, or `and`/`or` of those) and can assign one or more people,
+`weekday`, `any`, or `and`/`or` of those) and can assign one or more tracks,
 rewrite the title, or hide the event. Everything is documented in
 [CONFIG.md](CONFIG.md); the design of the map itself in [DESIGN.md](DESIGN.md).
 

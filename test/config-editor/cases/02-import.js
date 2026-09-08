@@ -9,10 +9,10 @@ module.exports = function (test, h) {
     document.getElementById('importIn').value = JSON.stringify(demo);
     click(document.getElementById('loadImport'));
     const out = jsonOut(document);
-    assertEqual(out.people, demo.people);
+    assertEqual(out.tracks, demo.tracks);
     assertEqual(out.calendars, demo.calendars);
     assertEqual(out.timeZone, demo.timeZone);
-    assert(document.querySelectorAll('#people .card').length === demo.people.length);
+    assert(document.querySelectorAll('#tracks .card').length === demo.tracks.length);
   });
 
   test('a plain list of ICS links imports as bare calendars', () => {
@@ -22,12 +22,12 @@ module.exports = function (test, h) {
     assertEqual(jsonOut(document).calendars, [{ url: 'https://a.example/x.ics' }, { url: 'webcal://b.example/y.ics' }]);
   });
 
-  test('people named only in rules are added to the people list on import', () => {
+  test('tracks named only in rules are added to the tracks list on import', () => {
     const { document } = loadEditor();
-    document.getElementById('importIn').value = JSON.stringify({ calendars: [{ url: 'https://a.example/x.ics', rules: [{ match: { type: 'word', value: 'Yoga' }, person: 'Alex' }] }] });
+    document.getElementById('importIn').value = JSON.stringify({ calendars: [{ url: 'https://a.example/x.ics', rules: [{ match: { type: 'word', value: 'Yoga' }, track: 'Alex' }] }] });
     click(document.getElementById('loadImport'));
-    assertEqual(jsonOut(document).people, [{ name: 'Alex' }]);
-    assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'Yoga' }, person: 'Alex' }]);
+    assertEqual(jsonOut(document).tracks, [{ name: 'Alex' }]);
+    assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'Yoga' }, track: 'Alex' }]);
   });
 
   test('the editor parses its own output with the plugin\'s parseConfig', () => {
@@ -36,7 +36,30 @@ module.exports = function (test, h) {
     click(document.getElementById('loadImport'));
     const parsed = window.parseConfig(document.getElementById('jsonOut').value);
     assert(parsed.calendars.length === demo.calendars.length);
-    assert(Object.keys(parsed.people).length === demo.people.length);
-    assert(parsed.people['sam'].side === 'left');
+    assert(Object.keys(parsed.tracks).length === demo.tracks.length);
+    assert(parsed.tracks['sam'].side === 'left');
+  });
+
+  test('importing a legacy config (top-level "people", rule "person") still loads tracks and rules correctly', () => {
+    const { document } = loadEditor();
+    document.getElementById('importIn').value = JSON.stringify({
+      people: [{ name: 'Nala', color: 'gray-40' }],
+      calendars: [{ url: 'https://a.example/x.ics', rules: [{ match: { type: 'word', value: 'L6' }, person: 'Nala' }] }],
+    });
+    click(document.getElementById('loadImport'));
+    assertEqual(jsonOut(document).tracks, [{ name: 'Nala', color: 'gray-40' }]);
+    assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'L6' }, track: 'Nala' }]);
+  });
+
+  test('importing a "station" rule round-trips and checks the station box', () => {
+    const { document } = loadEditor();
+    document.getElementById('importIn').value = JSON.stringify({
+      tracks: [{ name: 'Ward' }],
+      calendars: [{ url: 'https://a.example/x.ics', rules: [{ match: { type: 'word', value: 'Desk booking' }, station: true }] }],
+    });
+    click(document.getElementById('loadImport'));
+    assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'Desk booking' }, station: true }]);
+    const rule = document.querySelector('#calendars .card .rule');
+    assert(rule.querySelectorAll('input[type=checkbox]')[3].checked, 'the station checkbox should reflect the imported rule');
   });
 };

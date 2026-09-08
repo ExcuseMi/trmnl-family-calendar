@@ -53,23 +53,23 @@ module.exports = function (test, h) {
     assert(cfg2.calendars[0].rules[0].rx.test('anything'), '"all" should be accepted as a synonym for "any"');
   });
 
-  test('an "any" match assigning a person defaults rename to false (opt-in, not opt-out)', () => {
+  test('an "any" match assigning a track defaults rename to false (opt-in, not opt-out)', () => {
     const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, person: 'Ward' }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, track: 'Ward' }] }],
     });
     assert(cfg.calendars[0].rules[0].rename === false, 'rename should default to false for a catch-all match');
   });
 
   test('an "any" match can still opt into rename explicitly', () => {
     const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, person: 'Ward', rename: true }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, track: 'Ward', rename: true }] }],
     });
     assert(cfg.calendars[0].rules[0].rename === true, 'rename:true should still be honored when explicitly set on an "any" match');
   });
 
   test('a word/regex match still defaults rename to true, unaffected by the "any" default change', () => {
     const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L6' }, person: 'Alex' }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L6' }, track: 'Alex' }] }],
     });
     assert(cfg.calendars[0].rules[0].rename === true);
   });
@@ -79,37 +79,37 @@ module.exports = function (test, h) {
     assert(cfg.calendars[0].rules.length === 0, 'a rule missing "match" entirely should be silently dropped');
   });
 
-  test('a rule with no effect (no person/allDay/hide/rewrite) is dropped', () => {
+  test('a rule with no effect (no track/allDay/hide/rewrite) is dropped', () => {
     const cfg = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L1' } }] }] });
     assert(cfg.calendars[0].rules.length === 0, 'a rule that does nothing should be dropped, not kept as a no-op');
   });
 
-  test('a rule\'s person is normalized to an array even when given a single string', () => {
+  test('a rule\'s track is normalized to an array even when given a single string', () => {
     const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L1' }, person: 'Alex', allDay: true }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L1' }, track: 'Alex', allDay: true }] }],
     });
     const rule = cfg.calendars[0].rules[0];
     assert(rule.allDay === true);
     assert(rule.hide === false, 'hide should default to false');
-    assert(JSON.stringify(rule.person) === JSON.stringify(['Alex']));
+    assert(JSON.stringify(rule.track) === JSON.stringify(['Alex']));
   });
 
-  test('a rule\'s person field also accepts a list directly', () => {
+  test('a rule\'s track field also accepts a list directly', () => {
     const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'Dinner' }, person: ['Alex', 'Kids'] }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'Dinner' }, track: ['Alex', 'Kids'] }] }],
     });
-    assert(JSON.stringify(cfg.calendars[0].rules[0].person) === JSON.stringify(['Alex', 'Kids']));
+    assert(JSON.stringify(cfg.calendars[0].rules[0].track) === JSON.stringify(['Alex', 'Kids']));
   });
 
   test('a calendar rule with an invalid matcher (missing value) drops the rule, not the calendar', () => {
-    const cfg = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word' }, person: 'Alex' }] }] });
+    const cfg = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word' }, track: 'Alex' }] }] });
     assert(cfg.calendars[0].rules.length === 0);
     assert(cfg.calendars.length === 1, 'the calendar itself should still be kept');
   });
 
   test('global (top-level) rules compile separately from any calendar\'s own', () => {
     const cfg = parse({
-      rules: [{ match: { type: 'word', value: 'Doctor' }, person: 'Mom' }],
+      rules: [{ match: { type: 'word', value: 'Doctor' }, track: 'Mom' }],
       calendars: [{ url: 'https://x/a.ics' }],
     });
     assert(cfg.globalRules.length === 1, 'the top-level rule should compile');
@@ -236,7 +236,7 @@ module.exports = function (test, h) {
     ];
     const fetchImpl = async () => okText(icsWithEvents(events));
     const cfg = JSON.stringify({
-      people: [{ name: 'Familie' }, { name: 'Kato' }, { name: 'Nala' }],
+      tracks: [{ name: 'Familie' }, { name: 'Kato' }, { name: 'Nala' }],
       calendars: [{
         url: 'https://example.com/familie.ics', name: 'Familie',
         rules: [
@@ -248,14 +248,14 @@ module.exports = function (test, h) {
             ] },
             hide: true,
           },
-          { match: { type: 'word', value: 'L2' }, person: 'Kato' },
-          { match: { type: 'word', value: 'L6' }, person: 'Nala' },
+          { match: { type: 'word', value: 'L2' }, track: 'Kato' },
+          { match: { type: 'word', value: 'L6' }, track: 'Nala' },
         ],
       }],
     });
     const NOW = Date.parse('2026-09-08T12:00:00Z');
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, { config_json: cfg }));
     const titles = eventItems(r.metro).map((e) => e.title).sort();
-    assertEqual(titles, ['Kato - Extra turnen', 'Nala - Extra turnen'], 'only L2/L6 should survive the hide rule, each renamed to its person by the later word rules');
+    assertEqual(titles, ['Kato - Extra turnen', 'Nala - Extra turnen'], 'only L2/L6 should survive the hide rule, each renamed to its track by the later word rules');
   });
 };

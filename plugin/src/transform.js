@@ -5,7 +5,7 @@
 //     always shown — no network, no config needed, safe fallback.
 //   - config: a real calendar config pasted into the "Calendar Config"
 //     setting, same JSON shape as this repo's calendar-config.json /
-//     demo-config.json ({ calendars: [{url,name,rules}], people, timeZone,
+//     demo-config.json ({ calendars: [{url,name,rules}], tracks, timeZone,
 //     rules }). Calendars are fetched as plain ICS and parsed with a small
 //     hand-rolled parser (TRMNL Serverless only guarantees the built-in
 //     HTTP client, not an ICS library — see topics/serverless.md).
@@ -23,14 +23,18 @@
 // true, EXCEPT on an any/all match where it defaults to false — a
 // catch-all shouldn't silently rewrite every title unless asked), a
 // top-level `rules` array applied before each calendar's own (a
-// calendar's own rule wins when both assign a person to the same event),
-// a `person` field that can be a list (multiple people on the same
+// calendar's own rule wins when both assign a track to the same event),
+// a `track` field that can be a list (multiple tracks on the same
 // event become an interchange node, metro-plugin's own concept for a
-// shared event), and an `everyonePerson` fallback (the first entry in
-// `people[]`) for any event no rule assigns a person to.
+// shared event), and an `everyoneTrack` fallback (the first entry in
+// `tracks[]`) for any event no rule assigns a track to.
 //
-// `people[].side` ("left"/"work" or "right"/"family") pins a person to a
-// side of the map; without it the person a calendar named "Work" assigns
+// (For compatibility with configs written before tracks were called
+// tracks: the legacy top-level `people` key and per-rule `person` field
+// are still accepted as aliases for `tracks`/`track`.)
+//
+// `tracks[].side` ("left"/"work" or "right"/"family") pins a track to a
+// side of the map; without it the track a calendar named "Work" assigns
 // goes left and everyone else right. `locale` in the config overrides the
 // account locale for the string table and date names.
 //
@@ -54,7 +58,7 @@
 //     placeholder in both modes.
 //
 // Both branches converge on the SAME buildMetro() — the rest of the
-// pipeline (hour ticks, sub-spur detection, the "now" marker, people
+// pipeline (hour ticks, sub-spur detection, the "now" marker, tracks
 // list) doesn't care whether events came from DUMMY_EVENTS or real ICS.
 
 var DAY_START_MIN = 7 * 60;
@@ -275,9 +279,9 @@ function resolveTz(explicitTzname, input) {
 }
 
 // ---------------------------------------------------------------------
-// buildMetro: the shared pipeline. `events`: [{person, title, startMin,
+// buildMetro: the shared pipeline. `events`: [{track, title, startMin,
 // endMin, location, interchange_with}], startMin/endMin are minutes
-// since midnight LOCAL time. `people`: [{key,name,side,hue,track_offset,
+// since midnight LOCAL time. `tracks`: [{key,name,side,hue,track_offset,
 // line_width,line_style}].
 //
 // transform.js is a pure data normalizer — it does NOT decide where
@@ -294,37 +298,38 @@ function resolveTz(explicitTzname, input) {
 // itself. See that file's own header comment for the full breakdown.
 // ---------------------------------------------------------------------
 
-function buildMetro(people, events, weatherMilestones, headerWeather, nowMin, windowLabel, allDayEvents, extra) {
-  var peopleByKey = {};
-  people.forEach(function (p) { peopleByKey[p.key] = p; });
+function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, windowLabel, allDayEvents, extra, stationEvents) {
+  var trackByKey = {};
+  tracks.forEach(function (t) { trackByKey[t.key] = t; });
 
-  // A configured person with nothing on today's board gets no line and no
+  // A configured track with nothing on today's board gets no line and no
   // legend entry — otherwise every day carries every ever-configured
-  // person's empty track, permanently eating spine width. Side/hue/style
+  // track's empty line, permanently eating spine width. Side/hue/style
   // stay whatever finalize() decided from the FULL registered set (so a
-  // person's color/side identity doesn't shift day to day depending on
+  // track's color/side identity doesn't shift day to day depending on
   // who else happens to be busy); only the per-side offset is repacked
-  // against just today's active people, closing the gaps a filtered-out
-  // person would otherwise leave.
+  // against just today's active tracks, closing the gaps a filtered-out
+  // track would otherwise leave.
   var activeKeys = {};
   events.forEach(function (ev) {
-    if (!peopleByKey[ev.person]) return;
-    activeKeys[ev.person] = true;
-    (ev.interchange_with || []).forEach(function (key) { if (peopleByKey[key]) activeKeys[key] = true; });
+    if (!trackByKey[ev.track]) return;
+    activeKeys[ev.track] = true;
+    (ev.interchange_with || []).forEach(function (key) { if (trackByKey[key]) activeKeys[key] = true; });
   });
-  (allDayEvents || []).forEach(function (ev) { if (peopleByKey[ev.person]) activeKeys[ev.person] = true; });
-  people = people.filter(function (p) { return activeKeys[p.key]; });
+  (allDayEvents || []).forEach(function (ev) { if (trackByKey[ev.track]) activeKeys[ev.track] = true; });
+  (stationEvents || []).forEach(function (ev) { if (trackByKey[ev.track]) activeKeys[ev.track] = true; });
+  tracks = tracks.filter(function (t) { return activeKeys[t.key]; });
   var sideIdx = { left: 0, right: 0 };
-  people.forEach(function (p) { p.track_offset = TRACK_STEP * (++sideIdx[p.side]) * (p.side === 'left' ? -1 : 1); });
-  peopleByKey = {};
-  people.forEach(function (p) { peopleByKey[p.key] = p; });
+  tracks.forEach(function (t) { t.track_offset = TRACK_STEP * (++sideIdx[t.side]) * (t.side === 'left' ? -1 : 1); });
+  trackByKey = {};
+  tracks.forEach(function (t) { trackByKey[t.key] = t; });
 
   var items = [];
 
   events.forEach(function (ev) {
-    var person = peopleByKey[ev.person];
-    if (!person) return; // no resolved/known person for this event — drop it rather than guess
-    var coOwners = (ev.interchange_with || []).filter(function (key) { return !!peopleByKey[key]; });
+    var track = trackByKey[ev.track];
+    if (!track) return; // no resolved/known track for this event — drop it rather than guess
+    var coOwners = (ev.interchange_with || []).filter(function (key) { return !!trackByKey[key]; });
     items.push({
       type: 'event',
       _sortMin: ev.startMin,
@@ -332,25 +337,49 @@ function buildMetro(people, events, weatherMilestones, headerWeather, nowMin, wi
       start_min: ev.startMin,
       end_min: ev.endMin,
       location: ev.location || null,
-      owner: person.key,
-      co_owners: coOwners, // other person keys sharing this event (an interchange) — empty for a normal event
-      side: person.side,
-      hue: person.hue,
-      track_width: person.line_width,
-      track_style: person.line_style,
-      track_offset: person.track_offset,
+      owner: track.key,
+      co_owners: coOwners, // other track keys sharing this event (an interchange) — empty for a normal event
+      side: track.side,
+      hue: track.hue,
+      track_width: track.line_width,
+      track_style: track.line_style,
+      track_offset: track.track_offset,
     });
   });
 
   var allDayOut = [];
   var seenAllDay = {};
   (allDayEvents || []).forEach(function (ev) {
-    var person = peopleByKey[ev.person];
-    if (!person) return;
-    var key = ev.title + '|' + person.key;
+    var track = trackByKey[ev.track];
+    if (!track) return;
+    var key = ev.title + '|' + track.key;
     if (seenAllDay[key]) return;
     seenAllDay[key] = true;
-    allDayOut.push({ title: ev.title, owner: person.key, hue: person.hue, track_style: person.line_style });
+    allDayOut.push({ title: ev.title, owner: track.key, hue: track.hue, track_style: track.line_style });
+  });
+
+  // stations: a track's own line, not a lane branch — the client kinks
+  // the spine itself out to "station level" for [startMin,endMin] rather
+  // than drawing a diagonal/label run, so a status/location block doesn't
+  // compete with real meetings for lane space
+  var stationsOut = [];
+  (stationEvents || []).forEach(function (ev) {
+    var track = trackByKey[ev.track];
+    if (!track) return;
+    stationsOut.push({ owner: track.key, title: ev.title, location: ev.location || null, start_min: ev.startMin, end_min: ev.endMin });
+  });
+  // an all-day event is ALSO a station on its owner's line, spanning the
+  // whole day, in addition to its entry in the header strip above — so a
+  // day with a genuine all-day event (a holiday, "Out of office") shows a
+  // visible kink across that person's whole line, not just header text.
+  // `all_day: true` tells the client not to let this (deliberately
+  // full-day-wide) span drag the content-fit time window out to match —
+  // it always renders across whatever window is chosen, clamped, same as
+  // any other station.
+  (allDayEvents || []).forEach(function (ev) {
+    var track = trackByKey[ev.track];
+    if (!track) return;
+    stationsOut.push({ owner: track.key, title: ev.title, location: null, start_min: DAY_START_MIN, end_min: DAY_END_MIN, all_day: true });
   });
 
   (weatherMilestones || []).forEach(function (w) {
@@ -376,8 +405,9 @@ function buildMetro(people, events, weatherMilestones, headerWeather, nowMin, wi
     hour12: !!(extra && extra.hour12),
     i18n: (function (st) { return { today: tr(st, 'today'), more: tr(st, 'more'), earlier: tr(st, 'earlier'), rain_pct: tr(st, 'rain_pct') }; })((extra && extra.strings) || I18N.en),
     header_weather: headerWeather,
-    legend: people,
+    legend: tracks,
     all_day: allDayOut,
+    stations: stationsOut,
     items: items,
   };
 }
@@ -386,7 +416,7 @@ function buildMetro(people, events, weatherMilestones, headerWeather, nowMin, wi
 // Demo path — unchanged hardcoded data.
 // ---------------------------------------------------------------------
 
-var DEMO_PEOPLE = [
+var DEMO_TRACKS = [
   { key: 'work', name: 'Work', side: 'left', hue: 'black', track_offset: -10, line_width: 4, line_style: 'solid' },
   { key: 'alex', name: 'Alex', side: 'right', hue: 'orange-40', track_offset: 10, line_width: 3, line_style: 'solid' },
   { key: 'sam', name: 'Sam', side: 'right', hue: 'green-40', track_offset: 20, line_width: 3, line_style: 'dashed' },
@@ -394,29 +424,29 @@ var DEMO_PEOPLE = [
 ];
 
 // A deliberately busy day: back-to-back work meetings (lane stacking), a
-// long workshop (a branch that rejoins the spine), two- and three-person
+// long workshop (a branch that rejoins the spine), two- and three-track
 // interchanges, and an evening cluster on the family side.
 var DEMO_EVENTS = [
-  { person: 'alex', title: 'Yoga', startMin: 7 * 60 + 30, endMin: 8 * 60 + 30, location: 'Studio 9' },
-  { person: 'work', title: 'Team Standup', startMin: 8 * 60, endMin: 8 * 60 + 15 },
-  { person: 'kids', interchange_with: ['sam'], title: 'School Run', startMin: 8 * 60 + 15, endMin: 8 * 60 + 45 },
-  { person: 'work', title: 'Quick Sync', startMin: 8 * 60 + 20, endMin: 8 * 60 + 35 },
-  { person: 'work', title: 'Client Workshop', startMin: 9 * 60, endMin: 10 * 60 + 30, location: 'Room 4B' },
-  { person: 'alex', title: 'Dentist', startMin: 10 * 60, endMin: 10 * 60 + 45 },
-  { person: 'work', title: '1:1 with Priya', startMin: 11 * 60, endMin: 11 * 60 + 30 },
-  { person: 'alex', interchange_with: ['work'], title: 'Lunch with Alex', startMin: 12 * 60, endMin: 13 * 60, location: 'The Garden Cafe' },
-  { person: 'work', title: 'Design Review', startMin: 14 * 60, endMin: 15 * 60 },
-  { person: 'work', title: 'Sprint Planning', startMin: 15 * 60 + 30, endMin: 17 * 60 },
-  { person: 'kids', title: 'Pick Up Kids', startMin: 16 * 60, endMin: 16 * 60 + 20 },
-  { person: 'sam', title: 'Swim Training', startMin: 16 * 60 + 30, endMin: 17 * 60 + 30, location: 'City Pool' },
-  { person: 'kids', title: 'Piano Lesson', startMin: 17 * 60, endMin: 17 * 60 + 45 },
-  { person: 'alex', title: 'Groceries', startMin: 17 * 60 + 30, endMin: 18 * 60 },
-  { person: 'alex', interchange_with: ['sam', 'kids'], title: 'Family Dinner', startMin: 18 * 60 + 30, endMin: 19 * 60 + 30 },
-  { person: 'sam', title: 'Book Club', startMin: 19 * 60 + 45, endMin: 21 * 60 },
+  { track: 'alex', title: 'Yoga', startMin: 7 * 60 + 30, endMin: 8 * 60 + 30, location: 'Studio 9' },
+  { track: 'work', title: 'Team Standup', startMin: 8 * 60, endMin: 8 * 60 + 15 },
+  { track: 'kids', interchange_with: ['sam'], title: 'School Run', startMin: 8 * 60 + 15, endMin: 8 * 60 + 45 },
+  { track: 'work', title: 'Quick Sync', startMin: 8 * 60 + 20, endMin: 8 * 60 + 35 },
+  { track: 'work', title: 'Client Workshop', startMin: 9 * 60, endMin: 10 * 60 + 30, location: 'Room 4B' },
+  { track: 'alex', title: 'Dentist', startMin: 10 * 60, endMin: 10 * 60 + 45 },
+  { track: 'work', title: '1:1 with Priya', startMin: 11 * 60, endMin: 11 * 60 + 30 },
+  { track: 'alex', interchange_with: ['work'], title: 'Lunch with Alex', startMin: 12 * 60, endMin: 13 * 60, location: 'The Garden Cafe' },
+  { track: 'work', title: 'Design Review', startMin: 14 * 60, endMin: 15 * 60 },
+  { track: 'work', title: 'Sprint Planning', startMin: 15 * 60 + 30, endMin: 17 * 60 },
+  { track: 'kids', title: 'Pick Up Kids', startMin: 16 * 60, endMin: 16 * 60 + 20 },
+  { track: 'sam', title: 'Swim Training', startMin: 16 * 60 + 30, endMin: 17 * 60 + 30, location: 'City Pool' },
+  { track: 'kids', title: 'Piano Lesson', startMin: 17 * 60, endMin: 17 * 60 + 45 },
+  { track: 'alex', title: 'Groceries', startMin: 17 * 60 + 30, endMin: 18 * 60 },
+  { track: 'alex', interchange_with: ['sam', 'kids'], title: 'Family Dinner', startMin: 18 * 60 + 30, endMin: 19 * 60 + 30 },
+  { track: 'sam', title: 'Book Club', startMin: 19 * 60 + 45, endMin: 21 * 60 },
 ];
 
 var DEMO_ALLDAY = [
-  { person: 'kids', title: 'School Holiday' },
+  { track: 'kids', title: 'School Holiday' },
 ];
 
 var DEMO_WEATHER_MILESTONES = [
@@ -439,7 +469,7 @@ function buildFromDemo(weather, nowMin, extra) {
   var demo = demoWeather(strings);
   var w = weather || demo;
   return buildMetro(
-    DEMO_PEOPLE, DEMO_EVENTS,
+    DEMO_TRACKS, DEMO_EVENTS,
     w.milestones || [],
     w.header || demo.header,
     nowMin != null ? nowMin : DEMO_NOW_MIN,
@@ -738,7 +768,7 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// A `person` field can be one name or a list — always normalized to a
+// A `track` field can be one name or a list — always normalized to a
 // non-empty array (or null if nothing usable was given).
 function normalizeNameList(raw) {
   var list = Array.isArray(raw) ? raw : (typeof raw === 'string' ? [raw] : []);
@@ -806,20 +836,28 @@ function compileRule(spec) {
   if (!spec || typeof spec !== 'object') return null;
   var m = compileMatcher(spec.match);
   if (!m) return null;
-  var person = normalizeNameList(spec.person);
+  // `track` is the current field name; `person` is accepted too, for
+  // configs written before tracks were called tracks.
+  var track = normalizeNameList(spec.track !== undefined ? spec.track : spec.person);
   var allDay = spec.allDay === true;
   var hide = spec.hide === true;
+  // `station`: the event's own track kinks out to "station level" for its
+  // duration instead of branching into a lane — for a status/location
+  // block (e.g. "Desk booking") that spans real meetings without being
+  // one itself. Only meaningful for a timed event with both ends; see
+  // buildFromConfig.
+  var station = spec.station === true;
   var rewrite = typeof spec.rewrite === 'string' ? spec.rewrite : null;
   var rewriteFull = spec.rewriteFull === true;
-  if (!person && !allDay && !hide && rewrite === null) return null; // a no-op rule is dropped, not kept
+  if (!track && !allDay && !hide && !station && rewrite === null) return null; // a no-op rule is dropped, not kept
   var isAnyMatch = spec.match && (spec.match.type === 'any' || spec.match.type === 'all');
-  // rename defaults to true (a rule assigning a person also renames the
-  // title to that person, historically the common case) EXCEPT on an
+  // rename defaults to true (a rule assigning a track also renames the
+  // title to that track, historically the common case) EXCEPT on an
   // any/all match, where there's no specific text to rename and silently
   // overwriting every title would be surprising — there it defaults to
   // false and must be opted into.
-  var rename = person ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
-  return { match: m.test, rx: m.rx, person: person, allDay: allDay, hide: hide, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
+  var rename = track ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
+  return { match: m.test, rx: m.rx, track: track, allDay: allDay, hide: hide, station: station, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
 }
 
 function compileRuleList(raw) {
@@ -832,7 +870,7 @@ function compileRuleList(raw) {
 }
 
 // Parses the "Calendar Config (JSON)" setting text into
-// { calendars, people, timeZone, globalRules, everyonePerson }. Never
+// { calendars, tracks, timeZone, globalRules, everyoneTrack }. Never
 // throws: invalid JSON falls back to treating the text as a plain
 // newline-separated list of calendar URLs (a low-friction path for
 // someone who just wants to paste ICS links with no rules at all).
@@ -849,9 +887,11 @@ function parseConfig(raw) {
 
   var timeZone = typeof data.timeZone === 'string' && data.timeZone.trim() ? data.timeZone.trim() : null;
 
-  var people = {};
-  var everyonePerson = null;
-  (Array.isArray(data.people) ? data.people : []).forEach(function (item) {
+  var tracks = {};
+  var everyoneTrack = null;
+  // `tracks` is the current field name; `people` is accepted too, for
+  // configs written before tracks were called tracks.
+  (Array.isArray(data.tracks) ? data.tracks : Array.isArray(data.people) ? data.people : []).forEach(function (item) {
     if (!item || typeof item !== 'object') return;
     var name = typeof item.name === 'string' ? item.name.trim() : '';
     if (!name) return;
@@ -861,8 +901,8 @@ function parseConfig(raw) {
     // optional explicit side of the map: "left"/"work" or "right"/"family"
     var sideRaw = typeof item.side === 'string' ? item.side.trim().toLowerCase() : '';
     var side = (sideRaw === 'left' || sideRaw === 'work') ? 'left' : (sideRaw === 'right' || sideRaw === 'family') ? 'right' : null;
-    if (everyonePerson === null) everyonePerson = name;
-    people[name.toLowerCase()] = { name: name, color: color, badge: badge, side: side };
+    if (everyoneTrack === null) everyoneTrack = name;
+    tracks[name.toLowerCase()] = { name: name, color: color, badge: badge, side: side };
   });
 
   var globalRules = compileRuleList(data.rules);
@@ -883,7 +923,7 @@ function parseConfig(raw) {
     calendars.push({ name: name, url: item.url.trim(), rules: rules, headers: headers, includeDescription: includeDescription });
   });
 
-  return { calendars: calendars, people: people, timeZone: timeZone, globalRules: globalRules, everyonePerson: everyonePerson };
+  return { calendars: calendars, tracks: tracks, timeZone: timeZone, globalRules: globalRules, everyoneTrack: everyoneTrack };
 }
 
 // A replace that never double-matches an empty-string-capable pattern
@@ -896,25 +936,27 @@ function replaceMatch(text, rx, replacement) {
 }
 
 // Applies global rules then this calendar's own (cumulatively, in order —
-// a later matching rule's person/rewrite overrides an earlier one's,
+// a later matching rule's track/rewrite overrides an earlier one's,
 // and a calendar's own rule is listed after globals so it wins ties).
-// Returns { title, personNames, allDay, hide }; personNames is an array
-// (possibly with more than one name — a multi-person rule becomes an
+// Returns { title, trackNames, allDay, hide }; trackNames is an array
+// (possibly with more than one name — a multi-track rule becomes an
 // interchange event) or null if nothing assigned one.
-function applyCalendarRules(title, desc, status, weekday, cal, globalRules, everyonePerson) {
+function applyCalendarRules(title, desc, status, weekday, cal, globalRules, everyoneTrack) {
   var originalTitle = title;
   var ctx = { title: originalTitle, desc: desc || '', status: status || '', weekday: (weekday === undefined || weekday === null) ? null : weekday };
-  var personNames = null;
+  var trackNames = null;
   var renameRule = null;
   var rewriteRule = null;
   var allDay = false;
   var hide = false;
+  var station = false;
   globalRules.concat(cal.rules).forEach(function (rule) {
     if (!rule.match(ctx)) return;
     if (rule.hide) hide = true;
     if (rule.allDay) allDay = true;
-    if (rule.person) {
-      personNames = rule.person;
+    if (rule.station) station = true;
+    if (rule.track) {
+      trackNames = rule.track;
       renameRule = rule.rename ? rule : null;
     }
     if (rule.rewrite !== null) rewriteRule = rule;
@@ -926,24 +968,24 @@ function applyCalendarRules(title, desc, status, weekday, cal, globalRules, ever
       : rewriteRule.rx ? replaceMatch(originalTitle, rewriteRule.rx, rewriteRule.rewrite)
       : originalTitle;
   } else if (renameRule && renameRule.rx) {
-    finalTitle = replaceMatch(originalTitle, renameRule.rx, renameRule.person.join(' & '));
+    finalTitle = replaceMatch(originalTitle, renameRule.rx, renameRule.track.join(' & '));
   }
-  // NOTE: everyonePerson is deliberately NOT applied here — a calendar's
+  // NOTE: everyoneTrack is deliberately NOT applied here — a calendar's
   // own name is meant to be the fallback for one that has no rule
-  // assigning anyone (see buildFromConfig), and everyonePerson is the
+  // assigning anyone (see buildFromConfig), and everyoneTrack is the
   // last resort after THAT. Applying it here unconditionally used to make
-  // the calendar-name fallback unreachable dead code: with people[] set,
+  // the calendar-name fallback unreachable dead code: with tracks[] set,
   // EVERY unnamed-by-rule event (i.e. every event from any calendar with
   // no rules at all, or whose rules didn't match this one) landed on
-  // everyonePerson instead of that calendar's own name — so calendars
-  // literally named after a person (a common real setup: one calendar per
+  // everyoneTrack instead of that calendar's own name — so calendars
+  // literally named after a track (a common real setup: one calendar per
   // family member, no rules needed) never got their events attributed to
   // themselves at all.
 
-  return { title: finalTitle, personNames: personNames, allDay: allDay, hide: hide };
+  return { title: finalTitle, trackNames: trackNames, allDay: allDay, hide: hide, station: station };
 }
 
-// Converts a config person's `color` (a plain framework hue name like
+// Converts a config track's `color` (a plain framework hue name like
 // "blue", or "gray-NN"/"black"/"white") into the "hue-65"-style token
 // this plugin's tracks/nodes use ("hue-40" style) — null (fall back to the auto HUE_CYCLE)
 // if unset or not one of those.
@@ -954,20 +996,20 @@ function hueTokenForColor(color) {
   return null;
 }
 
-// A small, growable people/track registry — seeded from parsed.people,
-// but calendars with no person-assigning rule (e.g. a shared "Family"
+// A small, growable track registry — seeded from parsed.tracks, but
+// calendars with no track-assigning rule (e.g. a shared "Family"
 // calendar) fall back to using the CALENDAR's own name as an implicit
-// person, added here the first time it's encountered, so those events
+// track, added here the first time it's encountered, so those events
 // still get a track instead of silently vanishing.
 //
-// Which SIDE each person ends up on is decided once, in finalize() —
+// Which SIDE each track ends up on is decided once, in finalize() —
 // called after every calendar has been fetched and every event tallied —
-// not by any calendar's name. A person's `side` in config (if set) is
+// not by any calendar's name. A track's `side` in config (if set) is
 // honored; everyone else is balanced across the two sides by their own
 // event count (heaviest first, each going to whichever side is currently
 // lighter), so the split reflects the actual day's data instead of a
 // fixed "Work calendar" convention.
-function makePeopleRegistry(parsed) {
+function makeTrackRegistry(parsed) {
   var order = [];
   var byName = {};
   var counts = {};
@@ -984,7 +1026,7 @@ function makePeopleRegistry(parsed) {
   }
 
   function explicitSide(name) {
-    var c = parsed.people[name.toLowerCase()];
+    var c = parsed.tracks[name.toLowerCase()];
     return (c && (c.side === 'left' || c.side === 'right')) ? c.side : null;
   }
 
@@ -1005,16 +1047,16 @@ function makePeopleRegistry(parsed) {
 
     var sideIdx = { left: 0, right: 0 };
     order.forEach(function (name, i) {
-      var p = byName[name], side = decided[name], idx = sideIdx[side]++;
-      var configured = parsed.people[name.toLowerCase()];
-      p.side = side;
-      p.track_offset = TRACK_STEP * (idx + 1) * (side === 'left' ? -1 : 1);
+      var t = byName[name], side = decided[name], idx = sideIdx[side]++;
+      var configured = parsed.tracks[name.toLowerCase()];
+      t.side = side;
+      t.track_offset = TRACK_STEP * (idx + 1) * (side === 'left' ? -1 : 1);
       // the side's anchor line (first-placed, whichever side that ends up
       // being) is black/bold; everyone else cycles hues in registration order
-      p.hue = (configured && hueTokenForColor(configured.color)) || (side === 'left' && idx === 0 ? 'black' : HUE_CYCLE[i % HUE_CYCLE.length]);
-      p.line_width = (side === 'left' && idx === 0) ? 4 : 3;
-      p.line_style = LINE_STYLES[idx % LINE_STYLES.length];
-      p.initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
+      t.hue = (configured && hueTokenForColor(configured.color)) || (side === 'left' && idx === 0 ? 'black' : HUE_CYCLE[i % HUE_CYCLE.length]);
+      t.line_width = (side === 'left' && idx === 0) ? 4 : 3;
+      t.line_style = LINE_STYLES[idx % LINE_STYLES.length];
+      t.initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
     });
   }
 
@@ -1036,16 +1078,17 @@ async function buildFromConfig(input, parsed, weather, extra) {
   var nowMin = today.h * 60 + today.mi;
   var todayWeekday = (new Date(Date.UTC(today.y, today.mo - 1, today.d)).getUTCDay() + 6) % 7;
 
-  var registry = makePeopleRegistry(parsed);
-  // Every explicitly-configured person is registered up front, even with
+  var registry = makeTrackRegistry(parsed);
+  // Every explicitly-configured track is registered up front, even with
   // zero events today, so they still get a line and (if they set an
   // explicit side) it's honored regardless of load.
-  Object.keys(parsed.people).forEach(function (key) { registry.add(parsed.people[key].name, 0); });
+  Object.keys(parsed.tracks).forEach(function (key) { registry.add(parsed.tracks[key].name, 0); });
 
   var DEADLINE_MS = 4200;
   var deadline = Date.now() + DEADLINE_MS;
   var events = [];
   var allDayEvents = [];
+  var stationEvents = [];
 
   await Promise.all((parsed.calendars || []).map(async function (cal) {
     var url = cal.url;
@@ -1058,22 +1101,36 @@ async function buildFromConfig(input, parsed, weather, extra) {
       var text = await resp.text();
       var parsedIcs = parseIcs(text, tz, today, cal.includeDescription);
       parsedIcs.timed.forEach(function (ev) {
-        var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyonePerson);
+        var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
         if (resolved.hide) return;
-        var personNames = resolved.personNames || (cal.name ? [cal.name] : null) || (parsed.everyonePerson ? [parsed.everyonePerson] : null);
-        if (!personNames || !personNames.length) return;
+        var trackNames = resolved.trackNames || (cal.name ? [cal.name] : null) || (parsed.everyoneTrack ? [parsed.everyoneTrack] : null);
+        if (!trackNames || !trackNames.length) return;
         // A rule can mark an otherwise-timed event allDay (e.g. a calendar
         // that lists "Public Holiday" as a timed 00:00 entry) — that now
         // routes into the all-day strip instead of the timeline, same as a
         // genuine ICS all-day entry, rather than being silently dropped.
-        if (resolved.allDay) { allDayEvents.push({ person: registry.add(personNames[0], 0.25).key, title: resolved.title }); return; }
-        var primary = registry.add(personNames[0], 1);
+        if (resolved.allDay) { allDayEvents.push({ track: registry.add(trackNames[0], 0.25).key, title: resolved.title }); return; }
+        // A rule can mark a timed event as a station: a status/location
+        // block (e.g. "Desk booking") that its own track passes through
+        // rather than branches for — needs real start/end minutes, so
+        // only meaningful here in the timed-events loop.
+        if (resolved.station) {
+          stationEvents.push({
+            track: registry.add(trackNames[0], 0.25).key,
+            title: resolved.title,
+            location: ev.location || null,
+            startMin: ev.startMin,
+            endMin: ev.endMin != null ? ev.endMin : ev.startMin + 30,
+          });
+          return;
+        }
+        var primary = registry.add(trackNames[0], 1);
         // a co-owner on a shared/interchange event gets a smaller weight
         // toward side balancing — they have a ring there too, but it's not
         // "their" event the way the primary owner's is
-        var interchangeWith = personNames.slice(1).map(function (n) { return registry.add(n, 0.5).key; });
+        var interchangeWith = trackNames.slice(1).map(function (n) { return registry.add(n, 0.5).key; });
         events.push({
-          person: primary.key,
+          track: primary.key,
           interchange_with: interchangeWith.length ? interchangeWith : undefined,
           title: resolved.title,
           startMin: ev.startMin,
@@ -1082,11 +1139,11 @@ async function buildFromConfig(input, parsed, weather, extra) {
         });
       });
       parsedIcs.allDay.forEach(function (ev) {
-        var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyonePerson);
+        var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
         if (resolved.hide) return;
-        var personNames = resolved.personNames || (cal.name ? [cal.name] : null) || (parsed.everyonePerson ? [parsed.everyonePerson] : null);
-        if (!personNames || !personNames.length) return;
-        allDayEvents.push({ person: registry.add(personNames[0], 0.25).key, title: resolved.title });
+        var trackNames = resolved.trackNames || (cal.name ? [cal.name] : null) || (parsed.everyoneTrack ? [parsed.everyoneTrack] : null);
+        if (!trackNames || !trackNames.length) return;
+        allDayEvents.push({ track: registry.add(trackNames[0], 0.25).key, title: resolved.title });
       });
     } catch (e) {
       // one calendar failing shouldn't blank the whole render — skip it
@@ -1103,7 +1160,8 @@ async function buildFromConfig(input, parsed, weather, extra) {
     nowMin,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     allDayEvents,
-    Object.assign({}, extra, { dateLabel: dateLabel(today, extra.locale), sun: (weather && weather.sun) || [] })
+    Object.assign({}, extra, { dateLabel: dateLabel(today, extra.locale), sun: (weather && weather.sun) || [] }),
+    stationEvents
   );
 }
 

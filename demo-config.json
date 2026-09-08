@@ -14,7 +14,7 @@
           "match": {
             "type": "any"
           },
-          "person": "Alex"
+          "track": "Alex"
         }
       ]
     },
@@ -26,7 +26,7 @@
           "match": {
             "type": "any"
           },
-          "person": "Jordan"
+          "track": "Jordan"
         }
       ]
     },
@@ -38,7 +38,7 @@
           "match": {
             "type": "any"
           },
-          "person": "Mia"
+          "track": "Mia"
         }
       ]
     },
@@ -50,7 +50,7 @@
           "match": {
             "type": "any"
           },
-          "person": "Leo"
+          "track": "Leo"
         }
       ]
     },
@@ -62,7 +62,7 @@
           "match": {
             "type": "any"
           },
-          "person": "Sam"
+          "track": "Sam"
         }
       ]
     },
@@ -82,19 +82,19 @@
             "type": "word",
             "value": "L2"
           },
-          "person": "Mia"
+          "track": "Mia"
         },
         {
           "match": {
             "type": "word",
             "value": "L6"
           },
-          "person": "Leo"
+          "track": "Leo"
         }
       ]
     }
   ],
-  "people": [
+  "tracks": [
     {
       "name": "Sam",
       "side": "left"

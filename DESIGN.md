@@ -1,6 +1,6 @@
 # Metro Timeline — Design
 
-A single day drawn as a transit diagram: one line per person, running the full
+A single day drawn as a transit diagram: one line per track, running the full
 length of the canvas in one bundle, with the hour axis down the middle of the
 bundle. Events are stations on their owner's line; their labels sit on
 branches that leave the line at 45°. Everything below is computed client-side
@@ -19,10 +19,10 @@ and top-to-bottom otherwise. All geometry is written in axis coordinates
 orientations share one algorithm.
 
 Side A runs above the bundle in horizontal mode, left of it in vertical
-mode; side B is the other side. An explicit `person.side` in config puts
-that person on the side they asked for; everyone else is assigned once
+mode; side B is the other side. An explicit `track.side` in config puts
+that track on the side they asked for; everyone else is assigned once
 every calendar has been fetched and every event tallied — heaviest event
-count first, each person going to whichever side is currently lighter — so
+count first, each track going to whichever side is currently lighter — so
 the split reflects the actual day's data rather than any fixed convention.
 
 ## Spine
@@ -32,7 +32,7 @@ the split reflects the actual day's data rather than any fixed convention.
   cross the hour labels, only sibling lines (a normal metro flyover).
 - Lines: 7px apart, 3px wide (4px for Work), solid / dashed / dotted / dash-dot
   in track order per side. On a 1-bit panel every line is black and the dash
-  pattern is the only identifier; on 2/4-bit panels each person's `hue-40`
+  pattern is the only identifier; on 2/4-bit panels each track's `hue-40`
   token is resolved through `TRMNLPaint.stroke`, so themes and dark mode apply.
 - The bundle is not centred by default: after lane placement, whichever side
   needs more lanes gets more room, and any leftover space spreads the lanes

@@ -3,42 +3,54 @@ module.exports = function (test, h) {
 
   test('a fresh editor exports an empty configuration', () => {
     const { document } = loadEditor();
-    assertEqual(jsonOut(document), { people: [], calendars: [] });
+    assertEqual(jsonOut(document), { tracks: [], calendars: [] });
   });
 
-  test('a person with a side and colour exports as { name, color, side }', () => {
+  test('a track with a side and colour exports as { name, color, side }', () => {
     const { document } = loadEditor();
-    const card = document.querySelector('#people .card');
+    const card = document.querySelector('#tracks .card');
     fireInput(card.querySelector('.title-input'), 'Sam');
     const selects = card.querySelectorAll('select');
     fireChange(selects[0], 'left');
-    fireChange(document.querySelector('#people .card').querySelectorAll('select')[1], 'gray-20');
-    assertEqual(jsonOut(document).people, [{ name: 'Sam', color: 'gray-20', side: 'left' }]);
+    fireChange(document.querySelector('#tracks .card').querySelectorAll('select')[1], 'gray-20');
+    assertEqual(jsonOut(document).tracks, [{ name: 'Sam', color: 'gray-20', side: 'left' }]);
   });
 
-  test('a calendar assigned to a person exports a leading "any" rule', () => {
+  test('a calendar assigned to a track exports a leading "any" rule', () => {
     const { document } = loadEditor();
-    fireInput(document.querySelector('#people .card .title-input'), 'Alex');
-    fireChange(document.querySelector('#people .card .title-input'));
+    fireInput(document.querySelector('#tracks .card .title-input'), 'Alex');
+    fireChange(document.querySelector('#tracks .card .title-input'));
     const cal = document.querySelector('#calendars .card');
     fireInput(cal.querySelector('input[type=text]:not(.title-input)'), 'https://example.com/a.ics');
     fireInput(cal.querySelector('.title-input'), 'Alex');
     selectMulti(cal.querySelector('select[multiple]'), ['Alex']);
-    assertEqual(jsonOut(document).calendars, [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [{ match: { type: 'any' }, person: 'Alex' }] }]);
+    assertEqual(jsonOut(document).calendars, [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [{ match: { type: 'any' }, track: 'Alex' }] }]);
   });
 
-  test('a global rule with a word condition, a person and hide exports correctly', () => {
+  test('a global rule with a word condition, a track and hide exports correctly', () => {
     const { document } = loadEditor();
-    fireInput(document.querySelector('#people .card .title-input'), 'Kids');
-    fireChange(document.querySelector('#people .card .title-input'));
+    fireInput(document.querySelector('#tracks .card .title-input'), 'Kids');
+    fireChange(document.querySelector('#tracks .card .title-input'));
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), 'L2');
     selectMulti(rule.querySelector('select[multiple]'), ['Kids']);
-    assertEqual(jsonOut(document).rules, [{ match: { type: 'word', value: 'L2' }, person: 'Kids' }]);
+    assertEqual(jsonOut(document).rules, [{ match: { type: 'word', value: 'L2' }, track: 'Kids' }]);
     const hide = rule.querySelectorAll('input[type=checkbox]')[2];
     hide.checked = true; fireChange(hide);
     assertEqual(jsonOut(document).rules[0].hide, true);
+  });
+
+  test('a rule with "station" checked exports { station: true }', () => {
+    const { document } = loadEditor();
+    fireInput(document.querySelector('#tracks .card .title-input'), 'Ward');
+    fireChange(document.querySelector('#tracks .card .title-input'));
+    click(document.getElementById('addGlobalRule'));
+    const rule = document.querySelector('#globalRules .rule');
+    fireInput(rule.querySelector('.cond input[type=text]'), 'Desk booking');
+    const station = rule.querySelectorAll('input[type=checkbox]')[3];
+    station.checked = true; fireChange(station);
+    assertEqual(jsonOut(document).rules[0], { match: { type: 'word', value: 'Desk booking' }, station: true });
   });
 
   test('a rule with no action is left out of the JSON and flagged', () => {
@@ -52,8 +64,8 @@ module.exports = function (test, h) {
 
   test('two conditions export as an and-matcher', () => {
     const { document } = loadEditor();
-    fireInput(document.querySelector('#people .card .title-input'), 'Sam');
-    fireChange(document.querySelector('#people .card .title-input'));
+    fireInput(document.querySelector('#tracks .card .title-input'), 'Sam');
+    fireChange(document.querySelector('#tracks .card .title-input'));
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), 'Piano');
