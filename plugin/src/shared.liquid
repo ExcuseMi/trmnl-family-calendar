@@ -46,7 +46,11 @@
   <div class="item w--full bg--{{ item.hue }} rounded--xsmall relative" style="overflow:hidden;flex-shrink:0;border:2px solid {{ row_border_color }};box-shadow:2px 2px 0 0 {{ row_border_color }};{% if item.current %}outline:2px solid {% if item.fg == 'white' %}#ffffff{% else %}#000000{% endif %};outline-offset:1px;{% endif %}">
     <div class="w--full flex flex--row flex--center-y gap--small text--{{ item.fg }} px--2 py--1" style="min-width:0;">
       {% if item.time %}<span class="label {{ axis_cls }} text--{{ item.fg }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
-      <span class="title {{ event_title_cls }} text--{{ item.fg }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
+      {%- if title_clamp and title_clamp > 1 -%}
+        <span class="title {{ event_title_cls }} text--{{ item.fg }}" style="flex:1 1 auto;min-width:0;overflow-wrap:anywhere;" data-clamp="{{ title_clamp }}">{{ item.title }}</span>
+      {%- else -%}
+        <span class="title {{ event_title_cls }} text--{{ item.fg }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
+      {%- endif -%}
       {% if item.badges and item.badges.size > 0 %}
         <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;">
           {% for badge in item.badges limit: 2 %}
@@ -409,7 +413,7 @@
         {% for day in data.days limit: shown_days_n %}
           <div class="col--span-{{ day_span }} flex flex--col gap--xsmall border--v-1 relative cal-day-cell p--1" data-day-idx="{{ forloop.index0 }}" data-overflow="true" data-overflow-max-height="auto" data-overflow-counter="true" style="overflow:hidden;box-sizing:border-box;">
             {% for item in day.agenda %}
-              {%- render "agenda_row", item: item, axis_cls: axis_cls, event_title_cls: event_title_cls -%}
+              {%- render "agenda_row", item: item, axis_cls: axis_cls, event_title_cls: event_title_cls, title_clamp: 3 -%}
             {% else %}
               <div class="w--full h--full flex flex--center-x flex--center-y">
                 <span class="label {{ axis_cls }} text--gray-50">Nothing scheduled</span>
