@@ -347,17 +347,6 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     });
   });
 
-  var allDayOut = [];
-  var seenAllDay = {};
-  (allDayEvents || []).forEach(function (ev) {
-    var track = trackByKey[ev.track];
-    if (!track) return;
-    var key = ev.title + '|' + track.key;
-    if (seenAllDay[key]) return;
-    seenAllDay[key] = true;
-    allDayOut.push({ title: ev.title, owner: track.key, hue: track.hue, track_style: track.line_style });
-  });
-
   // stations: a track's own line, not a lane branch — the client kinks
   // the spine itself out to "station level" for [startMin,endMin] rather
   // than drawing a diagonal/label run, so a status/location block doesn't
@@ -368,17 +357,23 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     if (!track) return;
     stationsOut.push({ owner: track.key, title: ev.title, location: ev.location || null, start_min: ev.startMin, end_min: ev.endMin });
   });
-  // an all-day event is ALSO a station on its owner's line, spanning the
-  // whole day, in addition to its entry in the header strip above — so a
-  // day with a genuine all-day event (a holiday, "Out of office") shows a
-  // visible kink across that person's whole line, not just header text.
-  // `all_day: true` tells the client not to let this (deliberately
-  // full-day-wide) span drag the content-fit time window out to match —
-  // it always renders across whatever window is chosen, clamped, same as
-  // any other station.
+  // An all-day event is ALSO a station on its owner's line, spanning the
+  // whole day — this now REPLACES the old header-strip rendering (an
+  // all-day event used to appear only as small text under the date; now
+  // it shows as a real kink on the person's own line instead, so a day
+  // with a genuine all-day event (a holiday, "Out of office") reads the
+  // same way any other station does, deduped by title+owner). `all_day:
+  // true` tells the client not to let this (deliberately full-day-wide)
+  // span drag the content-fit time window out to match — it always
+  // renders across whatever window is chosen, clamped, same as any other
+  // station.
+  var seenAllDay = {};
   (allDayEvents || []).forEach(function (ev) {
     var track = trackByKey[ev.track];
     if (!track) return;
+    var key = ev.title + '|' + track.key;
+    if (seenAllDay[key]) return;
+    seenAllDay[key] = true;
     stationsOut.push({ owner: track.key, title: ev.title, location: null, start_min: DAY_START_MIN, end_min: DAY_END_MIN, all_day: true });
   });
 
@@ -406,7 +401,7 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     i18n: (function (st) { return { today: tr(st, 'today'), more: tr(st, 'more'), earlier: tr(st, 'earlier'), rain_pct: tr(st, 'rain_pct') }; })((extra && extra.strings) || I18N.en),
     header_weather: headerWeather,
     legend: tracks,
-    all_day: allDayOut,
+    all_day: [], // all-day events now render as stations (see stationsOut) instead of a header strip; the key stays for shape compatibility
     stations: stationsOut,
     items: items,
   };

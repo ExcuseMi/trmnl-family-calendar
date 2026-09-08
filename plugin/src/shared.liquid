@@ -333,11 +333,35 @@
     // read at all. Give it a short, fixed-width flag at the start of the
     // axis instead — same visual language as a real station, sized to
     // actually look like one regardless of how wide the visible window is.
-    var ALLDAY_STATION_LEN = 160 * S; // wide enough to leave a real flat plateau once STATION_RAISE's own ramp is subtracted from each end
+    // The flag shrinks (down to a floor) rather than overrunning into
+    // whatever this track's own first REAL item of the day is, so it
+    // can't tangle with — or visually swallow — an early event or a real
+    // timed station.
+    var ALLDAY_STATION_PREFERRED = 120 * S, ALLDAY_STATION_MIN = 34 * S, ALLDAY_STATION_GAP = 14 * S;
+    function earliestOwnA(ownerKey) {
+      var best = Infinity;
+      METRO.items.forEach(function (i) {
+        if (i.type !== 'event') return;
+        if (i.owner !== ownerKey && (i.co_owners || []).indexOf(ownerKey) === -1) return;
+        best = Math.min(best, aFor(i.start_min));
+      });
+      STATIONS.forEach(function (st) {
+        if (st.owner !== ownerKey || st.all_day) return;
+        best = Math.min(best, aFor(st.start_min));
+      });
+      return best;
+    }
     LEGEND.forEach(function (p) {
+      var allDayLen = null;
       p._stations = p._stations.map(function (st) {
         var a0, a1;
-        if (st.all_day) { a0 = axisStart; a1 = Math.min(axisStart + ALLDAY_STATION_LEN, axisEnd); }
+        if (st.all_day) {
+          if (allDayLen === null) {
+            var conflictA = earliestOwnA(p.key);
+            allDayLen = isFinite(conflictA) ? Math.max(ALLDAY_STATION_MIN, Math.min(ALLDAY_STATION_PREFERRED, conflictA - axisStart - ALLDAY_STATION_GAP)) : ALLDAY_STATION_PREFERRED;
+          }
+          a0 = axisStart; a1 = Math.min(axisStart + allDayLen, axisEnd);
+        }
         else { a0 = clamp(aFor(st.start_min), axisStart, axisEnd); a1 = clamp(aFor(st.end_min), axisStart, axisEnd); }
         return { a0: a0, a1: a1, title: st.title, location: st.location || null };
       }).filter(function (s) { return s.a1 > s.a0; });
@@ -893,6 +917,12 @@
     // than showing it crossing through readable text. Centered in the gap
     // the kink opens up, clear of both the flat baseline and the peak/ring
     // a real branch's diagonal actually starts from.
+    // fixed at the smallest tier regardless of what the real events on the
+    // canvas are currently using — a station is meta/status info, not a
+    // primary event, and letting it scale up with everything else (up to
+    // title--xlarge on a big canvas) made it big enough to physically
+    // overlap its own track's ramp geometry
+    var STATION_TITLE_CLASS = 'title title--small', STATION_TAG_CLASS = 'label label--small';
     LEGEND.forEach(function (p) {
       var baseC = spineC + p._c;
       p._stations.forEach(function (s) {
@@ -903,12 +933,12 @@
         });
         var box = el('div', 'metro-gen metro-label absolute bg--white');
         var availW = clamp((s.a1 - s.a0) - raise * 2, 70 * S, maxTitle);
-        var t = labelRow('metro-title-text ' + titleClass + ' font--bold text--black');
+        var t = labelRow('metro-title-text ' + STATION_TITLE_CLASS + ' font--bold text--black');
         t.textContent = s.title;
         t.style.maxWidth = availW + 'px'; t.style.overflow = 'hidden'; t.style.textOverflow = 'ellipsis';
         box.appendChild(t);
         if (s.location) {
-          var loc = labelRow(tagClass + ' text--gray-45');
+          var loc = labelRow(STATION_TAG_CLASS + ' text--gray-45');
           loc.textContent = s.location;
           loc.style.maxWidth = (availW * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
           box.appendChild(loc);

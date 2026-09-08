@@ -294,14 +294,14 @@ module.exports = function (test, h) {
     assertEqual(st.owner, wardTrack.key, 'a station-only track should still get a legend entry (it is "active")');
   });
 
-  test('an all-day event is ALSO added to metro.stations, spanning the full day, alongside its all_day strip entry', async () => {
+  test('an all-day event renders as a full-day station on its track, not a header strip entry', async () => {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Staff Training Day' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'Training' }, allDay: true }] }],
     })));
-    assertEqual(r.metro.all_day.map((a) => a.title), ['Staff Training Day'], 'still shows in the header strip');
-    assertEqual(r.metro.stations.length, 1, 'and also renders as a full-day station on its track');
+    assertEqual(r.metro.all_day, [], 'no longer duplicated into the header strip');
+    assertEqual(r.metro.stations.length, 1, 'renders as a full-day station on its track instead');
     const st = r.metro.stations[0];
     assertEqual(st.title, 'Staff Training Day');
     assertEqual(st.start_min, r.metro.day_start_min);

@@ -85,12 +85,15 @@ variables:
           "line_style": "dotted"
         }
       ],
-      "all_day": [
+      "all_day": [],
+      "stations": [
         {
-          "title": "School Holiday",
           "owner": "kids",
-          "hue": "purple-40",
-          "track_style": "dotted"
+          "title": "School Holiday",
+          "location": null,
+          "start_min": 420,
+          "end_min": 1260,
+          "all_day": true
         }
       ],
       "items": [
@@ -347,3 +350,4 @@ variables:
         }
       ]
     }
+    
