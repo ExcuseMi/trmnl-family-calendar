@@ -3,1477 +3,805 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Family Calendar — Configuration Editor</title>
+<title>Metro Calendar — Configuration</title>
 <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
-<!-- Real TRMNL framework CSS, so every swatch/preview here uses the SAME bg--{hue}-65 /
-     text--black / rounded--small classes the plugin itself renders with — what you see here
-     is what actually ships, not an approximation of it. -->
-<link rel="stylesheet" href="https://trmnl.com/css/latest/plugins.css">
+<!-- The real TRMNL framework CSS: the live preview below is the plugin's own template and
+     layout code running against it, so what you see is what the device draws. -->
+<link rel="stylesheet" href="https://trmnl.com/css/3.3.1/plugins.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: light; }
-  body {
-    margin: 0; padding: 24px; background: #f4f4f2; color: #111;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 14px; line-height: 1.5;
-  }
-  .wrap { max-width: 980px; margin: 0 auto; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 32px 0 10px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
-  p.lede { color: #555; margin-top: 0; }
-  .card { background: #fff; border: 1px solid #e0e0dc; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
-  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  .row + .row { margin-top: 8px; }
-  label { font-size: 12px; color: #666; display: block; margin-bottom: 3px; }
-  input[type=text], input[type=number], select, textarea {
-    font: inherit; padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; background: #fff; color: #111;
-  }
-  textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
-  /* width:100%+border-box matters when this sits in a plain (non-flex) wrapper — e.g. the
-     calendar's own ICS URL field below — where flex-basis has no effect and the input would
-     otherwise fall back to the browser's default ~20-character text input width. */
-  .field-url { flex: 1 1 320px; min-width: 220px; width: 100%; box-sizing: border-box; }
-  .field-narrow { flex: 0 0 130px; }
-  .field-regex { flex: 1 1 260px; min-width: 180px; }
-  button {
-    font: inherit; cursor: pointer; border: 1px solid #ccc; background: #f7f7f5; border-radius: 6px;
-    padding: 7px 12px;
-  }
-  button.primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
-  button.danger { background: #fff0f0; border-color: #e3b3b3; color: #a33; }
-  /* Color-coded by what a button DOES, not what it's on — green to add something new, blue to
-     reorder, red (button.danger, above) to remove — so the same visual language works whether
-     it's a calendar, a person, a rule, or a condition, and the eye can find "add more" or "get
-     rid of this" at a glance without reading every label. */
-  button.add { background: #eefbf0; border-color: #a9dab5; color: #1a7a33; }
-  button.move { background: #eef4fc; border-color: #aecbea; color: #1a5c9c; }
-  button.small { padding: 4px 9px; font-size: 12px; }
-  .entry { border: 1px solid #eee; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fafaf9; }
-  .entry-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  .entry-title-input {
-    font: inherit; font-weight: 600; font-size: 14px; border: 1px solid transparent; background: transparent;
-    padding: 3px 5px; border-radius: 5px; flex: 1 1 auto; min-width: 0; margin-right: 8px;
-  }
-  .entry-title-input:hover { border-color: #ddd; }
-  .entry-title-input:focus { border-color: #bbb; background: #fff; outline: none; }
-  .entry-title-input::placeholder { color: #111; opacity: 1; font-weight: 600; }
-  .advanced { margin-top: 10px; }
-  .advanced > summary { font-size: 12.5px; color: #555; padding: 4px 0; user-select: none; }
-  .advanced-body { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #ddd; }
-  .sub-entry { border: 1px solid #e5e5e2; border-radius: 6px; padding: 8px; margin-bottom: 6px; background: #fff; display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
-  .sub-entry .field { flex: 1 1 140px; }
-  .rule-card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: #fff; }
-  .rule-step + .rule-step { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e5e5e2; }
-  .rule-step-label { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #888; margin-bottom: 6px; }
-  .action-group + .action-group { margin-top: 8px; }
-  .swatch {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; font-size: 10px;
-  }
-  .muted { color: #888; font-size: 12px; }
-  #jsonOut { height: 160px; }
-  #resultJson { height: 220px; }
-  .status { font-size: 12px; padding: 4px 0; }
+  :root { color-scheme: light; --ink: #111; --paper: #fff; --mute: #6b6b6b; --rule: #d9d9d9; --soft: #f3f3f1; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 14px; line-height: 1.5; }
+  a { color: var(--ink); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+
+  /* ---- top bar: the plugin's own roundel + name */
+  .mc-top { display: flex; align-items: center; gap: 14px; padding: 18px 28px; border-bottom: 4px solid var(--ink); }
+  .mc-top img { width: 44px; height: 44px; }
+  .mc-top h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+  .mc-top .sub { color: var(--mute); font-size: 13px; }
+  .mc-top nav { margin-left: auto; display: flex; gap: 14px; font-size: 13px; }
+  .mc-top nav a { text-decoration: none; border-bottom: 2px solid transparent; }
+  .mc-top nav a:hover { border-bottom-color: var(--ink); }
+
+  /* ---- the page is one metro line: each section is a station on it */
+  .line { max-width: 1040px; margin: 0 auto; padding: 24px 28px 80px 28px; position: relative; }
+  .line::before { content: ""; position: absolute; left: 41px; top: 40px; bottom: 60px; width: 6px; background: var(--ink); border-radius: 3px; }
+  .station { position: relative; padding-left: 52px; margin: 0 0 40px; }
+  .station > h2 { position: relative; margin: 0 0 4px; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; }
+  .station > h2::before { content: ""; position: absolute; left: -46px; top: 5px; width: 14px; height: 14px; border-radius: 50%; background: var(--paper); border: 5px solid var(--ink); box-sizing: content-box; }
+  .station > h2 small { font-weight: 600; text-transform: none; color: var(--mute); font-size: 13px; margin-left: 10px; letter-spacing: 0; }
+  .station > p.lede { margin: 0 0 14px; color: var(--mute); max-width: 720px; }
+  .station.terminus > h2::before { width: 26px; height: 6px; border-radius: 3px; left: -52px; top: 10px; }
+
+  /* ---- cards: a card is a branch off the line */
+  .card { border: 2px solid var(--ink); border-radius: 12px; padding: 14px 16px; margin: 0 0 12px; background: var(--paper); position: relative; }
+  .card::before { content: ""; position: absolute; left: -52px; top: 26px; width: 40px; height: 2px; background: var(--ink); }
+  .card.plain::before { display: none; }
+  .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .card-head .title-input { flex: 1 1 auto; min-width: 0; border: none; border-bottom: 2px solid transparent; font-weight: 800; font-size: 17px; padding: 2px 0; background: transparent; }
+  .card-head .title-input:hover, .card-head .title-input:focus { border-bottom-color: var(--ink); outline: none; }
+  .card-head .title-input::placeholder { color: #999; font-weight: 800; }
+  .swatch { display: inline-block; width: 46px; height: 12px; flex: 0 0 auto; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .row + .row { margin-top: 10px; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field > label { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mute); }
+  .field.grow { flex: 1 1 260px; min-width: 200px; }
+  input[type=text], input[type=time], select, textarea { padding: 8px 10px; border: 2px solid var(--ink); border-radius: 8px; background: var(--paper); min-width: 0; }
+  input[type=text]:focus, input[type=time]:focus, select:focus, textarea:focus { outline: 3px solid #bbb; outline-offset: 1px; }
+  textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
+  select[multiple] { min-height: 74px; }
+  .hint { color: var(--mute); font-size: 12.5px; }
+  .status { font-size: 12.5px; }
   .status.ok { color: #1a7a1a; }
-  .status.err { color: #a33; }
-  .preview-day { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff; flex: 1 1 220px; min-width: 200px; }
-  .preview-daylabel { padding: 6px 10px; font-weight: 600; border-bottom: 1px solid #eee; }
-  .preview-allday { padding: 6px 8px 0; display: flex; flex-direction: column; gap: 4px; }
-  .preview-chip { border-radius: 6px; padding: 3px 8px; display: flex; align-items: center; gap: 6px; font-size: 12px; }
-  .preview-events { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-  .preview-event { border-radius: 6px; padding: 5px 8px; display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
-  .preview-time { font-size: 10.5px; opacity: 0.75; }
-  details summary { cursor: pointer; font-size: 12px; color: #555; }
-  code { background: #f0f0ee; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
-  a { color: #1a5fb4; }
+  .status.err { color: #b3261e; }
+
+  /* ---- buttons: solid = go, outlined = secondary, ghost = remove */
+  button { cursor: pointer; border: 2px solid var(--ink); background: var(--paper); border-radius: 999px; padding: 7px 14px; font-weight: 600; }
+  button:hover { background: var(--soft); }
+  button.primary { background: var(--ink); color: var(--paper); }
+  button.primary:hover { background: #333; }
+  button.ghost { border-color: transparent; color: var(--mute); padding: 4px 8px; }
+  button.ghost:hover { color: #b3261e; background: transparent; }
+  button.small { padding: 4px 10px; font-size: 12.5px; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; }
+
+  details.adv { margin-top: 10px; }
+  details.adv > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--mute); user-select: none; }
+  details.adv[open] > summary { color: var(--ink); }
+  .adv-body { margin-top: 10px; padding-top: 10px; border-top: 2px dashed var(--rule); }
+  .rule { border: 2px dashed var(--rule); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+  .rule-step { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--mute); margin: 6px 0; }
+  .cond, .action { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--ink); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; font-weight: 600; }
+  .header-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+
+  /* ---- preview */
+  .preview-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .stage { margin-top: 14px; border: 2px solid var(--ink); border-radius: 12px; overflow: hidden; background: #e9e9e6; padding: 16px; }
+  .stage-inner { margin: 0 auto; overflow: hidden; }
+  .stage-inner > .trmnl { transform-origin: 0 0; }
+  .device { background: #fff; box-shadow: 0 2px 0 #000; }
+  .sources .card { padding: 10px 12px; }
+  .sources .card::before { display: none; }
+  code { background: var(--soft); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  .steps { padding-left: 18px; margin: 8px 0 0; }
+  .steps li { margin-bottom: 4px; }
 </style>
 </head>
-<body class="trmnl">
-<div class="wrap">
-  <h1>Family Calendar</h1>
-  <p class="lede">Build the <strong>Calendar Configuration</strong> field visually, test it against real (fetched, uploaded, or pasted) ICS data, and preview colors using TRMNL's actual CSS — then copy the JSON into the plugin's settings. This page runs <code>plugin/src/transform.js</code> directly, unmodified — the same code that runs on TRMNL.</p>
+<body>
 
-  <h2>Import existing configuration <span class="muted">(optional)</span></h2>
-  <div class="card">
-    <p class="muted" style="margin-top:0;">Already have a Calendar Configuration from TRMNL? Paste it here to load it into the form below instead of starting from scratch — a full configuration JSON, or just a plain list of ICS URLs, one per line.</p>
-    <textarea id="importIn" rows="4" placeholder='{"calendars": [...], "people": [...]}&#10;&#10;or just:&#10;https://your-calendar.example.com/one.ics&#10;https://your-calendar.example.com/two.ics'></textarea>
-    <div class="row" style="margin-top:8px;">
-      <button id="loadImport">Load into editor</button>
-      <span id="importStatus" class="status"></span>
+<header class="mc-top">
+  <img src="../icons/icon.svg" alt="">
+  <div>
+    <h1>Metro Calendar</h1>
+    <div class="sub">Configuration — build the JSON for the plugin's <strong>Calendar Config</strong> field and see the map before you paste it.</div>
+  </div>
+  <nav>
+    <a href="#station-people">People</a>
+    <a href="#station-calendars">Calendars</a>
+    <a href="#station-preview">Preview</a>
+    <a href="#station-output">JSON</a>
+    <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin">GitHub</a>
+  </nav>
+</header>
+
+<main class="line">
+
+  <section class="station" id="station-start">
+    <h2>Start <small>load something, or begin from scratch</small></h2>
+    <p class="lede">Already have a configuration in TRMNL? Paste it here. You can also paste plain ICS links, one per line, or load the demo to see how a finished setup looks.</p>
+    <div class="card plain">
+      <textarea id="importIn" rows="4" placeholder='{"people": [...], "calendars": [...]}&#10;or just&#10;https://calendar.example.com/work.ics&#10;https://calendar.example.com/family.ics'></textarea>
+      <div class="toolbar">
+        <button id="loadImport" class="primary">Load into the editor</button>
+        <button id="loadDemo">Load the demo configuration</button>
+        <span id="importStatus" class="status"></span>
+      </div>
     </div>
-  </div>
+  </section>
 
-  <h2>Calendars <span class="muted">(order matters — shown first when there's more all-day content than fits)</span></h2>
-  <div id="calendars"></div>
-  <button id="addCalendar" class="add">+ Add calendar</button>
+  <section class="station" id="station-people">
+    <h2>People <small>one line on the map per person</small></h2>
+    <p class="lede">Every person is a line. The work side of the map (top, or left in portrait) is for you; everyone else runs on the family side. The first person is also who gets any event no rule claims.</p>
+    <div id="people"></div>
+    <div class="toolbar"><button id="addPerson">+ Add a person</button></div>
+  </section>
 
-  <h2>Holiday calendars <span class="muted">(kept separate for clarity — fully customizable, same as any calendar above)</span></h2>
-  <div id="holidayCalendars"></div>
-  <div class="row" style="margin-top:6px;">
-    <button id="addCalendarHoliday" class="add">+ Add calendar</button>
-  </div>
-  <div class="card" style="margin-top:10px;">
-    <p class="muted" style="margin-top:0;">Add a public holiday calendar — a real Google-hosted ICS feed, no account needed.</p>
-    <div class="row">
-      <select id="holidayCountrySelect"></select>
-      <button id="addHolidayCalendar" class="add">+ Add public holidays</button>
-    </div>
-  </div>
+  <section class="station" id="station-calendars">
+    <h2>Calendars <small>the ICS feeds the events come from</small></h2>
+    <p class="lede">Each calendar needs its ICS link. Pick whose line its events go on; open <em>Rules</em> when one calendar mixes several people or you want to rename or hide things.</p>
+    <div id="calendars"></div>
+    <div class="toolbar"><button id="addCalendar">+ Add a calendar</button></div>
+  </section>
 
-  <h2>People <span class="muted">(the first person is the "Everyone / All" fallback badge — shown on any event nobody more specific claims)</span></h2>
-  <div id="people"></div>
-  <button id="addPerson" class="add">+ Add person</button>
-
-  <h2>Global rules <span class="muted">(optional — apply across every calendar, not just one)</span></h2>
-  <div class="card">
-    <p class="muted" style="margin-top:0;">Same rule engine as each calendar's own "Advanced" rules below, just not scoped to a
-      single calendar — e.g. "any event titled 'Doctor' → assign Mom", regardless of which calendar it came from. A calendar's own
-      rule for the same event still wins over one of these.</p>
+  <section class="station" id="station-rules">
+    <h2>Rules for every calendar <small>optional</small></h2>
+    <p class="lede">The same rules as inside a calendar, applied to all of them — for example "anything called Dentist goes on Sam's line". A calendar's own rule wins over one of these.</p>
     <div id="globalRules"></div>
-    <button id="addGlobalRule" class="small add">+ Add global rule</button>
-  </div>
+    <div class="toolbar"><button id="addGlobalRule">+ Add a rule</button></div>
+  </section>
 
-  <h2>Generated Configuration</h2>
-  <div class="card">
-    <p class="muted" style="margin-top:0;">Paste this into the plugin's <strong>Calendar Configuration</strong> field on TRMNL.</p>
-    <textarea id="jsonOut" readonly></textarea>
-    <div class="row" style="margin-top:8px;">
-      <button id="copyJson">Copy JSON</button>
-      <span id="copyStatus" class="status"></span>
+  <section class="station" id="station-preview">
+    <h2>Preview <small>the plugin's own layout code, on a device-sized canvas</small></h2>
+    <p class="lede">Runs the real <code>transform.js</code> against your calendars (fetched from this browser), then draws the map exactly as the device would. Feeds that refuse browser requests can be pasted or uploaded instead.</p>
+    <div class="card plain">
+      <div class="preview-controls">
+        <div class="field"><label>Device</label>
+          <select id="pDevice">
+            <option value="og">TRMNL OG · 800×480 · 1-bit</option>
+            <option value="ogv2">TRMNL OG V2 · 800×480 · 2-bit</option>
+            <option value="x">TRMNL X · 1872×1404 · landscape</option>
+            <option value="xp">TRMNL X · 1404×1872 · portrait</option>
+            <option value="hh">OG half (horizontal)</option>
+            <option value="hv">OG half (vertical)</option>
+            <option value="q">OG quadrant</option>
+          </select></div>
+        <div class="field"><label>Orientation</label>
+          <select id="pOrientation"><option value="auto">Auto</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></div>
+        <div class="field"><label>Language</label>
+          <select id="pLocale"><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option><option value="de">Deutsch</option><option value="nl">Nederlands</option><option value="en-US">English (US, 12h)</option></select></div>
+        <div class="field"><label>Clock</label>
+          <select id="pTime"><option value="auto">Auto</option><option value="24h">24-hour</option><option value="12h">12-hour</option></select></div>
+        <div class="field"><label>Now</label><input type="time" id="pNow"></div>
+        <div class="field"><label>Location (lat, lon) for weather</label><input type="text" id="pLatLon" placeholder="50.8503, 4.3517" style="width:170px"></div>
+        <div class="field"><label>Time zone</label><input type="text" id="pTz" placeholder="from your config / browser" style="width:170px"></div>
+      </div>
+      <div class="toolbar" style="margin-top:12px;">
+        <button id="runPreview" class="primary">Draw the map</button>
+        <span id="previewStatus" class="status"></span>
+      </div>
+      <div id="sources" class="sources" style="margin-top:12px;"></div>
+      <div id="stage" class="stage" hidden><div id="stageInner" class="stage-inner"></div></div>
+      <details class="adv" style="margin-top:10px;"><summary>Raw run() output</summary><textarea id="resultJson" rows="10" readonly style="margin-top:8px;"></textarea></details>
     </div>
-  </div>
+  </section>
 
-  <h2>Test with real data</h2>
-  <div class="card">
-    <div class="row">
-      <div>
-        <label>Locale (e.g. en, nl, fr, ja, pt-BR)</label>
-        <input type="text" id="tLocale" value="en" class="field-narrow">
+  <section class="station terminus" id="station-output">
+    <h2>Your configuration <small>paste this into TRMNL</small></h2>
+    <div class="card plain">
+      <textarea id="jsonOut" rows="12" readonly></textarea>
+      <div class="toolbar">
+        <button id="copyJson" class="primary">Copy JSON</button>
+        <span id="copyStatus" class="status"></span>
       </div>
-      <div>
-        <label>Time format</label>
-        <select id="tTimeFormat"><option value="24h">24h</option><option value="12h">12h</option></select>
-      </div>
-      <div>
-        <label>Location lat,lon (blank = no sun/weather)</label>
-        <input type="text" id="tLatLon" placeholder="50.8503,4.3517" class="field-url" style="flex:0 0 200px;">
-      </div>
-      <div>
-        <label>Days to show</label>
-        <input type="number" id="tDays" value="3" min="1" max="3" class="field-narrow" style="flex:0 0 80px;">
-      </div>
+      <ol class="steps hint">
+        <li>In TRMNL open the plugin's settings and turn <strong>Use Demo Data</strong> off.</li>
+        <li>Paste the JSON into <strong>Calendar Config (JSON)</strong>.</li>
+        <li>Set your <strong>Location</strong> for weather and sunrise/sunset, then save.</li>
+      </ol>
     </div>
-    <div id="icsSources" style="margin-top:14px;"></div>
-    <div class="row" style="margin-top:10px;">
-      <button class="primary" id="runTest">Run test</button>
-      <span id="runStatus" class="status"></span>
-    </div>
-  </div>
+  </section>
 
-  <div id="previewWrap" style="display:none;">
-    <h2>Preview</h2>
-    <div class="card">
-      <div id="previewDays" class="row" style="align-items:stretch;"></div>
-      <details style="margin-top:14px;">
-        <summary>Raw run() output (JSON)</summary>
-        <textarea id="resultJson" readonly style="margin-top:8px;"></textarea>
-      </details>
-    </div>
-  </div>
-</div>
+</main>
 
-<!-- The plugin's actual serverless code — no build step, loaded exactly as TRMNL's Node
-     runtime and this page both execute it: plain top-level function/const declarations,
-     no import/export, so `run` (and everything it calls) just lands in this page's global
-     scope once the script tag below evaluates. -->
+<!-- The plugin's actual serverless code, unmodified: plain top-level declarations, so run()
+     and parseConfig() land in this page's global scope. -->
 <script src="../plugin/src/transform.js"></script>
 <script>
 (function () {
   "use strict";
+  var realFetch = window.fetch ? window.fetch.bind(window) : function () { return Promise.reject(new Error("no fetch")); };
 
-  // Captured once, at load time, before anything ever overrides window.fetch (see runTest
-  // below). fetchIcsSmart uses THIS, never the bare `fetch` identifier — a bare call would
-  // resolve to whatever window.fetch currently is, which during a test run is runTest's own
-  // wrapper that calls fetchIcsSmart in the first place, recursing into itself forever.
-  var realFetch = window.fetch.bind(window);
-
-  // Mirrors HUES/GRAY_SHADES/BLACK_WHITE/colorClass/foregroundFor in plugin/src/transform.js —
-  // kept as a second copy (not shared code) since this is a plain <script> tag, not a module;
-  // if those ever change over there, update these too.
-  var HUES = ["blue", "green", "orange", "purple", "red", "cyan", "pink", "lime", "violet", "yellow"];
-  var GRAY_SHADES = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75];
-  var BLACK_WHITE = ["black", "white"];
-  var VALID_COLORS = HUES.concat(GRAY_SHADES.map(function (n) { return "gray-" + n; })).concat(BLACK_WHITE);
-
-  function colorClass(color) { return HUES.indexOf(color) !== -1 ? color + "-65" : color; }
-  function foregroundFor(color) {
-    if (color === "black") return "white";
-    if (color === "white") return "black";
-    var m = /^gray-(\d+)$/.exec(color || "");
-    if (!m) return "black";
-    return parseInt(m[1], 10) < 45 ? "white" : "black";
-  }
-
-  // ---------------------------------------------------------- public holiday calendars (Google)
-  //
-  // Google hosts a free, no-account-needed public ICS feed per country at a predictable URL —
-  // this list of country -> feed-id pairs is this page's own convenience data (nothing to do
-  // with the plugin's schema, which has no notion of "holidays" at all, see transform.js) for
-  // turning a country pick into a normal calendars[] entry. Every id below was verified by hand
-  // (HTTP 200 + real ICS content) — Google doesn't publish a lookup API for these, and the
-  // naming isn't a consistent pattern (ISO codes, English country adjectives, and abbreviations
-  // are all mixed in), so this can't be derived programmatically; it's necessarily a fixed list
-  // rather than exhaustive country coverage.
-  var HOLIDAY_COUNTRIES = [
-    ["Australia", "australian"], ["Austria", "austrian"], ["Belgium", "be"],
-    ["Brazil", "brazilian"], ["Bulgaria", "bulgarian"], ["Canada", "canadian"],
-    ["China", "china"], ["Croatia", "croatian"], ["Czech Republic", "czech"],
-    ["Denmark", "danish"], ["Finland", "finnish"], ["France", "french"],
-    ["Germany", "german"], ["Greece", "greek"], ["Hong Kong", "hong_kong"],
-    ["Hungary", "hungarian"], ["India", "indian"], ["Indonesia", "indonesian"],
-    ["Ireland", "irish"], ["Israel", "jewish"], ["Italy", "italian"],
-    ["Japan", "japanese"], ["Latvia", "latvian"], ["Lithuania", "lithuanian"],
-    ["Malaysia", "malaysia"], ["Mexico", "mexican"], ["Netherlands", "dutch"],
-    ["New Zealand", "new_zealand"], ["Norway", "norwegian"], ["Pakistan", "pk"],
-    ["Philippines", "philippines"], ["Poland", "polish"], ["Portugal", "portuguese"],
-    ["Romania", "romanian"], ["Russia", "russian"], ["Saudi Arabia", "saudiarabian"],
-    ["Singapore", "singapore"], ["Slovakia", "slovak"], ["Slovenia", "slovenian"],
-    ["South Korea", "south_korea"], ["Spain", "spain"], ["Sweden", "swedish"],
-    ["Switzerland", "ch"], ["Taiwan", "taiwan"], ["Thailand", "th"],
-    ["Turkey", "turkish"], ["Ukraine", "ukrainian"], ["United Kingdom", "uk"],
-    ["United States", "usa"], ["Vietnam", "vietnamese"],
-  ];
-  function holidayIcsUrl(code) {
-    return "https://calendar.google.com/calendar/ical/en." + code + "%23holiday%40group.v.calendar.google.com/public/basic.ics";
-  }
-
+  // ------------------------------------------------------------ helpers
   function el(tag, attrs, children) {
     var e = document.createElement(tag);
-    for (var k in (attrs || {})) {
+    Object.keys(attrs || {}).forEach(function (k) {
       if (k === "text") e.textContent = attrs[k];
       else if (k === "html") e.innerHTML = attrs[k];
+      else if (k === "class") e.className = attrs[k];
       else e.setAttribute(k, attrs[k]);
-    }
-    (children || []).forEach(function (c) { if (c) e.appendChild(c); });
+    });
+    (children || []).forEach(function (c) { if (c) e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
     return e;
   }
+  function uid() { return Math.random().toString(36).slice(2, 9); }
+  function setStatus(id, text, cls) { var n = document.getElementById(id); n.textContent = text; n.className = "status " + (cls || ""); }
 
-  // Real background/foreground for a color VALUE, read off the framework's own CSS (a
-  // hidden probe element wearing the exact bg--{hue}-65/text--{fg} classes every chip
-  // actually renders with) rather than a hand-maintained hex table — stays correct if the
-  // framework's own palette ever changes. Cached since every option in every select reuses
-  // the same small color set.
-  var _colorStyleCache = {};
-  var colorProbeRoot = null;
-  function colorOptionStyle(colorValue) {
-    if (!colorValue) return "";
-    if (!(colorValue in _colorStyleCache)) {
-      // Framework color custom properties (--bg-{hue}-color etc.) are only ever defined
-      // under ".trmnl .screen" (confirmed against the framework's own shipped CSS the hard
-      // way) — but `.screen` also carries real device-viewport sizing that broke this page's
-      // own layout the first time it landed on the actual visible .wrap container. A
-      // dedicated, permanently hidden probe root (own .trmnl + .screen, never shown, never
-      // part of the real page flow) gets the color scoping right without that side effect.
-      if (!colorProbeRoot) {
-        colorProbeRoot = el("div", { class: "trmnl", style: "position:absolute;width:0;height:0;overflow:hidden;visibility:hidden;" });
-        colorProbeRoot.appendChild(el("div", { class: "screen" }));
-        document.body.appendChild(colorProbeRoot);
-      }
-      var probe = el("span", { class: "bg--" + colorClass(colorValue) + " text--" + foregroundFor(colorValue) });
-      colorProbeRoot.firstChild.appendChild(probe);
-      var cs = getComputedStyle(probe);
-      _colorStyleCache[colorValue] = "background-color:" + cs.backgroundColor + ";color:" + cs.color + ";";
-      colorProbeRoot.firstChild.removeChild(probe);
-    }
-    return _colorStyleCache[colorValue];
+  // Mirrors HUE_NAMES / hueTokenForColor in transform.js: a colour is a plain hue name (drawn
+  // as its -40 step), a gray step, or black/white.
+  var HUES = ["blue", "green", "orange", "purple", "red", "cyan", "pink", "lime", "violet", "yellow"];
+  var GRAYS = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75];
+  var COLORS = ["black"].concat(GRAYS.map(function (n) { return "gray-" + n; })).concat(HUES);
+  var LINE_STYLES = ["solid", "dashed", "dotted", "dashdot"]; // same order as transform.js
+  var DASH = { solid: "", dashed: "9 6", dotted: "0.1 5", dashdot: "11 5 0.1 5" };
+  // Approximate on-panel shade for the swatch (the framework resolves the real one on device).
+  function swatchColor(color) {
+    if (!color || color === "black") return "#000";
+    var g = /^gray-(\d+)$/.exec(color);
+    if (g) return "hsl(0 0% " + (parseInt(g[1], 10) + 8) + "%)";
+    return "#666";
   }
-
-  function hueSelect(id, value, includeAuto) {
-    var sel = el("select", { id: id });
-    sel.appendChild(el("option", { value: "" }, [document.createTextNode(includeAuto ? "(auto)" : "(none)")]));
-    var hueGroup = el("optgroup", { label: "Colors" });
-    HUES.forEach(function (h) {
-      var opt = el("option", { value: h, style: colorOptionStyle(h) }, [document.createTextNode(h)]);
-      if (h === value) opt.setAttribute("selected", "selected");
-      hueGroup.appendChild(opt);
-    });
-    sel.appendChild(hueGroup);
-    // Most real TRMNL devices are grayscale panels, not the color ones — an explicit gray
-    // shade gives direct control over exactly how light/dark a calendar/person reads there,
-    // rather than relying on a hue's automatic (but less predictable) grayscale fallback.
-    var grayGroup = el("optgroup", { label: "Grays (10=darkest .. 75=lightest)" });
-    GRAY_SHADES.forEach(function (n) {
-      var v = "gray-" + n;
-      var opt = el("option", { value: v, style: colorOptionStyle(v) }, [document.createTextNode(v)]);
-      if (v === value) opt.setAttribute("selected", "selected");
-      grayGroup.appendChild(opt);
-    });
-    sel.appendChild(grayGroup);
-    // True black/white (bg--black / bg--white) rather than the nearest gray step — gray-10 is
-    // #111111 and gray-75 a light gray, neither is literal 0/255.
-    var bwGroup = el("optgroup", { label: "Black & White" });
-    BLACK_WHITE.forEach(function (v) {
-      var opt = el("option", { value: v, style: colorOptionStyle(v) }, [document.createTextNode(v)]);
-      if (v === value) opt.setAttribute("selected", "selected");
-      bwGroup.appendChild(opt);
-    });
-    sel.appendChild(bwGroup);
+  function swatchSvg(color, style, width) {
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "swatch"); svg.setAttribute("viewBox", "0 0 46 12"); svg.setAttribute("width", "46"); svg.setAttribute("height", "12");
+    var ln = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    ln.setAttribute("x1", "2"); ln.setAttribute("y1", "6"); ln.setAttribute("x2", "44"); ln.setAttribute("y2", "6");
+    ln.setAttribute("stroke", swatchColor(color)); ln.setAttribute("stroke-width", String(width || 3)); ln.setAttribute("stroke-linecap", "round");
+    if (DASH[style]) ln.setAttribute("stroke-dasharray", DASH[style]);
+    svg.appendChild(ln);
+    return svg;
+  }
+  function colorSelect(value) {
+    var sel = el("select", {});
+    sel.appendChild(el("option", { value: "", text: "auto" }));
+    var g1 = el("optgroup", { label: "Black & grays (10 darkest … 75 lightest)" });
+    ["black"].concat(GRAYS.map(function (n) { return "gray-" + n; })).forEach(function (c) { g1.appendChild(el("option", { value: c, text: c })); });
+    var g2 = el("optgroup", { label: "Hues (colour panels; mid gray elsewhere)" });
+    HUES.forEach(function (c) { g2.appendChild(el("option", { value: c, text: c })); });
+    sel.appendChild(g1); sel.appendChild(g2);
+    sel.value = COLORS.indexOf(value) !== -1 ? value : "";
     return sel;
   }
 
-  // Plain bg--{hue}/text--{fg} classes on this swatch span would render with NO color at all
-  // here: the framework only ever defines those custom properties under ".trmnl .screen" (see
-  // colorOptionStyle above), and this span sits in the page's real, visible DOM — which has
-  // .trmnl on <body> but deliberately no .screen ancestor (adding one broke this page's own
-  // layout the first time it was tried). Reusing colorOptionStyle's already-correct computed
-  // rgb() values sidesteps that entirely, same fix as the <option> list, applied here too.
-  function swatchStyle(color) {
-    return color ? colorOptionStyle(color) : "border:1px dashed #bbb;";
-  }
-  function swatchFor(color) {
-    return el("span", { class: "swatch", style: swatchStyle(color) });
-  }
-
-  // ------------------------------------------------------------------- state
-
-  function uid() { return Math.random().toString(36).slice(2, 9); }
-  function newCalendar() { return { _id: uid(), url: "", name: "", color: "", assignPerson: [], rules: [], headers: [] }; }
+  // ------------------------------------------------------------ model
+  var state = { people: [], calendars: [], rules: [], timeZone: "", locale: "" };
+  function newPerson() { return { _id: uid(), name: "", color: "", side: "" }; }
+  function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false }; }
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
-  // Google's public per-country holiday feed always follows this exact predictable URL shape
-  // (see holidayIcsUrl below) — used on import to sort a flat calendars[] back into "regular"
-  // vs "holiday calendars", since transform.js's own schema has no such distinction at all;
-  // it's purely how this editor organizes the same flat array for clarity.
-  function isHolidayUrl(url) {
-    return /^https:\/\/calendar\.google\.com\/calendar\/ical\/en\.[^%]+%23holiday%40group\.v\.calendar\.google\.com\/public\/basic\.ics$/i.test(url || "");
-  }
-  function newPerson() { return { _id: uid(), name: "", color: "", badge: "" }; }
+  function newCondition() { return { _id: uid(), type: "word", value: "", status: "confirmed", weekdays: [] }; }
+  function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], persons: [], rename: true, rewrite: "", rewriteFull: false, hide: false }; }
 
-  // A "matcher" backs a rule's match — two tiers, matching
-  // compileMatcher() in plugin/src/transform.js exactly: "word" is the everyday case (plain
-  // text, matched case-insensitively on whole-word boundaries so "L1" doesn't also catch
-  // "L10" — no regex knowledge needed), "regex" is the expert escape hatch for anything a
-  // plain word can't express (character classes, lookaheads, alternation, ...).
-  function newMatcher() { return { _id: uid(), matchType: "word", matchText: "", matchRegex: "", matchStatus: "confirmed", matchWeekdays: [], testText: "" }; }
-  var MATCH_TYPES = [
-    { value: "word", label: "Word" },
-    { value: "contains", label: "Contains" },
-    { value: "exact", label: "Exact match" },
-    { value: "regex", label: "Regex (expert)" },
-    { value: "any", label: "Any (always matches)" },
-    { value: "status", label: "Status (confirmed/tentative/cancelled)" },
-    { value: "weekday", label: "Day of week" },
-  ];
-  // word/contains/exact all share the same plain-text input (matchText) — only their compiled
-  // boundary differs (\b...\b / none / ^...$) — regex gets its own field, any needs no text at
-  // all. Kept as one set so buildMatcherFields/applyMode below has a single place to ask
-  // "does this type use the plain-text field."
-  var PLAIN_TEXT_TYPES = ["word", "contains", "exact"];
-  // Types that can be meaningfully "tested against a sample title" — status/weekday depend on
-  // event metadata the live tester has no access to (just a typed sample title), so they get no
-  // test row at all rather than a misleading always-blank one. "any" is excluded too: it matches
-  // literally every title unconditionally, so testing it against a sample can only ever say
-  // "✓ matches" — there's nothing for the tester to actually tell you.
-  var TITLE_TESTABLE_TYPES = ["word", "contains", "exact", "regex"];
-  var STATUS_OPTIONS = [
-    { value: "confirmed", label: "Confirmed" },
-    { value: "tentative", label: "Tentative" },
-    { value: "cancelled", label: "Cancelled" },
-  ];
-  // 2-letter codes match transform.js's own WD_MAP/compileMatcher exactly (RRULE-style),
-  // Monday-first to match how the plugin's own week/weekday logic is indexed everywhere else.
-  var WEEKDAY_CODES = [
-    { code: "MO", label: "Mon" }, { code: "TU", label: "Tue" }, { code: "WE", label: "Wed" },
-    { code: "TH", label: "Thu" }, { code: "FR", label: "Fri" }, { code: "SA", label: "Sat" },
-    { code: "SU", label: "Sun" },
-  ];
-  function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
-  // Mirrors compileMatcher() in plugin/src/transform.js exactly, so the live tester below shows
-  // precisely what transform.js itself would do with this matcher.
-  function compileMatcherPreview(m) {
-    if (m.matchType === "any") return /[\s\S]*/i;
-    if (m.matchType === "status" || m.matchType === "weekday") return null;
-    if (m.matchType === "regex") {
-      var p = (m.matchRegex || "").trim();
-      if (!p) return null;
-      try { return new RegExp(p, "i"); } catch (e) { return null; }
-    }
-    var p2 = (m.matchText || "").trim();
-    if (!p2) return null;
-    if (m.matchType === "contains") return new RegExp(escapeRegExp(p2), "i");
-    if (m.matchType === "exact") return new RegExp("^" + escapeRegExp(p2) + "$", "i");
-    return new RegExp("\\b" + escapeRegExp(p2) + "\\b", "i");
-  }
-  // The JSON value transform.js's parseConfig actually expects for this matcher: a plain string
-  // for "word"/"contains"/"exact" (it derives the right boundary on that side from `type`),
-  // { type: "regex", value: ... } for "regex", or just { type: "any" } (no value at all) for
-  // the catch-all — null when there's nothing usable yet (blank word/regex), for the caller to
-  // drop.
-  function matcherValue(m) {
-    if (m.matchType === "any") return { type: "any" };
-    if (m.matchType === "status") return { type: "status", value: m.matchStatus || "confirmed" };
-    if (m.matchType === "weekday") return (m.matchWeekdays || []).length ? { type: "weekday", value: m.matchWeekdays.slice() } : null;
-    if (m.matchType === "regex") {
-      var p = (m.matchRegex || "").trim();
-      return p ? { type: "regex", value: p } : null;
-    }
-    var p2 = (m.matchText || "").trim();
-    if (!p2) return null;
-    return m.matchType === "word" ? { type: "word", value: p2 } : { type: m.matchType, value: p2 };
-  }
-  // Inverse of matcherValue() — used when importing an existing config, so { type: "word"/
-  // "contains"/"exact", value: ... }, { type: "regex", value: ... }, { type: "any" },
-  // { type: "status", value: ... }, { type: "weekday", value: ... }, and { type: "and"/"or",
-  // matchers: [...] } each round-trip to the matching editor state.
-  // A match value is usable if it's a real word/regex/contains/exact/status string, a weekday
-  // string/array, an "any"/"all" catch-all (no value needed), or an "and"/"or" with at least one
-  // usable sub-matcher — used to decide whether an imported rule survives at all. Missing this
-  // for "any" would silently DROP every catch-all rule on import, since it has no `.value` to check.
-  function isUsableMatchValue(mv) {
-    if (!mv || typeof mv !== "object") return false;
-    if (mv.type === "any" || mv.type === "all") return true;
-    if (mv.type === "and" || mv.type === "or") return Array.isArray(mv.matchers) && mv.matchers.some(isUsableMatchValue);
-    if (mv.type === "status") return typeof mv.value === "string" && !!mv.value.trim();
-    if (mv.type === "weekday") return (typeof mv.value === "string" && !!mv.value.trim()) || (Array.isArray(mv.value) && mv.value.length > 0);
-    return typeof mv.value === "string";
-  }
-  function matcherFromValue(v) {
-    var m = newMatcher();
-    if (!v || typeof v !== "object") return m;
-    if (v.type === "any" || v.type === "all") {
-      m.matchType = "any";
-    } else if (v.type === "status" && typeof v.value === "string") {
-      m.matchType = "status";
-      var wantStatus = v.value.trim().toLowerCase();
-      m.matchStatus = STATUS_OPTIONS.some(function (s) { return s.value === wantStatus; }) ? wantStatus : "confirmed";
-    } else if (v.type === "weekday") {
-      m.matchType = "weekday";
-      var rawDays = Array.isArray(v.value) ? v.value : typeof v.value === "string" ? [v.value] : [];
-      m.matchWeekdays = rawDays
-        .map(function (x) { return typeof x === "string" ? x.trim().toUpperCase().slice(0, 2) : ""; })
-        .filter(function (c) { return WEEKDAY_CODES.some(function (w) { return w.code === c; }); });
-    } else if (typeof v.value === "string") {
-      if (v.type === "regex") {
-        m.matchType = "regex";
-        m.matchRegex = v.value;
-      } else {
-        m.matchType = PLAIN_TEXT_TYPES.indexOf(v.type) !== -1 ? v.type : "word";
-        m.matchText = v.value;
-      }
-    }
-    return m;
-  }
-  // A rule's exported `match` may be a single matcher, or an "and"/"or" combining several — this
-  // reads either shape back into a flat { combinator, conditions[] } the editor's UI works with
-  // (see buildConditionsUI). A plain (non-and/or) match becomes a one-condition list.
-  function conditionsFromMatchValue(mv) {
-    if (mv && typeof mv === "object" && (mv.type === "and" || mv.type === "or") && Array.isArray(mv.matchers) && mv.matchers.length) {
-      return { combinator: mv.type, conditions: mv.matchers.map(matcherFromValue) };
-    }
-    return { combinator: "and", conditions: [matcherFromValue(mv)] };
-  }
-  // Inverse of conditionsFromMatchValue() — collapses back to a single matcher when there's only
-  // one usable condition (so a simple rule still exports as a plain matcher, not a needless
-  // one-element "and"), or wraps 2+ into { type: combinator, matchers: [...] }. null when no
-  // condition is usable at all, for the caller to drop the whole rule.
-  function matchValueFromConditions(rule) {
-    var values = rule.conditions.map(matcherValue).filter(Boolean);
-    if (!values.length) return null;
-    if (values.length === 1) return values[0];
-    return { type: rule.combinator === "or" ? "or" : "and", matchers: values };
-  }
-  // Builds the type-select + type-specific input(s) + live tester for one matcher — reused for
-  // every condition in every rule (a calendar's own, or global).
-  function buildMatcherFields(m, onChange) {
-    var typeSelect = el("select", { class: "field", style: "flex:0 0 auto;width:auto;" });
-    MATCH_TYPES.forEach(function (t) {
-      var opt = el("option", { value: t.value }, [document.createTextNode(t.label)]);
-      if (t.value === m.matchType) opt.setAttribute("selected", "selected");
-      typeSelect.appendChild(opt);
+  var MATCH_TYPES = [["word", "has the word"], ["contains", "contains"], ["exact", "is exactly"], ["regex", "matches regex"], ["any", "any event"], ["status", "has status"], ["weekday", "is on weekday"]];
+  var WEEKDAYS = [["MO", "Mon"], ["TU", "Tue"], ["WE", "Wed"], ["TH", "Thu"], ["FR", "Fri"], ["SA", "Sat"], ["SU", "Sun"]];
+
+  // Which side, colour, dash pattern and width the plugin will give each person — the same
+  // decisions makePeopleRegistry() in transform.js makes, so the swatches here match the map.
+  function lineLook() {
+    var work = workPersonName();
+    var buckets = { left: [], right: [] };
+    var out = {};
+    state.people.forEach(function (p) {
+      var name = p.name.trim();
+      if (!name) return;
+      var side = p.side === "left" || p.side === "right" ? p.side : (name === work ? "left" : "right");
+      var b = buckets[side];
+      out[p._id] = { side: side, style: LINE_STYLES[b.length % LINE_STYLES.length], width: (side === "left" && b.length === 0) ? 4 : 3, color: p.color || ((side === "left" && b.length === 0) ? "black" : "") };
+      b.push(name);
     });
-
-    var textInput = el("input", { type: "text", class: "field", placeholder: "text to match, e.g. L6", value: m.matchText });
-    var regexInput = el("input", { type: "text", class: "field field-regex", placeholder: "regex, e.g. \\bL[1345]\\b", value: m.matchRegex });
-
-    var statusSelect = el("select", { class: "field", style: "flex:0 0 auto;width:auto;" });
-    STATUS_OPTIONS.forEach(function (s) {
-      var opt = el("option", { value: s.value }, [document.createTextNode(s.label)]);
-      if (s.value === m.matchStatus) opt.setAttribute("selected", "selected");
-      statusSelect.appendChild(opt);
-    });
-
-    // A day-of-week is picked with toggle buttons, not a <select multiple> — 7 fixed options
-    // read faster as a row of on/off pills than as a scrolling list box.
-    // No `display` here — it's set explicitly in applyMode() below (flex when shown, none when
-    // not), since an always-on inline `display:flex` would outrank the `hidden` attribute's own
-    // (very low-specificity) UA style and stay visually visible even while .hidden is true.
-    var weekdayGroup = el("div", { style: "gap:4px;flex-wrap:wrap;align-items:center;" });
-    function weekdayBtnStyle(active) {
-      return "min-width:42px;" + (active ? "background:#1a1a1a;color:#fff;border-color:#1a1a1a;" : "");
-    }
-    WEEKDAY_CODES.forEach(function (w) {
-      var btn = el("button", { type: "button", class: "small", style: weekdayBtnStyle(m.matchWeekdays.indexOf(w.code) !== -1) }, [document.createTextNode(w.label)]);
-      btn.addEventListener("click", function () {
-        var idx = m.matchWeekdays.indexOf(w.code);
-        if (idx === -1) m.matchWeekdays.push(w.code); else m.matchWeekdays.splice(idx, 1);
-        btn.setAttribute("style", weekdayBtnStyle(m.matchWeekdays.indexOf(w.code) !== -1));
-        onChange();
-      });
-      weekdayGroup.appendChild(btn);
-    });
-
-    function applyMode() {
-      textInput.hidden = PLAIN_TEXT_TYPES.indexOf(m.matchType) === -1;
-      regexInput.hidden = m.matchType !== "regex";
-      statusSelect.hidden = m.matchType !== "status";
-      var showWeekday = m.matchType === "weekday";
-      weekdayGroup.hidden = !showWeekday;
-      weekdayGroup.style.display = showWeekday ? "flex" : "none";
-    }
-    applyMode();
-
-    var testInput = el("input", { type: "text", class: "field", placeholder: "test against a sample title...", value: m.testText, style: "flex:1 1 160px;" });
-    var testResult = el("span", { style: "font-size:12px;white-space:nowrap;min-width:90px;" });
-    function updateTestResult() {
-      var testable = TITLE_TESTABLE_TYPES.indexOf(m.matchType) !== -1;
-      testInput.hidden = !testable;
-      testResult.hidden = !testable;
-      if (!testable || !m.testText) { testResult.textContent = ""; return; }
-      var rx = compileMatcherPreview(m);
-      if (!rx) {
-        testResult.textContent = m.matchType === "regex" ? "invalid regex" : "";
-        testResult.style.color = "#d1242f";
-        return;
-      }
-      var matches = rx.test(m.testText);
-      testResult.textContent = matches ? "✓ matches" : "✗ no match";
-      testResult.style.color = matches ? "#1a7f37" : "#d1242f";
-    }
-
-    textInput.addEventListener("input", function () { m.matchText = textInput.value; updateTestResult(); onChange(); });
-    regexInput.addEventListener("input", function () { m.matchRegex = regexInput.value; updateTestResult(); onChange(); });
-    statusSelect.addEventListener("change", function () { m.matchStatus = statusSelect.value; onChange(); });
-    typeSelect.addEventListener("change", function () { m.matchType = typeSelect.value; applyMode(); updateTestResult(); onChange(); });
-    testInput.addEventListener("input", function () { m.testText = testInput.value; updateTestResult(); });
-    updateTestResult();
-
-    return {
-      typeSelect: typeSelect, textInput: textInput, regexInput: regexInput,
-      statusSelect: statusSelect, weekdayGroup: weekdayGroup,
-      testInput: testInput, testResult: testResult,
-      isTitleTestable: function () { return TITLE_TESTABLE_TYPES.indexOf(m.matchType) !== -1; },
-    };
-  }
-  // Renders one rule's full set of conditions — a single matcher by default, or several chained
-  // with a shared AND/OR combinator (see matchValueFromConditions/conditionsFromMatchValue for
-  // how this maps to the exported JSON). Returns the wrapper element plus a re-render function,
-  // since adding/removing a condition changes how many rows (and whether the combinator picker)
-  // need to exist at all.
-  function buildConditionsUI(rule, onChange) {
-    var wrap = el("div", {});
-    function render() {
-      wrap.innerHTML = "";
-      if (rule.conditions.length > 1) {
-        var combSel = el("select", { class: "field-narrow", style: "margin-bottom:6px;" }, [
-          el("option", { value: "and" }, [document.createTextNode("Match ALL of these (AND)")]),
-          el("option", { value: "or" }, [document.createTextNode("Match ANY of these (OR)")]),
-        ]);
-        combSel.value = rule.combinator === "or" ? "or" : "and";
-        combSel.addEventListener("change", function () { rule.combinator = combSel.value; onChange(); });
-        wrap.appendChild(combSel);
-      }
-      rule.conditions.forEach(function (cond, i) {
-        var f = buildMatcherFields(cond, onChange);
-        var pieces = [f.typeSelect, f.textInput, f.regexInput, f.statusSelect, f.weekdayGroup];
-        if (rule.conditions.length > 1) {
-          var rmCond = el("button", { type: "button", class: "small danger" }, [document.createTextNode("Remove")]);
-          rmCond.addEventListener("click", function () { rule.conditions.splice(i, 1); render(); onChange(); });
-          pieces.push(rmCond);
-        }
-        wrap.appendChild(el("div", { class: "sub-entry" }, pieces));
-        if (f.isTitleTestable()) {
-          wrap.appendChild(el("div", { style: "display:flex;gap:6px;align-items:center;margin:2px 0 8px;" }, [f.testInput, f.testResult]));
-        }
-      });
-      var addCond = el("button", { type: "button", class: "small add" }, [document.createTextNode("+ Add condition (AND/OR)")]);
-      addCond.addEventListener("click", function () { rule.conditions.push(newMatcher()); render(); onChange(); });
-      wrap.appendChild(addCond);
-    }
-    render();
-    return { wrap: wrap, render: render };
-  }
-  // A "rule" is one or more conditions (chained with a shared AND/OR when there's more than
-  // one — see buildConditionsUI) plus any combination of four effects: assign a person, rewrite
-  // the title, mark the event all-day, hide it — the exact same shape whether it's this
-  // calendar's own rule or a global one, and the exact same shape rules[] in transform.js's
-  // parseConfig expects.
-  // "Then" actions are added one at a time (pick a type, it appears — see buildThenStep) rather
-  // than always showing all four at once — activeActions tracks which ones are currently shown
-  // for this rule; it's purely a UI-side concern, never part of the exported JSON (ruleValue
-  // below still looks at person/rewrite/allDay/hide directly, regardless of activeActions).
-  var ACTION_TYPES = [
-    { value: "person", label: "Assign person(s)" },
-    { value: "rewrite", label: "Rewrite title" },
-    { value: "allDay", label: "Make all-day" },
-    { value: "hide", label: "Hide" },
-  ];
-  function newRule() { return { _id: uid(), conditions: [newMatcher()], combinator: "and", activeActions: [], person: [], rename: true, allDay: false, hide: false, rewrite: "", rewriteFull: false }; }
-  function ruleFromValue(v) {
-    var c = conditionsFromMatchValue(v.match);
-    var r = { _id: uid(), conditions: c.conditions, combinator: c.combinator, activeActions: [] };
-    r.person = normalizeNames(v.person);
-    r.rename = v.rename !== false;
-    r.allDay = v.allDay === true;
-    r.hide = v.hide === true;
-    r.rewrite = typeof v.rewrite === "string" ? v.rewrite : "";
-    r.rewriteFull = v.rewriteFull === true;
-    if (r.person.length) r.activeActions.push("person");
-    if (r.rewrite) r.activeActions.push("rewrite");
-    if (r.allDay) r.activeActions.push("allDay");
-    if (r.hide) r.activeActions.push("hide");
-    return r;
-  }
-  // Shared by every checkbox-driven action ("make all-day", "hide") — a plain, stateless toggle
-  // row; the caller's onToggle is fully responsible for reacting (including re-rendering/JSON).
-  function checkboxLabel(checked, text, onToggle) {
-    var chk = el("input", { type: "checkbox" });
-    chk.checked = checked;
-    chk.addEventListener("change", function () { onToggle(chk.checked); });
-    var lbl = el("label", { style: "display:flex;align-items:center;gap:4px;margin:0;font-size:12px;color:#333;white-space:nowrap;" }, [chk, document.createTextNode(text)]);
-    lbl.checkboxEl = chk;
-    return lbl;
-  }
-  // Whether this rule's match, as it will actually export, is a single plain word/regex/
-  // contains/exact matcher — the only case where "rename"/a non-full "rewrite" have an actual
-  // piece of matched text to substitute (mirrors applyCalendarRules/compileRule in
-  // transform.js: an and/or/any/status/weekday top-level match has nothing to point at).
-  function ruleHasRenameableMatch(r) {
-    return r.conditions.length === 1 && PLAIN_TEXT_TYPES.concat(["regex"]).indexOf(r.conditions[0].matchType) !== -1;
-  }
-  function actionHeader(label, onRemove) {
-    var rm = el("button", { type: "button", class: "small danger" }, [document.createTextNode("Remove")]);
-    rm.addEventListener("click", onRemove);
-    return el("div", { class: "row", style: "justify-content:space-between;align-items:center;" }, [
-      el("label", { text: label, style: "margin:0;" }), rm,
-    ]);
-  }
-  // Renders rule `r`'s "Then" actions. Each of the four (person/rewrite/allDay/hide) is added
-  // one at a time via the "+ Add an action" picker at the bottom, rather than always showing
-  // all four — removing one also resets its underlying value back to the rule's default, so no
-  // orphaned state survives once its block disappears. `refresh` is the rule's shared refresh
-  // (updates the no-op warning, re-renders the JSON) — called after every change here.
-  //
-  // rebuild() (full DOM replace) only runs when the SET of active actions changes; ordinary
-  // typing/toggling instead mutates the existing hint elements in place via refreshHints(), so
-  // an input never loses focus just because a sibling hint needed updating.
-  function buildThenStep(r, refresh) {
-    var wrap = el("div", {});
-    var hints = {};
-
-    function removeAction(type) {
-      r.activeActions = r.activeActions.filter(function (t) { return t !== type; });
-      if (type === "person") { r.person = []; r.rename = true; }
-      if (type === "rewrite") { r.rewrite = ""; r.rewriteFull = false; }
-      if (type === "allDay") r.allDay = false;
-      if (type === "hide") r.hide = false;
-      rebuild();
-      refresh();
-    }
-
-    function buildPersonBlock() {
-      var personInput = personMultiSelect(r.person);
-      personInput.classList.add("field");
-      personInput.addEventListener("change", function () { r.person = selectedValues(personInput); refresh(); });
-      var renameLbl = checkboxLabel(r.rename !== false, "rename match to person name", function (v) { r.rename = v; refresh(); });
-      var renameHint = el("p", { class: "muted", style: "flex-basis:100%;margin:2px 0 0;font-size:11.5px;" });
-      hints.person = { renameLbl: renameLbl, renameHint: renameHint };
-      return el("div", { class: "action-group" }, [
-        actionHeader("Assign person(s)", function () { removeAction("person"); }),
-        el("div", { class: "sub-entry" }, [personInput, renameLbl, renameHint]),
-      ]);
-    }
-
-    function buildRewriteBlock() {
-      var rewriteInput = el("input", { type: "text", class: "field", placeholder: "replacement text...", value: r.rewrite || "", style: "flex:1 1 160px;" });
-      rewriteInput.addEventListener("input", function () { r.rewrite = rewriteInput.value; refresh(); });
-      var rewriteModeSel = el("select", { class: "field", style: "flex:0 0 auto;width:auto;" }, [
-        el("option", { value: "regex" }, [document.createTextNode("Regex replace")]),
-        el("option", { value: "full" }, [document.createTextNode("Full rewrite")]),
-      ]);
-      rewriteModeSel.value = r.rewriteFull ? "full" : "regex";
-      rewriteModeSel.addEventListener("change", function () { r.rewriteFull = rewriteModeSel.value === "full"; refresh(); });
-      var rewriteHint = el("p", { class: "muted", style: "margin:4px 0 0;font-size:11.5px;" });
-      hints.rewrite = { rewriteHint: rewriteHint };
-      return el("div", { class: "action-group" }, [
-        actionHeader("Rewrite title", function () { removeAction("rewrite"); }),
-        el("div", { class: "sub-entry", style: "background:transparent;border:none;padding:4px 0 0;margin:0;" }, [rewriteModeSel, rewriteInput]),
-        rewriteHint,
-      ]);
-    }
-
-    function buildAllDayBlock() {
-      r.allDay = true;
-      return el("div", { class: "action-group" }, [
-        actionHeader("Make all-day", function () { removeAction("allDay"); }),
-        el("p", { class: "muted", style: "margin:2px 0 0;" }, [document.createTextNode("Matching events render as an all-day bar instead of a timed one.")]),
-      ]);
-    }
-
-    function buildHideBlock() {
-      r.hide = true;
-      return el("div", { class: "action-group" }, [
-        actionHeader("Hide", function () { removeAction("hide"); }),
-        el("p", { class: "muted", style: "margin:2px 0 0;" }, [document.createTextNode("Matching events are dropped entirely.")]),
-      ]);
-    }
-
-    var BUILDERS = { person: buildPersonBlock, rewrite: buildRewriteBlock, allDay: buildAllDayBlock, hide: buildHideBlock };
-
-    function rebuild() {
-      wrap.innerHTML = "";
-      hints = {};
-      r.activeActions.forEach(function (type) { wrap.appendChild(BUILDERS[type]()); });
-
-      var remaining = ACTION_TYPES.filter(function (a) { return r.activeActions.indexOf(a.value) === -1; });
-      if (remaining.length) {
-        var options = [el("option", { value: "" }, [document.createTextNode("+ Add an action...")])].concat(
-          remaining.map(function (a) { return el("option", { value: a.value }, [document.createTextNode(a.label)]); })
-        );
-        var sel = el("select", { class: "field-narrow" }, options);
-        var addBtn = el("button", { type: "button", class: "small add" }, [document.createTextNode("+ Add")]);
-        addBtn.disabled = true;
-        sel.addEventListener("change", function () { addBtn.disabled = !sel.value; });
-        addBtn.addEventListener("click", function () {
-          if (!sel.value) return;
-          r.activeActions.push(sel.value);
-          rebuild();
-          refresh();
-        });
-        wrap.appendChild(el("div", { class: "sub-entry" }, [sel, addBtn]));
-      }
-      refreshHints();
-    }
-
-    function refreshHints() {
-      if (hints.person) {
-        var hasPerson = r.person && r.person.length > 0;
-        var renameable = ruleHasRenameableMatch(r);
-        hints.person.renameLbl.checkboxEl.disabled = !(hasPerson && renameable);
-        hints.person.renameLbl.style.opacity = hasPerson && renameable ? "1" : "0.45";
-        hints.person.renameHint.textContent = hasPerson && !renameable
-          ? "Only works with a single Word/Contains/Exact/Regex condition — this rule's match won't rename anything, but the person/color/badge still apply."
-          : "";
-      }
-      if (hints.rewrite) {
-        hints.rewrite.rewriteHint.textContent = !!r.rewrite && !r.rewriteFull && !ruleHasRenameableMatch(r)
-          ? "\"Regex replace\" needs a single Word/Contains/Exact/Regex condition to know what to replace — switch to \"Full rewrite\", or this has no effect."
-          : "";
-      }
-    }
-
-    rebuild();
-    return { wrap: wrap, refreshHints: refreshHints };
-  }
-  // The JSON value transform.js's parseConfig actually expects for one rule — null when the
-  // rule has no usable condition, or matches but does nothing (no person/allDay/hide/rewrite),
-  // for the caller to drop, mirroring compileRule() in transform.js exactly.
-  function ruleValue(r) {
-    var mv = matchValueFromConditions(r);
-    if (!mv) return null;
-    var out = { match: mv };
-    if (r.person && r.person.length) {
-      out.person = r.person.length === 1 ? r.person[0] : r.person;
-      if (r.rename === false) out.rename = false;
-    }
-    if (r.allDay) out.allDay = true;
-    if (r.hide) out.hide = true;
-    if (r.rewrite) {
-      out.rewrite = r.rewrite;
-      if (r.rewriteFull) out.rewriteFull = true;
-    }
-    if (!out.person && !out.allDay && !out.hide && !out.rewrite) return null;
     return out;
   }
-  // Renders a repeatable list of rules into `container` (used for both a calendar's own rules
-  // and the top-level global rules — identical UI and behavior either way) and returns a
-  // re-render function for the "+ Add rule" button to call after pushing a new one.
-  //
-  // Each rule is laid out as two explicit steps rather than one flat row of controls: Step 1
-  // ("If...") is one or more conditions (chained with AND/OR — see buildConditionsUI); step 2
-  // ("Then") is every action the match can trigger (assign a person, rewrite the title, make it
-  // all-day, hide it), so it reads as a sentence instead of a wall of inputs.
-  function renderRulesList(container, rules) {
-    function render() {
-      container.innerHTML = "";
-      rules.forEach(function (r, i) {
-        var rm = el("button", { class: "small danger" }, [document.createTextNode("Remove rule")]);
-        rm.addEventListener("click", function () { rules.splice(i, 1); render(); renderJson(); });
-
-        // A rule that matches but triggers nothing usable (no action added yet, or a blank
-        // match) is silently dropped from the exported JSON by ruleValue — surfaced here
-        // instead of leaving the user to wonder why a rule "disappeared".
-        var noopWarning = el("p", { class: "status err", style: "margin:6px 0 0;" });
-        function updateNoopWarning() {
-          noopWarning.textContent = ruleValue(r) === null ? "⚠ This rule won't be included in the JSON — it either has no usable condition, or has no action added yet (Assign person, Rewrite, All-day, or Hide)." : "";
-        }
-
-        var thenUI; // assigned below; referenced here since refresh() can fire from conditionsUI
-                    // before thenUI itself is built — safe, refresh() isn't actually called until
-                    // both are constructed.
-        function refresh() { thenUI.refreshHints(); updateNoopWarning(); renderJson(); }
-
-        var conditionsUI = buildConditionsUI(r, refresh);
-        thenUI = buildThenStep(r, refresh);
-        updateNoopWarning();
-
-        var matchStep = el("div", { class: "rule-step" }, [
-          el("div", { class: "rule-step-label" }, [document.createTextNode("1. If")]),
-          conditionsUI.wrap,
-        ]);
-        var thenStep = el("div", { class: "rule-step" }, [
-          el("div", { class: "rule-step-label" }, [document.createTextNode("2. Then")]),
-          thenUI.wrap,
-        ]);
-
-        container.appendChild(el("div", { class: "rule-card" }, [
-          matchStep, thenStep, noopWarning,
-          el("div", { style: "text-align:right;margin-top:6px;" }, [rm]),
-        ]));
-      });
+  // The person a calendar named "Work" assigns (via its own rules or a global one) — the
+  // plugin's fallback for who sits on the work side when nobody has an explicit side.
+  function workPersonName() {
+    var cal = state.calendars.filter(function (c) { return /^work$/i.test(c.name.trim()); })[0];
+    if (cal) {
+      if (cal.assign.length) return cal.assign[0];
+      var r = cal.rules.concat(state.rules).filter(function (r) { return r.persons.length; })[0];
+      if (r) return r.persons[0];
     }
-    render();
-    return render;
+    var first = state.people.filter(function (p) { return p.name.trim(); })[0];
+    return first ? first.name.trim() : null;
   }
 
-  var calendars = [newCalendar()];
-  var holidayCalendars = [];
-  var people = [];
-  var globalRules = [];
-
-  // -------------------------------------------------------------- calendars UI
-
-  // A real dropdown of currently-declared people (add them in the People section below)
-  // rather than free text — `value` is preserved as the selection if it still matches a
-  // declared name, otherwise falls back to the placeholder/empty option so a rename or
-  // removal in People doesn't leave a select silently pointing at a name that's gone.
-  // Multi-select: a rule's person field accepts one name OR several (a
-  // shared event tagging more than one person — see applyCalendarRules in transform.js), so
-  // this always returns/accepts an ARRAY, even for a single pick. Native <select multiple>
-  // rather than a custom checkbox widget — ctrl/cmd-click (or shift-click for a range) is a
-  // standard-enough pattern and this is far less code than building one, for a field that's
-  // usually just one person anyway. size caps at 4 rows so it doesn't dominate the form when
-  // there's a long people[] list — still fully scrollable for more.
-  function personMultiSelect(values) {
-    var sel = el("select", { class: "field-narrow", multiple: "multiple", size: String(Math.max(2, Math.min(4, people.length || 1))) });
-    var names = people.map(function (p) { return p.name.trim(); }).filter(Boolean);
-    if (!names.length) {
-      sel.appendChild(el("option", { value: "", disabled: "disabled" }, [document.createTextNode("(add a person below first)")]));
-      sel.disabled = true;
-      return sel;
+  // ------------------------------------------------------------ export
+  function conditionValue(c) {
+    if (c.type === "any") return { type: "any" };
+    if (c.type === "status") return { type: "status", value: c.status || "confirmed" };
+    if (c.type === "weekday") return c.weekdays.length ? { type: "weekday", value: c.weekdays.slice() } : null;
+    var v = (c.value || "").trim();
+    return v ? { type: c.type, value: v } : null;
+  }
+  function ruleValue(r) {
+    var conds = r.conditions.map(conditionValue).filter(Boolean);
+    if (!conds.length) return null;
+    var out = { match: conds.length === 1 ? conds[0] : { type: r.combinator, matchers: conds } };
+    if (r.persons.length) {
+      out.person = r.persons.length === 1 ? r.persons[0] : r.persons.slice();
+      if (!r.rename) out.rename = false;
     }
-    names.forEach(function (n) {
-      var opt = el("option", { value: n }, [document.createTextNode(n)]);
-      if (values.indexOf(n) !== -1) opt.setAttribute("selected", "selected");
-      sel.appendChild(opt);
+    if (r.rewrite.trim()) { out.rewrite = r.rewrite.trim(); if (r.rewriteFull) out.rewriteFull = true; }
+    if (r.hide) out.hide = true;
+    if (!out.person && !out.rewrite && !out.hide) return null;
+    return out;
+  }
+  function buildConfig() {
+    var cfg = {};
+    if (state.timeZone.trim()) cfg.timeZone = state.timeZone.trim();
+    if (state.locale.trim()) cfg.locale = state.locale.trim();
+    cfg.people = state.people.filter(function (p) { return p.name.trim(); }).map(function (p) {
+      var o = { name: p.name.trim() };
+      if (p.color) o.color = p.color;
+      if (p.side === "left" || p.side === "right") o.side = p.side;
+      return o;
     });
+    var gr = state.rules.map(ruleValue).filter(Boolean);
+    if (gr.length) cfg.rules = gr;
+    cfg.calendars = state.calendars.filter(function (c) { return c.url.trim(); }).map(function (c) {
+      var o = { url: c.url.trim() };
+      if (c.name.trim()) o.name = c.name.trim();
+      var rules = [];
+      if (c.assign.length) rules.push({ match: { type: "any" }, person: c.assign.length === 1 ? c.assign[0] : c.assign.slice() });
+      rules = rules.concat(c.rules.map(ruleValue).filter(Boolean));
+      if (rules.length) o.rules = rules;
+      var headers = {}, has = false;
+      c.headers.forEach(function (h) { if (h.key.trim()) { headers[h.key.trim()] = h.value; has = true; } });
+      if (has) o.headers = headers;
+      if (c.includeDescription) o.includeDescription = true;
+      return o;
+    });
+    return cfg;
+  }
+  function renderJson() { document.getElementById("jsonOut").value = JSON.stringify(buildConfig(), null, 2); }
+
+  // ------------------------------------------------------------ import
+  function conditionFrom(m) {
+    var c = newCondition();
+    if (!m || typeof m !== "object") return c;
+    if (m.type === "any" || m.type === "all") { c.type = "any"; return c; }
+    if (m.type === "status") { c.type = "status"; c.status = String(m.value || "confirmed").toLowerCase(); return c; }
+    if (m.type === "weekday") { c.type = "weekday"; c.weekdays = (Array.isArray(m.value) ? m.value : [m.value]).map(function (v) { return String(v || "").toUpperCase().slice(0, 2); }).filter(function (v) { return WEEKDAYS.some(function (w) { return w[0] === v; }); }); return c; }
+    c.type = ["word", "contains", "exact", "regex"].indexOf(m.type) !== -1 ? m.type : "word";
+    c.value = typeof m.value === "string" ? m.value : "";
+    return c;
+  }
+  function ruleFrom(rv) {
+    var r = newRule();
+    var m = rv.match;
+    if (m && (m.type === "and" || m.type === "or") && Array.isArray(m.matchers)) { r.combinator = m.type; r.conditions = m.matchers.map(conditionFrom); }
+    else r.conditions = [conditionFrom(m)];
+    var persons = Array.isArray(rv.person) ? rv.person : typeof rv.person === "string" ? [rv.person] : [];
+    r.persons = persons.filter(function (n) { return typeof n === "string" && n.trim(); }).map(function (n) { return n.trim(); });
+    r.rename = rv.rename !== false;
+    r.rewrite = typeof rv.rewrite === "string" ? rv.rewrite : "";
+    r.rewriteFull = rv.rewriteFull === true;
+    r.hide = rv.hide === true;
+    return r;
+  }
+  function loadConfig(data) {
+    state.people = (Array.isArray(data.people) ? data.people : []).filter(function (p) { return p && typeof p.name === "string" && p.name.trim(); }).map(function (p) {
+      var o = newPerson();
+      o.name = p.name.trim();
+      o.color = typeof p.color === "string" && COLORS.indexOf(p.color.toLowerCase()) !== -1 ? p.color.toLowerCase() : "";
+      var side = typeof p.side === "string" ? p.side.toLowerCase() : "";
+      o.side = side === "left" || side === "work" ? "left" : side === "right" || side === "family" ? "right" : "";
+      return o;
+    });
+    var knownNames = state.people.map(function (p) { return p.name; });
+    function ensurePerson(name) { if (knownNames.indexOf(name) === -1) { var p = newPerson(); p.name = name; state.people.push(p); knownNames.push(name); } }
+    state.calendars = (Array.isArray(data.calendars) ? data.calendars : []).map(function (c) { return typeof c === "string" ? { url: c } : c; })
+      .filter(function (c) { return c && typeof c.url === "string" && c.url.trim(); }).map(function (c) {
+        var o = newCalendar();
+        o.url = c.url.trim();
+        o.name = typeof c.name === "string" ? c.name.trim() : "";
+        var rules = (Array.isArray(c.rules) ? c.rules : []).filter(function (r) { return r && r.match; }).map(ruleFrom);
+        // a leading "any event → person" rule is the calendar's owner; keep it as the simple picker
+        if (rules.length && rules[0].conditions.length === 1 && rules[0].conditions[0].type === "any" && rules[0].persons.length && !rules[0].rewrite && !rules[0].hide) {
+          o.assign = rules.shift().persons;
+        }
+        o.rules = rules;
+        rules.forEach(function (r) { r.persons.forEach(ensurePerson); });
+        o.assign.forEach(ensurePerson);
+        if (c.headers && typeof c.headers === "object") Object.keys(c.headers).forEach(function (k) { if (typeof c.headers[k] === "string") { var h = newHeader(); h.key = k; h.value = c.headers[k]; o.headers.push(h); } });
+        o.includeDescription = c.includeDescription === true;
+        return o;
+      });
+    state.rules = (Array.isArray(data.rules) ? data.rules : []).filter(function (r) { return r && r.match; }).map(ruleFrom);
+    state.rules.forEach(function (r) { r.persons.forEach(ensurePerson); });
+    state.timeZone = typeof data.timeZone === "string" ? data.timeZone : "";
+    state.locale = typeof data.locale === "string" ? data.locale : "";
+    if (!state.calendars.length) state.calendars.push(newCalendar());
+    renderAll();
+  }
+  function parseImport(raw) {
+    try { var d = JSON.parse(raw); if (d && typeof d === "object") return d; } catch (e) {}
+    return { calendars: raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean) };
+  }
+
+  // ------------------------------------------------------------ people UI
+  function personNames() { return state.people.map(function (p) { return p.name.trim(); }).filter(Boolean); }
+  function personPicker(values, onChange) {
+    var names = personNames();
+    var sel = el("select", { multiple: "multiple", title: "Ctrl/Cmd-click to pick more than one" });
+    if (!names.length) { sel.appendChild(el("option", { value: "", disabled: "disabled", text: "add a person first" })); sel.disabled = true; return sel; }
+    names.forEach(function (n) { var o = el("option", { value: n, text: n }); if (values.indexOf(n) !== -1) o.selected = true; sel.appendChild(o); });
+    sel.addEventListener("change", function () { onChange(Array.from(sel.selectedOptions).map(function (o) { return o.value; }).filter(Boolean)); });
     return sel;
   }
-  function selectedValues(sel) {
-    return Array.from(sel.selectedOptions).map(function (o) { return o.value; }).filter(Boolean);
-  }
-  // Mirrors normalizeNameList() in plugin/src/transform.js: a rule's person field accepts one
-  // name (string) or several (array) on import — always normalized to an array here
-  // (possibly empty) so this editor's own model only ever deals with one shape.
-  function normalizeNames(raw) {
-    var list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
-    return list.filter(function (n) { return typeof n === "string" && n.trim(); }).map(function (n) { return n.trim(); });
-  }
-
-  // Shared by both the regular calendars list and the holiday calendars list below — same row
-  // UI (URL/name/color/rules), same reordering, just a different backing array/container so the
-  // two groups render as visually separate sections while both still land in one flat
-  // `calendars[]` in the exported JSON (see buildConfig) — transform.js has no notion of
-  // "holiday calendars" at all, this grouping exists purely for this editor's own clarity.
-  function renderCalendarList(containerId, list) {
-    var wrap = document.getElementById(containerId);
-    wrap.innerHTML = "";
-    function rerenderAll() { renderCalendarList(containerId, list); renderJson(); renderIcsSources(); }
-    list.forEach(function (c, idx) {
-      var urlInput = el("input", { type: "text", class: "field-url", placeholder: "https://.../calendar.ics", value: c.url });
-      urlInput.addEventListener("input", function () { c.url = urlInput.value; renderJson(); renderIcsSources(); });
-
-      // The name doubles as this entry's own heading — an editable input styled to look like
-      // the bold "Calendar N" label it replaces, rather than a separate labeled field further
-      // down the form. Placeholder (not a real value) falls back to "Calendar N" so an unnamed
-      // entry still reads the same as before until the feed's own name is read at render time.
-      var nameInput = el("input", { type: "text", class: "entry-title-input", placeholder: "Calendar " + (idx + 1), value: c.name });
-      nameInput.addEventListener("input", function () { c.name = nameInput.value; renderJson(); });
-
-      var colorSel = hueSelect("cal-color-" + c._id, c.color, true);
-      colorSel.addEventListener("change", function () { c.color = colorSel.value; renderJson(); swatch.setAttribute("style", swatchStyle(c.color)); });
-      var swatch = swatchFor(c.color);
-      swatch.id = "swatch-" + c._id;
-
-      // Assigning a person here (rather than via a rule) covers the common case of a whole
-      // calendar belonging to one person — it's exported as an implicit "match everything"
-      // rule placed first, so any more specific per-title rule below still overrides it (see
-      // applyCalendarRules in transform.js: later matches win). Picking a person presets this
-      // calendar's own color to that person's color as a one-time convenience — it only fires
-      // on this change event, so a manual color edit afterward is never fought/overwritten.
-      var personSelect = personMultiSelect(c.assignPerson);
-      personSelect.addEventListener("change", function () {
-        c.assignPerson = selectedValues(personSelect);
-        var first = people.filter(function (p) { return c.assignPerson.indexOf(p.name.trim()) !== -1; })[0];
-        if (first && first.color) {
-          c.color = first.color;
-          colorSel.value = first.color;
-          swatch.setAttribute("style", swatchStyle(c.color));
-        }
-        renderJson();
-      });
-
-      // Order determines display priority — e.g. which all-day events win the visible rows
-      // when there are more than fit — so reordering is a real, meaningful action, not just
-      // cosmetic list management.
-      var upBtn = el("button", { class: "small move", title: "Move up" }, [document.createTextNode("↑")]);
-      upBtn.disabled = idx === 0;
-      upBtn.addEventListener("click", function () {
-        var tmp = list[idx - 1]; list[idx - 1] = list[idx]; list[idx] = tmp;
-        rerenderAll();
-      });
-      var downBtn = el("button", { class: "small move", title: "Move down" }, [document.createTextNode("↓")]);
-      downBtn.disabled = idx === list.length - 1;
-      downBtn.addEventListener("click", function () {
-        var tmp = list[idx + 1]; list[idx + 1] = list[idx]; list[idx] = tmp;
-        rerenderAll();
-      });
-
-      var removeBtn = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
-      removeBtn.addEventListener("click", function () {
-        list.splice(idx, 1);
-        rerenderAll();
-      });
-
-      var head = el("div", { class: "entry-head" }, [
-        nameInput,
-        el("div", { class: "row", style: "gap:4px;" }, [upBtn, downBtn, removeBtn]),
-      ]);
-
-      var body = el("div", { class: "row" }, [
-        el("div", { style: "flex:1 1 320px;" }, [el("label", { text: "ICS URL" }), urlInput]),
-        el("div", {}, [el("label", { text: "Person" }), personSelect]),
-        el("div", {}, [el("label", { text: "Color" }), el("div", { class: "row", style: "gap:6px;" }, [colorSel, swatch])]),
-      ]);
-
-      wrap.appendChild(el("div", { class: "entry" }, [head, body, advancedBlockFor(c)]));
-    });
-  }
-  function renderCalendars() { renderCalendarList("calendars", calendars); }
-  function renderHolidayCalendars() { renderCalendarList("holidayCalendars", holidayCalendars); }
-
-  function renderHeadersList(container, headers) {
-    function render() {
-      container.innerHTML = "";
-      headers.forEach(function (h, i) {
-        var keyInput = el("input", { type: "text", class: "field-narrow", placeholder: "Header name, e.g. Authorization", value: h.key });
-        keyInput.addEventListener("input", function () { h.key = keyInput.value; renderJson(); });
-        var valueInput = el("input", { type: "text", class: "field-url", placeholder: "Header value", value: h.value });
-        valueInput.addEventListener("input", function () { h.value = valueInput.value; renderJson(); });
-        var rm = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
-        rm.addEventListener("click", function () { headers.splice(i, 1); render(); renderJson(); });
-        container.appendChild(el("div", { class: "sub-entry" }, [keyInput, valueInput, rm]));
-      });
-    }
-    render();
-    return render;
-  }
-
-  function advancedBlockFor(c) {
-    var body = el("div", { class: "advanced-body" });
-
-    // Rules (repeatable) — each one matches a title and can assign a person, rewrite the
-    // title, mark the event all-day, and/or hide it, in any combination ---------------------
-    var rulesWrap = el("div", {});
-    var rerender = renderRulesList(rulesWrap, c.rules);
-    var addRule = el("button", { class: "small add" }, [document.createTextNode("+ Add rule")]);
-    addRule.addEventListener("click", function () { c.rules.push(newRule()); rerender(); });
-
-    body.appendChild(el("div", {}, [
-      el("label", { text: "Rules for this calendar" }),
-      rulesWrap, addRule,
-    ]));
-
-    // Custom HTTP headers (repeatable) — an escape hatch for hosts that need auth or other
-    // request headers this plugin can't otherwise supply (a private/self-hosted feed behind
-    // Basic auth or a bearer token, etc.), mirroring TRMNL's own official Calendar plugin's
-    // `headers` setting.
-    var headersWrap = el("div", {});
-    var rerenderHeaders = renderHeadersList(headersWrap, c.headers);
-    var addHeader = el("button", { class: "small add" }, [document.createTextNode("+ Add header")]);
-    addHeader.addEventListener("click", function () { c.headers.push(newHeader()); rerenderHeaders(); });
-
-    body.appendChild(el("div", { style: "margin-top:12px;" }, [
-      el("label", { text: "Custom HTTP headers for this calendar's ICS request (optional — e.g. Authorization for a private feed)" }),
-      headersWrap, addHeader,
-    ]));
-
-    var details = el("details", { class: "advanced" }, [
-      el("summary", { text: "Rules & custom headers" }),
-      body,
-    ]);
-    return details;
-  }
-
-  document.getElementById("addCalendar").addEventListener("click", function () {
-    calendars.push(newCalendar());
-    renderCalendars(); renderJson(); renderIcsSources();
-  });
-  document.getElementById("addCalendarHoliday").addEventListener("click", function () {
-    holidayCalendars.push(newCalendar());
-    renderHolidayCalendars(); renderJson(); renderIcsSources();
-  });
-
-  // ------------------------------------------------------- public holiday calendar quick-add
-
-  (function () {
-    var sel = document.getElementById("holidayCountrySelect");
-    HOLIDAY_COUNTRIES.forEach(function (pair) {
-      sel.appendChild(el("option", { value: pair[1] }, [document.createTextNode(pair[0])]));
-    });
-  })();
-
-  document.getElementById("addHolidayCalendar").addEventListener("click", function () {
-    var sel = document.getElementById("holidayCountrySelect");
-    var code = sel.value;
-    var cal = newCalendar();
-    cal.url = holidayIcsUrl(code);
-    cal.name = "Holidays";
-    cal.color = "red";
-    holidayCalendars.push(cal);
-    renderHolidayCalendars(); renderJson(); renderIcsSources();
-  });
-
-  // ----------------------------------------------------------------- people UI
-
   function renderPeople() {
     var wrap = document.getElementById("people");
     wrap.innerHTML = "";
-    people.forEach(function (p, idx) {
-      var isEveryone = idx === 0;
-      var nameInput = el("input", { type: "text", class: "field-narrow", placeholder: isEveryone ? "Everyone" : "Alex", value: p.name });
-      nameInput.addEventListener("input", function () { p.name = nameInput.value; renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal(); });
-
-      var colorSel = hueSelect("p-color-" + p._id, p.color, false);
-      colorSel.addEventListener("change", function () { p.color = colorSel.value; renderJson(); swatch.setAttribute("style", swatchStyle(p.color)); });
-      var swatch = swatchFor(p.color);
-      swatch.id = "pswatch-" + p._id;
-
-      var badgeInput = el("input", { type: "text", class: "field-narrow", placeholder: "(auto: first letter)", value: p.badge, maxlength: "4" });
-      badgeInput.addEventListener("input", function () { p.badge = badgeInput.value; renderJson(); });
-      badgeInput.disabled = isEveryone;
-      if (isEveryone) badgeInput.placeholder = "(auto: group icon)";
-
-      // Order matters here too: whichever person ends up first becomes the "Everyone/All"
-      // fallback (see transform.js's parseConfig), so reordering is how you change who that is.
-      var upBtn = el("button", { class: "small move", title: "Move up" }, [document.createTextNode("↑")]);
-      upBtn.disabled = idx === 0;
-      upBtn.addEventListener("click", function () {
-        var tmp = people[idx - 1]; people[idx - 1] = people[idx]; people[idx] = tmp;
-        renderPeople(); renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal();
-      });
-      var downBtn = el("button", { class: "small move", title: "Move down" }, [document.createTextNode("↓")]);
-      downBtn.disabled = idx === people.length - 1;
-      downBtn.addEventListener("click", function () {
-        var tmp = people[idx + 1]; people[idx + 1] = people[idx]; people[idx] = tmp;
-        renderPeople(); renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal();
-      });
-
-      var removeBtn = el("button", { class: "small danger" }, [document.createTextNode("Remove")]);
-      removeBtn.addEventListener("click", function () {
-        people = people.filter(function (x) { return x._id !== p._id; });
-        renderPeople(); renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal();
-      });
-
-      var head = el("div", { class: "entry-head" }, [
-        el("strong", {}, [document.createTextNode(isEveryone ? "Everyone / All (fallback)" : "Person " + idx)]),
-        el("div", { class: "row", style: "gap:4px;" }, [upBtn, downBtn, removeBtn]),
-      ]);
-      var body = el("div", { class: "row" }, [
-        el("div", {}, [el("label", { text: "Name" }), nameInput]),
-        el("div", {}, [el("label", { text: "Color" }), el("div", { class: "row", style: "gap:6px;" }, [colorSel, swatch])]),
-        el("div", {}, [el("label", { text: "Badge (icon/unicode/text)" }), badgeInput]),
-      ]);
-      if (isEveryone) body.appendChild(el("p", { class: "muted", style: "flex-basis:100%;margin:2px 0 0;" }, [document.createTextNode("Shown on any event no rule below assigns to someone more specific.")]));
-      wrap.appendChild(el("div", { class: "entry" }, [head, body]));
-    });
-  }
-
-  document.getElementById("addPerson").addEventListener("click", function () {
-    people.push(newPerson());
-    renderPeople(); renderJson(); renderCalendars(); renderHolidayCalendars(); renderGlobal();
-  });
-
-  // ------------------------------------------------------------------- global rules
-
-  function renderGlobal() {
-    var rulesWrap = document.getElementById("globalRules");
-    renderRulesList(rulesWrap, globalRules);
-  }
-
-  document.getElementById("addGlobalRule").addEventListener("click", function () {
-    globalRules.push(newRule());
-    renderGlobal();
-  });
-
-  // ------------------------------------------------------------------ JSON out
-
-  function buildConfig() {
-    var cfg = {};
-    cfg.calendars = [];
-    cfg.people = [];
-    // Holiday calendars are a separate list purely for this editor's own organization — they
-    // land in the exact same flat `calendars[]` transform.js expects, always after the regular
-    // ones (each group keeps its own reorderable priority; the groups themselves don't interleave).
-    calendars.concat(holidayCalendars).forEach(function (c) {
-      if (!c.url.trim()) return;
-      var entry = { url: c.url.trim() };
-      if (c.name.trim()) entry.name = c.name.trim();
-      if (c.color) entry.color = c.color;
-
-      var rules = [];
-      if (c.assignPerson && c.assignPerson.length) {
-        rules.push({ match: { type: "any" }, person: c.assignPerson.length === 1 ? c.assignPerson[0] : c.assignPerson });
-      }
-      rules = rules.concat(c.rules.map(ruleValue).filter(Boolean));
-      if (rules.length) entry.rules = rules;
-
-      var headers = {};
-      var hasHeaders = false;
-      (c.headers || []).forEach(function (h) {
-        var k = h.key.trim();
-        if (!k) return;
-        headers[k] = h.value;
-        hasHeaders = true;
-      });
-      if (hasHeaders) entry.headers = headers;
-
-      cfg.calendars.push(entry);
-    });
-    people.forEach(function (p) {
-      if (!p.name.trim()) return;
-      var entry = { name: p.name.trim() };
-      if (p.color) entry.color = p.color;
-      if (p.badge.trim()) entry.badge = p.badge.trim();
-      cfg.people.push(entry);
-    });
-    var gRules = globalRules.map(ruleValue).filter(Boolean);
-    if (gRules.length) cfg.rules = gRules;
-    return cfg;
-  }
-
-  // --------------------------------------------------------------- import JSON
-
-  document.getElementById("loadImport").addEventListener("click", function () {
-    var status = document.getElementById("importStatus");
-    var raw = document.getElementById("importIn").value.trim();
-    if (!raw) {
-      status.textContent = "Paste a configuration JSON first.";
-      status.className = "status err";
-      return;
-    }
-    var data;
-    try {
-      data = JSON.parse(raw);
-    } catch (e) {
-      // Simple mode: not JSON at all — just one ICS URL per line, same fallback as
-      // transform.js's own parseConfig, so pasting either form here works.
-      data = { calendars: raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean) };
-    }
-    if (!data || typeof data !== "object") {
-      status.textContent = "Expected a JSON object with \"calendars\"/\"people\".";
-      status.className = "status err";
-      return;
-    }
-
-    var newCalendars = (Array.isArray(data.calendars) ? data.calendars : [])
-      // Simple mode: a plain ICS URL string is shorthand for { url: <that string> } — expand it
-      // here so pasting a simple-mode config still lands correctly in the full form below.
-      .map(function (c) { return typeof c === "string" ? { url: c } : c; })
-      .filter(function (c) { return c && typeof c === "object" && typeof c.url === "string" && c.url.trim(); })
-      .map(function (c) {
-        var rules = (Array.isArray(c.rules) ? c.rules : [])
-          .filter(function (rv) { return rv && typeof rv === "object" && isUsableMatchValue(rv.match); })
-          .map(ruleFromValue);
-        var headers = [];
-        if (c.headers && typeof c.headers === "object" && !Array.isArray(c.headers)) {
-          Object.keys(c.headers).forEach(function (k) {
-            if (typeof c.headers[k] === "string") headers.push({ _id: uid(), key: k, value: c.headers[k] });
-          });
-        }
-        return {
-          _id: uid(),
-          url: c.url.trim(),
-          name: typeof c.name === "string" ? c.name.trim() : "",
-          color: typeof c.color === "string" && VALID_COLORS.indexOf(c.color.toLowerCase()) !== -1 ? c.color.toLowerCase() : "",
-          assignPerson: [],
-          rules: rules,
-          headers: headers,
-        };
-      });
-    var newPeople = (Array.isArray(data.people) ? data.people : [])
-      .filter(function (p) { return p && typeof p === "object" && typeof p.name === "string" && p.name.trim(); })
-      .map(function (p) {
-        return {
-          _id: uid(),
-          name: p.name.trim(),
-          color: typeof p.color === "string" && VALID_COLORS.indexOf(p.color.toLowerCase()) !== -1 ? p.color.toLowerCase() : "",
-          badge: typeof p.badge === "string" ? p.badge.trim() : "",
-        };
-      });
-    // Google's public holiday feeds get their own section purely for this editor's clarity —
-    // see isHolidayUrl — everything else (including a holiday feed some other host serves) is
-    // a regular calendar.
-    var splitCalendars = newCalendars.reduce(function (acc, c) {
-      acc[isHolidayUrl(c.url) ? 1 : 0].push(c);
-      return acc;
-    }, [[], []]);
-
-    calendars = splitCalendars[0].length ? splitCalendars[0] : [newCalendar()];
-    holidayCalendars = splitCalendars[1];
-    people = newPeople;
-    globalRules = (Array.isArray(data.rules) ? data.rules : [])
-      .filter(function (rv) { return rv && typeof rv === "object" && isUsableMatchValue(rv.match); })
-      .map(ruleFromValue);
-    renderCalendars(); renderHolidayCalendars(); renderPeople(); renderGlobal(); renderJson(); renderIcsSources();
-    status.textContent = "Loaded " + newCalendars.length + " calendar(s) and " + newPeople.length + " person/people.";
-    status.className = "status ok";
-  });
-
-  function renderJson() {
-    document.getElementById("jsonOut").value = JSON.stringify(buildConfig(), null, 2);
-  }
-
-  document.getElementById("copyJson").addEventListener("click", function () {
-    var ta = document.getElementById("jsonOut");
-    ta.select();
-    var status = document.getElementById("copyStatus");
-    navigator.clipboard.writeText(ta.value).then(function () {
-      status.textContent = "Copied.";
-      status.className = "status ok";
-    }).catch(function () {
-      status.textContent = "Couldn't copy automatically — select the text and copy manually.";
-      status.className = "status err";
-    });
-  });
-
-  // --------------------------------------------------------------- ICS sources
-
-  // For each configured calendar: try a direct fetch() first (works when the host happens
-  // to send permissive CORS headers — most calendar hosts do), and only then fall back to
-  // letting you upload/paste the ICS content by hand. No proxy of any kind — this page never
-  // routes a calendar URL through any third party, or through a server of its own.
-  var icsOverrides = {}; // url -> ICS text, from a successful fetch/upload/paste
-
-  function fetchIcsSmart(url) {
-    return realFetch(url).then(function (r) {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.text();
-    }).then(function (text) {
-      return { text: text, via: "direct fetch" };
-    });
-  }
-
-  function renderIcsSources() {
-    var wrap = document.getElementById("icsSources");
-    wrap.innerHTML = "";
-    var withUrls = calendars.concat(holidayCalendars).filter(function (c) { return c.url.trim(); });
-    if (!withUrls.length) {
-      wrap.appendChild(el("p", { class: "muted", text: "Add at least one calendar above to test it." }));
-      return;
-    }
-    withUrls.forEach(function (c) {
-      var url = c.url.trim();
-      var statusSpan = el("span", { class: "status" });
-      var textarea = el("textarea", { rows: "4", placeholder: "Paste this calendar's raw .ics content here, or use the file picker above, if direct fetch fails (CORS)…" });
-      textarea.value = icsOverrides[url] || "";
-      textarea.addEventListener("input", function () {
-        if (textarea.value.trim()) icsOverrides[url] = textarea.value;
-        else delete icsOverrides[url];
-      });
-      var tryBtn = el("button", { class: "small" }, [document.createTextNode("Try fetch")]);
-      tryBtn.addEventListener("click", function () {
-        statusSpan.textContent = "Fetching…";
-        statusSpan.className = "status";
-        fetchIcsSmart(url).then(function (result) {
-          icsOverrides[url] = result.text;
-          textarea.value = result.text;
-          statusSpan.textContent = "Fetched " + result.text.length + " bytes via " + result.via + ".";
-          statusSpan.className = "status ok";
-        }).catch(function (e) {
-          statusSpan.textContent = e.message + " — upload or paste the ICS content below instead.";
-          statusSpan.className = "status err";
-        });
-      });
-
-      // Upload: reads a local .ics file (e.g. one already downloaded from the calendar app,
-      // or exported manually) straight into the same override the pasted textarea uses — no
-      // network request at all, so it sidesteps CORS entirely rather than working around it.
-      var fileInput = el("input", { type: "file", accept: ".ics,text/calendar" });
-      fileInput.addEventListener("change", function () {
-        var file = fileInput.files && fileInput.files[0];
-        if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function () {
-          textarea.value = String(reader.result || "");
-          icsOverrides[url] = textarea.value;
-          statusSpan.textContent = "Loaded " + file.name + " (" + textarea.value.length + " bytes).";
-          statusSpan.className = "status ok";
-        };
-        reader.onerror = function () {
-          statusSpan.textContent = "Couldn't read " + file.name + ".";
-          statusSpan.className = "status err";
-        };
-        reader.readAsText(file);
-      });
-
-      wrap.appendChild(el("div", { class: "entry" }, [
-        el("div", { class: "entry-head" }, [el("strong", { text: url }), el("div", { class: "row" }, [tryBtn, fileInput])]),
-        textarea,
-        el("div", { style: "margin-top:4px;" }, [statusSpan]),
+    var looks = lineLook();
+    state.people.forEach(function (p, idx) {
+      var look = looks[p._id] || { style: "solid", width: 3, color: p.color, side: "right" };
+      var sw = swatchSvg(look.color, look.style, look.width);
+      var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "You (e.g. Sam)" : "Name", value: p.name });
+      name.addEventListener("input", function () { p.name = name.value; renderJson(); renderCalendars(); renderGlobalRules(); });
+      name.addEventListener("change", function () { renderPeople(); });
+      var side = el("select", {}, [el("option", { value: "", text: "auto" }), el("option", { value: "left", text: "Work side" }), el("option", { value: "right", text: "Family side" })]);
+      side.value = p.side;
+      side.addEventListener("change", function () { p.side = side.value; renderJson(); renderPeople(); });
+      var color = colorSelect(p.color);
+      color.addEventListener("change", function () { p.color = color.value; renderJson(); renderPeople(); });
+      var up = el("button", { class: "ghost small", title: "Move up", text: "↑" }); up.disabled = idx === 0;
+      up.addEventListener("click", function () { state.people.splice(idx - 1, 0, state.people.splice(idx, 1)[0]); renderAll(); });
+      var down = el("button", { class: "ghost small", title: "Move down", text: "↓" }); down.disabled = idx === state.people.length - 1;
+      down.addEventListener("click", function () { state.people.splice(idx + 1, 0, state.people.splice(idx, 1)[0]); renderAll(); });
+      var rm = el("button", { class: "ghost small", text: "Remove" });
+      rm.addEventListener("click", function () { state.people.splice(idx, 1); renderAll(); });
+      wrap.appendChild(el("div", { class: "card person" }, [
+        el("div", { class: "card-head" }, [sw, name, up, down, rm]),
+        el("div", { class: "row" }, [
+          el("div", { class: "field" }, [el("label", { text: "Side of the map" }), side]),
+          el("div", { class: "field" }, [el("label", { text: "Line colour" }), color]),
+          el("div", { class: "hint", style: "align-self:center;" }, [idx === 0 ? "First person: also gets any event no rule assigns." : "Line pattern follows the order on this side: solid, dashed, dotted, dash-dot."]),
+        ]),
       ]));
     });
   }
 
-  // ------------------------------------------------------------------ run test
-
-  document.getElementById("runTest").addEventListener("click", function () {
-    var runStatus = document.getElementById("runStatus");
-    runStatus.textContent = "Running…";
-    runStatus.className = "status";
-
-    var config = buildConfig();
-    var input = {
-      trmnl: {
-        user: {
-          locale: document.getElementById("tLocale").value.trim() || "en",
-          time_zone_iana: undefined,
-        },
-        plugin_settings: {
-          instance_name: "Preview",
-          custom_fields_values: {
-            calendars: JSON.stringify(config),
-            time_format: document.getElementById("tTimeFormat").value,
-            lat_lon: document.getElementById("tLatLon").value.trim(),
-            temperature_unit: "celsius",
-            view_days: String(document.getElementById("tDays").value || "3"),
-          },
-        },
-      },
-    };
-
-    // Route configured calendar URLs to their pasted/fetched override (if any), or — for a
-    // calendar URL with no override yet — try fetchIcsSmart (a direct fetch) automatically
-    // rather than making the user click "Try fetch" first. Anything else (Open-Meteo) goes
-    // through untouched, real fetch only. Reuses the module-level
-    // realFetch (captured once at load time, see above) rather than re-binding window.fetch
-    // here — at this point it's already been overridden by THIS wrapper if runTest is
-    // somehow invoked twice without the first call finishing, so re-binding here could
-    // capture the wrapper itself instead of the real thing.
-    var calendarUrls = calendars.concat(holidayCalendars).map(function (c) { return c.url.trim(); }).filter(Boolean);
-    window.fetch = function (url, opts) {
-      var key = Object.keys(icsOverrides).find(function (u) { return url === u || url.indexOf(u) === 0; });
-      if (key) {
-        return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(icsOverrides[key]); } });
+  // ------------------------------------------------------------ rules UI
+  function renderConditions(rule, container, onChange) {
+    container.innerHTML = "";
+    rule.conditions.forEach(function (c, i) {
+      var row = el("div", { class: "cond" });
+      if (i > 0) {
+        var comb = el("select", {}, [el("option", { value: "and", text: "and" }), el("option", { value: "or", text: "or" })]);
+        comb.value = rule.combinator;
+        comb.addEventListener("change", function () { rule.combinator = comb.value; onChange(); });
+        row.appendChild(comb);
+      } else row.appendChild(el("span", { class: "chip", text: "If the event" }));
+      var type = el("select", {}, MATCH_TYPES.map(function (t) { return el("option", { value: t[0], text: t[1] }); }));
+      type.value = c.type;
+      row.appendChild(type);
+      var value = el("input", { type: "text", placeholder: c.type === "regex" ? "^Piano.*" : "Dentist", value: c.value, style: "width:200px" });
+      value.addEventListener("input", function () { c.value = value.value; onChange(); });
+      var status = el("select", {}, ["confirmed", "tentative", "cancelled"].map(function (s) { return el("option", { value: s, text: s }); }));
+      status.value = c.status;
+      status.addEventListener("change", function () { c.status = status.value; onChange(); });
+      var days = el("span", {}, WEEKDAYS.map(function (w) {
+        var b = el("button", { class: "small", text: w[1], type: "button" });
+        function paint() { b.className = "small" + (c.weekdays.indexOf(w[0]) !== -1 ? " primary" : ""); }
+        paint();
+        b.addEventListener("click", function () { var k = c.weekdays.indexOf(w[0]); if (k === -1) c.weekdays.push(w[0]); else c.weekdays.splice(k, 1); paint(); onChange(); });
+        return b;
+      }));
+      function mode() {
+        value.hidden = !(c.type === "word" || c.type === "contains" || c.type === "exact" || c.type === "regex");
+        status.hidden = c.type !== "status";
+        days.hidden = c.type !== "weekday";
       }
-      var isCalendarUrl = calendarUrls.some(function (u) { return url === u || url.indexOf(u) === 0; });
-      if (isCalendarUrl) {
-        return fetchIcsSmart(url).then(function (result) {
-          return { ok: true, status: 200, text: function () { return Promise.resolve(result.text); } };
-        }).catch(function () {
-          return { ok: false, status: 0, text: function () { return Promise.resolve(""); } };
+      type.addEventListener("change", function () { c.type = type.value; mode(); onChange(); });
+      mode();
+      row.appendChild(value); row.appendChild(status); row.appendChild(days);
+      if (rule.conditions.length > 1) {
+        var rm = el("button", { class: "ghost small", text: "×", title: "Remove condition" });
+        rm.addEventListener("click", function () { rule.conditions.splice(i, 1); renderConditions(rule, container, onChange); onChange(); });
+        row.appendChild(rm);
+      }
+      container.appendChild(row);
+    });
+    var add = el("button", { class: "small", text: "+ condition" });
+    add.addEventListener("click", function () { rule.conditions.push(newCondition()); renderConditions(rule, container, onChange); onChange(); });
+    container.appendChild(add);
+  }
+  function renderRules(list, container) {
+    container.innerHTML = "";
+    list.forEach(function (r, i) {
+      var card = el("div", { class: "rule" });
+      var conds = el("div", {});
+      var warn = el("div", { class: "status err" });
+      function refresh() { warn.textContent = ruleValue(r) ? "" : "This rule is not exported yet: it needs a condition and at least one action."; renderJson(); }
+      renderConditions(r, conds, refresh);
+      var persons = personPicker(r.persons, function (v) { r.persons = v; refresh(); });
+      var rename = el("input", { type: "checkbox" }); rename.checked = r.rename;
+      rename.addEventListener("change", function () { r.rename = rename.checked; refresh(); });
+      var rewrite = el("input", { type: "text", placeholder: "new title (or replacement for the matched text)", value: r.rewrite, style: "width:260px" });
+      rewrite.addEventListener("input", function () { r.rewrite = rewrite.value; refresh(); });
+      var full = el("input", { type: "checkbox" }); full.checked = r.rewriteFull;
+      full.addEventListener("change", function () { r.rewriteFull = full.checked; refresh(); });
+      var hide = el("input", { type: "checkbox" }); hide.checked = r.hide;
+      hide.addEventListener("change", function () { r.hide = hide.checked; refresh(); });
+      var rm = el("button", { class: "ghost small", text: "Remove rule" });
+      rm.addEventListener("click", function () { list.splice(i, 1); renderRules(list, container); renderJson(); });
+      card.appendChild(el("div", { class: "rule-step", text: "1 · If" }));
+      card.appendChild(conds);
+      card.appendChild(el("div", { class: "rule-step", text: "2 · Then" }));
+      card.appendChild(el("div", { class: "action" }, [el("span", { class: "chip", text: "put it on the line of" }), persons, el("label", { class: "check" }, [rename, "replace the matched text with their name"])]));
+      card.appendChild(el("div", { class: "action" }, [el("span", { class: "chip", text: "rename it" }), rewrite, el("label", { class: "check" }, [full, "replace the whole title"])]));
+      card.appendChild(el("div", { class: "action" }, [el("label", { class: "check" }, [hide, el("span", { class: "chip", text: "hide it from the map" })])]));
+      card.appendChild(warn);
+      card.appendChild(el("div", { style: "text-align:right" }, [rm]));
+      refresh();
+      container.appendChild(card);
+    });
+  }
+  function renderGlobalRules() { renderRules(state.rules, document.getElementById("globalRules")); }
+
+  // ------------------------------------------------------------ calendars UI
+  function renderCalendars() {
+    var wrap = document.getElementById("calendars");
+    wrap.innerHTML = "";
+    state.calendars.forEach(function (c, idx) {
+      var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "Work" : "Calendar " + (idx + 1), value: c.name });
+      name.addEventListener("input", function () { c.name = name.value; renderJson(); });
+      name.addEventListener("change", function () { renderPeople(); });
+      var url = el("input", { type: "text", placeholder: "https://…/calendar.ics (or webcal://…)", value: c.url });
+      url.addEventListener("input", function () { c.url = url.value; renderJson(); renderSources(); });
+      var assign = personPicker(c.assign, function (v) { c.assign = v; renderJson(); renderPeople(); });
+      var rm = el("button", { class: "ghost small", text: "Remove" });
+      rm.addEventListener("click", function () { state.calendars.splice(idx, 1); if (!state.calendars.length) state.calendars.push(newCalendar()); renderAll(); });
+      // advanced: rules, headers, description matching
+      var rulesWrap = el("div", {});
+      renderRules(c.rules, rulesWrap);
+      var addRule = el("button", { class: "small", text: "+ Add a rule" });
+      addRule.addEventListener("click", function () { c.rules.push(newRule()); renderRules(c.rules, rulesWrap); });
+      var headersWrap = el("div", {});
+      function renderHeaders() {
+        headersWrap.innerHTML = "";
+        c.headers.forEach(function (h, hi) {
+          var k = el("input", { type: "text", placeholder: "Authorization", value: h.key, style: "width:180px" });
+          k.addEventListener("input", function () { h.key = k.value; renderJson(); });
+          var v = el("input", { type: "text", placeholder: "Bearer …", value: h.value, style: "flex:1 1 200px" });
+          v.addEventListener("input", function () { h.value = v.value; renderJson(); });
+          var x = el("button", { class: "ghost small", text: "×" });
+          x.addEventListener("click", function () { c.headers.splice(hi, 1); renderHeaders(); renderJson(); });
+          headersWrap.appendChild(el("div", { class: "header-row" }, [k, v, x]));
         });
       }
+      renderHeaders();
+      var addHeader = el("button", { class: "small", text: "+ HTTP header" });
+      addHeader.addEventListener("click", function () { c.headers.push(newHeader()); renderHeaders(); });
+      var desc = el("input", { type: "checkbox" }); desc.checked = c.includeDescription;
+      desc.addEventListener("change", function () { c.includeDescription = desc.checked; renderJson(); });
+      var adv = el("details", { class: "adv" }, [
+        el("summary", { text: "Rules, headers & description matching" }),
+        el("div", { class: "adv-body" }, [
+          el("div", { class: "rule-step", text: "Rules for this calendar" }),
+          el("p", { class: "hint", text: "Checked in order; the last matching rule wins for each effect. Use these when one calendar holds several people's events, or to rename class codes and hide noise." }),
+          rulesWrap, addRule,
+          el("div", { class: "rule-step", style: "margin-top:14px", text: "HTTP headers for this feed" }),
+          headersWrap, addHeader,
+          el("div", { style: "margin-top:12px" }, [el("label", { class: "check" }, [desc, "also let rules match the event description (slower; off by default)"])]),
+        ]),
+      ]);
+      wrap.appendChild(el("div", { class: "card calendar" }, [
+        el("div", { class: "card-head" }, [name, rm]),
+        el("div", { class: "row" }, [
+          el("div", { class: "field grow" }, [el("label", { text: "ICS link" }), url]),
+          el("div", { class: "field" }, [el("label", { text: "Whose line" }), assign]),
+        ]),
+        idx === 0 && !c.name.trim() ? el("p", { class: "hint", style: "margin:8px 0 0", text: "Tip: name your own calendar \"Work\" — its person gets the work side of the map unless a person has an explicit side." }) : null,
+        adv,
+      ]));
+    });
+  }
+
+  function renderAll() { renderPeople(); renderCalendars(); renderGlobalRules(); renderJson(); renderSources(); }
+
+  document.getElementById("addPerson").addEventListener("click", function () { state.people.push(newPerson()); renderAll(); });
+  document.getElementById("addCalendar").addEventListener("click", function () { state.calendars.push(newCalendar()); renderAll(); });
+  document.getElementById("addGlobalRule").addEventListener("click", function () { state.rules.push(newRule()); renderGlobalRules(); });
+  document.getElementById("loadImport").addEventListener("click", function () {
+    var raw = document.getElementById("importIn").value.trim();
+    if (!raw) { setStatus("importStatus", "Paste a configuration first.", "err"); return; }
+    loadConfig(parseImport(raw));
+    setStatus("importStatus", "Loaded " + state.calendars.filter(function (c) { return c.url; }).length + " calendar(s), " + state.people.length + " people.", "ok");
+  });
+  document.getElementById("loadDemo").addEventListener("click", function () {
+    setStatus("importStatus", "Loading…");
+    realFetch("../demo-config.json").then(function (r) { return r.json(); }).then(function (d) {
+      loadConfig(d);
+      document.getElementById("importIn").value = JSON.stringify(d, null, 2);
+      setStatus("importStatus", "Demo loaded — scroll down and draw the map.", "ok");
+    }).catch(function (e) { setStatus("importStatus", "Couldn't load demo-config.json: " + e.message, "err"); });
+  });
+  document.getElementById("copyJson").addEventListener("click", function () {
+    var ta = document.getElementById("jsonOut");
+    ta.select();
+    (navigator.clipboard ? navigator.clipboard.writeText(ta.value) : Promise.reject()).then(function () { setStatus("copyStatus", "Copied.", "ok"); })
+      .catch(function () { setStatus("copyStatus", "Select the text and copy it manually.", "err"); });
+  });
+
+  // ------------------------------------------------------------ ICS sources for the preview
+  var icsOverrides = {}; // url -> ICS text (fetched, pasted or uploaded)
+  function fetchIcs(url) {
+    var u = url.indexOf("webcal://") === 0 ? "https://" + url.slice(9) : url;
+    return realFetch(u).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); });
+  }
+  function renderSources() {
+    var wrap = document.getElementById("sources");
+    wrap.innerHTML = "";
+    state.calendars.filter(function (c) { return c.url.trim(); }).forEach(function (c) {
+      var url = c.url.trim();
+      var status = el("span", { class: "status" });
+      var ta = el("textarea", { rows: "3", placeholder: "If the feed can't be fetched from the browser (CORS), paste its .ics content here or upload the file." });
+      ta.value = icsOverrides[url] || "";
+      ta.hidden = !ta.value;
+      ta.addEventListener("input", function () { if (ta.value.trim()) icsOverrides[url] = ta.value; else delete icsOverrides[url]; });
+      var paste = el("button", { class: "small", text: "Paste / upload instead" });
+      var file = el("input", { type: "file", accept: ".ics,text/calendar", hidden: "hidden" });
+      file.addEventListener("change", function () {
+        var f = file.files && file.files[0]; if (!f) return;
+        var rd = new FileReader();
+        rd.onload = function () { ta.value = String(rd.result || ""); ta.hidden = false; icsOverrides[url] = ta.value; status.textContent = "Loaded " + f.name; status.className = "status ok"; };
+        rd.readAsText(f);
+      });
+      paste.addEventListener("click", function () { ta.hidden = false; file.click(); });
+      wrap.appendChild(el("div", { class: "card" }, [
+        el("div", { class: "toolbar" }, [el("strong", { text: c.name.trim() || url }), el("span", { class: "hint", text: c.name.trim() ? url : "" }), paste, file, status]),
+        ta,
+      ]));
+      c._status = status;
+    });
+  }
+
+  // ------------------------------------------------------------ preview
+  var DEVICES = {
+    og:   { w: 800,  h: 480,  zoom: 1, view: "full",            classes: "screen--og screen--md screen--1bit screen--density-1x" },
+    ogv2: { w: 800,  h: 480,  zoom: 1, view: "full",            classes: "screen--ogv2 screen--md screen--2bit screen--density-1x" },
+    x:    { w: 1872, h: 1404, zoom: 2, view: "full",            classes: "screen--v2 screen--lg screen--4bit screen--density-2x" },
+    xp:   { w: 1404, h: 1872, zoom: 2, view: "full",            classes: "screen--v2 screen--lg screen--4bit screen--density-2x screen--portrait" },
+    hh:   { w: 800,  h: 480,  zoom: 1, view: "half_horizontal", classes: "screen--og screen--md screen--1bit screen--density-1x", mashup: "1Tx1B" },
+    hv:   { w: 800,  h: 480,  zoom: 1, view: "half_vertical",   classes: "screen--og screen--md screen--1bit screen--density-1x", mashup: "1Lx1R" },
+    q:    { w: 800,  h: 480,  zoom: 1, view: "quadrant",        classes: "screen--og screen--md screen--1bit screen--density-1x", mashup: "2x2" },
+  };
+  var templateCache = null;
+  // The plugin template is fetched once; its <script> (the layout engine) and <style> are
+  // reused verbatim, its header markup is mirrored below in JS (it is Liquid).
+  function loadTemplate() {
+    if (templateCache) return Promise.resolve(templateCache);
+    return realFetch("../plugin/src/shared.liquid").then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); }).then(function (src) {
+      var si = src.indexOf("<script>\n(function");
+      var script = src.slice(si + 8, src.indexOf("</script>", si));
+      var st = src.indexOf("<style>");
+      var style = src.slice(st + 7, src.indexOf("</style>", st));
+      templateCache = { script: script, style: style };
+      return templateCache;
+    });
+  }
+  function renderHeader(metro) {
+    var h = el("div", { class: "metro-header flex flex--row flex--center-y flex--wrap gap--medium px--3 py--2 flex-none" });
+    h.appendChild(el("span", { class: "metro-title title title--large font--bold", text: metro.i18n && metro.i18n.today || "Today" }));
+    if (metro.date_label) h.appendChild(el("span", { class: "metro-date label label--base text--gray-40", text: metro.date_label }));
+    h.appendChild(el("span", { class: "metro-window label label--small text--gray-40", text: metro.window_label || "" }));
+    h.appendChild(el("div", { class: "grow" }));
+    var w = metro.header_weather || {};
+    if (w.hi != null) {
+      var wx = el("span", { class: "metro-weather flex flex--row flex--center-y gap--xsmall" });
+      if (w.icon) wx.appendChild(el("img", { class: "metro-wicon image--adaptive", src: w.icon }));
+      var temp = el("span", { class: "metro-temp title title--base" }, [String(w.hi) + "°"]);
+      temp.appendChild(el("span", { class: "text--gray-40", text: " / " + w.lo + "°" }));
+      wx.appendChild(temp);
+      wx.appendChild(el("span", { class: "metro-cond label label--small text--gray-40", text: (w.condition || "") + " · " + String((metro.i18n && metro.i18n.rain_pct) || "{n}% rain").replace("{n}", w.rain_chance) }));
+      h.appendChild(wx);
+    }
+    var lg = el("span", { class: "metro-legend flex flex--row flex--center-y gap--small flex--wrap" });
+    (metro.legend || []).forEach(function (p) {
+      var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "metro-swatch no-shrink"); svg.setAttribute("data-hue", p.hue); svg.setAttribute("data-style", p.line_style); svg.setAttribute("data-width", p.line_width);
+      svg.setAttribute("width", "34"); svg.setAttribute("height", "8"); svg.setAttribute("viewBox", "0 0 34 8");
+      lg.appendChild(el("span", { class: "flex flex--row flex--center-y gap--xsmall" }, [svg, el("span", { class: "metro-legend-name label label--small font--bold", text: p.name })]));
+    });
+    h.appendChild(lg);
+    return h;
+  }
+  function drawMap(metro, dev) {
+    return loadTemplate().then(function (tpl) {
+      var inner = document.getElementById("stageInner");
+      inner.innerHTML = "";
+      var layout = el("div", { class: "layout layout--col gap--none metro-root" }, [
+        renderHeader(metro),
+        el("div", { class: "divider divider--on-white flex-none" }),
+        el("div", { class: "metro-canvas relative grow w--full" }, [(function () {
+          var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+          svg.setAttribute("class", "metro-svg absolute"); svg.setAttribute("style", "inset:0;width:100%;height:100%;pointer-events:none;");
+          return svg;
+        })()]),
+        el("style", { text: tpl.style }),
+      ]);
+      var view = el("div", { class: "view view--" + dev.view }, [layout]);
+      var content = view;
+      if (dev.mashup) {
+        var slots = { "2x2": 3, "1Lx1R": 1, "1Tx1B": 1 }[dev.mashup];
+        content = el("div", { class: "mashup mashup--" + dev.mashup }, [view]);
+        for (var i = 0; i < slots; i++) content.appendChild(el("div", { class: "view view--" + dev.view }));
+      }
+      var screen = el("div", { class: "screen screen--no-bleed " + dev.classes, style: "width:" + (dev.w / dev.zoom) + "px;height:" + (dev.h / dev.zoom) + "px;overflow:hidden;" }, [content]);
+      var trmnl = el("div", { class: "trmnl environment device" }, [screen]);
+      var scale = Math.min(1, (inner.clientWidth || 900) / dev.w);
+      trmnl.style.transform = "scale(" + scale + ")";
+      inner.style.height = Math.round(dev.h * scale) + "px";
+      inner.style.width = Math.round(dev.w * scale) + "px";
+      inner.appendChild(trmnl);
+      document.getElementById("stage").hidden = false;
+      // the layout engine, exactly as it ships — with our data in place of the Liquid tag
+      var code = tpl.script.replace("{{ metro | json }}", JSON.stringify(metro));
+      new Function(code)();
+    });
+  }
+  function nowTimestamp() {
+    var v = document.getElementById("pNow").value;
+    var d = new Date();
+    if (/^\d{2}:\d{2}$/.test(v)) { d.setHours(+v.slice(0, 2), +v.slice(3, 5), 0, 0); }
+    return Math.floor(d.getTime() / 1000);
+  }
+  document.getElementById("runPreview").addEventListener("click", function () {
+    setStatus("previewStatus", "Fetching calendars and laying out…");
+    var cfg = buildConfig();
+    var tzField = document.getElementById("pTz").value.trim();
+    var tz = tzField || cfg.timeZone || (Intl.DateTimeFormat().resolvedOptions().timeZone) || "UTC";
+    var dev = DEVICES[document.getElementById("pDevice").value];
+    var urls = state.calendars.map(function (c) { return c.url.trim(); }).filter(Boolean);
+    var input = { trmnl: {
+      user: { locale: document.getElementById("pLocale").value, time_zone_iana: tz },
+      system: { timestamp_utc: nowTimestamp() },
+      plugin_settings: { instance_name: "Preview", custom_fields_values: {
+        use_demo_data: urls.length ? "false" : "true",
+        config_json: JSON.stringify(cfg),
+        orientation: document.getElementById("pOrientation").value,
+        time_format: document.getElementById("pTime").value,
+        lat_lon: document.getElementById("pLatLon").value.trim(),
+      } },
+    } };
+    var failures = [];
+    window.fetch = function (url, opts) {
+      var u = String(url);
+      var key = Object.keys(icsOverrides).find(function (k) { return u === k || u.indexOf(k) === 0 || (k.indexOf("webcal://") === 0 && u === "https://" + k.slice(9)); });
+      if (key) return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(icsOverrides[key]); } });
+      var isCal = urls.some(function (k) { return u === k || u.indexOf(k) === 0 || (k.indexOf("webcal://") === 0 && u === "https://" + k.slice(9)); });
+      if (isCal) return fetchIcs(u).then(function (t) { icsOverrides[u] = t; return { ok: true, status: 200, text: function () { return Promise.resolve(t); } }; })
+        .catch(function (e) { failures.push(u + " (" + e.message + ")"); return { ok: false, status: 0, text: function () { return Promise.resolve(""); } }; });
       return realFetch(url, opts);
     };
-
     Promise.resolve(run(input)).then(function (result) {
       window.fetch = realFetch;
-      var data = result.data;
-      runStatus.textContent = data.error ? ("Done, with a page-level error: " + data.error) : "Done.";
-      runStatus.className = data.error ? "status err" : "status ok";
       document.getElementById("resultJson").value = JSON.stringify(result, null, 2);
-      renderPreview(data);
+      return drawMap(result.metro, dev).then(function () {
+        var events = result.metro.items.filter(function (i) { return i.type === "event"; }).length;
+        var msg = events + " event(s) today.";
+        if (failures.length) msg += " Could not fetch: " + failures.join(", ") + " — paste or upload those feeds above and draw again.";
+        setStatus("previewStatus", msg, failures.length ? "err" : "ok");
+        renderSources();
+      });
     }).catch(function (e) {
       window.fetch = realFetch;
-      runStatus.textContent = "run() threw: " + (e && e.message ? e.message : e);
-      runStatus.className = "status err";
+      setStatus("previewStatus", "Preview failed: " + (e && e.message ? e.message : e) + (location.protocol === "file:" ? " — serve this folder over http (e.g. python3 -m http.server) so the plugin template can be loaded." : ""), "err");
     });
   });
 
-  function renderPreview(result) {
-    var wrap = document.getElementById("previewDays");
-    wrap.innerHTML = "";
-    document.getElementById("previewWrap").style.display = "";
-
-    if (result.error && !result.has_events) {
-      wrap.appendChild(el("p", { class: "muted", text: result.error }));
-      return;
-    }
-
-    // allday_bars is a flat, top-level list now (transform.js's layoutNative — a multi-day
-    // event is one entry with its own start_col/span, not repeated per day it touches — see
-    // the multi-day banner work in shared.liquid). This preview has no spanning-grid layout of
-    // its own to match that with, so it just re-associates each bar back to every day column
-    // it touches (start_col..start_col+span-1) and shows the same chip in each — a simpler
-    // stand-in than the real plugin's single continuous banner, not a pixel match for it.
-    var alldayBars = result.allday_bars || [];
-
-    (result.days || []).forEach(function (day, dayIdx) {
-      var dayEl = el("div", { class: "preview-day" });
-      dayEl.appendChild(el("div", { class: "preview-daylabel" + (day.is_today ? "" : "") , text: day.label + (day.temp ? "  " + day.temp.high + "°/" + day.temp.low + "°" : "") }));
-
-      var dayAllday = alldayBars.filter(function (bar) {
-        return dayIdx >= bar.start_col && dayIdx < bar.start_col + bar.span;
-      });
-      if (dayAllday.length) {
-        var adWrap = el("div", { class: "preview-allday" });
-        dayAllday.forEach(function (a) {
-          adWrap.appendChild(chipFor(a.title, a.hue, a.fg, false));
-        });
-        dayEl.appendChild(adWrap);
-      }
-
-      var evWrap = el("div", { class: "preview-events" });
-      // Each entry in day.events is already one independently-positioned event/lane (see
-      // transform.js's layoutNative) — no more nested .lanes sub-array to flatten.
-      (day.events || []).forEach(function (ev) {
-        evWrap.appendChild(chipFor(ev.title, ev.hue, ev.fg, true));
-      });
-      if (!day.events || !day.events.length) evWrap.appendChild(el("p", { class: "muted", text: "No timed events." }));
-      dayEl.appendChild(evWrap);
-
-      wrap.appendChild(dayEl);
-    });
+  // ------------------------------------------------------------ init
+  state.people.push(newPerson());
+  state.calendars.push(newCalendar());
+  renderAll();
+  document.getElementById("pNow").value = (function () { var d = new Date(); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); })();
+  // ?demo opens the page with the demo configuration loaded and drawn (also handy for screenshots)
+  if (/[?&]demo\b/.test(location.search)) {
+    var params = new URLSearchParams(location.search);
+    ["pDevice", "pOrientation", "pLocale", "pTime"].forEach(function (id) { var v = params.get(id.slice(1).toLowerCase()); if (v) document.getElementById(id).value = v; });
+    if (params.get("now")) document.getElementById("pNow").value = params.get("now");
+    document.getElementById("loadDemo").click();
+    var wait = setInterval(function () {
+      if (!/Demo loaded/.test(document.getElementById("importStatus").textContent)) return;
+      clearInterval(wait);
+      document.getElementById("runPreview").click();
+    }, 100);
   }
-
-  function chipFor(title, hue, fg, isEvent) {
-    // hue/fg arrive already fully resolved from run()'s own output (see colorClass/
-    // foregroundFor in transform.js) — complete bg--/text-- suffixes, applied as-is rather
-    // than recomputing anything. No badge rail and no left accent bar here any more — the
-    // real chip_body (shared.liquid) is title-only now, category icons/photos and the
-    // per-event accent bar both removed from every chip.
-    var chip = el("div", { class: isEvent ? "preview-event" : "preview-chip" });
-    chip.classList.add("bg--" + hue);
-    chip.classList.add("text--" + fg);
-    chip.appendChild(el("span", { text: title }));
-    return chip;
-  }
-
-  // ------------------------------------------------------------------- init
-
-  renderCalendars();
-  renderHolidayCalendars();
-  renderPeople();
-  renderJson();
-  renderIcsSources();
 })();
 </script>
 </body>

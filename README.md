@@ -1,285 +1,91 @@
-# TRMNL: Family Calendar
+# Metro Calendar for TRMNL
 
-A [TRMNL](https://usetrmnl.com) private plugin that shows 1 to 3 days of any ICS calendar
-feed as a time-grid, with sunrise/sunset and daily weather on the timeline. The grid auto-scales
-so the hours that matter (daylight and your meetings) get more room and quiet hours shrink out
-of the way, with no fixed "business hours" window to configure.
+Your family's day drawn as a transit map. One line per person runs along a
+central spine with the hour axis down its middle; events are stations,
+labels sit on 45° branches, long events loop out and rejoin their line, and
+the whole thing lays itself out to the screen it lands on: TRMNL OG, OG V2,
+TRMNL X in landscape or portrait, and every mashup size.
 
-The plugin itself runs entirely on TRMNL
-**[Serverless](https://help.trmnl.com/en/articles/14130649-serverless)** — no server involved in
-actually rendering your calendar. `plugin/src/transform.js`'s `run()` fetches the ICS link(s),
-expands recurring events for the window, and returns a pre-computed native layout
-(percent-of-screen heights) to the Liquid template. The same file, unmodified, also runs in a
-plain browser tab — see [Configuration Editor](#configuration-editor) below.
+![TRMNL X, landscape](docs/trmnl-x-landscape.png)
 
-The [Configuration Editor](#configuration-editor) itself is a plain static page hosted on
-[GitHub Pages](https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html) — no
-backend at all, either to load it or to test a feed with it. When a calendar host blocks direct
-browser fetches (CORS), the editor falls back to letting you paste/upload the `.ics` content by
-hand — see [Configuration Editor](#configuration-editor) below.
+It runs entirely on TRMNL **Serverless**: `plugin/src/transform.js` fetches
+your ICS feeds and normalises them, `plugin/src/shared.liquid` draws the map.
+No server of your own.
 
 ## What it shows
 
-- 1 to 3 day columns (your choice), drawn as a real hour-grid (not an image), with daylight and
-  meeting hours automatically given more vertical space than the quiet hours around them.
-- All-day events as chips, timed events as blocks sized by duration, overlapping events split
-  into side-by-side lanes.
-- A red line for the current time (spanning every visible day, not just today), plus night
-  shading around sunrise/sunset when a location is configured, a subtle pattern overlay on hours
-  with real rain/snow/storm/fog forecast, and a daily weather icon + high/low.
-- **News Feed** (optional): point it at an RSS or Atom feed URL and its top headlines scroll as a
-  ticker in the footer (a customizable tag — "NEWS" by default — leads the ticker; it doesn't have
-  to be a news feed) — the weather moves up into the header (small icon + high/low next to each
-  day's date) instead of disappearing. Leave the feed URL blank and the footer keeps showing
-  per-day weather as usual.
-- One color per configured calendar — auto-assigned in order (cycled if you add more than the
-  palette covers) or pinned per calendar — so you can combine as many ICS feeds as you like and
-  still tell them apart at a glance.
-- **People**: tag specific events (by regex, across every calendar) with a person's own color —
-  e.g. give a kid their own color, independent of which calendar their events land on — optionally
-  renaming a class code to their actual name at the same time. Every distinct person with anything
-  anywhere in the visible range also gets one small badge in the header's own corner (full view
-  only) — a shared "who has something going on" strip, not repeated on every one of their events —
-  showing their initial. A shared event can tag more than one person at once (e.g. a family trip).
-- **Public holidays**: the Configuration Editor has a one-click "Add public holidays" picker (50
-  countries) that adds a real Google-hosted holiday ICS feed as a normal calendar, with a color
-  pre-filled — nothing holiday-specific in the plugin itself, it's just a calendar entry.
-- Recurring events (`DAILY` / `WEEKLY` incl. `BYDAY` / `MONTHLY` / `YEARLY`, with `INTERVAL`,
-  `COUNT`, `UNTIL`, `EXDATE`) expanded into the window, IANA-timezone aware.
-- Language (day/month names, abbreviated on narrower layouts) auto-detected from your TRMNL
-  account locale — any locale `Intl` supports, not a fixed list — with 24h/12h time format as
-  a setting.
-- **Resilient to transient outages**: weather and the news ticker keep showing their last
-  successfully-fetched data for one refresh cycle if the live fetch fails, instead of blanking
-  out. A calendar feed that's been unreachable for a couple of hours gets a small banner
-  ("⚠ Unavailable for a while: …") rather than silently and permanently dropping its events with
-  no indication anything's wrong.
-- Per-calendar **Exclude** regex to hide events matching a pattern (e.g. only show your kid's
-  class among a whole school calendar's events).
-- Graceful states: an `error` banner if every feed fails to fetch.
+- Today, 07:00–21:00 (narrowed around now on small views), with "+N earlier"
+  and "+N more" counts at the ends of the line.
+- Work on one side of the spine, family on the other. Each person's line has
+  its own dash pattern (and shade on grayscale panels), is named where it
+  enters the map, and appears in the legend.
+- Events as rings at their true start time; shared events as capsules across
+  the lines involved. Title, time and location on the branch.
+- The current time, sunrise and sunset, and rain start/stop markers across
+  the map; today's high/low and conditions in the header.
+- English, French, Spanish, German and Dutch, following your TRMNL account
+  language; 12- or 24-hour clocks.
 
 ## Setup
 
-1. In TRMNL: **Plugins → Private Plugins → New**, name it, **Save**.
-2. Push this repo with `trmnlp push` (see below); it uploads `settings.yml`, the `.liquid`
-   templates, and `transform.js` in one go.
-3. Add your calendar link(s) (see [Getting your calendar's ICS link](#getting-your-calendars-ics-link)
-   if you're not sure where to find one) to **Easy ICS** — one per entry, nothing else needed. Each
-   calendar's name is read automatically from the feed itself, and colors auto-assign. If you
-   want per-calendar colors, filtering, or to attach specific people to specific events, flip
-   **Advanced Configuration** to On (it's hidden by default) to reveal a JSON field, and build
-   that with the [Configuration Editor](#configuration-editor) (or hand-write the JSON — see its
-   shape there). Turning it on switches the plugin over to Advanced Configuration entirely —
-   Easy ICS is ignored while it's on, so list every calendar you want (including the simple
-   ones) in the JSON itself rather than splitting them across both fields. Flipping the toggle
-   back off does the reverse: Advanced Configuration is ignored (even if you leave the JSON
-   sitting there) and only Easy ICS is used.
-   Then fill in the plugin's remaining custom fields:
-   - **Time Format**: 24-hour or 12-hour (AM/PM).
-   - **Location**: search a place or enter coordinates, for sunrise/sunset and daily weather.
-     Leave blank to hide sun times and weather, and emphasize hours by meetings alone.
-   - **Temperature Unit**: Celsius or Fahrenheit (requires Location above).
-   - **Days to Show**: 1, 2, or 3 days. Only the full 800x480 ("OG") layout actually honors
-     this — the quadrant/half-horizontal/half-vertical layouts are narrow or short enough that
-     more than one day column stops being legible, so those three always show just today,
-     regardless of what's set here.
-   - **Visible Hours** (Advanced): the default "start-end" hour range (e.g. `7-21`), blank =
-     `7-21`. Only ever a starting point — real events, sunrise/sunset, and the current hour
-     always widen it further; hours outside your configured range but inside that wider window
-     render compressed instead of disappearing or diluting the rest of the grid.
-   - **News Feed** (Advanced): off by default — flip it on to reveal the feed URL and an optional
-     label field underneath.
+1. In TRMNL: **Plugins → Private Plugins → New**, name it, save. Then from
+   this repo's `plugin/` folder run `trmnlp push` (it uploads settings,
+   templates and `transform.js`).
+2. The plugin starts with demo data. To show your own calendars turn **Use
+   Demo Data** off and paste a configuration into **Calendar Config (JSON)**.
+   Build it with the [Configuration editor](https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html),
+   which also previews the map at every device size, or write it by hand
+   (see [CONFIG.md](CONFIG.md)). The simplest possible config is one ICS
+   link per line.
+3. Optional settings: **Timeline Orientation** (auto picks horizontal on a
+   landscape screen), **Time Format**, and **Location** for weather and sun
+   times.
 
-## Getting your calendar's ICS link
+### Getting an ICS link
 
-Any calendar that can produce a private ICS/iCal feed URL works — here's where to find it for
-the popular ones. All of these are private, secret-token links: anyone who has the link can
-*view* your calendar, so treat it like a password (don't post it publicly), but it can't be used
-to edit anything.
+- Google Calendar: calendar settings → *Secret address in iCal format*.
+- Apple iCloud: share the calendar as public, copy the `webcal://` link.
+- Outlook: calendar settings → *Shared calendars* → publish → ICS link.
 
-**Google Calendar**
-1. [calendar.google.com](https://calendar.google.com) → **Settings** (gear icon, top right)
-2. Left sidebar, under "Settings for my calendars" → click the calendar's name
-3. Click **Integrate calendar**
-4. Copy the **Secret address in iCal format**
-
-If you don't see that option, a Google Workspace admin may have disabled it for your account.
-
-**Outlook.com** (personal Microsoft account)
-1. Calendar view → **Settings** (gear icon) → **Shared calendars**
-2. Under **Publish a calendar**, pick the calendar and a permission level, then **Publish**
-3. Copy the **ICS link** that appears below (not the HTML link — that's a browser-only view)
-
-**Microsoft 365 / Outlook on the web** (work or school account)
-
-Same steps as Outlook.com above — Calendar → Settings → Shared calendars → Publish a calendar.
-The published ICS link is public (works outside your organization), which is what lets this
-plugin's servers fetch it.
-
-**Microsoft Teams**
-
-Teams doesn't have its own calendar — its Calendar tab is just a live view of the same
-Outlook/Exchange calendar. Use the Microsoft 365 steps above.
-
-**Apple iCloud Calendar**
-1. [icloud.com/calendar](https://icloud.com/calendar) (or the Calendar app) → click the ⓘ next
-   to the calendar's name in the sidebar
-2. Turn on **Public Calendar**
-3. Click **Copy Link** (**Share Link** on iPhone/iPad)
-
-The link starts with `webcal://` — this plugin (and the Configuration Editor) handles that
-automatically, no need to change it to `https://` yourself.
-
-**Yahoo Calendar**
-1. Open Yahoo Calendar → **Actions** → **Share** (pick a calendar first if you have more than one)
-2. Turn on **Enable my public calendar**, then **Get shareable link**
-3. Copy the link under **To import into a Calendar app (ICS)**
-
-## Try it with the demo calendar
-
-No calendar of your own handy, or just want to see a genuinely busy grid (overlapping events,
-multi-day banners, recurring classes, a couple of kids each with their own color) before wiring
-up your real one? Flip **Advanced Configuration** to On and paste
-[`demo-config.json`](demo-config.json) straight into the field that reveals — it's a complete,
-working config, not a fragment to edit first. It points at a small fictional family (parents Alex/Jordan, kids Mia/Leo, plus Sam's standalone Outlook-style work calendar — nobody real)
-spread across a few ICS feeds this repo hosts directly at
-[`demo/*.ics`](demo/) (via raw.githubusercontent.com — plain static files, no backend
-involved), every event `RRULE`-recurring (weekly or yearly) so it stays "today, busy"
-regardless of when you actually load it, plus the same public-Google-holiday calendar the
-Configuration Editor's own "Add public holidays" picker would add. It's also how this project's
-own layout work gets tested end to end — Mia's and Leo's Thursday "Gymnastics" deliberately land
-at the exact same time, so the grid always has at least one genuinely overlapping pair of events
-to check, and the School feed carries the same class-code style (rules that hide, rename, and
-attach a person) the placeholder example below demonstrates, with real matching and non-matching
-classes side by side.
-
-## Configuration Editor
-
-**[excusemi.github.io/trmnl-family-calendar/tools/config-editor.html](https://excusemi.github.io/trmnl-family-calendar/tools/config-editor.html)**
-— `tools/config-editor.html`, a plain static page served straight from GitHub Pages (its
-`<script src="../plugin/src/transform.js">` resolves against the same repo Pages is already
-serving — nothing to build or copy) for building the Calendar Configuration field visually
-instead of hand-writing JSON: add calendars and people through a
-form, add a public holiday calendar for your country in one click, test against real ICS data
-(direct fetch when the host allows CORS — most do; otherwise paste or upload the `.ics` content
-by hand, which also sidesteps CORS entirely since no fetch happens at all), and preview the
-actual colors using TRMNL's real CSS classes. Copy the generated JSON into the plugin's
-**Advanced Configuration** field when you're happy with it. (Calendar *names* don't need to be
-filled in here or in the JSON at all — the plugin reads them from the feed itself at render time,
-where there's no CORS to work around; only set one by hand if you want to override what the feed
-calls itself.)
-
-For the full field-by-field reference see [CONFIG.md](CONFIG.md); having an LLM write the JSON
-for you instead works too — point it at [LLM.md](LLM.md), a compact version of the same schema
-sized for that.
-
-The JSON shape it produces:
+## Configuration in one glance
 
 ```json
 {
-  "calendars": [
-    { "url": "https://cloud.example.com/family.ics", "color": "pink" },
-    {
-      "url": "https://cloud.example.com/school.ics",
-      "rules": [
-        { "match": { "type": "regex", "value": "\\bL[1345]\\b" }, "hide": true },
-        { "match": { "type": "regex", "value": "\\bL6\\b" }, "person": "Alex" }
-      ]
-    }
-  ],
   "people": [
-    { "name": "Alex", "color": "pink", "badge": "A" }
+    { "name": "Sam", "side": "work" },
+    { "name": "Alex" },
+    { "name": "Kids", "color": "gray-40" }
+  ],
+  "calendars": [
+    { "name": "Work", "url": "https://…/work.ics", "rules": [{ "match": { "type": "any" }, "person": "Sam" }] },
+    { "name": "Alex", "url": "https://…/alex.ics", "rules": [{ "match": { "type": "any" }, "person": "Alex" }] },
+    { "name": "School", "url": "https://…/school.ics",
+      "rules": [{ "match": { "type": "word", "value": "L2" }, "person": "Kids" }, { "match": { "type": "contains", "value": "staff" }, "hide": true }] }
   ]
 }
 ```
 
-- `calendars[].url` — required. Any ICS source works, including Nextcloud, Google Calendar,
-  Outlook/Microsoft 365, Apple Calendar, and Yahoo Calendar — see
-  [Getting your calendar's ICS link](#getting-your-calendars-ics-link) for exact steps per
-  provider. `webcal://` links are handled automatically.
-- `calendars[].color` — optional, one of `red` `orange` `yellow` `lime` `green` `cyan` `blue`
-  `violet` `purple` `pink`, an explicit `gray-10`..`gray-75` shade, or literal `black`/`white`.
-  Pins that calendar's color instead of auto-assigning by position. What the Configuration
-  Editor's "Add public holidays" picker sets, for instance — the plugin has no built-in notion
-  of holidays, that button just fills in a normal calendar entry.
-- `calendars[].rules` (and top-level `rules` for global ones, checked first) — attach a
-  [person](#people), hide, retitle, or all-day-ify specific events on that calendar. Each rule is
-  a `match` (a matcher — word/regex/contains/exact text, ICS `status`, `weekday`, or an `and`/`or`
-  combining any of those) plus any combination of `person`, `hide`, `allDay`, and `rewrite`. See
-  [CONFIG.md](CONFIG.md) for the full schema and every matcher type. The first entry in
-  `people[]` is automatically the fallback person for any event no rule assigns more
-  specifically — no rule needed for that.
-- `people[].name` — required, the lookup key a `rules[].person` entry references. `people[].color`
-  — optional; overrides that event's chip color. `people[].badge` — optional, a
-  short label (defaults to the name's first letter) shown in the header's own small per-person
-  badge (full view only — see People above — never repeated per event).
+Rules match on the title (`word`, `contains`, `exact`, `regex`, `status`,
+`weekday`, `any`, or `and`/`or` of those) and can assign one or more people,
+rewrite the title, or hide the event. Everything is documented in
+[CONFIG.md](CONFIG.md); the design of the map itself in [DESIGN.md](DESIGN.md).
 
-## Local layout development
+Limits worth knowing: recurring events are expanded for `FREQ=WEEKLY` rules
+(with `BYDAY`/`UNTIL`) plus any single occurrence dated today; all-day events
+are not drawn.
 
-`run()` doesn't execute inside `trmnlp serve` (it targets `transform.js`, not the mock-data
-Liquid preview), but you can iterate on the Liquid with mock data:
+## Development
 
 ```bash
-cd plugin
-trmnlp serve      # http://127.0.0.1:4567
-trmnlp build      # writes static HTML to _build/
-trmnlp push       # uploads settings.yml + src/* to the TRMNL plugin
+cd plugin && trmnlp serve      # local preview at http://127.0.0.1:4567
+./test.sh                      # transform + editor test suites (Node only)
 ```
 
-Mock data lives in `plugin/.trmnlp.yml` and mirrors the shape `layoutNative()` returns; to
-exercise `run()`/`transform.js` itself against real data, use the
-[Configuration Editor](#configuration-editor) instead — it loads and runs the exact same file.
+The layout is verified with headless-Chrome screenshots of `trmnlp build`
+output at real device sizes; the renders in `docs/` come from that. The
+editor needs to be served over http to load the plugin template for its
+preview (`python3 -m http.server` from the repo root works).
 
-## Tests
+## License
 
-`test/transform/` is a regression suite for `transform.js` — word/regex/status/weekday/and/or
-matchers, calendar name auto-detection and de-duplication, the saved-state fallbacks (weather,
-news, a calendar that's been down a while), the shared serverless-deadline fetch budget, the
-all-day "+N more" overflow, and that each plugin setting (`view_days`, `hours`,
-`temperature_unit`, `time_format`, `lat_lon`, `rss_label`, Easy ICS vs. Advanced Configuration)
-actually does what its description says. It mocks `fetch()` per test rather than replaying
-static fixtures, since `run()` does its own fetching (unlike a typical polling-strategy plugin).
-
-`test/config-editor/` is a regression suite for `tools/config-editor.html` itself — loads the
-real page into a headless DOM ([jsdom](https://github.com/jsdom/jsdom)) and drives it the way a
-person would (type into fields, click buttons, toggle day/status pickers, read the generated
-JSON), covering the rule builder (every matcher type, AND/OR chaining, the "this rule won't be
-included" warning), people/Everyone-fallback handling, and JSON import.
-
-```bash
-./test.sh
-```
-
-(equivalent to `cd test/transform && npm test` followed by `cd test/config-editor && npm install
-&& npm test`). No Docker/browser needed for either suite; `docker compose -f
-docker-compose.test.yml run --rm test-transform` also works for the `transform.js` suite,
-exercising the exact same file mounted read-only, for CI parity. A GitHub Actions workflow
-(`.github/workflows/test.yml`) runs `./test.sh` (both suites) on every push and pull request.
-
-## Files
-
-| Path | Purpose |
-|------|---------|
-| `plugin/src/transform.js` | Serverless code: fetch ICS, expand recurrences, compute layout, fetch sun times. Runs on TRMNL (Node) and in `tools/config-editor.html` (browser) unmodified. |
-| `plugin/src/shared.liquid` | The `main` template for all four view sizes (`full`/`half_*`/`quadrant`) |
-| `plugin/src/settings.yml` | Custom fields (Easy ICS, Advanced Configuration, days to show, location, temperature unit, time format, visible hours, news feed) |
-| `plugin/.trmnlp.yml` | Local mock data for `trmnlp serve` |
-| `tools/config-editor.html` | Standalone config builder + real-data tester — see above; served as a static page by GitHub Pages |
-| `demo/*.ics` | Demo calendars — see "Try it with the demo calendar" above; served as static files via raw.githubusercontent.com |
-| `demo-config.json` | The complete Calendar Configuration paired with the demo calendars above — paste as-is to try the plugin |
-| `assets/weather/*.svg` | Source SVGs for the rain/storm/snow/fog hour-background patterns (tiled as a CSS background in the grid) |
-| `test/transform/` | Regression tests for `transform.js` — see [Tests](#tests) |
-| `test/config-editor/` | Regression tests for `tools/config-editor.html` — see [Tests](#tests) |
-
-## Notes & limits
-
-- The Serverless VM allows **128 MB / 5 s**; parsing is pure JS (no npm packages guaranteed in
-  TRMNL's sandbox — only global `fetch()`) and bounded to the configured day window. Sunrise/
-  sunset and weather lookups (Open-Meteo) are best-effort with short timeouts; a slow/failed
-  lookup just omits sun times and weather rather than breaking the calendar.
-- Timezone conversion is hand-rolled against `Intl.DateTimeFormat`'s offset data (no IANA
-  tzdata package needed, unlike Python) — accurate outside the ambiguous/skipped hour of a DST
-  transition itself, an inherent edge case for any zone conversion without full disambiguation
-  rules.
-- Modified single instances of a recurring series (`RECURRENCE-ID` overrides) and `VTIMEZONE`
-  definitions with non-IANA `TZID`s are not fully resolved; standard IANA zone names work.
+MIT, see [LICENSE](LICENSE).

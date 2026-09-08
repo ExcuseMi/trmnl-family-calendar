@@ -4,56 +4,116 @@
   "calendars": [
     {
       "name": "Family",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/family.ics",
-      "color": "gray-25"
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/family.ics"
     },
     {
       "name": "Alex",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/alex.ics",
-      "rules": [{ "match": { "type": "any" }, "person": "Alex" }]
-    },
-    {
-      "name": "Jordan",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/jordan.ics",
-      "rules": [{ "match": { "type": "any" }, "person": "Jordan" }]
-    },
-    {
-      "name": "Mia",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/mia.ics",
-      "rules": [{ "match": { "type": "any" }, "person": "Mia" }]
-    },
-    {
-      "name": "Leo",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/leo.ics",
-      "rules": [{ "match": { "type": "any" }, "person": "Leo" }]
-    },
-    {
-      "name": "Work",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/sam.ics",
-      "rules": [{ "match": { "type": "any" }, "person": "Sam" }]
-    },
-    {
-      "name": "School",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/school.ics",
-      "color": "gray-70",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/alex.ics",
       "rules": [
-        { "match": { "type": "regex", "value": "(?=.*\\b(?:L[1345]|K[123])\\b)(?!.*\\b(?:L2|L6)\\b)" }, "hide": true },
-        { "match": { "type": "word", "value": "L2" }, "person": "Mia" },
-        { "match": { "type": "word", "value": "L6" }, "person": "Leo" }
+        {
+          "match": {
+            "type": "any"
+          },
+          "person": "Alex"
+        }
       ]
     },
     {
-      "name": "Holidays",
-      "url": "https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics",
-      "color": "gray-45"
+      "name": "Jordan",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/jordan.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "any"
+          },
+          "person": "Jordan"
+        }
+      ]
+    },
+    {
+      "name": "Mia",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/mia.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "any"
+          },
+          "person": "Mia"
+        }
+      ]
+    },
+    {
+      "name": "Leo",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/leo.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "any"
+          },
+          "person": "Leo"
+        }
+      ]
+    },
+    {
+      "name": "Work",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/sam.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "any"
+          },
+          "person": "Sam"
+        }
+      ]
+    },
+    {
+      "name": "School",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/school.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "regex",
+            "value": "(?=.*\\b(?:L[1345]|K[123])\\b)(?!.*\\b(?:L2|L6)\\b)"
+          },
+          "hide": true
+        },
+        {
+          "match": {
+            "type": "word",
+            "value": "L2"
+          },
+          "person": "Mia"
+        },
+        {
+          "match": {
+            "type": "word",
+            "value": "L6"
+          },
+          "person": "Leo"
+        }
+      ]
     }
   ],
   "people": [
-    { "name": "Family" },
-    { "name": "Alex", "color": "gray-15" },
-    { "name": "Jordan", "color": "gray-35" },
-    { "name": "Mia", "color": "gray-55" },
-    { "name": "Leo", "color": "gray-65" },
-    { "name": "Sam", "color": "gray-75" }
+    {
+      "name": "Sam",
+      "side": "work"
+    },
+    {
+      "name": "Alex",
+      "color": "gray-25"
+    },
+    {
+      "name": "Jordan",
+      "color": "gray-40"
+    },
+    {
+      "name": "Mia",
+      "color": "gray-50"
+    },
+    {
+      "name": "Leo",
+      "color": "gray-60"
+    }
   ]
 }

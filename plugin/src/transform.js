@@ -1,668 +1,255 @@
+// metro-plugin/src/transform.js — TRMNL Serverless entry point.
+//
+// Two data sources, chosen by the "Use Demo Data" boolean setting:
+//   - demo (default): the same hardcoded dummy events this plugin has
+//     always shown — no network, no config needed, safe fallback.
+//   - config: a real calendar config pasted into the "Calendar Config"
+//     setting, same JSON shape as this repo's calendar-config.json /
+//     demo-config.json ({ calendars: [{url,name,rules}], people, timeZone,
+//     rules }). Calendars are fetched as plain ICS and parsed with a small
+//     hand-rolled parser (TRMNL Serverless only guarantees the built-in
+//     HTTP client, not an ICS library — see topics/serverless.md).
+//
+// The config parser/rule engine (parseConfig/compileMatcher/
+// applyCalendarRules below) is ported from plugin/src/transform.js's own
+// — same config shape, same semantics, minus the pieces that plugin's
+// flat agenda list needs but this metro map doesn't (multi-day windows,
+// saved-state/calendar-down alerts, X-WR-CALNAME derived names). It
+// supports: string-shorthand calendars (`"https://.../a.ics"` as well as
+// `{url:...}`), non-JSON config text falling back to a newline-separated
+// URL list, per-calendar `headers` (sent alongside the default
+// User-Agent), match types any/all/exact/word/contains/regex/status/
+// weekday/and/or, `rewrite`(+`rewriteFull`) and `rename` (defaults to
+// true, EXCEPT on an any/all match where it defaults to false — a
+// catch-all shouldn't silently rewrite every title unless asked), a
+// top-level `rules` array applied before each calendar's own (a
+// calendar's own rule wins when both assign a person to the same event),
+// a `person` field that can be a list (multiple people on the same
+// event become an interchange node, metro-plugin's own concept for a
+// shared event), and an `everyonePerson` fallback (the first entry in
+// `people[]`) for any event no rule assigns a person to.
+//
+// `people[].side` ("left"/"work" or "right"/"family") pins a person to a
+// side of the map; without it the person a calendar named "Work" assigns
+// goes left and everyone else right. `locale` in the config overrides the
+// account locale for the string table and date names.
+//
+// Known, deliberate limitations of the config path (documented rather
+// than silently wrong):
+//   - RRULE support is a bounded subset, not full recurrence: only
+//     FREQ=WEEKLY (with optional BYDAY/UNTIL) is evaluated against
+//     today — the pattern real calendar exports actually use for
+//     standing meetings/family routines, and what this repo's own
+//     demo-config.json fixtures use throughout. DAILY/MONTHLY/YEARLY and
+//     COUNT are not handled; an event using one of those only shows if
+//     its DTSTART itself falls on today. A RECURRENCE-ID override IS
+//     handled (it suppresses the master's occurrence on that date, so a
+//     moved/cancelled single instance doesn't show up twice).
+//   - No all-day lane — all-day events are skipped (this UI has no place
+//     to put them yet).
+//   - A rule's `desc` match only sees an event's DESCRIPTION when that
+//     calendar opts in via `includeDescription: true` — off by default
+//     since most calendars don't need it parsed/matched against.
+//   - Weather needs a `lat_lon` setting; without one it stays a
+//     placeholder in both modes.
+//
+// Both branches converge on the SAME buildMetro() — the rest of the
+// pipeline (hour ticks, sub-spur detection, the "now" marker, people
+// list) doesn't care whether events came from DUMMY_EVENTS or real ICS.
 
-const SERVERLESS_DEADLINE_MS = 4200;
-const CALENDAR_DOWN_THRESHOLD_MS = 2 * 60 * 60 * 1000;
-const WEATHER_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
-const DEFAULT_DAYS = 3;
-const DEFAULT_HOURS = { start: 7, end: 21 };
-const AGENDA_SANITY_CAP = 20;
-const WD_MAP = { MO: 0, TU: 1, WE: 2, TH: 3, FR: 4, SA: 5, SU: 6 };
+var DAY_START_MIN = 7 * 60;
+var DAY_END_MIN = 21 * 60;
+var SECONDARY_THRESHOLD_MIN = 30;
+var TRACK_STEP = 10; // px between adjacent track offsets
+var LINE_STYLES = ['solid', 'dashed', 'dotted', 'dashdot']; // per side, in track order — pattern (not just hue) tells lines apart on a 1-bit panel
+// -40 steps: dark enough to read as a line on grayscale panels (the framework's scale runs 10 = darkest … 75 = lightest)
+var HUE_CYCLE = ['blue-40', 'orange-40', 'purple-40', 'red-40', 'cyan-40', 'pink-40', 'lime-40', 'violet-40', 'yellow-40', 'green-40'];
+var HUE_NAMES = ['blue', 'green', 'orange', 'purple', 'red', 'cyan', 'pink', 'lime', 'violet', 'yellow'];
 
-const HUES = ["blue", "green", "orange", "purple", "red", "cyan", "pink", "lime", "violet", "yellow"];
-const GRAY_SHADES = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75];
-const BLACK_WHITE = ["black", "white"];
-const AUTO_HUES = GRAY_SHADES.map((n) => "gray-" + n);
-
-function isValidColor(v) {
-  if (HUES.includes(v) || BLACK_WHITE.includes(v)) return true;
-  const m = /^gray-(\d+)$/.exec(v);
-  return !!m && GRAY_SHADES.includes(parseInt(m[1], 10));
+function pad2(n) {
+  return (n < 10 ? '0' : '') + n;
 }
 
-function colorClass(color) {
-  return HUES.includes(color) ? color + "-65" : color;
+function timeLabel(min) {
+  var h = Math.floor(min / 60) % 24;
+  var m = min % 60;
+  return pad2(h) + ':' + pad2(m);
 }
 
-function foregroundFor(color) {
-  if (color === "black") return "white";
-  if (color === "white") return "black";
-  const m = /^gray-(\d+)$/.exec(color);
-  if (!m) return "black";
-  return parseInt(m[1], 10) < 55 ? "white" : "black";
+// ---------------------------------------------------------------------
+// i18n — every user-facing string the plugin renders, keyed by the first
+// two letters of the TRMNL account locale (en, fr, es, de, nl; anything
+// else falls back to English). Embedded here rather than in separate
+// files because Serverless only ships this one file. Weekday and month
+// names come from Intl with the full locale instead, so they cover any
+// language Intl knows.
+// ---------------------------------------------------------------------
+var I18N = {
+  en: { today: 'Today', more: '+{n} more', earlier: '+{n} earlier', rain_pct: '{n}% rain',
+        clear: 'Clear', partly_cloudy: 'Partly cloudy', cloudy: 'Cloudy', foggy: 'Foggy', rain: 'Rain', snow: 'Snow', storms: 'Storms',
+        rain_starts: 'Rain starts', rain_stops: 'Rain stops', sunrise: 'Sunrise', sunset: 'Sunset' },
+  fr: { today: "Aujourd'hui", more: '+{n} de plus', earlier: '+{n} plus tôt', rain_pct: '{n} % de pluie',
+        clear: 'Dégagé', partly_cloudy: 'Partiellement nuageux', cloudy: 'Nuageux', foggy: 'Brouillard', rain: 'Pluie', snow: 'Neige', storms: 'Orages',
+        rain_starts: 'Début de la pluie', rain_stops: 'Fin de la pluie', sunrise: 'Lever du soleil', sunset: 'Coucher du soleil' },
+  es: { today: 'Hoy', more: '+{n} más', earlier: '+{n} antes', rain_pct: '{n}% lluvia',
+        clear: 'Despejado', partly_cloudy: 'Parcialmente nublado', cloudy: 'Nublado', foggy: 'Niebla', rain: 'Lluvia', snow: 'Nieve', storms: 'Tormentas',
+        rain_starts: 'Empieza la lluvia', rain_stops: 'Para la lluvia', sunrise: 'Amanecer', sunset: 'Atardecer' },
+  de: { today: 'Heute', more: '+{n} weitere', earlier: '+{n} früher', rain_pct: '{n} % Regen',
+        clear: 'Klar', partly_cloudy: 'Teils bewölkt', cloudy: 'Bewölkt', foggy: 'Neblig', rain: 'Regen', snow: 'Schnee', storms: 'Gewitter',
+        rain_starts: 'Regen beginnt', rain_stops: 'Regen endet', sunrise: 'Sonnenaufgang', sunset: 'Sonnenuntergang' },
+  nl: { today: 'Vandaag', more: '+{n} meer', earlier: '+{n} eerder', rain_pct: '{n}% regen',
+        clear: 'Helder', partly_cloudy: 'Half bewolkt', cloudy: 'Bewolkt', foggy: 'Mistig', rain: 'Regen', snow: 'Sneeuw', storms: 'Onweer',
+        rain_starts: 'Regen begint', rain_stops: 'Regen stopt', sunrise: 'Zonsopgang', sunset: 'Zonsondergang' },
+};
+
+// The account locale ("nl", "fr-BE", "en-US", ...): the full tag drives
+// Intl (dates, 12h/24h default); the two-letter language picks the string
+// table.
+function userLocale(input) {
+  try {
+    var l = input.trmnl.user.locale;
+    return (typeof l === 'string' && l.trim()) ? l.trim().replace('_', '-') : 'en';
+  } catch (e) {
+    return 'en';
+  }
 }
 
-async function run(input) {
-  const advancedEnabled = cf(input, "advanced_config_enabled").trim().toLowerCase() === "true";
-  const simpleUrls = advancedEnabled ? [] : cf(input, "calendars_simple").split(/[\r\n,]+/).map((l) => l.trim()).filter(Boolean);
-  const cfg = parseConfig(advancedEnabled ? cf(input, "calendars") : "", simpleUrls);
-  const calendars = cfg.calendars;
-  const people = cfg.people;
-  const globalRules = cfg.globalRules;
-  const everyonePerson = cfg.everyonePerson;
-  const calendarColors = calendars.map((c) => c.color);
-  const locale = cfg.locale || localeOf(input);
-  const tzname = cfg.timeZone || userTz(input) || "UTC";
-  const is12h = cf(input, "time_format").trim().toLowerCase() === "12h";
-  const location = cf(input, "lat_lon");
-  const fahrenheit = cf(input, "temperature_unit").trim().toLowerCase() === "fahrenheit";
-  const newsFeedEnabled = cf(input, "news_feed_enabled").trim().toLowerCase() === "true";
-  const rssUrl = newsFeedEnabled ? cf(input, "rss_url").trim() : "";
-  const rssLabel = cf(input, "rss_label").trim() || "NEWS";
-  const daysN = toInt(cf(input, "view_days"), DEFAULT_DAYS, 1, 3);
-  const fullViewGrid = cf(input, "full_view_style").trim().toLowerCase() !== "agenda";
+function stringsFor(locale) {
+  var lang = String(locale || 'en').slice(0, 2).toLowerCase();
+  return I18N[lang] || I18N.en;
+}
 
-  const tz = resolveTz(tzname, input);
+function tr(strings, key, n) {
+  var v = strings[key] || I18N.en[key] || key;
+  return n == null ? v : v.replace('{n}', String(n));
+}
 
-  if (!calendars.length) {
-    return emptyResult(tzname, tz, locale, daysN, is12h, "No ICS URL configured");
+// "Tue 8 Sep" / "di 8 sep" / "mar. 8 sept." — header date, in the account's
+// own language via Intl; falls back to English names if Intl rejects the tag.
+function dateLabel(civil, locale) {
+  if (!civil) return null;
+  var d = new Date(Date.UTC(civil.y, civil.mo - 1, civil.d));
+  try {
+    return new Intl.DateTimeFormat(locale || 'en', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d);
+  } catch (e) {
+    return new Intl.DateTimeFormat('en', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d);
   }
+}
 
-  const prevState = (input && input.trmnl && input.trmnl.state) || {};
-  const prevCalendarDown = (prevState.calendarDown && typeof prevState.calendarDown === "object") ? prevState.calendarDown : {};
-  const prevCalendarNames = (prevState.calendarNames && typeof prevState.calendarNames === "object") ? prevState.calendarNames : {};
+// 12-hour clocks where the locale defaults to them (en-US, ...), unless the
+// Time Format setting says otherwise.
+function resolveHour12(timeFormatRaw, locale) {
+  if (timeFormatRaw === '12h') return true;
+  if (timeFormatRaw === '24h') return false;
+  // only an explicit 12-hour region (en-US, en-CA, en-AU, ...) defaults to
+  // 12h — a bare "en" account (the TRMNL default) keeps a 24-hour clock
+  var region = /-([A-Za-z]{2})$/.exec(String(locale || ''));
+  return !!region && ['US', 'CA', 'AU', 'NZ', 'PH', 'IN'].indexOf(region[1].toUpperCase()) !== -1;
+}
 
-  const nowEpoch = Date.now();
-  const nowCivil = fromEpoch(nowEpoch, tz);
-  const winSCivil = { y: nowCivil.y, mo: nowCivil.mo, d: nowCivil.d };
-  const winSEpoch = zonedTimeToUtc(winSCivil.y, winSCivil.mo, winSCivil.d, 0, 0, 0, tz);
-  const winEDate = addCivilDays({ ...winSCivil, h: 0, mi: 0, s: 0 }, daysN);
-  const winEEpoch = zonedTimeToUtc(winEDate.y, winEDate.mo, winEDate.d, 0, 0, 0, tz);
+// ---------------------------------------------------------------------
+// Timezone helpers (Intl-based, no library) — same technique used by
+// this project's other plugin (plugin/src/transform.js: fromEpoch /
+// zonedTimeToUtc), ported compactly rather than re-derived.
+// ---------------------------------------------------------------------
 
-  const deadline = Date.now() + SERVERLESS_DEADLINE_MS;
-
-  const errors = [];
-  const calendarFetches = calendars.map(async (cal, calIdx) => {
-    let url = cal.url;
-    if (url.startsWith("webcal://")) url = "https://" + url.slice("webcal://".length);
-    try {
-      const budget = msUntil(deadline);
-      if (budget <= 0) throw new Error("timed out");
-      const headers = Object.assign({ "User-Agent": "TRMNL-ICS-Calendar" }, cal.headers);
-      const resp = await fetchWithTimeout(url, Math.min(budget, 4000), { headers });
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      return { calIdx, url: cal.url, text: await resp.text(), ok: true };
-    } catch (exc) {
-      errors.push(String((exc && exc.message) || exc));
-      return { calIdx, url: cal.url, text: null, ok: false };
-    }
-  });
-
-  const localeCode = localeCodeOf(locale);
-  const shouldFetchWeatherI18n = WEATHER_I18N_LOCALES.includes(localeCode);
-
-  const [calendarResults, sky, rssResult, weatherI18nFetched] = await Promise.all([
-    Promise.all(calendarFetches),
-    fetchSky(location, daysN, fahrenheit, deadline),
-    fetchRssHeadline(rssUrl, rssLabel, deadline),
-    shouldFetchWeatherI18n ? fetchWeatherI18n(localeCode, deadline) : Promise.resolve(null),
-  ]);
-  let rssHeadline = rssResult;
-
-  let weatherI18n = WEATHER_TEXT_FALLBACK;
-  let weatherI18nState = null;
-  if (shouldFetchWeatherI18n) {
-    if (weatherI18nFetched) {
-      weatherI18nState = { code: localeCode, data: weatherI18nFetched };
-    } else if (prevState.weatherI18n && prevState.weatherI18n.code === localeCode) {
-      weatherI18nState = prevState.weatherI18n;
-    }
-    if (weatherI18nState) weatherI18n = weatherI18nState.data;
+var _offsetFmtCache = {};
+// Validates an IANA zone name before it's ever handed to
+// getOffsetMinutes()/zonedTimeToUtc() — Intl throws on anything it
+// doesn't recognize (notably Windows-style TZIDs like "Eastern Standard
+// Time" that Outlook exports use instead of "America/New_York"), and an
+// uncaught throw here would silently drop that entire calendar's events
+// (swallowed by the per-calendar try/catch in buildFromConfig) with
+// nothing pointing at why. Ported from plugin/src/transform.js's own
+// safeZone — same fix, same reason.
+var _safeZoneCache = {};
+function safeZone(name) {
+  if (!name) return null;
+  if (name in _safeZoneCache) return _safeZoneCache[name];
+  var ok;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: name });
+    ok = name;
+  } catch (e) {
+    ok = null;
   }
+  _safeZoneCache[name] = ok;
+  return ok;
+}
 
-  const occ = [];
-  for (const r of calendarResults) {
-    if (r.text !== null) collectIcs(r.text, tz, winSEpoch, winEEpoch, occ, r.calIdx);
+function offsetFormatter(tz) {
+  if (!_offsetFmtCache[tz]) {
+    _offsetFmtCache[tz] = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', timeZoneName: 'longOffset' });
   }
+  return _offsetFmtCache[tz];
+}
 
-  let err = null;
-  if (errors.length && !occ.length) err = "Fetch/parse failed: " + errors[0];
+function getOffsetMinutes(epochMs, tz) {
+  if (typeof tz === 'number') return tz; // already a raw UTC offset in minutes — the utc_offset fallback case
+  if (!isFinite(epochMs)) return 0;
+  var parts = offsetFormatter(tz).formatToParts(new Date(epochMs));
+  var part = parts.filter(function (p) { return p.type === 'timeZoneName'; })[0];
+  var v = part ? part.value : 'GMT';
+  if (v === 'GMT' || v === 'UTC') return 0;
+  var m = /GMT([+-])(\d{1,2}):(\d{2})/.exec(v);
+  if (m) return (m[1] === '-' ? -1 : 1) * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10));
+  m = /GMT([+-])(\d{1,2})$/.exec(v);
+  if (m) return (m[1] === '-' ? -1 : 1) * parseInt(m[2], 10) * 60;
+  return 0;
+}
 
-  const calendarNames = {};
-  const seenNames = new Set();
-  calendars.forEach((cal, i) => {
-    if (!cal.name) {
-      const r = calendarResults[i];
-      const fetched = r && r.ok ? extractCalName(r.text) : null;
-      cal.name = fetched || prevCalendarNames[r.url] || "Calendar " + (i + 1);
-    }
-    let unique = cal.name;
-    let dupe = 2;
-    while (seenNames.has(unique.toLowerCase())) {
-      unique = cal.name + " (" + dupe + ")";
-      dupe++;
-    }
-    seenNames.add(unique.toLowerCase());
-    cal.name = unique;
-    calendarNames[calendarResults[i].url] = unique;
-  });
-
-  const calendarDown = {};
-  const calendarAlerts = [];
-  for (const r of calendarResults) {
-    if (r.ok) continue;
-    const downSince = prevCalendarDown[r.url] || nowEpoch;
-    calendarDown[r.url] = downSince;
-    if (nowEpoch - downSince >= CALENDAR_DOWN_THRESHOLD_MS) {
-      calendarAlerts.push(calendars[r.calIdx].name);
-    }
-  }
-
-  const prevWeatherFetchedAt = typeof prevState.weatherFetchedAt === "number" ? prevState.weatherFetchedAt : null;
-  let weatherFetchedAt = nowEpoch;
-  let weatherStale = false;
-  if (sky.error && prevState.weather) {
-    sky.sunMarks = prevState.weather.sunMarks;
-    sky.hourlyWeather = prevState.weather.hourlyWeather;
-    sky.dailyTemps = prevState.weather.dailyTemps;
-    weatherFetchedAt = prevWeatherFetchedAt || nowEpoch;
-    weatherStale = !!prevWeatherFetchedAt && nowEpoch - prevWeatherFetchedAt >= WEATHER_STALE_THRESHOLD_MS;
-  }
-
-  if (rssUrl && !rssHeadline && prevState.news) rssHeadline = prevState.news;
-
-  const filtered = [];
-  for (const e of occ) {
-    const cal = calendars[e.calIdx];
-    const startWeekday = fromEpoch(e.startEpoch, tz).wd;
-    const r = applyCalendarRules(e.title, e.desc, e.status, startWeekday, cal, people, globalRules, everyonePerson);
-    if (r.hide) continue;
-    e.title = r.title;
-    e.hueOverride = r.hue;
-    e.personBadges = r.badges;
-    if (r.allDay) e.allDay = true;
-    filtered.push(e);
-  }
-
-  const dayBounds = [];
-  const rawDays = [];
-  for (let i = 0; i < daysN; i++) {
-    const d0Civil = addCivilDays({ ...winSCivil, h: 0, mi: 0, s: 0 }, i);
-    const d0Epoch = zonedTimeToUtc(d0Civil.y, d0Civil.mo, d0Civil.d, 0, 0, 0, tz);
-    const d1Civil = addCivilDays(d0Civil, 1);
-    const d1Epoch = zonedTimeToUtc(d1Civil.y, d1Civil.mo, d1Civil.d, 0, 0, 0, tz);
-    dayBounds.push({ d0Epoch, d1Epoch });
-
-    const timed = [];
-    for (const e of filtered) {
-      if (e.allDay || e.endEpoch - e.startEpoch >= 86400000) continue;
-      if (!(e.startEpoch < d1Epoch && e.endEpoch > d0Epoch)) continue;
-      const vs = Math.max(e.startEpoch, d0Epoch);
-      const ve = Math.min(e.endEpoch, d1Epoch);
-      timed.push({
-        h0: (vs - d0Epoch) / 3600000,
-        h1: (ve - d0Epoch) / 3600000,
-        title: e.title,
-        calIdx: e.calIdx,
-        hueOverride: e.hueOverride,
-        personBadges: e.personBadges,
-        label: fmtTime(vs, tz, is12h) + "-" + fmtTime(ve, tz, is12h),
-      });
-    }
-    timed.sort((a, b) => a.h0 - b.h0);
-    rawDays.push({
-      label: dayLabel(d0Civil, locale),
-      labelShort: dayLabelShort(d0Civil, locale),
-      labelShortWeekday: dayLabelShortParts(d0Civil, locale).weekday,
-      labelShortRest: dayLabelShortParts(d0Civil, locale).rest,
-      isToday: i === 0,
-      timed,
+var _civilFmtCache = {};
+function civilFormatter(tz) {
+  if (!_civilFmtCache[tz]) {
+    _civilFmtCache[tz] = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hourCycle: 'h23',
+      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
     });
   }
+  return _civilFmtCache[tz];
+}
 
-  const alldaySpans = [];
-  for (const e of filtered) {
-    if (!(e.allDay || e.endEpoch - e.startEpoch >= 86400000)) continue;
-    let startCol = -1, endCol = -1;
-    for (let i = 0; i < daysN; i++) {
-      if (e.startEpoch < dayBounds[i].d1Epoch && e.endEpoch > dayBounds[i].d0Epoch) {
-        if (startCol === -1) startCol = i;
-        endCol = i;
-      }
-    }
-    if (startCol === -1) continue;
-    alldaySpans.push({
-      e, startCol, span: endCol - startCol + 1,
-      continuesBefore: e.startEpoch < dayBounds[startCol].d0Epoch,
-      continuesAfter: e.endEpoch > dayBounds[endCol].d1Epoch,
-    });
+function fromEpoch(epochMs, tz) {
+  if (typeof tz === 'number') {
+    var dNum = new Date(epochMs + tz * 60000);
+    return { y: dNum.getUTCFullYear(), mo: dNum.getUTCMonth() + 1, d: dNum.getUTCDate(), h: dNum.getUTCHours(), mi: dNum.getUTCMinutes(), s: dNum.getUTCSeconds() };
   }
-  alldaySpans.sort((a, b) => a.startCol - b.startCol || b.span - a.span);
-  const rowEnds = [];
-  for (const s of alldaySpans) {
-    const endCol = s.startCol + s.span - 1;
-    let row = 0;
-    while (row < rowEnds.length && rowEnds[row] >= s.startCol) row++;
-    s.row = row;
-    rowEnds[row] = endCol;
-  }
-  const neededRows = rowEnds.length;
-  const visibleCap = neededRows <= 3 ? 3 : 2;
-  if (neededRows > visibleCap) {
-    const overflowCount = new Array(daysN).fill(0);
-    for (const s of alldaySpans) {
-      if (s.row < visibleCap) continue;
-      for (let d = s.startCol; d <= s.startCol + s.span - 1 && d < daysN; d++) overflowCount[d]++;
-    }
-    for (let d = 0; d < daysN; d++) {
-      if (!overflowCount[d]) continue;
-      alldaySpans.push({
-        e: { title: "+" + overflowCount[d] + " more", hueOverride: null, calIdx: -1, personBadges: null },
-        startCol: d, span: 1, row: visibleCap,
-        continuesBefore: false, continuesAfter: false, isOverflow: true,
-      });
-    }
-  }
-  let alldayBars = alldaySpans.filter((s) => s.row < visibleCap || s.isOverflow).map((s) => ({
-    title: s.e.title,
-    hue: s.isOverflow ? "gray-30" : (s.e.hueOverride || hueOf(s.e.calIdx, calendarColors)),
-    personBadges: s.e.personBadges,
-    startCol: s.startCol,
-    span: s.span,
-    row: s.row,
-    continuesBefore: s.continuesBefore,
-    continuesAfter: s.continuesAfter,
-  }));
-  alldayBars.sort((a, b) => a.row - b.row || a.startCol - b.startCol);
-  const mergedAlldayBars = [];
-  for (const bar of alldayBars) {
-    const prev = mergedAlldayBars[mergedAlldayBars.length - 1];
-    if (
-      prev && prev.row === bar.row && prev.startCol + prev.span === bar.startCol &&
-      prev.title === bar.title && prev.hue === bar.hue &&
-      JSON.stringify(prev.personBadges) === JSON.stringify(bar.personBadges)
-    ) {
-      prev.span += bar.span;
-      prev.continuesAfter = bar.continuesAfter;
-    } else {
-      mergedAlldayBars.push(Object.assign({}, bar));
-    }
-  }
-  alldayBars = mergedAlldayBars;
+  var parts = {};
+  civilFormatter(tz).formatToParts(new Date(epochMs)).forEach(function (p) { parts[p.type] = p.value; });
+  var h = +parts.hour;
+  if (h === 24) h = 0;
+  return { y: +parts.year, mo: +parts.month, d: +parts.day, h: h, mi: +parts.minute, s: +parts.second };
+}
 
-  const nowH = (nowEpoch - winSEpoch) / 3600000;
-  const newsPct = rssHeadline ? NEWS_PCT : 0;
-  rawDays.forEach((rd, i) => {
-    rd.temp = sky.dailyTemps[i] || null;
-    rd.icon = rd.temp ? dayIcon(sky.hourlyWeather[i]) : null;
-  });
-
-  const daySun = sky.sunMarks[0] || [];
-  const sunriseMark = daySun.find((m) => m.kind === "sunrise");
-  const sunsetMark = daySun.find((m) => m.kind === "sunset");
-  const eventStarts = [];
-  const eventEnds = [];
-  for (const d of rawDays) {
-    for (const e of d.timed) {
-      eventStarts.push(e.h0);
-      eventEnds.push(e.h1);
-    }
-  }
-  const defaultHours = parseHours(cf(input, "hours")) || DEFAULT_HOURS;
-  const coreStartCandidates = [defaultHours.start, sunriseMark ? sunriseMark.hour : null, ...eventStarts].filter((h) => h !== null && h !== undefined);
-  const coreEndCandidates = [defaultHours.end, sunsetMark ? sunsetMark.hour : null, ...eventEnds].filter((h) => h !== null && h !== undefined);
-  const coreStartH = Math.floor(Math.min(...coreStartCandidates));
-  let coreEndH = Math.ceil(Math.max(...coreEndCandidates));
-  coreEndH = Math.max(coreEndH, coreStartH + 1);
-  const startH = nowH !== null && nowH !== undefined ? Math.min(coreStartH, Math.floor(nowH)) : coreStartH;
-  let endH = nowH !== null && nowH !== undefined ? Math.max(coreEndH, Math.ceil(nowH) + 1) : coreEndH;
-  endH = Math.max(endH, startH + 1);
-
-  const alertsPct = calendarAlerts.length ? ALERTS_ROW_PCT : 0;
-  const grid = layoutNative(rawDays, alldayBars, startH, endH, coreStartH, coreEndH, nowH, sky.sunMarks, sky.hourlyWeather, calendarColors, HEADER_PCT, is12h, newsPct, alertsPct, weatherI18n);
-
-  // The single-day views (half_horizontal/half_vertical/quadrant) show only rawDays[0], rendered
-  // as a plain time+title list rather than a timeline grid — a grid this small is more cramped
-  // than useful. All-day items touching today come first (also still shown in the all-day bar
-  // header above, for every view — this is deliberately in addition, not instead), then every
-  // timed event still relevant from now on (already-ended ones are dropped; one in progress right
-  // now is kept and flagged `current` so the template can call it out). How many of these
-  // actually fit — and the "and N more" indicator for the rest — is handled by TRMNL's own
-  // overflow engine in the template (data-overflow/data-overflow-counter), which measures real
-  // rendered space at runtime; AGENDA_SANITY_CAP here is just a hard ceiling against a
-  // pathological day's payload size, not a display cap.
-  const day0 = rawDays[0];
-  const day0AlldayBars = alldayBars.filter((b) => b.startCol === 0);
-  const nowIsKnown = nowH !== null && nowH !== undefined;
-  const agendaAllDay = day0AlldayBars.map((b) => ({
-    time: null, all_day: true, title: b.title,
-    hue: colorClass(b.hue), fg: foregroundFor(b.hue), current: false,
-    badges: b.personBadges || [],
-  }));
-  const agendaTimed = day0.timed
-    .filter((e) => !nowIsKnown || e.h1 > nowH)
-    .map((e) => {
-      const color = e.hueOverride || hueOf(e.calIdx, calendarColors);
-      return {
-        sortH: e.h0,
-        item: {
-          time: e.label, title: e.title,
-          hue: colorClass(color), fg: foregroundFor(color),
-          current: nowIsKnown && e.h0 <= nowH && e.h1 > nowH,
-          badges: e.personBadges || [],
-        },
-      };
-    });
-  const agendaWeather = weatherTransitions((sky.hourlyWeather || {})[0])
-    .filter((m) => !nowIsKnown || m.h >= nowH)
-    .map((m) => {
-      const timeLabel = fmtTime(dayBounds[0].d0Epoch + m.h * 3600000, tz, is12h);
-      return { sortH: m.h, item: weatherMarkerItem(m.kind, m.starting, timeLabel, weatherI18n) };
-    });
-  const agendaItems = agendaAllDay.concat(
-    agendaTimed.concat(agendaWeather).sort((a, b) => a.sortH - b.sortH).map((x) => x.item)
-  ).slice(0, AGENDA_SANITY_CAP);
-
-  const viewPeopleSeen = new Set();
-  const viewPeople = [];
-  for (const b of [...alldayBars.flatMap((a) => a.personBadges || []), ...rawDays.flatMap((d) => d.timed.flatMap((t) => t.personBadges || []))]) {
-    if (!b.person || viewPeopleSeen.has(b.person)) continue;
-    viewPeopleSeen.add(b.person);
-    viewPeople.push({ text: b.text, person: b.person, hue: b.hue, fg: b.fg, is_everyone: b.is_everyone });
-  }
-
-  const data = Object.assign({}, grid, {
-    single_day: { agenda: agendaItems },
-    full_view_grid: fullViewGrid,
-    people: viewPeople,
-    generated_at: Math.floor(nowEpoch / 1000),
-    tz: tzname,
-    error: err,
-    unavailable_label: unavailableText(locale),
-    all_day_label: allDayText(locale),
-    nothing_scheduled_label: nothingScheduledText(locale),
-    has_events: alldayBars.length > 0 || rawDays.some((d) => d.timed.length),
-    weather_error: sky.error,
-    weather_stale: weatherStale,
-    temp_unit: fahrenheit ? "F" : "C",
-    rss_headline: rssHeadline,
-    calendar_alerts: calendarAlerts,
-  });
-  const trmnl_state = {
-    weather: { sunMarks: sky.sunMarks, hourlyWeather: sky.hourlyWeather, dailyTemps: sky.dailyTemps },
-    weatherFetchedAt,
-    weatherI18n: weatherI18nState,
-    news: rssHeadline || null,
-    calendarDown,
-    calendarNames,
-  };
-  return { data, trmnl_state };
+function zonedTimeToUtc(y, mo, d, h, mi, s, tz) {
+  if (typeof tz === 'number') return Date.UTC(y, mo - 1, d, h, mi, s) - tz * 60000;
+  var guess = Date.UTC(y, mo - 1, d, h, mi, s);
+  var off1 = getOffsetMinutes(guess, tz);
+  var t1 = guess - off1 * 60000;
+  var off2 = getOffsetMinutes(t1, tz);
+  return guess - off2 * 60000;
 }
 
 function cf(input, key) {
-  if (!input || typeof input !== "object") return "";
-  if (typeof input[key] === "string") return input[key];
   try {
-    const v = input.trmnl.plugin_settings.custom_fields_values[key];
-    return typeof v === "string" ? v : "";
+    var v = input.trmnl.plugin_settings.custom_fields_values[key];
+    return v == null ? '' : String(v);
   } catch (e) {
-    return "";
+    return '';
   }
 }
 
-function toInt(raw, def, lo, hi) {
-  const f = parseFloat(String(raw).trim());
-  if (!isFinite(f)) return def;
-  return Math.max(lo, Math.min(hi, Math.trunc(f)));
-}
-
-function parseHours(raw) {
-  const m = /^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$/.exec(String(raw || ""));
-  if (!m) return null;
-  const start = parseInt(m[1], 10);
-  const end = parseInt(m[2], 10);
-  if (!(start >= 0 && start < end && end <= 24)) return null;
-  return { start, end };
-}
-
-function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
-  const nowEpoch = Date.now();
-  const nowCivil = fromEpoch(nowEpoch, tz);
-  const winSCivil = { y: nowCivil.y, mo: nowCivil.mo, d: nowCivil.d, h: 0, mi: 0, s: 0 };
-  const days = [];
-  for (let i = 0; i < daysN; i++) {
-    const d0Civil = addCivilDays(winSCivil, i);
-    days.push({
-      label: dayLabel(d0Civil, locale),
-      labelShort: dayLabelShort(d0Civil, locale),
-      labelShortWeekday: dayLabelShortParts(d0Civil, locale).weekday,
-      labelShortRest: dayLabelShortParts(d0Civil, locale).rest,
-      isToday: i === 0,
-      timed: [],
-    });
-  }
-  const grid = layoutNative(days, [], 8, 22, null, null, null, null, HEADER_PCT, is12h);
-  const data = Object.assign({}, grid, {
-    single_day: { agenda: [] },
-    full_view_grid: false,
-    people: [],
-    generated_at: Math.floor(nowEpoch / 1000),
-    tz: tzname,
-    error: msg,
-    unavailable_label: unavailableText(locale),
-    all_day_label: allDayText(locale),
-    nothing_scheduled_label: nothingScheduledText(locale),
-    has_events: false,
-    weather_error: null,
-    weather_stale: false,
-    temp_unit: "C",
-    rss_headline: null,
-    calendar_alerts: [],
-  });
-  return { data };
-}
-
-function compileRule(spec) {
-  if (!spec || typeof spec !== "object") return null;
-  const m = compileMatcher(spec.match);
-  if (!m) return null;
-  const person = normalizeNameList(spec.person);
-  const allDay = spec.allDay === true;
-  const hide = spec.hide === true;
-  const rewrite = typeof spec.rewrite === "string" ? spec.rewrite : null;
-  const rewriteFull = spec.rewriteFull === true;
-  if (!person && !allDay && !hide && rewrite === null) return null;
-  const isAnyMatch = spec.match && (spec.match.type === "any" || spec.match.type === "all");
-  const rename = person ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
-  return { match: m.test, rx: m.rx, person, allDay, hide, rename, rewrite, rewriteFull };
-}
-
-function compileRuleList(raw) {
-  const rules = [];
-  for (const spec of Array.isArray(raw) ? raw : []) {
-    const compiled = compileRule(spec);
-    if (compiled) rules.push(compiled);
-  }
-  return rules;
-}
-
-function parseConfig(raw, extraUrls) {
-  let data = null;
-  if (typeof raw === "string" && raw.trim()) {
-    try {
-      data = JSON.parse(raw);
-    } catch (e) {
-      data = { calendars: raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean) };
-    }
-  }
-  if (!data || typeof data !== "object") data = {};
-
-  const locale = typeof data.locale === "string" && data.locale.trim() ? data.locale.trim() : null;
-
-  const timeZone = typeof data.timeZone === "string" && data.timeZone.trim() ? data.timeZone.trim() : null;
-
-  const people = {};
-  let everyonePerson = null;
-  for (const item of Array.isArray(data.people) ? data.people : []) {
-    if (!item || typeof item !== "object") continue;
-    const name = typeof item.name === "string" ? item.name.trim() : "";
-    if (!name) continue;
-    const color = typeof item.color === "string" && isValidColor(item.color.toLowerCase()) ? item.color.toLowerCase() : "";
-    const badgeSrc = typeof item.badge === "string" && item.badge.trim() ? item.badge.trim() : name;
-    const badge = Array.from(badgeSrc)[0].toUpperCase();
-    if (everyonePerson === null) everyonePerson = name;
-    people[name.toLowerCase()] = { name, color, badge };
-  }
-
-  const globalRules = compileRuleList(data.rules);
-
-  const rawCalendars = (extraUrls || []).concat(Array.isArray(data.calendars) ? data.calendars : []);
-  const calendars = [];
-  for (const raw_item of rawCalendars) {
-    const item = typeof raw_item === "string" ? { url: raw_item } : raw_item;
-    if (!item || typeof item !== "object" || typeof item.url !== "string" || !item.url.trim()) continue;
-    const name = typeof item.name === "string" && item.name.trim() ? item.name.trim() : null;
-    const color = typeof item.color === "string" && isValidColor(item.color.toLowerCase()) ? item.color.toLowerCase() : null;
-    const rules = compileRuleList(item.rules);
-    const headers = {};
-    if (item.headers && typeof item.headers === "object") {
-      for (const k of Object.keys(item.headers)) {
-        if (typeof item.headers[k] === "string") headers[k] = item.headers[k];
-      }
-    }
-
-    calendars.push({ name, url: item.url.trim(), color, rules, headers });
-  }
-
-  return { calendars, people, locale, timeZone, globalRules, everyonePerson };
-}
-
-function normalizeNameList(raw) {
-  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
-  const names = list.filter((n) => typeof n === "string" && n.trim()).map((n) => n.trim());
-  return names.length ? names : null;
-}
-
-function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function compileMatcher(spec) {
-  if (!spec || typeof spec !== "object") return null;
-  if (spec.type === "any" || spec.type === "all") {
-    return { rx: /[\s\S]*/i, test: () => true };
-  }
-  if (spec.type === "and" || spec.type === "or") {
-    const subs = (Array.isArray(spec.matchers) ? spec.matchers : []).map(compileMatcher).filter(Boolean);
-    if (!subs.length) return null;
-    const isAnd = spec.type === "and";
-    return { rx: null, test: (ctx) => (isAnd ? subs.every((m) => m.test(ctx)) : subs.some((m) => m.test(ctx))) };
-  }
-  if (spec.type === "status") {
-    const want = typeof spec.value === "string" ? spec.value.trim().toUpperCase() : "";
-    if (!want) return null;
-    return { rx: null, test: (ctx) => ctx.status === want };
-  }
-  if (spec.type === "weekday") {
-    const raw = Array.isArray(spec.value) ? spec.value : [spec.value];
-    const wanted = new Set();
-    for (const v of raw) {
-      if (typeof v !== "string") continue;
-      const code = v.trim().toUpperCase().slice(0, 2);
-      if (code in WD_MAP) wanted.add(WD_MAP[code]);
-    }
-    if (!wanted.size) return null;
-    return { rx: null, test: (ctx) => ctx.weekday !== null && wanted.has(ctx.weekday) };
-  }
-  if (typeof spec.value !== "string") return null;
-  const p = spec.value.trim();
-  if (!p) return null;
-  let rx;
-  if (spec.type === "regex") {
-    try {
-      rx = new RegExp(p, "i");
-    } catch (e) {
-      return null;
-    }
-  } else if (spec.type === "contains") {
-    rx = new RegExp(escapeRegExp(p), "i");
-  } else if (spec.type === "exact") {
-    rx = new RegExp("^" + escapeRegExp(p) + "$", "i");
-  } else {
-    rx = new RegExp("\\b" + escapeRegExp(p) + "\\b", "i");
-  }
-  return { rx, test: (ctx) => rx.test(ctx.title) || (!!ctx.desc && rx.test(ctx.desc)) };
-}
-
-function replaceMatch(text, rx, replacement) {
-  if (rx.test("")) return text.replace(new RegExp(rx.source, rx.flags.replace("g", "")), replacement);
-  return text.replace(new RegExp(rx.source, rx.flags.includes("g") ? rx.flags : rx.flags + "g"), replacement);
-}
-
-function applyCalendarRules(title, desc, status, weekday, cal, people, globalRules, everyonePerson) {
-  const originalTitle = title;
-  const ctx = { title: originalTitle, desc: desc || "", status: status || "", weekday: weekday === undefined || weekday === null ? null : weekday };
-  let personNames = null;
-  let renameRule = null;
-  let rewriteRule = null;
-  let allDay = false;
-  let hide = false;
-  for (const rule of globalRules.concat(cal.rules)) {
-    if (!rule.match(ctx)) continue;
-    if (rule.hide) hide = true;
-    if (rule.allDay) allDay = true;
-    if (rule.person) {
-      personNames = rule.person;
-      renameRule = rule.rename ? rule : null;
-    }
-    if (rule.rewrite !== null) rewriteRule = rule;
-  }
-  if (rewriteRule) {
-    title = rewriteRule.rewriteFull
-      ? rewriteRule.rewrite
-      : rewriteRule.rx
-      ? replaceMatch(originalTitle, rewriteRule.rx, rewriteRule.rewrite)
-      : originalTitle;
-  } else if (renameRule && renameRule.rx) {
-    title = replaceMatch(originalTitle, renameRule.rx, renameRule.person.join(" & "));
-  }
-  if (personNames === null && everyonePerson) personNames = [everyonePerson];
-
-  let hue = null;
-  const badges = [];
-  if (personNames) {
-    for (const personName of personNames) {
-      const p = people[personName.toLowerCase()];
-      if (!p) continue;
-      if (hue === null && p.color) hue = p.color;
-      const badgeHue = p.color ? colorClass(p.color) : "gray-30";
-      const badgeFg = p.color ? foregroundFor(p.color) : "white";
-      badges.push({ text: p.badge, person: p.name, hue: badgeHue, fg: badgeFg, is_everyone: p.name === everyonePerson });
-    }
-  }
-  return { title, hue, badges, allDay, hide };
-}
-
-function localeOf(input) {
-  try {
-    const loc = input.trmnl.user.locale;
-    if (typeof loc === "string" && loc.trim()) return loc.trim();
-  } catch (e) {}
-  return "en";
-}
-
-function localeCodeOf(locale) {
-  return String(locale).toLowerCase().split(/[-_]/)[0];
-}
-
-function uiText(locale) {
-  return UI_TEXT[localeCodeOf(locale)] || UI_TEXT.en;
-}
-
-function unavailableText(locale) {
-  return uiText(locale).unavailable;
-}
-
-function allDayText(locale) {
-  return uiText(locale).all_day;
-}
-
-function nothingScheduledText(locale) {
-  return uiText(locale).nothing_scheduled;
-}
-
+// User's own TRMNL account timezone/offset — the fallback chain a config
+// (or demo mode, which has no timeZone of its own at all) should use
+// before ever defaulting to plain UTC, so "now" and any floating-time ICS
+// events land on the viewer's actual local day instead of an arbitrary
+// one. Ported from plugin/src/transform.js's userTz/userUtcOffsetMinutes/
+// resolveTz — same fallback order: explicit override > account IANA zone
+// > account UTC offset (seconds, per the merge-variable, hence /60) > UTC.
 function userTz(input) {
   try {
-    const tz = input.trmnl.user.time_zone_iana;
-    return typeof tz === "string" && tz.trim() ? tz.trim() : null;
+    var tz = input.trmnl.user.time_zone_iana;
+    return (typeof tz === 'string' && tz.trim()) ? tz.trim() : null;
   } catch (e) {
     return null;
   }
@@ -670,972 +257,785 @@ function userTz(input) {
 
 function userUtcOffsetMinutes(input) {
   try {
-    const s = input.trmnl.user.utc_offset;
-    const n = Number(s);
+    var n = Number(input.trmnl.user.utc_offset);
     return isFinite(n) ? n / 60 : null;
   } catch (e) {
     return null;
   }
 }
 
-function resolveTz(tzname, input) {
-  const tz = tzname ? safeZone(tzname) : null;
-  if (tz) return tz;
-  const offsetMin = userUtcOffsetMinutes(input);
-  if (offsetMin !== null) return offsetMin;
-  return 0;
+function resolveTz(explicitTzname, input) {
+  var explicit = explicitTzname ? safeZone(explicitTzname) : null;
+  if (explicit) return explicit;
+  var accountTz = safeZone(userTz(input));
+  if (accountTz) return accountTz;
+  var offsetMin = userUtcOffsetMinutes(input);
+  if (offsetMin !== null) return offsetMin; // numeric — getOffsetMinutes/fromEpoch/zonedTimeToUtc all handle this
+  return 'UTC';
 }
 
-function safeZone(name) {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: name });
-    return name;
-  } catch (e) {
-    return null;
-  }
-}
-
-const _offsetFmtCache = new Map();
-function offsetFormatter(tz) {
-  let f = _offsetFmtCache.get(tz);
-  if (!f) {
-    f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", hour: "2-digit", minute: "2-digit", timeZoneName: "longOffset" });
-    _offsetFmtCache.set(tz, f);
-  }
-  return f;
-}
-
-function getOffsetMinutes(epochMs, tz) {
-  if (typeof tz === "number") return tz;
-  if (!isFinite(epochMs)) return 0;
-  const parts = offsetFormatter(tz).formatToParts(new Date(epochMs));
-  const part = parts.find((p) => p.type === "timeZoneName");
-  const v = part ? part.value : "GMT";
-  if (v === "GMT" || v === "UTC") return 0;
-  let m = /GMT([+-])(\d{1,2}):(\d{2})/.exec(v);
-  if (m) return (m[1] === "-" ? -1 : 1) * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10));
-  m = /GMT([+-])(\d{1,2})$/.exec(v);
-  if (m) return (m[1] === "-" ? -1 : 1) * parseInt(m[2], 10) * 60;
-  return 0;
-}
-
-const _civilFmtCache = new Map();
-function civilFormatter(tz) {
-  let f = _civilFmtCache.get(tz);
-  if (!f) {
-    f = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz, hourCycle: "h23",
-      year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", second: "2-digit",
-    });
-    _civilFmtCache.set(tz, f);
-  }
-  return f;
-}
-
-function fromEpoch(epochMs, tz) {
-  if (typeof tz === "number") {
-    const d = new Date(epochMs + tz * 60000);
-    return {
-      y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate(),
-      h: d.getUTCHours(), mi: d.getUTCMinutes(), s: d.getUTCSeconds(),
-      wd: (d.getUTCDay() + 6) % 7,
-    };
-  }
-  if (!isFinite(epochMs)) epochMs = 0;
-  const parts = {};
-  for (const p of civilFormatter(tz).formatToParts(new Date(epochMs))) parts[p.type] = p.value;
-  const y = +parts.year, mo = +parts.month, d = +parts.day;
-  let h = +parts.hour;
-  if (h === 24) h = 0;
-  return { y, mo, d, h, mi: +parts.minute, s: +parts.second, wd: civilWeekday(y, mo, d) };
-}
-
-function zonedTimeToUtc(y, mo, d, h, mi, s, tz) {
-  if (typeof tz === "number") return Date.UTC(y, mo - 1, d, h, mi, s) - tz * 60000;
-  const guess = Date.UTC(y, mo - 1, d, h, mi, s);
-  const off1 = getOffsetMinutes(guess, tz);
-  const t1 = guess - off1 * 60000;
-  const off2 = getOffsetMinutes(t1, tz);
-  return guess - off2 * 60000;
-}
-
-function civilWeekday(y, mo, d) {
-  return (new Date(Date.UTC(y, mo - 1, d)).getUTCDay() + 6) % 7;
-}
-
-function civilDateOrdinal(y, mo, d) {
-  return Math.floor(Date.UTC(y, mo - 1, d) / 86400000);
-}
-
-function ordinalToYmd(ordinal) {
-  const dt = new Date(ordinal * 86400000);
-  return { y: dt.getUTCFullYear(), mo: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
-}
-
-function addCivilDays(civil, n) {
-  const dt = new Date(Date.UTC(civil.y, civil.mo - 1, civil.d + n, civil.h, civil.mi, civil.s));
-  return { y: dt.getUTCFullYear(), mo: dt.getUTCMonth() + 1, d: dt.getUTCDate(), h: dt.getUTCHours(), mi: dt.getUTCMinutes(), s: dt.getUTCSeconds() };
-}
-
-function isLeap(y) {
-  return y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
-}
-
-const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-function addMonths(civil, n) {
-  const mTotal = civil.mo - 1 + n;
-  const y = civil.y + Math.floor(mTotal / 12);
-  const m = ((mTotal % 12) + 12) % 12;
-  const maxDay = m === 1 ? (isLeap(y) ? 29 : 28) : MONTH_DAYS[m];
-  return { y, mo: m + 1, d: Math.min(civil.d, maxDay), h: civil.h, mi: civil.mi, s: civil.s };
-}
-
-function daysInMonth(y, mo) {
-  return mo === 2 ? (isLeap(y) ? 29 : 28) : MONTH_DAYS[mo - 1];
-}
-
-function nthWeekdayOfMonth(y, mo, wd, n) {
-  const maxDay = daysInMonth(y, mo);
-  if (n > 0) {
-    const firstWd = civilWeekday(y, mo, 1);
-    const d = 1 + ((wd - firstWd + 7) % 7) + (n - 1) * 7;
-    return d <= maxDay ? d : null;
-  }
-  const lastWd = civilWeekday(y, mo, maxDay);
-  const d = maxDay - ((lastWd - wd + 7) % 7) - (-n - 1) * 7;
-  return d >= 1 ? d : null;
-}
-
-function retargetDay(civil, byMonthDay, byDayNth, byDayNthWd) {
-  if (byDayNth !== null) {
-    const d = nthWeekdayOfMonth(civil.y, civil.mo, byDayNthWd, byDayNth);
-    return d === null ? null : Object.assign({}, civil, { d });
-  }
-  if (byMonthDay !== null) {
-    const maxDay = daysInMonth(civil.y, civil.mo);
-    const d = byMonthDay > 0 ? byMonthDay : maxDay + byMonthDay + 1;
-    return d >= 1 && d <= maxDay ? Object.assign({}, civil, { d }) : null;
-  }
-  return civil;
-}
-
-function advanceNthDayMonth(civil, monthStep, byMonthDay, byDayNth, byDayNthWd) {
-  let next = addMonths(civil, monthStep);
-  if (byMonthDay === null && byDayNth === null) return next;
-  for (let tries = 0; tries < 60; tries++) {
-    const adj = retargetDay(next, byMonthDay, byDayNth, byDayNthWd);
-    if (adj !== null) return adj;
-    next = addMonths(next, monthStep);
-  }
-  return next;
-}
-
-// Weekday/month names are handled entirely by Intl (localeDatePart, below) — no translation
-// file needed there. The only strings that get fetched are the weather condition messages
-// ("Rain starts", "Fog stops", ...): those are new copy introduced for the agenda-list weather
-// markers and have no Intl equivalent, so i18n/{code}.json on GitHub holds them for each
-// non-English locale and fetchWeatherI18n() below pulls the one matching the viewer's locale at
-// render time. English is excluded here (WEATHER_TEXT_FALLBACK below already *is* the English
-// copy) so an English viewer never pays for a fetch that would only echo back what's already
-// inline.
-const WEATHER_I18N_LOCALES = ["nl", "fr", "de", "es"];
-const WEATHER_I18N_BASE_URL = "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/i18n/";
-const WEATHER_TEXT_FALLBACK = {
-  rain_starts: "Rain starts", rain_stops: "Rain stops",
-  storm_starts: "Storm starts", storm_stops: "Storm stops",
-  snow_starts: "Snow starts", snow_stops: "Snow stops",
-  fog_starts: "Fog starts", fog_stops: "Fog stops",
-};
-
-async function fetchWeatherI18n(code, deadline) {
-  try {
-    const budget = msUntil(deadline);
-    if (budget <= 0) throw new Error("timed out");
-    const resp = await fetchWithTimeout(WEATHER_I18N_BASE_URL + code + ".json", Math.min(budget, 3000), {});
-    if (!resp.ok) throw new Error("HTTP " + resp.status);
-    const json = await resp.json();
-    if (!json || typeof json.rain_starts !== "string" || typeof json.rain_stops !== "string") {
-      throw new Error("malformed i18n payload");
-    }
-    return json;
-  } catch (e) {
-    return null;
-  }
-}
-
-// Short static UI chrome text — kept inline (not fetched) since it must always render even if
-// GitHub is unreachable and there's no cached copy yet (e.g. the plugin's very first run).
-const UI_TEXT = {
-  en: { unavailable: "Calendar unavailable", all_day: "All day", nothing_scheduled: "Nothing scheduled" },
-  nl: { unavailable: "Kalender niet beschikbaar", all_day: "Hele dag", nothing_scheduled: "Niets gepland" },
-  fr: { unavailable: "Agenda indisponible", all_day: "Journée", nothing_scheduled: "Rien de prévu" },
-  de: { unavailable: "Kalender nicht verfügbar", all_day: "Ganztägig", nothing_scheduled: "Nichts geplant" },
-  es: { unavailable: "Calendario no disponible", all_day: "Todo el día", nothing_scheduled: "Nada programado" },
-};
-
-const _weekdayFmtCache = new Map();
-const _monthFmtCache = new Map();
-
-function localeDatePart(locale, width, kind, y, mo, d) {
-  const cacheKey = locale + "|" + width;
-  const cache = kind === "weekday" ? _weekdayFmtCache : _monthFmtCache;
-  let fmt = cache.get(cacheKey);
-  if (!fmt) {
-    try {
-      fmt = new Intl.DateTimeFormat(locale, { [kind]: width, timeZone: "UTC" });
-    } catch (e) {
-      fmt = new Intl.DateTimeFormat("en", { [kind]: width, timeZone: "UTC" });
-    }
-    cache.set(cacheKey, fmt);
-  }
-  const raw = fmt.format(new Date(Date.UTC(y, mo - 1, d))).replace(/\.$/, "");
-  return raw.charAt(0).toUpperCase() + raw.slice(1);
-}
-
-function dayLabel(civil, locale) {
-  const wd = localeDatePart(locale, "short", "weekday", civil.y, civil.mo, civil.d);
-  const month = localeDatePart(locale, "long", "month", civil.y, civil.mo, civil.d);
-  return wd + " " + civil.d + " " + month;
-}
-
-function dayLabelShortParts(civil, locale) {
-  const wd = localeDatePart(locale, "short", "weekday", civil.y, civil.mo, civil.d);
-  const month = localeDatePart(locale, "short", "month", civil.y, civil.mo, civil.d);
-  return { weekday: wd, rest: civil.d + " " + month };
-}
-
-function dayLabelShort(civil, locale) {
-  const p = dayLabelShortParts(civil, locale);
-  return p.weekday + " " + p.rest;
-}
-
-function fmtTime(epoch, tz, is12h) {
-  const c = fromEpoch(epoch, tz);
-  const mi = String(c.mi).padStart(2, "0");
-  if (is12h) {
-    const h = c.h % 12 || 12;
-    return h + ":" + mi + " " + (c.h < 12 ? "AM" : "PM");
-  }
-  return c.h + ":" + mi;
-}
-
-function unfold(text) {
-  const lines = [];
-  for (const raw of text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")) {
-    if ((raw[0] === " " || raw[0] === "\t") && lines.length) {
-      lines[lines.length - 1] += raw.slice(1);
-    } else {
-      lines.push(raw);
-    }
-  }
-  return lines;
-}
-
-function prop(line) {
-  const idx = line.indexOf(":");
-  if (idx === -1) return null;
-  const head = line.slice(0, idx);
-  const value = line.slice(idx + 1);
-  const parts = head.split(";");
-  const params = {};
-  for (const p of parts.slice(1)) {
-    const eq = p.indexOf("=");
-    if (eq !== -1) {
-      params[p.slice(0, eq).toUpperCase()] = p.slice(eq + 1).replace(/^"+|"+$/g, "");
-    }
-  }
-  return [parts[0].toUpperCase(), params, value];
-}
-
-function untext(v) {
-  return v.replace(/\\n/g, "\n").replace(/\\N/g, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\").trim();
-}
-
-function extractCalName(text) {
-  for (const line of unfold(text || "")) {
-    const parsed = prop(line);
-    if (parsed && parsed[0] === "X-WR-CALNAME") {
-      const name = untext(parsed[2]);
-      if (name) return name;
-    }
-  }
-  return null;
-}
-
-function parseDt(value, params, tz) {
-  const v = value.trim();
-  if (params.VALUE === "DATE" || (v.length === 8 && !v.includes("T"))) {
-    const y = +v.slice(0, 4), mo = +v.slice(4, 6), d = +v.slice(6, 8);
-    if (!(isFinite(y) && isFinite(mo) && isFinite(d))) return null;
-    return { epoch: zonedTimeToUtc(y, mo, d, 0, 0, 0, tz), allDay: true, civil: { y, mo, d, h: 0, mi: 0, s: 0 }, zone: tz };
-  }
-  if (v.endsWith("Z")) {
-    const y = +v.slice(0, 4), mo = +v.slice(4, 6), d = +v.slice(6, 8),
-          h = +v.slice(9, 11), mi = +v.slice(11, 13), s = +v.slice(13, 15);
-    if (!(isFinite(y) && isFinite(mo) && isFinite(d) && isFinite(h) && isFinite(mi) && isFinite(s))) return null;
-    return { epoch: Date.UTC(y, mo - 1, d, h, mi, s), allDay: false, civil: { y, mo, d, h, mi, s }, zone: 0 };
-  }
-  const v15 = v.slice(0, 15);
-  const y = +v15.slice(0, 4), mo = +v15.slice(4, 6), d = +v15.slice(6, 8),
-        h = +v15.slice(9, 11), mi = +v15.slice(11, 13), s = +v15.slice(13, 15);
-  if (!(isFinite(y) && isFinite(mo) && isFinite(d) && isFinite(h) && isFinite(mi) && isFinite(s))) return null;
-  const z = safeZone(params.TZID || "") || tz;
-  return { epoch: zonedTimeToUtc(y, mo, d, h, mi, s, z), allDay: false, civil: { y, mo, d, h, mi, s }, zone: z };
-}
-
-function collectIcs(text, tz, winS, winE, out, calIdx) {
-  let inEv = false;
-  let ev = null;
-  const events = [];
-  for (const line of unfold(text)) {
-    if (line === "BEGIN:VEVENT") {
-      inEv = true;
-      ev = {};
-      continue;
-    }
-    if (line === "END:VEVENT") {
-      inEv = false;
-      if (ev) events.push(ev);
-      continue;
-    }
-    if (!inEv) continue;
-    const parsed = prop(line);
-    if (!parsed) continue;
-    const [name, params, value] = parsed;
-    if (name === "DTSTART") {
-      ev.start = parseDt(value, params, tz);
-    } else if (name === "DTEND") {
-      ev.end = parseDt(value, params, tz);
-    } else if (name === "SUMMARY") {
-      ev.title = untext(value);
-    } else if (name === "DESCRIPTION") {
-      ev.desc = untext(value);
-    } else if (name === "STATUS") {
-      ev.status = value.trim().toUpperCase();
-    } else if (name === "RRULE") {
-      ev.rrule = parseRrule(value, tz);
-    } else if (name === "EXDATE") {
-      ev.exdate = ev.exdate || new Set();
-      for (const part of value.split(",")) {
-        try {
-          const p = parseDt(part, params, tz);
-          ev.exdate.add(Math.floor(p.epoch / 1000));
-        } catch (e) {}
-      }
-    } else if (name === "UID") {
-      ev.uid = value.trim();
-    } else if (name === "RECURRENCE-ID") {
-      try {
-        ev.recurrenceId = parseDt(value, params, tz);
-      } catch (e) {}
-    }
-  }
-
-  const overrideEpochsByUid = new Map();
-  for (const e of events) {
-    if (!e.uid || !e.recurrenceId) continue;
-    if (!overrideEpochsByUid.has(e.uid)) overrideEpochsByUid.set(e.uid, new Set());
-    overrideEpochsByUid.get(e.uid).add(Math.floor(e.recurrenceId.epoch / 1000));
-  }
-
-  for (const e of events) {
-    if (e.uid && !e.recurrenceId && overrideEpochsByUid.has(e.uid)) {
-      e.exdate = e.exdate || new Set();
-      for (const epoch of overrideEpochsByUid.get(e.uid)) e.exdate.add(epoch);
-    }
-    e.calIdx = calIdx;
-    expandEvent(e, tz, winS, winE, out);
-  }
-}
-
-function parseRrule(value, tz) {
-  const rr = {};
-  for (const token of value.split(";")) {
-    const eq = token.indexOf("=");
-    if (eq !== -1) rr[token.slice(0, eq).toUpperCase()] = token.slice(eq + 1);
-  }
-  if (rr.UNTIL) {
-    const u = rr.UNTIL;
-    try {
-      if (u.endsWith("Z")) {
-        const y = +u.slice(0, 4), mo = +u.slice(4, 6), d = +u.slice(6, 8),
-              h = +u.slice(9, 11), mi = +u.slice(11, 13), s = +u.slice(13, 15);
-        rr._until = Date.UTC(y, mo - 1, d, h, mi, s);
-      } else if (u.includes("T")) {
-        const u15 = u.slice(0, 15);
-        const y = +u15.slice(0, 4), mo = +u15.slice(4, 6), d = +u15.slice(6, 8),
-              h = +u15.slice(9, 11), mi = +u15.slice(11, 13), s = +u15.slice(13, 15);
-        rr._until = zonedTimeToUtc(y, mo, d, h, mi, s, tz);
-      } else {
-        const y = +u.slice(0, 4), mo = +u.slice(4, 6), d = +u.slice(6, 8);
-        rr._until = zonedTimeToUtc(y, mo, d, 0, 0, 0, tz);
-      }
-    } catch (e) {
-      rr._until = null;
-    }
-  }
-  return rr;
-}
-
-function expandEvent(ev, tz, winS, winE, out) {
-  const start = ev.start;
-  if (!start) return;
-  const allDay = !!start.allDay;
-  const end = ev.end || { epoch: start.epoch + (allDay ? 86400000 : 3600000) };
-  const dur = end.epoch - start.epoch;
-  const title = ev.title !== undefined ? ev.title : "(no title)";
-  const desc = ev.desc || "";
-  const status = ev.status || "";
-  const exdate = ev.exdate || new Set();
-  const rr = ev.rrule;
-  const calIdx = ev.calIdx || 0;
-
-  function emit(curEpoch) {
-    if (exdate.has(Math.floor(curEpoch / 1000))) return;
-    const e = curEpoch + dur;
-    if (curEpoch < winE && e > winS) {
-      out.push({ startEpoch: curEpoch, endEpoch: e, allDay, title, desc, status, calIdx });
-    }
-  }
-
-  if (!rr || !rr.FREQ) {
-    emit(start.epoch);
-    return;
-  }
-
-  const freq = rr.FREQ;
-  const interval = Math.max(1, parseInt(rr.INTERVAL || "1", 10) || 1);
-  const count = rr.COUNT ? parseInt(rr.COUNT, 10) : null;
-  const until = rr._until != null ? rr._until : null;
-  let byday = null;
-  if (rr.BYDAY) {
-    byday = rr.BYDAY.split(",").map((tok) => tok.slice(-2)).filter((code) => code in WD_MAP).map((code) => WD_MAP[code]).sort((a, b) => a - b);
-  }
-
-  let byMonthDay = null;
-  if (rr.BYMONTHDAY) {
-    const n = parseInt(rr.BYMONTHDAY.split(",")[0], 10);
-    if (isFinite(n) && n !== 0 && n >= -31 && n <= 31) byMonthDay = n;
-  }
-  let byDayNth = null, byDayNthWd = null;
-  if ((freq === "MONTHLY" || freq === "YEARLY") && rr.BYDAY) {
-    const m = /^(-?\d{1,2})(MO|TU|WE|TH|FR|SA|SU)$/.exec(rr.BYDAY.split(",")[0]);
-    if (m) { byDayNth = parseInt(m[1], 10); byDayNthWd = WD_MAP[m[2]]; }
-  }
-
-  let emitted = 0;
-  let cur = { y: start.civil.y, mo: start.civil.mo, d: start.civil.d, h: start.civil.h, mi: start.civil.mi, s: start.civil.s };
-  const zone = start.zone;
-  let curEpoch = start.epoch;
-  const startOrdinal = civilDateOrdinal(start.civil.y, start.civil.mo, start.civil.d);
-
-  if ((freq === "DAILY" || freq === "WEEKLY") && !(freq === "WEEKLY" && byday)) {
-    const unit = freq === "DAILY" ? 1 : 7;
-    const winSCivil = fromEpoch(winS, tz);
-    const winSOrdinal = civilDateOrdinal(winSCivil.y, winSCivil.mo, winSCivil.d);
-    const gap = Math.floor((winSOrdinal - startOrdinal) / unit);
-    if (gap > 0) {
-      const k = Math.floor(gap / interval);
-      if (count !== null && k >= count) return;
-      emitted = k;
-      cur = addCivilDays(cur, k * interval * unit);
-      curEpoch = zonedTimeToUtc(cur.y, cur.mo, cur.d, cur.h, cur.mi, cur.s, zone);
-    }
-  }
-
-  let guard = 0;
-  while (guard < 6000) {
-    guard++;
-    if (count !== null && emitted >= count) return;
-    if (until !== null && curEpoch > until) return;
-
-    if (freq === "WEEKLY" && byday) {
-      const baseWd = civilWeekday(cur.y, cur.mo, cur.d);
-      const mondayOrdinal = civilDateOrdinal(cur.y, cur.mo, cur.d) - baseWd;
-      for (const wd of byday) {
-        const dayOrdinal = mondayOrdinal + wd;
-        if (dayOrdinal < startOrdinal) continue;
-        const ymd = ordinalToYmd(dayOrdinal);
-        const occEpoch = zonedTimeToUtc(ymd.y, ymd.mo, ymd.d, cur.h, cur.mi, cur.s, zone);
-        if (count !== null && emitted >= count) return;
-        if (until !== null && occEpoch > until) return;
-        emitted++;
-        emit(occEpoch);
-      }
-    } else {
-      emitted++;
-      emit(curEpoch);
-    }
-
-    if (freq === "DAILY") {
-      cur = addCivilDays(cur, interval);
-    } else if (freq === "WEEKLY") {
-      cur = addCivilDays(cur, interval * 7);
-    } else if (freq === "MONTHLY") {
-      cur = advanceNthDayMonth(cur, interval, byMonthDay, byDayNth, byDayNthWd);
-    } else if (freq === "YEARLY") {
-      cur = advanceNthDayMonth(cur, 12 * interval, byMonthDay, byDayNth, byDayNthWd);
-    } else {
-      return;
-    }
-    curEpoch = zonedTimeToUtc(cur.y, cur.mo, cur.d, cur.h, cur.mi, cur.s, zone);
-
-    if (curEpoch > winE && !(freq === "WEEKLY" && byday)) return;
-    if (freq === "WEEKLY" && byday) {
-      const wd = civilWeekday(cur.y, cur.mo, cur.d);
-      const mondayYmd = ordinalToYmd(civilDateOrdinal(cur.y, cur.mo, cur.d) - wd);
-      const mondayEpoch = zonedTimeToUtc(mondayYmd.y, mondayYmd.mo, mondayYmd.d, cur.h, cur.mi, cur.s, zone);
-      if (mondayEpoch > winE) return;
-    }
-  }
-}
-
-function parseLatLon(raw) {
-  const parts = raw.split(",");
-  if (parts.length !== 2) return null;
-  const lat = parseFloat(parts[0].trim()), lon = parseFloat(parts[1].trim());
-  return isFinite(lat) && isFinite(lon) ? [lat, lon] : null;
-}
-
-const WEATHER_CODES = {
-  fog: new Set([45, 48]),
-  rain: new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82]),
-  snow: new Set([71, 73, 75, 77, 85, 86]),
-  storm: new Set([95, 96, 99]),
-};
-
-function weatherKind(code) {
-  for (const kind of Object.keys(WEATHER_CODES)) {
-    if (WEATHER_CODES[kind].has(code)) return kind;
-  }
-  return null;
-}
-
-const ICON_BASE = "https://trmnl.com/images/plugins/weather/";
-const ICON_PRIORITY = ["storm", "snow", "rain", "fog"];
-const ICON_FILE = { storm: "wi-day-thunderstorm.svg", snow: "wi-day-snow.svg", rain: "wi-day-rain.svg", fog: "wi-day-fog.svg" };
-
-function dayIcon(hours) {
-  const present = new Set(Object.values(hours || {}));
-  const kind = ICON_PRIORITY.find((k) => present.has(k)) || null;
-  return ICON_BASE + (kind ? ICON_FILE[kind] : "wi-day-sunny.svg");
-}
-
-const CLEAR_ICON = ICON_BASE + "wi-day-sunny.svg";
-const WEATHER_MARKER_HUE = { storm: "purple", snow: "cyan", rain: "blue", fog: "gray-30" };
-
-// The grid view shows weather via per-hour hatching, but the agenda list views have no per-hour
-// visual at all — so a weather condition starting or stopping is surfaced there as its own
-// marker "event" at the hour it starts and the hour it stops. dayWeather is the same
-// {hour: "rain"|"storm"|"snow"|"fog"} map segments use; a change straight from one condition to
-// another (e.g. rain into snow, with no clear hour between) emits both a "stops" and a "starts"
-// marker at that same hour.
-function weatherTransitions(dayWeather) {
-  const marks = [];
-  let prevKind = null;
-  for (let h = 0; h < 24; h++) {
-    const kind = (dayWeather || {})[h] || null;
-    if (kind !== prevKind) {
-      if (prevKind) marks.push({ h, kind: prevKind, starting: false });
-      if (kind) marks.push({ h, kind, starting: true });
-    }
-    prevKind = kind;
-  }
-  return marks;
-}
-
-function weatherMarkerItem(kind, starting, timeLabel, weatherI18n) {
-  const t = weatherI18n || WEATHER_TEXT_FALLBACK;
-  const hue = starting ? WEATHER_MARKER_HUE[kind] : "yellow";
-  return {
-    time: timeLabel, title: t[kind + (starting ? "_starts" : "_stops")] || WEATHER_TEXT_FALLBACK[kind + (starting ? "_starts" : "_stops")],
-    hue: colorClass(hue), fg: foregroundFor(hue),
-    current: false, badges: [], icon_url: starting ? ICON_BASE + ICON_FILE[kind] : CLEAR_ICON,
-  };
-}
-
-function splitIsoLocal(iso) {
-  const [datePart, timePart] = iso.split("T");
-  const [y, mo, d] = datePart.split("-").map(Number);
-  const [h, mi] = (timePart || "00:00").split(":").map(Number);
-  return { y, mo, d, h, mi };
-}
-
-async function fetchWithTimeout(url, ms, opts) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(), ms);
-  try {
-    return await fetch(url, Object.assign({}, opts, { signal: ctrl.signal }));
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-function msUntil(deadline) {
-  return Math.max(0, deadline - Date.now());
-}
-
-async function fetchSky(location, daysN, fahrenheit, deadline) {
-  location = (location || "").trim();
-  if (!location) return { sunMarks: {}, hourlyWeather: {}, dailyTemps: {}, error: null };
-  try {
-    const latlon = parseLatLon(location);
-    if (!latlon) return { sunMarks: {}, hourlyWeather: {}, dailyTemps: {}, error: "invalid coordinates " + JSON.stringify(location) };
-    const [lat, lon] = latlon;
-    const params = new URLSearchParams({
-      latitude: String(lat), longitude: String(lon),
-      daily: "sunrise,sunset,temperature_2m_max,temperature_2m_min",
-      hourly: "weathercode", timezone: "auto", forecast_days: String(daysN),
-    });
-    if (fahrenheit) params.set("temperature_unit", "fahrenheit");
-    const budget = msUntil(deadline);
-    if (budget <= 0) throw new Error("timed out");
-    const resp = await fetchWithTimeout("https://api.open-meteo.com/v1/forecast?" + params.toString(), Math.min(budget, 3000), {
-      headers: { "User-Agent": "TRMNL-ICS-Calendar" },
-    });
-    if (!resp.ok) throw new Error("HTTP " + resp.status);
-    const body = await resp.json();
-    const daily = body.daily || {};
-    const sunrises = daily.sunrise || [], sunsets = daily.sunset || [];
-    const highs = daily.temperature_2m_max || [], lows = daily.temperature_2m_min || [];
-
-    const sunMarks = {};
-    for (let i = 0; i < Math.min(daysN, sunrises.length, sunsets.length); i++) {
-      const marks = [];
-      for (const [arr, kind] of [[sunrises, "sunrise"], [sunsets, "sunset"]]) {
-        const parsed = splitIsoLocal(arr[i]);
-        marks.push({ hour: parsed.h + parsed.mi / 60.0, kind });
-      }
-      sunMarks[i] = marks;
-    }
-    const dailyTemps = {};
-    for (let i = 0; i < Math.min(daysN, highs.length, lows.length); i++) {
-      dailyTemps[i] = { high: Math.round(highs[i]), low: Math.round(lows[i]) };
-    }
-
-    const hourly = body.hourly || {};
-    const hTimes = hourly.time || [], codes = hourly.weathercode || [];
-    const hourlyWeather = {};
-    let dayI = -1, prevKey = null;
-    for (let j = 0; j < hTimes.length; j++) {
-      const parsed = splitIsoLocal(hTimes[j]);
-      const key = parsed.y + "-" + parsed.mo + "-" + parsed.d;
-      if (key !== prevKey) {
-        dayI++;
-        prevKey = key;
-      }
-      if (dayI >= daysN) break;
-      if (j < codes.length) {
-        const kind = weatherKind(codes[j]);
-        if (kind !== null) {
-          hourlyWeather[dayI] = hourlyWeather[dayI] || {};
-          hourlyWeather[dayI][parsed.h] = kind;
-        }
-      }
-    }
-
-    return { sunMarks, hourlyWeather, dailyTemps, error: null };
-  } catch (exc) {
-    return { sunMarks: {}, hourlyWeather: {}, dailyTemps: {}, error: (exc && exc.name ? exc.name : "Error") + ": " + (exc && exc.message ? exc.message : exc) };
-  }
-}
-
-function decodeXmlEntities(s) {
-  return s
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#39;/g, "'")
-    .replace(/&#(\d+);/g, (m, n) => String.fromCodePoint(parseInt(n, 10)))
-    .replace(/<[^>]+>/g, "")
-    .trim();
-}
-
-const RSS_HEADLINE_LIMIT = 3;
-
-function findElements(xml, localName, limit) {
-  const results = [];
-  const openRe = new RegExp("<(?:[\\w-]+:)?" + localName + "\\b([^>]*?)(/)?>", "gi");
-  let open;
-  while (results.length < limit && (open = openRe.exec(xml)) !== null) {
-    if (open[2]) { results.push(""); continue; }
-    const closeRe = new RegExp("<\\/(?:[\\w-]+:)?" + localName + "\\s*>", "i");
-    const rest = xml.slice(openRe.lastIndex);
-    const close = closeRe.exec(rest);
-    if (close) {
-      results.push(rest.slice(0, close.index));
-      openRe.lastIndex += close.index + close[0].length;
-    } else {
-      results.push("");
-    }
-  }
-  return results;
-}
-
-function findFirstElement(xml, localName) {
-  const all = findElements(xml, localName, 1);
-  return all.length ? all[0] : null;
-}
-
-async function fetchRssHeadline(url, label, deadline) {
-  url = (url || "").trim();
-  if (!url) return null;
-  try {
-    const budget = msUntil(deadline);
-    if (budget <= 0) return null;
-    const resp = await fetchWithTimeout(url, Math.min(budget, 4000), { headers: { "User-Agent": "TRMNL-ICS-Calendar" } });
-    if (!resp.ok) return null;
-    const text = await resp.text();
-    let entries = findElements(text, "item", RSS_HEADLINE_LIMIT);
-    if (!entries.length) entries = findElements(text, "entry", RSS_HEADLINE_LIMIT);
-    const titles = entries
-      .map((entryXml) => findFirstElement(entryXml, "title"))
-      .filter((t) => t)
-      .map((t) => decodeXmlEntities(t))
-      .filter((t) => t);
-    if (!titles.length) return null;
-    return { label: label || null, titles };
-  } catch (exc) {
-    return null;
-  }
-}
-
-const HEADER_PCT = 11;
-const FOOTER_PCT = 7;
-const NEWS_PCT = 2;
-const ALLDAY_ROW_PCT = 7;
-const ALERTS_ROW_PCT = 5;
-const READABLE_BOX_MIN_PCT = 4;
-function hueOf(calIdx, calendarColors) {
-  if (calendarColors && calIdx < calendarColors.length && calendarColors[calIdx]) return calendarColors[calIdx];
-  return AUTO_HUES[calIdx % AUTO_HUES.length];
-}
-
-function cluster(events) {
-  const clusters = [];
-  let active = [];
-  let cur = null;
-
-  function close() {
-    if (cur !== null) {
-      cur.nlanes = Math.max(...cur.lanes.map((p) => p[1])) + 1;
-      clusters.push(cur);
-    }
-  }
-
-  for (const ev of [...events].sort((a, b) => a.h0 - b.h0)) {
-    if (cur !== null && ev.h0 >= cur.h1) {
-      close();
-      cur = null;
-      active = [];
-    }
-    if (cur === null) cur = { h0: ev.h0, h1: ev.h1, lanes: [] };
-    active = active.filter((p) => p[0] > ev.h0);
-    const used = new Set(active.map((p) => p[1]));
-    let lane = 0;
-    while (used.has(lane)) lane++;
-    active.push([ev.h1, lane]);
-    cur.lanes.push([ev, lane]);
-    cur.h1 = Math.max(cur.h1, ev.h1);
-  }
-  close();
-  return clusters;
-}
-
-function round4(x) {
-  return Math.round(x * 10000) / 10000;
-}
-
-const EXTENSION_WEIGHT = 0.8;
-
-function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd, nowH, sunMarks, hourlyWeather, calendarColors, headerPct, is12h, newsPct, alertsPct, weatherI18n) {
-  outerStart = Math.max(0, Math.min(23, Math.trunc(outerStart)));
-  outerEnd = Math.max(outerStart + 1, Math.min(24, Math.trunc(outerEnd)));
-  coreStart = Math.max(outerStart, Math.min(23, Math.trunc(coreStart)));
-  coreEnd = Math.max(coreStart + 1, Math.min(outerEnd, Math.trunc(coreEnd)));
-  newsPct = newsPct || 0;
-  alertsPct = alertsPct || 0;
-
-  const headerRenderedPct = headerPct + newsPct;
-  const maxAdRows = alldayBars.length ? Math.max(...alldayBars.map((b) => b.row)) + 1 : 0;
-  const alldayPct = Math.min(3, maxAdRows) * ALLDAY_ROW_PCT;
-  const gridBase = headerRenderedPct + alldayPct + alertsPct;
-  const gridPct = 100 - gridBase - FOOTER_PCT;
-
-  const weight = new Array(24).fill(0);
-  let totalWeight = 0;
-  for (let h = outerStart; h < outerEnd; h++) {
-    weight[h] = h >= coreStart && h < coreEnd ? 1 : EXTENSION_WEIGHT;
-    totalWeight += weight[h];
-  }
-  const hourPct = new Array(24).fill(0);
-  let prevCum = 0;
-  let cumW = 0;
-  for (let h = outerStart; h < outerEnd; h++) {
-    cumW += weight[h];
-    const cum = Math.round((cumW * gridPct) / totalWeight);
-    hourPct[h] = cum - prevCum;
-    prevCum = cum;
-  }
-
-  const cumPct = [0];
-  for (const p of hourPct) cumPct.push(cumPct[cumPct.length - 1] + p);
-
-  function pctAt(tt) {
-    const whole = Math.trunc(tt);
-    const frac = tt - whole;
-    const cum = cumPct[whole] + (whole < 24 ? hourPct[whole] * frac : 0);
-    return gridBase + cum;
-  }
-
-  let nextEventH0 = null;
-  if (nowH !== null && nowH !== undefined) {
-    for (const d of days) {
-      if (!d.isToday) continue;
-      for (const e of d.timed) {
-        if (e.h0 >= nowH && e.h0 < 24 && (nextEventH0 === null || e.h0 < nextEventH0)) nextEventH0 = e.h0;
-      }
-    }
-  }
-  const nextHour = nextEventH0 !== null ? Math.trunc(nextEventH0) : null;
-  const hasNowHour = nowH !== null && nowH !== undefined && nowH >= 0 && nowH < 24;
-  const nowHour = hasNowHour ? Math.floor(nowH) : null;
-  const hourRows = [];
-  for (let h = 0; h < 24; h++) {
-    const hourDisplay = is12h ? (h % 12 || 12) : h;
-    const period = is12h ? (h < 12 ? "AM" : "PM") : null;
-    hourRows.push({
-      hour: hourDisplay, period, pct: hourPct[h], shade: h % 2, bold: h === nextHour,
-      important: coreStart <= h && h < coreEnd, current: h === nowHour,
-    });
-  }
-
-  const minBoxHeight = (gridPct * READABLE_BOX_MIN_PCT) / 100;
-  const outDays = [];
-  days.forEach((d, di) => {
-    const boundsSet = new Set([0, 24]);
-    for (let h = 1; h < 24; h++) boundsSet.add(h);
-
-    const daySun = (sunMarks || {})[0] || [];
-    const sunriseMark = daySun.find((m) => m.kind === "sunrise");
-    const sunsetMark = daySun.find((m) => m.kind === "sunset");
-    const sunriseH = sunriseMark ? sunriseMark.hour : null;
-    const sunsetH = sunsetMark ? sunsetMark.hour : null;
-    for (const h of [sunriseH, sunsetH]) {
-      if (h !== null && h >= 0 && h < 24) boundsSet.add(h);
-    }
-    const hasNow = d.isToday && nowH !== null && nowH !== undefined && nowH >= 0 && nowH < 24;
-    if (hasNow) boundsSet.add(nowH);
-    const bounds = [...boundsSet].sort((a, b) => a - b);
-
-    function isNight(mid) {
-      if (sunriseH === null || sunsetH === null) return false;
-      return mid < sunriseH || mid >= sunsetH;
-    }
-
-    const dayWeather = (hourlyWeather || {})[di] || {};
-
-    const segments = [];
-    for (let bi = 0; bi < bounds.length - 1; bi++) {
-      const a = bounds[bi], b = bounds[bi + 1];
-      const mid = (a + b) / 2.0;
-      const h = Math.trunc(a);
-      const pct = Math.round(hourPct[h] * (b - h)) - Math.round(hourPct[h] * (a - h));
-      const shade = Math.trunc(a) % 2;
-      const past = hasNow && a < nowH;
-      segments.push({ pct, shade, night: isNight(mid), past, weather: dayWeather[Math.trunc(a)] || null });
-    }
-
-    // Lanes are assigned on each event's READABLE vertical extent — its natural top/height,
-    // with the bottom stretched to at least minBoxHeight — rather than its raw start/end time.
-    // Two events can be sequential (not actually overlapping in time) yet still too close
-    // together for the first one's stretched box to fit before the second starts; assigning
-    // lanes by extent instead of raw time catches that case too and puts them side by side
-    // instead of squishing/hiding one behind the other.
-    const withExtent = d.timed.map((ev) => {
-      const top = pctAt(ev.h0) - gridBase;
-      const height = pctAt(ev.h1) - gridBase - top;
-      return { h0: top, h1: top + Math.max(height, minBoxHeight), ev, top, height };
-    });
-    const clusters = cluster(withExtent);
-
-    const flatEvents = [];
-    for (const c of clusters) {
-      for (const [item, laneIdx] of c.lanes) flatEvents.push({ item, laneIdx, nlanes: c.nlanes });
-    }
-    flatEvents.sort((a, b) => a.item.top - b.item.top);
-
-    const events = [];
-    flatEvents.forEach(({ item, laneIdx, nlanes }) => {
-      const ev = item.ev;
-      const boxHeight = item.h1 - item.top;
-      const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);
-      events.push({
-        top_pct: round4((item.top / gridPct) * 100),
-        height_pct: round4((item.height / gridPct) * 100),
-        box_height_pct: round4((boxHeight / gridPct) * 100),
-        lane_index: laneIdx,
-        nlanes: nlanes,
-        title: ev.title,
-        hue: colorClass(color),
-        fg: foregroundFor(color),
-      });
-    });
-
-    // Agenda variant of this same day, for the full view's own list-with-overflow rendering
-    // (an alternative to the segments/events timeline above) — one difference from the
-    // single-day views' agenda (data.single_day.agenda): it shows the WHOLE day's schedule, not
-    // just what's still ahead of "now" (this is a multi-day at-a-glance overview, where hiding a
-    // day's earlier events would look inconsistent next to neighboring days that show
-    // everything). All-day items covering this day are prepended using the same agenda_row
-    // treatment as a timed event (no time label) — matching how the single-day views already
-    // show them — instead of this style's own bars, which shared.liquid suppresses (allday_pct
-    // forced to 0) so the list reclaims that header space instead of duplicating them.
-    const dayAlldayBars = alldayBars.filter((b) => di >= b.startCol && di < b.startCol + b.span);
-    const agendaAllDay = dayAlldayBars.map((b) => ({
-      time: null, all_day: true, title: b.title,
-      hue: colorClass(b.hue), fg: foregroundFor(b.hue), current: false,
-      badges: b.personBadges || [],
-    }));
-    const agendaEvents = d.timed.map((ev) => {
-      const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);
-      return {
-        sortH: ev.h0,
-        item: {
-          time: ev.label, title: ev.title,
-          hue: colorClass(color), fg: foregroundFor(color),
-          current: hasNow && ev.h0 <= nowH && ev.h1 > nowH,
-          badges: ev.personBadges || [],
-        },
-      };
-    });
-    const agendaWeather = weatherTransitions(dayWeather).map((m) => {
-      // Matches real events' own "H:MM" time labels (fmtTime), not the bare axis-style hour
-      // digit (hourRows[h].hour) — mixing "14" in among "10:00–10:30" etc. would look wrong.
-      const hourDisplay = is12h ? m.h % 12 || 12 : m.h;
-      const period = is12h ? (m.h < 12 ? " AM" : " PM") : "";
-      const timeLabel = hourDisplay + ":00" + period;
-      return { sortH: m.h, item: weatherMarkerItem(m.kind, m.starting, timeLabel, weatherI18n) };
-    });
-    const agenda = agendaAllDay.concat(
-      agendaEvents.concat(agendaWeather).sort((a, b) => a.sortH - b.sortH).map((x) => x.item)
-    ).slice(0, AGENDA_SANITY_CAP);
-
-    outDays.push({
-      label: d.label, label_short: d.labelShort,
-      label_short_weekday: d.labelShortWeekday, label_short_rest: d.labelShortRest,
-      is_today: d.isToday,
-      temp: d.temp || null, icon: d.icon || null,
-      segments, events, agenda,
+// ---------------------------------------------------------------------
+// buildMetro: the shared pipeline. `events`: [{person, title, startMin,
+// endMin, location, interchange_with}], startMin/endMin are minutes
+// since midnight LOCAL time. `people`: [{key,name,side,hue,track_offset,
+// line_width,line_style}].
+//
+// transform.js is a pure data normalizer — it does NOT decide where
+// anything sits on the canvas, which events are "close enough" to become
+// a sub-spur, or which same-event entries are duplicates across feeds.
+// It can't: it has no idea what the real rendered canvas height is, how
+// many pixels a wrapped multi-line title needs, or whether two calendars
+// happened to both return the same event. Event items here are raw facts
+// only (title/times/location/owner/side/track styling); shared.liquid's
+// client-side script does the dedup pass, maps start_min/end_min to a
+// real pixel Y against the canvas's own measured height, measures each
+// label's ACTUAL rendered box before deciding the next one's position,
+// and decides sub-spur grouping from the deduped, time-sorted list
+// itself. See that file's own header comment for the full breakdown.
+// ---------------------------------------------------------------------
+
+function buildMetro(people, events, weatherMilestones, headerWeather, nowMin, windowLabel, extra) {
+  var peopleByKey = {};
+  people.forEach(function (p) { peopleByKey[p.key] = p; });
+
+  var items = [];
+
+  events.forEach(function (ev) {
+    var person = peopleByKey[ev.person];
+    if (!person) return; // no resolved/known person for this event — drop it rather than guess
+    var coOwners = (ev.interchange_with || []).filter(function (key) { return !!peopleByKey[key]; });
+    items.push({
+      type: 'event',
+      _sortMin: ev.startMin,
+      title: ev.title,
+      start_min: ev.startMin,
+      end_min: ev.endMin,
+      location: ev.location || null,
+      owner: person.key,
+      co_owners: coOwners, // other person keys sharing this event (an interchange) — empty for a normal event
+      side: person.side,
+      hue: person.hue,
+      track_width: person.line_width,
+      track_style: person.line_style,
+      track_offset: person.track_offset,
     });
   });
 
-  const alldayBarsOut = alldayBars.map((b) => ({
-    title: b.title, hue: colorClass(b.hue), fg: foregroundFor(b.hue),
-    start_col: b.startCol, span: b.span, row: b.row,
-    continues_before: b.continuesBefore, continues_after: b.continuesAfter,
+  (weatherMilestones || []).forEach(function (w) {
+    items.push({ type: 'weather', _sortMin: w.atMin, at_min: w.atMin, icon: w.icon, label: w.label });
+  });
+
+  ((extra && extra.sun) || []).forEach(function (m) {
+    if (m.atMin == null) return;
+    items.push({ type: 'sun', _sortMin: m.atMin, at_min: m.atMin, kind: m.kind, icon: WEATHER_ICON_BASE + (m.kind === 'sunrise' ? 'wi-sunrise.svg' : 'wi-sunset.svg'), label: tr((extra && extra.strings) || I18N.en, m.kind) });
+  });
+
+  items.sort(function (a, b) { return a._sortMin - b._sortMin; });
+  items.forEach(function (item) { delete item._sortMin; });
+
+  return {
+    day_start_min: DAY_START_MIN,
+    day_end_min: DAY_END_MIN,
+    secondary_threshold_min: SECONDARY_THRESHOLD_MIN, // sub-spur grouping window — client decides sub-spurs, but this constant is config, not geometry
+    window_label: windowLabel,
+    date_label: (extra && extra.dateLabel) || null,
+    now_min: nowMin != null ? nowMin : null, // minutes since local midnight; the client decides whether/where to draw it
+    orientation: (extra && extra.orientation) || 'auto', // auto | horizontal | vertical — client picks for auto from the canvas aspect
+    hour12: !!(extra && extra.hour12),
+    i18n: (function (st) { return { today: tr(st, 'today'), more: tr(st, 'more'), earlier: tr(st, 'earlier'), rain_pct: tr(st, 'rain_pct') }; })((extra && extra.strings) || I18N.en),
+    header_weather: headerWeather,
+    legend: people,
+    items: items,
+  };
+}
+
+// ---------------------------------------------------------------------
+// Demo path — unchanged hardcoded data.
+// ---------------------------------------------------------------------
+
+var DEMO_PEOPLE = [
+  { key: 'work', name: 'Work', side: 'left', hue: 'black', track_offset: -10, line_width: 4, line_style: 'solid' },
+  { key: 'alex', name: 'Alex', side: 'right', hue: 'orange-40', track_offset: 10, line_width: 3, line_style: 'solid' },
+  { key: 'sam', name: 'Sam', side: 'right', hue: 'green-40', track_offset: 20, line_width: 3, line_style: 'dashed' },
+  { key: 'kids', name: 'Kids', side: 'right', hue: 'purple-40', track_offset: 30, line_width: 3, line_style: 'dotted' },
+];
+
+// A deliberately busy day: back-to-back work meetings (lane stacking), a
+// long workshop (a branch that rejoins the spine), two- and three-person
+// interchanges, and an evening cluster on the family side.
+var DEMO_EVENTS = [
+  { person: 'alex', title: 'Yoga', startMin: 7 * 60 + 30, endMin: 8 * 60 + 30, location: 'Studio 9' },
+  { person: 'work', title: 'Team Standup', startMin: 8 * 60, endMin: 8 * 60 + 15 },
+  { person: 'kids', interchange_with: ['sam'], title: 'School Run', startMin: 8 * 60 + 15, endMin: 8 * 60 + 45 },
+  { person: 'work', title: 'Quick Sync', startMin: 8 * 60 + 20, endMin: 8 * 60 + 35 },
+  { person: 'work', title: 'Client Workshop', startMin: 9 * 60, endMin: 10 * 60 + 30, location: 'Room 4B' },
+  { person: 'alex', title: 'Dentist', startMin: 10 * 60, endMin: 10 * 60 + 45 },
+  { person: 'work', title: '1:1 with Priya', startMin: 11 * 60, endMin: 11 * 60 + 30 },
+  { person: 'alex', interchange_with: ['work'], title: 'Lunch with Alex', startMin: 12 * 60, endMin: 13 * 60, location: 'The Garden Cafe' },
+  { person: 'work', title: 'Design Review', startMin: 14 * 60, endMin: 15 * 60 },
+  { person: 'work', title: 'Sprint Planning', startMin: 15 * 60 + 30, endMin: 17 * 60 },
+  { person: 'kids', title: 'Pick Up Kids', startMin: 16 * 60, endMin: 16 * 60 + 20 },
+  { person: 'sam', title: 'Swim Training', startMin: 16 * 60 + 30, endMin: 17 * 60 + 30, location: 'City Pool' },
+  { person: 'kids', title: 'Piano Lesson', startMin: 17 * 60, endMin: 17 * 60 + 45 },
+  { person: 'alex', title: 'Groceries', startMin: 17 * 60 + 30, endMin: 18 * 60 },
+  { person: 'alex', interchange_with: ['sam', 'kids'], title: 'Family Dinner', startMin: 18 * 60 + 30, endMin: 19 * 60 + 30 },
+  { person: 'sam', title: 'Book Club', startMin: 19 * 60 + 45, endMin: 21 * 60 },
+];
+
+var DEMO_WEATHER_MILESTONES = [
+  { atMin: 15 * 60, icon: 'https://trmnl.com/images/plugins/weather/wi-rain.svg', label: 'Rain Starts 15:00' },
+];
+
+var DEMO_NOW_MIN = 11 * 60;
+var DEMO_SUN = [{ kind: 'sunrise', atMin: 7 * 60 + 8 }, { kind: 'sunset', atMin: 19 * 60 + 58 }];
+
+function demoWeather(strings) {
+  return {
+    header: { hi: 21, lo: 13, condition: tr(strings, 'rain'), rain_chance: 60, icon: WEATHER_ICON_BASE + 'wi-day-rain.svg' },
+    milestones: [{ atMin: 15 * 60, icon: WEATHER_ICON_BASE + 'wi-rain.svg', label: tr(strings, 'rain_starts') + ' ' + timeLabel(15 * 60) }],
+    sun: DEMO_SUN,
+  };
+}
+
+function buildFromDemo(weather, nowMin, extra) {
+  var strings = (extra && extra.strings) || I18N.en;
+  var demo = demoWeather(strings);
+  var w = weather || demo;
+  return buildMetro(
+    DEMO_PEOPLE, DEMO_EVENTS,
+    w.milestones || [],
+    w.header || demo.header,
+    nowMin != null ? nowMin : DEMO_NOW_MIN,
+    timeLabel(DAY_START_MIN) + ' – ' + timeLabel(DAY_END_MIN),
+    Object.assign({}, extra || {}, { sun: (w.sun && w.sun.length) ? w.sun : DEMO_SUN })
+  );
+}
+
+// ---------------------------------------------------------------------
+// Weather — Open-Meteo (no API key), same provider/icon convention as
+// plugin/src/transform.js's own fetchSky(). Ported parseLatLon/weather
+// code mapping rather than re-derived, for the same reason as the TZ
+// helpers above: it's already correct, no need to risk a fresh bug.
+// ---------------------------------------------------------------------
+
+function parseLatLon(raw) {
+  var parts = (raw || '').split(',');
+  if (parts.length !== 2) return null;
+  var lat = parseFloat(parts[0].trim()), lon = parseFloat(parts[1].trim());
+  return (isFinite(lat) && isFinite(lon)) ? [lat, lon] : null;
+}
+
+var WEATHER_ICON_BASE = 'https://trmnl.com/images/plugins/weather/';
+// code -> { label, icon } — condition text is intentionally coarse (a
+// header summary, not a forecast detail); icons reuse the exact
+// filenames confirmed present in plugin/src/transform.js's own ICON_FILE
+// map, plus wi-day-sunny/wi-day-cloudy for the clear/cloudy default.
+function weatherCodeInfo(code) {
+  if (code === 0) return { key: 'clear', icon: 'wi-day-sunny.svg' };
+  if (code === 1 || code === 2) return { key: 'partly_cloudy', icon: 'wi-day-cloudy.svg' };
+  if (code === 3) return { key: 'cloudy', icon: 'wi-day-cloudy.svg' };
+  if (code === 45 || code === 48) return { key: 'foggy', icon: 'wi-day-fog.svg' };
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return { key: 'rain', icon: 'wi-day-rain.svg' };
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return { key: 'snow', icon: 'wi-day-snow.svg' };
+  if (code >= 95) return { key: 'storms', icon: 'wi-day-thunderstorm.svg' };
+  return { key: 'clear', icon: 'wi-day-sunny.svg' };
+}
+
+// "2026-09-08T07:05" (Open-Meteo local time) → minutes since midnight
+function isoToMinutes(iso) {
+  var m = /T(\d{2}):(\d{2})/.exec(iso || '');
+  return m ? (+m[1]) * 60 + (+m[2]) : null;
+}
+
+var RAIN_THRESHOLD = 50; // %, precipitation_probability crossing this is what draws a "Rain Starts/Stops" milestone
+
+async function fetchWeather(latLonRaw, tz, deadline, strings) {
+  var latlon = parseLatLon(latLonRaw);
+  if (!latlon) return null;
+  strings = strings || I18N.en;
+  try {
+    var params = new URLSearchParams({
+      latitude: String(latlon[0]), longitude: String(latlon[1]),
+      daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode,sunrise,sunset',
+      hourly: 'precipitation_probability',
+      timezone: tz, forecast_days: '1',
+    });
+    var budget = deadline - Date.now();
+    if (budget <= 0) return null;
+    var resp = await fetchWithTimeout('https://api.open-meteo.com/v1/forecast?' + params.toString(), Math.min(budget, 3000));
+    if (!resp.ok) return null;
+    var body = await resp.json();
+    var daily = body.daily || {};
+    var info = weatherCodeInfo((daily.weathercode || [])[0]);
+
+    var header = {
+      hi: Math.round((daily.temperature_2m_max || [])[0]),
+      lo: Math.round((daily.temperature_2m_min || [])[0]),
+      condition: tr(strings, info.key),
+      rain_chance: Math.round((daily.precipitation_probability_max || [])[0]),
+      icon: WEATHER_ICON_BASE + info.icon,
+    };
+    var sun = [];
+    var sr = isoToMinutes((daily.sunrise || [])[0]), ss = isoToMinutes((daily.sunset || [])[0]);
+    if (sr != null) sun.push({ kind: 'sunrise', atMin: sr });
+    if (ss != null) sun.push({ kind: 'sunset', atMin: ss });
+
+    // Milestones: first threshold up-crossing -> "Rain Starts", the next
+    // down-crossing after it -> "Rain Stops" — same idea as the dummy
+    // data's illustrative example, just driven from real hourly
+    // probabilities within the visible window.
+    var hourly = body.hourly || {};
+    var times = hourly.time || [];
+    var probs = hourly.precipitation_probability || [];
+    var milestones = [];
+    var wasAbove = false;
+    for (var i = 0; i < times.length && milestones.length < 2; i++) {
+      var hourMatch = /T(\d{2}):/.exec(times[i]);
+      if (!hourMatch) continue;
+      var hour = +hourMatch[1];
+      var atMin = hour * 60;
+      if (atMin < DAY_START_MIN || atMin > DAY_END_MIN) continue;
+      var above = (probs[i] || 0) >= RAIN_THRESHOLD;
+      if (above && !wasAbove) {
+        milestones.push({ atMin: atMin, icon: WEATHER_ICON_BASE + 'wi-rain.svg', label: tr(strings, 'rain_starts') + ' ' + pad2(hour) + ':00' });
+      } else if (!above && wasAbove) {
+        milestones.push({ atMin: atMin, icon: WEATHER_ICON_BASE + 'wi-day-sunny.svg', label: tr(strings, 'rain_stops') + ' ' + pad2(hour) + ':00' });
+      }
+      wasAbove = above;
+    }
+
+    return { header: header, milestones: milestones, sun: sun };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function fetchWithTimeout(url, ms, extraHeaders) {
+  var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var headers = Object.assign({ 'User-Agent': 'TRMNL-Metro-Calendar' }, extraHeaders || {});
+  var timer = controller ? setTimeout(function () { controller.abort(); }, ms) : null;
+  try {
+    var resp = await fetch(url, controller ? { signal: controller.signal, headers: headers } : { headers: headers });
+    return resp;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+// Unfold RFC5545 continuation lines (a line starting with a space/tab
+// continues the previous one) and split into logical lines.
+function unfoldIcs(text) {
+  return text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '').split('\n');
+}
+
+function unescapeIcsText(v) {
+  return v.replace(/\\n/gi, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\');
+}
+
+// Parses a raw DTSTART/DTEND value+params into {y,mo,d,h,mi,isAllDay},
+// converted to civil LOCAL (fallbackTz) date/time — this is the "what
+// date/time does this property mean, in our target zone" step, kept
+// separate from "does that land on today" so the same parsed value can
+// be reused for both a direct hit and the weekly-recurrence check below.
+function parseIcsDateTime(paramsStr, value, fallbackTz) {
+  if (/VALUE=DATE\b/i.test(paramsStr) || /^\d{8}$/.test(value)) return { isAllDay: true };
+
+  var m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/.exec(value);
+  if (!m) return null;
+  var evY = +m[1], evMo = +m[2], evD = +m[3], evH = +m[4], evMi = +m[5], evS = +m[6], isUtc = !!m[7];
+
+  var tzidMatch = /TZID=([^:;]+)/.exec(paramsStr);
+  var epochMs;
+  if (isUtc) {
+    epochMs = Date.UTC(evY, evMo - 1, evD, evH, evMi, evS);
+  } else {
+    var eventTz = (tzidMatch && safeZone(tzidMatch[1])) || fallbackTz;
+    epochMs = zonedTimeToUtc(evY, evMo, evD, evH, evMi, evS, eventTz);
+  }
+  var c = fromEpoch(epochMs, fallbackTz);
+  c.isAllDay = false;
+  return c;
+}
+
+// Bounded RRULE subset: FREQ=WEEKLY only (the pattern real calendar
+// exports use constantly for standing meetings/family routines), with
+// optional BYDAY and UNTIL. Anything else (DAILY/MONTHLY/YEARLY, COUNT,
+// ...) is intentionally not handled — see the file header. RECURRENCE-ID
+// overrides ARE handled, in parseIcs below. Returns true if `today`
+// (y/mo/d, weekday 0=Mon..6=Sun) is an occurrence.
+var WD_NAMES = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+function weeklyRruleMatchesToday(rruleValue, dtstartCivil, todayY, todayMo, todayD, todayWeekday, tz) {
+  var parts = {};
+  rruleValue.split(';').forEach(function (kv) {
+    var i = kv.indexOf('=');
+    if (i > 0) parts[kv.slice(0, i)] = kv.slice(i + 1);
+  });
+  if ((parts.FREQ || '').toUpperCase() !== 'WEEKLY') return false;
+
+  var todayOrdinal = Date.UTC(todayY, todayMo - 1, todayD);
+  var startOrdinal = Date.UTC(dtstartCivil.y, dtstartCivil.mo - 1, dtstartCivil.d);
+  if (todayOrdinal < startOrdinal) return false; // recurrence hasn't started yet
+
+  if (parts.UNTIL) {
+    var um = /^(\d{4})(\d{2})(\d{2})/.exec(parts.UNTIL);
+    if (um && todayOrdinal > Date.UTC(+um[1], +um[2] - 1, +um[3])) return false;
+  }
+
+  if (parts.BYDAY) {
+    var days = parts.BYDAY.split(',');
+    return days.indexOf(WD_NAMES[todayWeekday]) !== -1;
+  }
+  // No BYDAY: recurs weekly on DTSTART's own weekday.
+  var startWeekday = (new Date(startOrdinal).getUTCDay() + 6) % 7; // 0=Mon
+  return startWeekday === todayWeekday;
+}
+
+// `includeDescription` (a per-calendar config flag, off by default) is the
+// only thing that makes parseIcs pay for DESCRIPTION at all — it's usually
+// a large multi-line blob and most calendars' rules never need it.
+function parseIcs(text, tz, today, includeDescription) {
+  var lines = unfoldIcs(text);
+  var raw = [];
+  var cur = null;
+  lines.forEach(function (line) {
+    if (line === 'BEGIN:VEVENT') { cur = {}; return; }
+    if (line === 'END:VEVENT') { if (cur) raw.push(cur); cur = null; return; }
+    if (!cur) return;
+    var idx = line.indexOf(':');
+    if (idx < 0) return;
+    var keyPart = line.slice(0, idx);
+    var value = line.slice(idx + 1);
+    var key = keyPart.split(';')[0];
+    var params = keyPart.slice(key.length);
+    if (key === 'DTSTART') cur.dtstart = parseIcsDateTime(params, value, tz);
+    else if (key === 'DTEND') cur.dtend = parseIcsDateTime(params, value, tz);
+    else if (key === 'SUMMARY') cur.title = unescapeIcsText(value);
+    else if (key === 'LOCATION') cur.location = unescapeIcsText(value);
+    else if (key === 'DESCRIPTION' && includeDescription) cur.desc = unescapeIcsText(value);
+    else if (key === 'STATUS') cur.status = value.trim().toUpperCase();
+    else if (key === 'RRULE') cur.rrule = value;
+    else if (key === 'UID') cur.uid = value.trim();
+    else if (key === 'RECURRENCE-ID') cur.recurrenceId = parseIcsDateTime(params, value, tz);
+  });
+
+  var todayWeekday = (new Date(Date.UTC(today.y, today.mo - 1, today.d)).getUTCDay() + 6) % 7;
+  var todayKey = today.y + '-' + today.mo + '-' + today.d;
+
+  // A RECURRENCE-ID override (same UID, own DTSTART/SUMMARY) REPLACES the
+  // master's occurrence on that specific date — without this, an edited
+  // or moved single instance of a recurring event shows up twice: once
+  // from the master's own weekly-RRULE match, once from the override's
+  // own direct-hit DTSTART. Suppress the master on any date an override
+  // for its UID targets, keyed by civil date (not exact minute) since
+  // that's what RECURRENCE-ID identifies — "which occurrence", not "what
+  // time it now is".
+  var overriddenDates = {};
+  raw.forEach(function (ev) {
+    if (!ev.uid || !ev.recurrenceId || ev.recurrenceId.isAllDay) return;
+    overriddenDates[ev.uid + '|' + ev.recurrenceId.y + '-' + ev.recurrenceId.mo + '-' + ev.recurrenceId.d] = true;
+  });
+
+  var out = [];
+  raw.forEach(function (ev) {
+    if (!ev.title || !ev.dtstart || ev.dtstart.isAllDay) return;
+
+    var durationMin = null;
+    if (ev.dtend && !ev.dtend.isAllDay) {
+      durationMin = (ev.dtend.h * 60 + ev.dtend.mi) - (ev.dtstart.h * 60 + ev.dtstart.mi);
+      if (durationMin < 0) durationMin += 24 * 60; // crossed midnight in local time — approximate
+    }
+
+    var isDirectHit = ev.dtstart.y === today.y && ev.dtstart.mo === today.mo && ev.dtstart.d === today.d;
+    var isWeeklyHit = !isDirectHit && ev.rrule && weeklyRruleMatchesToday(ev.rrule, ev.dtstart, today.y, today.mo, today.d, todayWeekday, tz);
+    if (!isDirectHit && !isWeeklyHit) return;
+
+    if (!ev.recurrenceId && ev.uid && overriddenDates[ev.uid + '|' + todayKey]) return; // superseded by today's override
+
+    var startMin = ev.dtstart.h * 60 + ev.dtstart.mi; // same time-of-day, whichever day it landed on
+    out.push({
+      title: ev.title,
+      desc: ev.desc || '',
+      status: ev.status || '',
+      location: ev.location,
+      startMin: startMin,
+      endMin: durationMin != null ? startMin + durationMin : null,
+    });
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------------
+// Rule engine — ported from plugin/src/transform.js's own compileMatcher/
+// compileRule/compileRuleList/parseConfig/applyCalendarRules (same config
+// shape, same semantics). See the file header for the feature summary.
+// ---------------------------------------------------------------------
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// A `person` field can be one name or a list — always normalized to a
+// non-empty array (or null if nothing usable was given).
+function normalizeNameList(raw) {
+  var list = Array.isArray(raw) ? raw : (typeof raw === 'string' ? [raw] : []);
+  var names = list.filter(function (n) { return typeof n === 'string' && n.trim(); }).map(function (n) { return n.trim(); });
+  return names.length ? names : null;
+}
+
+function compileMatcher(spec) {
+  if (!spec || typeof spec !== 'object') return null;
+  if (spec.type === 'any' || spec.type === 'all') {
+    return { rx: /[\s\S]*/i, test: function () { return true; } };
+  }
+  if (spec.type === 'and' || spec.type === 'or') {
+    var subs = (Array.isArray(spec.matchers) ? spec.matchers : []).map(compileMatcher).filter(Boolean);
+    if (!subs.length) return null;
+    var isAnd = spec.type === 'and';
+    return { rx: null, test: function (ctx) {
+      return isAnd ? subs.every(function (m) { return m.test(ctx); }) : subs.some(function (m) { return m.test(ctx); });
+    } };
+  }
+  if (spec.type === 'status') {
+    var want = typeof spec.value === 'string' ? spec.value.trim().toUpperCase() : '';
+    if (!want) return null;
+    return { rx: null, test: function (ctx) { return ctx.status === want; } };
+  }
+  if (spec.type === 'weekday') {
+    var rawDays = Array.isArray(spec.value) ? spec.value : [spec.value];
+    var wanted = {};
+    var any = false;
+    rawDays.forEach(function (v) {
+      if (typeof v !== 'string') return;
+      var idx = WD_NAMES.indexOf(v.trim().toUpperCase().slice(0, 2));
+      if (idx !== -1) { wanted[idx] = true; any = true; }
+    });
+    if (!any) return null;
+    return { rx: null, test: function (ctx) { return ctx.weekday !== null && ctx.weekday !== undefined && !!wanted[ctx.weekday]; } };
+  }
+  if (typeof spec.value !== 'string') return null;
+  var p = spec.value.trim();
+  if (!p) return null;
+  var rx;
+  if (spec.type === 'regex') {
+    try { rx = new RegExp(p, 'i'); } catch (e) { return null; }
+  } else if (spec.type === 'contains') {
+    rx = new RegExp(escapeRegExp(p), 'i');
+  } else if (spec.type === 'exact') {
+    rx = new RegExp('^' + escapeRegExp(p) + '$', 'i');
+  } else {
+    rx = new RegExp('\\b' + escapeRegExp(p) + '\\b', 'i');
+  }
+  return { rx: rx, test: function (ctx) { return rx.test(ctx.title) || (!!ctx.desc && rx.test(ctx.desc)); } };
+}
+
+function compileRule(spec) {
+  if (!spec || typeof spec !== 'object') return null;
+  var m = compileMatcher(spec.match);
+  if (!m) return null;
+  var person = normalizeNameList(spec.person);
+  var allDay = spec.allDay === true;
+  var hide = spec.hide === true;
+  var rewrite = typeof spec.rewrite === 'string' ? spec.rewrite : null;
+  var rewriteFull = spec.rewriteFull === true;
+  if (!person && !allDay && !hide && rewrite === null) return null; // a no-op rule is dropped, not kept
+  var isAnyMatch = spec.match && (spec.match.type === 'any' || spec.match.type === 'all');
+  // rename defaults to true (a rule assigning a person also renames the
+  // title to that person, historically the common case) EXCEPT on an
+  // any/all match, where there's no specific text to rename and silently
+  // overwriting every title would be surprising — there it defaults to
+  // false and must be opted into.
+  var rename = person ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
+  return { match: m.test, rx: m.rx, person: person, allDay: allDay, hide: hide, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
+}
+
+function compileRuleList(raw) {
+  var rules = [];
+  (Array.isArray(raw) ? raw : []).forEach(function (spec) {
+    var compiled = compileRule(spec);
+    if (compiled) rules.push(compiled);
+  });
+  return rules;
+}
+
+// Parses the "Calendar Config (JSON)" setting text into
+// { calendars, people, timeZone, globalRules, everyonePerson }. Never
+// throws: invalid JSON falls back to treating the text as a plain
+// newline-separated list of calendar URLs (a low-friction path for
+// someone who just wants to paste ICS links with no rules at all).
+function parseConfig(raw) {
+  var data = null;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      data = { calendars: raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean) };
+    }
+  }
+  if (!data || typeof data !== 'object') data = {};
+
+  var timeZone = typeof data.timeZone === 'string' && data.timeZone.trim() ? data.timeZone.trim() : null;
+
+  var people = {};
+  var everyonePerson = null;
+  (Array.isArray(data.people) ? data.people : []).forEach(function (item) {
+    if (!item || typeof item !== 'object') return;
+    var name = typeof item.name === 'string' ? item.name.trim() : '';
+    if (!name) return;
+    var color = typeof item.color === 'string' ? item.color.trim().toLowerCase() : '';
+    var badgeSrc = typeof item.badge === 'string' && item.badge.trim() ? item.badge.trim() : name;
+    var badge = Array.from(badgeSrc)[0].toUpperCase(); // Array.from, not [0] — keeps a full surrogate pair (emoji) intact
+    // optional explicit side of the map: "left"/"work" or "right"/"family"
+    var sideRaw = typeof item.side === 'string' ? item.side.trim().toLowerCase() : '';
+    var side = (sideRaw === 'left' || sideRaw === 'work') ? 'left' : (sideRaw === 'right' || sideRaw === 'family') ? 'right' : null;
+    if (everyonePerson === null) everyonePerson = name;
+    people[name.toLowerCase()] = { name: name, color: color, badge: badge, side: side };
+  });
+
+  var globalRules = compileRuleList(data.rules);
+
+  var calendars = [];
+  (Array.isArray(data.calendars) ? data.calendars : []).forEach(function (rawItem) {
+    var item = typeof rawItem === 'string' ? { url: rawItem } : rawItem;
+    if (!item || typeof item !== 'object' || typeof item.url !== 'string' || !item.url.trim()) return;
+    var name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : null;
+    var rules = compileRuleList(item.rules);
+    var headers = {};
+    if (item.headers && typeof item.headers === 'object') {
+      Object.keys(item.headers).forEach(function (k) {
+        if (typeof item.headers[k] === 'string') headers[k] = item.headers[k];
+      });
+    }
+    var includeDescription = item.includeDescription === true;
+    calendars.push({ name: name, url: item.url.trim(), rules: rules, headers: headers, includeDescription: includeDescription });
+  });
+
+  return { calendars: calendars, people: people, timeZone: timeZone, globalRules: globalRules, everyonePerson: everyonePerson };
+}
+
+// A replace that never double-matches an empty-string-capable pattern
+// (like the regex "any"/"all" compile to, or a user's own ".*") — a plain
+// global replace on such a pattern matches the real text once, then the
+// empty string right after it, turning "Ward" into "WardWard".
+function replaceMatch(text, rx, replacement) {
+  if (rx.test('')) return text.replace(new RegExp(rx.source, rx.flags.replace('g', '')), replacement);
+  return text.replace(new RegExp(rx.source, rx.flags.indexOf('g') !== -1 ? rx.flags : rx.flags + 'g'), replacement);
+}
+
+// Applies global rules then this calendar's own (cumulatively, in order —
+// a later matching rule's person/rewrite overrides an earlier one's,
+// and a calendar's own rule is listed after globals so it wins ties).
+// Returns { title, personNames, allDay, hide }; personNames is an array
+// (possibly with more than one name — a multi-person rule becomes an
+// interchange event) or null if nothing assigned one.
+function applyCalendarRules(title, desc, status, weekday, cal, globalRules, everyonePerson) {
+  var originalTitle = title;
+  var ctx = { title: originalTitle, desc: desc || '', status: status || '', weekday: (weekday === undefined || weekday === null) ? null : weekday };
+  var personNames = null;
+  var renameRule = null;
+  var rewriteRule = null;
+  var allDay = false;
+  var hide = false;
+  globalRules.concat(cal.rules).forEach(function (rule) {
+    if (!rule.match(ctx)) return;
+    if (rule.hide) hide = true;
+    if (rule.allDay) allDay = true;
+    if (rule.person) {
+      personNames = rule.person;
+      renameRule = rule.rename ? rule : null;
+    }
+    if (rule.rewrite !== null) rewriteRule = rule;
+  });
+
+  var finalTitle = originalTitle;
+  if (rewriteRule) {
+    finalTitle = rewriteRule.rewriteFull ? rewriteRule.rewrite
+      : rewriteRule.rx ? replaceMatch(originalTitle, rewriteRule.rx, rewriteRule.rewrite)
+      : originalTitle;
+  } else if (renameRule && renameRule.rx) {
+    finalTitle = replaceMatch(originalTitle, renameRule.rx, renameRule.person.join(' & '));
+  }
+  if (personNames === null && everyonePerson) personNames = [everyonePerson];
+
+  return { title: finalTitle, personNames: personNames, allDay: allDay, hide: hide };
+}
+
+// Converts a config person's `color` (a plain framework hue name like
+// "blue", or "gray-NN"/"black"/"white") into the "hue-65"-style token
+// this plugin's tracks/nodes use ("hue-40" style) — null (fall back to the auto HUE_CYCLE)
+// if unset or not one of those.
+function hueTokenForColor(color) {
+  if (!color) return null;
+  if (HUE_NAMES.indexOf(color) !== -1) return color + '-40';
+  if (color === 'black' || color === 'white' || /^gray-\d+$/.test(color)) return color;
+  return null;
+}
+
+// Finds which config.people name should sit on the LEFT (the "own"/work
+// side) — whichever person a calendar literally named "Work" assigns via
+// its own rules or a global rule; falls back to everyonePerson, then the
+// first configured person.
+function findWorkPersonName(parsed) {
+  var workCal = (parsed.calendars || []).filter(function (c) { return /^work$/i.test(c.name || ''); })[0];
+  if (workCal) {
+    var rule = workCal.rules.concat(parsed.globalRules).filter(function (r) { return r.person && r.person.length; })[0];
+    if (rule) return rule.person[0];
+  }
+  if (parsed.everyonePerson) return parsed.everyonePerson;
+  var firstKey = Object.keys(parsed.people)[0];
+  return firstKey ? parsed.people[firstKey].name : null;
+}
+
+// A small, growable people/track registry — seeded from parsed.people,
+// but calendars with no person-assigning rule (e.g. a shared "Family"
+// calendar) fall back to using the CALENDAR's own name as an implicit
+// person, added here the first time it's encountered, so those events
+// still get a track instead of silently vanishing.
+function makePeopleRegistry(parsed) {
+  var workName = findWorkPersonName(parsed);
+  var left = [];
+  var right = [];
+  var byName = {};
+  var hueIdx = 0;
+
+  function add(name) {
+    if (byName[name]) return byName[name];
+    var configuredSide = parsed.people[name.toLowerCase()] && parsed.people[name.toLowerCase()].side;
+    var side = configuredSide || ((name === workName) ? 'left' : 'right');
+    var bucket = side === 'left' ? left : right;
+    var offset = TRACK_STEP * (bucket.length + 1) * (side === 'left' ? -1 : 1);
+    var configured = parsed.people[name.toLowerCase()];
+    // the work/own line is the map's trunk: black unless a color is configured; everyone else cycles hues
+    var hue = (configured && hueTokenForColor(configured.color)) || (side === 'left' && left.length === 0 ? 'black' : HUE_CYCLE[hueIdx % HUE_CYCLE.length]);
+    var initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
+    var p = {
+      key: 'p' + hueIdx,
+      name: name,
+      side: side,
+      hue: hue,
+      track_offset: offset,
+      line_width: (side === 'left' && bucket.length === 0) ? 4 : 3,
+      line_style: LINE_STYLES[bucket.length % LINE_STYLES.length],
+      initial: initial,
+    };
+    hueIdx++;
+    bucket.push(p);
+    byName[name] = p;
+    return p;
+  }
+
+  Object.keys(parsed.people).forEach(function (key) { add(parsed.people[key].name); });
+
+  return { add: add, byName: byName, all: function () { return left.concat(right); } };
+}
+
+async function buildFromConfig(input, parsed, weather, extra) {
+  var tz = resolveTz(parsed.timeZone, input); // config.timeZone > account time_zone_iana > account utc_offset > UTC
+  var nowTs = (input.trmnl && input.trmnl.system && input.trmnl.system.timestamp_utc) || Math.floor(Date.now() / 1000);
+  var today = fromEpoch(nowTs * 1000, tz);
+  var nowMin = today.h * 60 + today.mi;
+  var todayWeekday = (new Date(Date.UTC(today.y, today.mo - 1, today.d)).getUTCDay() + 6) % 7;
+
+  var registry = makePeopleRegistry(parsed);
+
+  var DEADLINE_MS = 4200;
+  var deadline = Date.now() + DEADLINE_MS;
+  var events = [];
+
+  await Promise.all((parsed.calendars || []).map(async function (cal) {
+    var url = cal.url;
+    if (url.indexOf('webcal://') === 0) url = 'https://' + url.slice('webcal://'.length);
+    try {
+      var budget = deadline - Date.now();
+      if (budget <= 0) return;
+      var resp = await fetchWithTimeout(url, Math.min(budget, 4000), cal.headers);
+      if (!resp.ok) return;
+      var text = await resp.text();
+      var rawEvents = parseIcs(text, tz, today, cal.includeDescription);
+      rawEvents.forEach(function (ev) {
+        var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyonePerson);
+        if (resolved.hide || resolved.allDay) return;
+        var personNames = resolved.personNames || (cal.name ? [cal.name] : null);
+        if (!personNames || !personNames.length) return;
+        var primary = registry.add(personNames[0]);
+        var interchangeWith = personNames.slice(1).map(function (n) { return registry.add(n).key; });
+        events.push({
+          person: primary.key,
+          interchange_with: interchangeWith.length ? interchangeWith : undefined,
+          title: resolved.title,
+          startMin: ev.startMin,
+          endMin: ev.endMin != null ? ev.endMin : ev.startMin + 30,
+          location: ev.location || null,
+        });
+      });
+    } catch (e) {
+      // one calendar failing shouldn't blank the whole render — skip it
+    }
   }));
 
-  return { header_pct: headerRenderedPct, allday_pct: alldayPct, allday_row_pct: ALLDAY_ROW_PCT, allday_bars: alldayBarsOut, allday_max_rows: maxAdRows, grid_pct: gridPct, footer_pct: FOOTER_PCT, news_pct: newsPct, alerts_pct: alertsPct, hour_rows: hourRows, days: outDays };
+  events.sort(function (a, b) { return a.startMin - b.startMin; });
+
+  return buildMetro(
+    registry.all(), events,
+    (weather && weather.milestones) || [],
+    (weather && weather.header) || { hi: null, lo: null, condition: null, rain_chance: null },
+    nowMin,
+    timeLabel(DAY_START_MIN) + ' – ' + timeLabel(DAY_END_MIN),
+    Object.assign({}, extra, { dateLabel: dateLabel(today, extra.locale), sun: (weather && weather.sun) || [] })
+  );
 }
+
+// ---------------------------------------------------------------------
+// Entry point.
+// ---------------------------------------------------------------------
+
+async function run(input) {
+  var useDemoRaw = cf(input, 'use_demo_data').trim().toLowerCase();
+  var useDemo = useDemoRaw !== 'false'; // default true (demo) unless explicitly turned off
+  var configRaw = cf(input, 'config_json').trim();
+  var latLonRaw = cf(input, 'lat_lon').trim();
+  var orientationRaw = cf(input, 'orientation').trim().toLowerCase();
+  var orientation = (orientationRaw === 'horizontal' || orientationRaw === 'vertical') ? orientationRaw : 'auto';
+  var locale = (function () {
+    // a config timeZone/locale is only known after parsing; the account locale is the default
+    try { var d = JSON.parse(configRaw); if (d && typeof d.locale === 'string' && d.locale.trim()) return d.locale.trim(); } catch (e) {}
+    return userLocale(input);
+  })();
+  var strings = stringsFor(locale);
+  var hour12 = resolveHour12(cf(input, 'time_format').trim().toLowerCase(), locale);
+  var extra = { orientation: orientation, locale: locale, strings: strings, hour12: hour12 };
+
+  var deadline = Date.now() + 4200;
+
+  if (useDemo || !configRaw) {
+    // Demo mode has no config.timeZone of its own — resolve straight to
+    // the account's own zone/offset (still falling back to UTC) so the
+    // "now" marker and any real weather fetch land on the viewer's
+    // actual local day, not an arbitrary fixed one.
+    var demoTz = resolveTz(null, input);
+    var demoNowMin = null;
+    var demoDate = null;
+    try {
+      var nowTsDemo = (input.trmnl && input.trmnl.system && input.trmnl.system.timestamp_utc) || Math.floor(Date.now() / 1000);
+      var demoToday = fromEpoch(nowTsDemo * 1000, demoTz);
+      demoNowMin = demoToday.h * 60 + demoToday.mi;
+      demoDate = dateLabel(demoToday, locale);
+    } catch (e) { /* keep the illustrative fixed DEMO_NOW_MIN on failure */ }
+    var liveWeather = latLonRaw ? await fetchWeather(latLonRaw, typeof demoTz === 'string' ? demoTz : 'GMT', deadline, strings) : null;
+    return { metro: buildFromDemo(liveWeather, demoNowMin, Object.assign({ dateLabel: demoDate }, extra)) };
+  }
+
+  var parsed = parseConfig(configRaw); // never throws — falls back to a bare URL list on invalid JSON
+  if (!parsed.calendars.length) {
+    return { metro: buildFromDemo(null, null, extra) }; // nothing usable in the config — degrade to demo rather than error the render
+  }
+
+  try {
+    var configTz = resolveTz(parsed.timeZone, input);
+    var weather = latLonRaw ? await fetchWeather(latLonRaw, typeof configTz === 'string' ? configTz : 'GMT', deadline, strings) : null;
+    return { metro: await buildFromConfig(input, parsed, weather, extra) };
+  } catch (e) {
+    return { metro: buildFromDemo(null, null, extra) };
+  }
+}
+
+if (typeof module !== 'undefined') module.exports = run;

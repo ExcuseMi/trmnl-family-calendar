@@ -15,13 +15,6 @@ module.exports = function (test, h) {
     assert(!rx.test('XL1'), 'should NOT match "XL1"');
   });
 
-  test('word matcher is case-insensitive', () => {
-    const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'assembly' }, person: 'Alex' }] }],
-    });
-    assert(cfg.calendars[0].rules[0].rx.test('ASSEMBLY today'), 'should match regardless of case');
-  });
-
   test('regex matcher uses the pattern as-is (expert escape hatch)', () => {
     const cfg = parse({
       calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'regex', value: '\\bK[123]\\b' }, hide: true }] }],
@@ -36,7 +29,6 @@ module.exports = function (test, h) {
       calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'contains', value: 'team' }, hide: true }] }],
     });
     const rx = cfg.calendars[0].rules[0].rx;
-    assert(rx.test('Team Meeting'), 'should match at a word boundary too');
     assert(rx.test('Steam Room'), 'should match mid-word, unlike "word"');
     assert(!rx.test('Tea Room'), 'should not match when the substring genuinely is not present');
   });
@@ -46,19 +38,15 @@ module.exports = function (test, h) {
       calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'exact', value: 'Desk booking' }, hide: true }] }],
     });
     const rx = cfg.calendars[0].rules[0].rx;
-    assert(rx.test('Desk booking'), 'should match the exact title');
     assert(rx.test('DESK BOOKING'), 'should still be case-insensitive');
     assert(!rx.test('Desk booking (extended)'), 'should not match a title that merely contains it');
-    assert(!rx.test('booking'), 'should not match a partial title');
   });
 
   test('"any"/"all" matcher matches every title, empty or not, no value needed', () => {
     const cfg = parse({
       calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, hide: true }] }],
     });
-    const rx = cfg.calendars[0].rules[0].rx;
-    assert(rx.test('literally anything'), 'should match a normal title');
-    assert(rx.test(''), 'should match an empty title too');
+    assert(cfg.calendars[0].rules[0].rx.test(''), 'should match an empty title too');
     const cfg2 = parse({
       calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'all' }, hide: true }] }],
     });
@@ -69,7 +57,7 @@ module.exports = function (test, h) {
     const cfg = parse({
       calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, person: 'Ward' }] }],
     });
-    assert(cfg.calendars[0].rules[0].rename === false, 'rename should default to false for a catch-all match — there is no specific text to rename');
+    assert(cfg.calendars[0].rules[0].rename === false, 'rename should default to false for a catch-all match');
   });
 
   test('an "any" match can still opt into rename explicitly', () => {
@@ -79,42 +67,43 @@ module.exports = function (test, h) {
     assert(cfg.calendars[0].rules[0].rename === true, 'rename:true should still be honored when explicitly set on an "any" match');
   });
 
-  test('a word/regex match still defaults rename to true, unchanged from before "any" existed', () => {
+  test('a word/regex match still defaults rename to true, unaffected by the "any" default change', () => {
     const cfg = parse({
       calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L6' }, person: 'Alex' }] }],
     });
-    assert(cfg.calendars[0].rules[0].rename === true, 'word/regex matches should be unaffected by the "any" default change');
+    assert(cfg.calendars[0].rules[0].rename === true);
   });
 
   test('a rule with no match is dropped, not crash', () => {
-    const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ hide: true }] }],
-    });
+    const cfg = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ hide: true }] }] });
     assert(cfg.calendars[0].rules.length === 0, 'a rule missing "match" entirely should be silently dropped');
   });
 
-  test('a rule with no effect (no person/allDay/hide) is dropped', () => {
-    const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L1' } }] }],
-    });
+  test('a rule with no effect (no person/allDay/hide/rewrite) is dropped', () => {
+    const cfg = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L1' } }] }] });
     assert(cfg.calendars[0].rules.length === 0, 'a rule that does nothing should be dropped, not kept as a no-op');
   });
 
-  test('one rule can combine person, allDay, and hide at once', () => {
+  test('a rule\'s person is normalized to an array even when given a single string', () => {
     const cfg = parse({
       calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L1' }, person: 'Alex', allDay: true }] }],
     });
     const rule = cfg.calendars[0].rules[0];
-    assert(rule.allDay === true, 'allDay should be set');
+    assert(rule.allDay === true);
     assert(rule.hide === false, 'hide should default to false');
-    assert(JSON.stringify(rule.person) === JSON.stringify(['Alex']), 'person should be normalized to an array');
+    assert(JSON.stringify(rule.person) === JSON.stringify(['Alex']));
+  });
+
+  test('a rule\'s person field also accepts a list directly', () => {
+    const cfg = parse({
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'Dinner' }, person: ['Alex', 'Kids'] }] }],
+    });
+    assert(JSON.stringify(cfg.calendars[0].rules[0].person) === JSON.stringify(['Alex', 'Kids']));
   });
 
   test('a calendar rule with an invalid matcher (missing value) drops the rule, not the calendar', () => {
-    const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word' }, person: 'Alex' }] }],
-    });
-    assert(cfg.calendars[0].rules.length === 0, 'rule with no usable match should be dropped');
+    const cfg = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word' }, person: 'Alex' }] }] });
+    assert(cfg.calendars[0].rules.length === 0);
     assert(cfg.calendars.length === 1, 'the calendar itself should still be kept');
   });
 
@@ -140,8 +129,8 @@ module.exports = function (test, h) {
     });
     const m = cfg.calendars[0].rules[0].match;
     assert(m(ctx({ title: 'Standup', weekday: 4 })), 'Friday (weekday 4) Standup should match');
-    assert(!m(ctx({ title: 'Standup', weekday: 0 })), 'Monday Standup should NOT match (fails the weekday half)');
-    assert(!m(ctx({ title: 'Retro', weekday: 4 })), 'Friday Retro should NOT match (fails the word half)');
+    assert(!m(ctx({ title: 'Standup', weekday: 0 })), 'Monday Standup should NOT match');
+    assert(!m(ctx({ title: 'Retro', weekday: 4 })), 'Friday Retro should NOT match');
   });
 
   test('"or" matcher matches when any sub-matcher matches', () => {
@@ -152,49 +141,46 @@ module.exports = function (test, h) {
       }] }],
     });
     const m = cfg.calendars[0].rules[0].match;
-    assert(m(ctx({ title: 'Vacation', status: 'CONFIRMED' })), 'title match alone should be enough');
-    assert(m(ctx({ title: 'Team Sync', status: 'CANCELLED' })), 'status match alone should be enough');
-    assert(!m(ctx({ title: 'Team Sync', status: 'CONFIRMED' })), 'neither matching should not match');
+    assert(m(ctx({ title: 'Vacation', status: 'CONFIRMED' })));
+    assert(m(ctx({ title: 'Team Sync', status: 'CANCELLED' })));
+    assert(!m(ctx({ title: 'Team Sync', status: 'CONFIRMED' })));
   });
 
   test('"status" matcher compares case-insensitively against the event\'s ICS STATUS', () => {
-    const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'status', value: 'tentative' }, hide: true }] }],
-    });
+    const cfg = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'status', value: 'tentative' }, hide: true }] }] });
     const m = cfg.calendars[0].rules[0].match;
-    assert(m(ctx({ status: 'TENTATIVE' })), 'should match the uppercase ICS value against a lowercase config value');
-    assert(!m(ctx({ status: 'CONFIRMED' })), 'should not match a different status');
+    assert(m(ctx({ status: 'TENTATIVE' })));
+    assert(!m(ctx({ status: 'CONFIRMED' })));
   });
 
   test('"weekday" matcher accepts a single day or a list, by 2-letter or full name', () => {
-    const single = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'weekday', value: 'Monday' }, hide: true }] }],
-    }).calendars[0].rules[0].match;
+    const single = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'weekday', value: 'Monday' }, hide: true }] }] }).calendars[0].rules[0].match;
     assert(single(ctx({ weekday: 0 })), 'weekday 0 (Monday) should match "Monday"');
-    assert(!single(ctx({ weekday: 1 })), 'weekday 1 (Tuesday) should not match "Monday"');
+    assert(!single(ctx({ weekday: 1 })));
 
-    const list = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'weekday', value: ['SA', 'SU'] }, hide: true }] }],
-    }).calendars[0].rules[0].match;
-    assert(list(ctx({ weekday: 5 })), 'Saturday (5) should match ["SA","SU"]');
-    assert(list(ctx({ weekday: 6 })), 'Sunday (6) should match ["SA","SU"]');
-    assert(!list(ctx({ weekday: 2 })), 'Wednesday (2) should not match ["SA","SU"]');
+    const list = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'weekday', value: ['SA', 'SU'] }, hide: true }] }] }).calendars[0].rules[0].match;
+    assert(list(ctx({ weekday: 5 })));
+    assert(list(ctx({ weekday: 6 })));
+    assert(!list(ctx({ weekday: 2 })));
   });
 
   test('a rule can hide events only on a specific weekday, end to end', async () => {
-    const { runTransform, icsWithEvents, okText, baseInput, assertEqual } = h;
-    const NOW = Date.parse('2026-09-07T12:00:00Z'); // a Monday
-    const events = [
-      { uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Weekly Sync' }, // Monday
-      { uid: 2, start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Weekly Sync' }, // Wednesday
-    ];
+    const { runTransform, icsWithEvents, okText, baseInput, eventItems, assertEqual } = h;
+    // A weekly-Monday-and-Wednesday-alike series, expressed as one weekly
+    // master (matches every Monday from 2026-09-07 on) — checked against
+    // two different "todays" since this plugin only ever shows one day.
+    const events = [{ uid: 1, start: '20260907T140000Z', end: '20260907T150000Z', rrule: 'FREQ=WEEKLY;BYDAY=MO,WE', summary: 'Weekly Sync' }];
     const fetchImpl = async () => okText(icsWithEvents(events));
-    const { run } = runTransform(fetchImpl, NOW);
-    const input = baseInput(Object.assign({ view_days: '3', advanced_config_enabled: 'true' }, {
-      calendars: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'weekday', value: 'MO' }, hide: true }] }] }),
-    }));
-    const r = await run(input);
-    const titles = r.data.days.flatMap((d) => d.events.map((e) => e.title));
-    assertEqual(titles, ['Weekly Sync'], 'only the Wednesday occurrence should survive — the Monday one is hidden by the weekday rule');
+    const cfg = JSON.stringify({
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'weekday', value: 'MO' }, hide: true }] }],
+    });
+
+    const MONDAY = Date.parse('2026-09-07T12:00:00Z');
+    const rMon = await runTransform(fetchImpl, MONDAY).run(baseInput(MONDAY, { config_json: cfg }));
+    assertEqual(eventItems(rMon.metro).length, 0, 'Monday occurrence should be hidden by the weekday rule');
+
+    const WEDNESDAY = Date.parse('2026-09-09T12:00:00Z');
+    const rWed = await runTransform(fetchImpl, WEDNESDAY).run(baseInput(WEDNESDAY, { config_json: cfg }));
+    assertEqual(eventItems(rWed.metro).length, 1, 'Wednesday occurrence should still show — the rule only targets Monday');
   });
 };

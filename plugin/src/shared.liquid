@@ -1,914 +1,925 @@
-
-
-{% template badge_circle %}
-  {%- assign badge_border_color = "currentColor" -%}
-  {%- if fg == "white" -%}{%- assign badge_border_color = "#888888" -%}{%- endif -%}
-  {%- comment -%}
-    contrast_ring adds a white-then-black double ring around the whole badge — since the outer
-    ring below is the assigned person's own color, it can otherwise end up nearly the same color
-    as the row/background it sits on (e.g. an event auto-colored by that same person). One of the
-    two rings is guaranteed to contrast against any background color, unlike a single fixed color.
-
-    Inside that, a solid black-or-white core (core_bg — whichever of black/white is the pre-
-    computed contrast shade for this person's hue, i.e. what already renders legibly on top of
-    it) holds the letter/icon, itself in the opposite shade. This is what keeps the badge readable
-    even when a person's own configured color is muted or dark: the old design filled the whole
-    badge with that color, which could nearly vanish against a similarly-toned event card (a gray
-    person color on a gray card, for instance) with only the outer contrast_ring saving it. The
-    person's color still shows as the ring — still color-codes at a glance — it just no longer
-    carries the icon's own contrast on its own.
-  {%- endcomment -%}
-  {%- assign core_bg = fg | default: "white" -%}
-  {%- assign core_fg = "black" -%}
-  {%- if core_bg == "black" -%}{%- assign core_fg = "white" -%}{%- endif -%}
-  <span class="rounded--small no-shrink flex flex--center-x flex--center-y bg--{{ hue }} font--bold w--min-0 h--min-0 {{ extra_cls }}" style="width:min({{ badge_w_expr }}, {{ badge_h_expr }});height:min({{ badge_w_expr }}, {{ badge_h_expr }});padding:14%;border:2px solid {{ badge_border_color }};box-sizing:border-box;{% if contrast_ring %}box-shadow:0 0 0 2px #ffffff, 0 0 0 4px #000000;{% endif %}">
-    <span class="rounded--small bg--{{ core_bg }} flex flex--center-x flex--center-y w--full h--full" style="box-sizing:border-box;">
-      <span class="text--{{ core_fg }} flex flex--center-x flex--center-y w--full h--full" style="font-size:calc(min({{ badge_w_expr }}, {{ badge_h_expr }}) * 0.48);line-height:1;{% if uppercase %}text-transform:uppercase;{% endif %}">
-      {%- if b.is_everyone -%}
-        <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/group/default/48px.svg" alt="{{ b.person }}" style="width:65%;height:65%;{% if core_fg == 'white' %}filter:invert(1);{% endif %}">
-      {%- else -%}
-        {{- b.text -}}
-      {%- endif -%}
-      </span>
-    </span>
-  </span>
-{% endtemplate %}
-
 {%- comment -%}
-  chip/chip_body: the full view's optional Timeline Grid style (data.full_view_grid) renders its
-  positioned event boxes with these — kept alongside agenda_row rather than instead of it, since
-  the grid is a user-selectable alternative (Full View Style setting), not dead code.
+  Metro Timeline — all canvas geometry is computed client-side.
 
-  White card + thin black border, with the event's own color reduced to a left accent bar rather
-  than filling the whole card. A full week of tightly packed, fully-colored chips (this view's
-  own thing — every other view still fills its rows with the event's color, at a much lower
-  density) hurt legibility more than the color coding helped, especially once a short slot forced
-  small text on top of a saturated fill. Black-on-white keeps every title readable regardless of
-  hue; the accent bar still color-codes at a glance without competing with the text for contrast.
+  transform.js is a pure data normalizer (events with start_min/end_min,
+  owner/co_owners, side, track styling; weather milestones; now_min). The
+  <script> below does everything that depends on the real rendered size:
+
+    1. Orientation — "auto" runs the timeline left-to-right on a landscape
+       canvas and top-to-bottom on a portrait one (or the setting forces one).
+    2. Time window — if the canvas can't give every hour enough pixels, the
+       visible window narrows around "now" and events outside it are
+       summarised as "+N earlier / +N later" at the ends of the line.
+    3. Spine — every person's line runs the full length of the canvas in
+       one bundle. The hour axis runs down the MIDDLE of the bundle (work
+       lines on one side of it, family lines on the other), so no branch
+       ever has to cross the hour labels.
+    4. Stations + branches — each event is a ring on its owner's line at
+       its true start time. A branch leaves at 45°, runs along a "lane"
+       parallel to the spine carrying the label, and — if the event is
+       long enough — comes back at 45° to rejoin the line at its end time.
+       Short events end in a stub instead.
+    5. Lane placement — labels are measured (real DOM boxes), then each
+       event takes the innermost lane where neither its label nor its
+       line collides with what's already there. Same-owner branches that
+       overlap in a lane become ONE spur with several rings feeding into
+       it (the label just slides along it); a title that would overrun
+       the end of the axis loses its time tag, then gets an ellipsis, and
+       only then branches backward; when nothing fits the event is counted
+       as "+N more". Text steps down a size ladder (drop location → smaller
+       title → drop time) only as far as needed to keep every event.
+    6. Spine position — the bundle is placed so the side that needs more
+       lanes gets more room, instead of always sitting dead-centre.
+
+  Labels are plain text on the canvas (no cards, pills, or borders).
+  Colors come from TRMNLPaint.stroke(hue) so they follow the device/theme;
+  every line also has its own dash pattern so it stays identifiable on a
+  1-bit panel.
 {%- endcomment -%}
-{% template chip_body %}
-  <div class="w--full h--full flex flex--row flex--center-y w--min-0">
-    <span class="title {{ title_cls }} text--black text--left block w--full cal-fit-text{% if clip %} cal-fit-clip{% endif %} {{ pad_x_cls }} w--min-0" data-fit-min="{{ fit_min }}" data-fit-max="60">{{ title }}</span>
-  </div>
-{% endtemplate %}
-
-{% template chip %}
-  <div class="{{ size_class }} bg--white w--full flex flex--row {{ radius_cls }} relative" style="overflow:hidden;box-sizing:border-box;{{ size_style }}border:2px solid #000000;box-shadow:2px 2px 0 0 #000000;">
-    <div class="bg--{{ hue }} no-shrink" style="width:5px;align-self:stretch;"></div>
-    <div class="w--full h--full flex {{ flex_dir }} flex--center-y cal-fit-box {{ pad_cls }} w--min-0">
-      {%- render "chip_body", title: title, fit_min: fit_min, clip: clip, pad_x_cls: pad_x_cls -%}
-    </div>
-  </div>
-{% endtemplate %}
-
-{%- comment -%}
-  One agenda row (time/all-day + title + up to 2 person badges), shared by the single-day
-  agenda-list views (data.single_day.agenda) and the full view's own per-day agenda columns
-  (day.agenda) — same row markup either way, just fed a different list. The border+offset
-  box-shadow is the same "sticker" treatment `chip` uses; it's what keeps a chip's contents
-  legible on-device, so it's applied here too rather than relying on bg/text contrast alone.
-{%- endcomment -%}
-{% template agenda_row %}
-  {%- assign row_border_color = "currentColor" -%}
-  {%- if item.fg == "white" -%}{%- assign row_border_color = "#888888" -%}{%- endif -%}
-  {%- comment -%}
-    Badge size is keyed off title_clamp (full-view rows) rather than the layout branch below, so
-    an all-day item — routed to the single-line branch regardless of title_clamp — still gets the
-    same bigger badge as a timed event in that same view, instead of the smaller single-day-view
-    size that branch would otherwise imply.
-  {%- endcomment -%}
-  {%- assign badge_dim = "22px" -%}
-  {%- if title_clamp and title_clamp > 1 -%}{%- assign badge_dim = "32px" -%}{%- endif -%}
-  {%- comment -%}
-    A "current" (in-progress) event used to add a 1px-offset outline on top of this same box's
-    own border+shadow "sticker" treatment — two concentric rings with a visible gap between them,
-    reading as a double border. Widening this one border instead keeps a single ring that still
-    stands out.
-  {%- endcomment -%}
-  {%- assign row_border_width = "2px" -%}
-  {%- if item.current -%}{%- assign row_border_width = "4px" -%}{%- endif -%}
-  <div class="item w--full bg--{{ item.hue }} rounded--xsmall relative" style="overflow:hidden;flex-shrink:0;border:{{ row_border_width }} solid {{ row_border_color }};box-shadow:2px 2px 0 0 {{ row_border_color }};">
-    {%- comment -%}
-      Weather markers (item.icon_url) and all-day items (item.all_day) always use the compact
-      single-line layout below, even in the full view — their titles never need to wrap ("Rain
-      starts"/"Rain stops" is short; an all-day item has no time label competing for the line, so
-      its title gets the full row width to itself), so stacking them across two lines like a real
-      timed event would just waste vertical space.
-    {%- endcomment -%}
-    {%- if title_clamp and title_clamp > 1 and item.icon_url == blank and item.all_day != true -%}
-      {%- comment -%}
-        Stacked layout: time (+ badges) on their own first line, title wrapping below on its
-        own line(s) — requested specifically for the full view's narrower columns, where titles
-        need real width to wrap into rather than competing with the time for horizontal space.
-      {%- endcomment -%}
-      <div class="w--full flex flex--col gap--xsmall text--{{ item.fg }} px--2 py--1" style="min-width:0;">
-        <div class="w--full flex flex--row flex--center-y gap--small" style="min-width:0;">
-          {% if item.time %}<span class="label {{ time_cls | default: axis_cls }} text--{{ item.fg }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
-          {% if item.icon_url %}<img src="{{ item.icon_url }}" class="w--[20px] h--[20px] no-shrink" style="margin-left:auto;{% if item.fg == 'white' %}filter:invert(1);{% endif %}">{% endif %}
-          {% if item.badges and item.badges.size > 0 %}
-            <span class="flex flex--row gap--small no-shrink" style="flex:0 0 auto;{% unless item.icon_url %}margin-left:auto;{% endunless %}">
-              {% for badge in item.badges limit: 2 %}
-                {%- render "badge_circle", badge_w_expr: badge_dim, badge_h_expr: badge_dim, b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "", uppercase: true, contrast_ring: true -%}
-              {% endfor %}
-            </span>
-          {% endif %}
-        </div>
-        <span class="title {{ event_title_cls }} text--{{ item.fg }} text--left w--full block" style="min-width:0;overflow-wrap:anywhere;" data-clamp="{{ title_clamp }}">{{ item.title }}</span>
-      </div>
-    {%- else -%}
-      {%- comment -%}
-        Weather markers get slightly less vertical padding (py--0.5 vs py--1) — a quick "rain
-        starts/stops" note doesn't need the same visual weight as a real calendar event.
-      {%- endcomment -%}
-      <div class="w--full flex flex--row flex--center-y gap--small text--{{ item.fg }} px--2 {% if item.icon_url %}py--0.5{% else %}py--1{% endif %}" style="min-width:0;">
-        {% if item.time %}<span class="label {{ time_cls | default: axis_cls }} text--{{ item.fg }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
-        <span class="title {{ event_title_cls }} text--{{ item.fg }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
-        {% if item.icon_url %}<img src="{{ item.icon_url }}" class="w--[20px] h--[20px] no-shrink"{% if item.fg == 'white' %} style="filter:invert(1);"{% endif %}>{% endif %}
-        {% if item.badges and item.badges.size > 0 %}
-          <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;">
-            {% for badge in item.badges limit: 2 %}
-              {%- render "badge_circle", badge_w_expr: badge_dim, badge_h_expr: badge_dim, b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "", contrast_ring: true -%}
-            {% endfor %}
-          </span>
-        {% endif %}
-      </div>
-    {%- endif -%}
-  </div>
-{% endtemplate %}
 
 {% template main %}
-<style>
 
-.trmnl .screen--lg.screen--portrait .cal-head-badge { }
-.hours { font-family:monospace; width:2ch; }
-.cal-axis-period { font-weight: normal; white-space: nowrap; }
-.cal-day-underline { border-bottom: 1px solid #888888; padding-bottom: 1px; }
-.cal-day-underline--today { border-bottom: 1px solid #ffffff; padding-bottom: 1px; }
-.view--half_vertical .cal-axis-col [data-hour-shade="1"],
-.view--quadrant .cal-axis-col [data-hour-shade="1"],
-.view--half_horizontal .cal-axis-col [data-hour-shade="1"] { display: none; }
-.view--half_vertical .cal-axis-col [data-hour-shade="0"],
-.view--quadrant .cal-axis-col [data-hour-shade="0"],
-.view--half_horizontal .cal-axis-col [data-hour-shade="0"] { grid-row: span 2; }
-</style>
-{%- assign header_pct_scale = 1 -%}
-{%- if view == 4 -%}
+<div class="layout layout--col gap--none metro-root">
 
-  {%- assign head_title_cls = "title--small" -%}
-  {%- assign chip_title_cls = "title--small" -%}
-  {%- assign axis_cls = "label--small" -%}
-  {%- assign event_title_cls = "title--small" -%}
-{%- elsif view == 3 -%}
-
-  {%- assign head_title_cls = "title--base lg:title--large" -%}
-  {%- assign chip_title_cls = "title--small" -%}
-  {%- assign axis_cls = "label--base lg:label--large" -%}
-  {%- assign event_title_cls = "title--small" -%}
-  {%- assign header_pct_scale = 0.6 -%}
-{%- elsif view == 2 -%}
-
-  {%- assign head_title_cls = "title--small" -%}
-  {%- assign chip_title_cls = "title--small lg:title--base" -%}
-  {%- assign axis_cls = "label--base lg:label--large" -%}
-  {%- assign event_title_cls = "title--small" -%}
-{%- else -%}
-
-  {%- assign head_title_cls = "title--large lg:title--large lg:portrait:title--xlarge" -%}
-  {%- assign chip_title_cls = "title--base lg:title--large lg:portrait:title--xlarge" -%}
-  {%- assign axis_cls = "label--large lg:label--xxlarge" -%}
-  {%- assign event_title_cls = "title--base" -%}
-{%- endif -%}
-
-{%- if view == 1 -%}
-  {%- assign shown_days_n = data.days.size -%}
-{%- else -%}
-  {%- assign shown_days_n = 1 -%}
-{%- endif -%}
-
-{%- if shown_days_n >= 6 -%}
-  {%- assign head_title_cls = "title--small" -%}
-  {%- assign chip_title_cls = "title--small" -%}
-{%- elsif shown_days_n >= 4 -%}
-  {%- assign head_title_cls = "title--base lg:title--large" -%}
-  {%- assign chip_title_cls = "title--small" -%}
-{%- endif -%}
-
-{%- if shown_days_n == 1 -%}
-  {%- assign day_span = 12 -%}
-{%- elsif shown_days_n == 2 -%}
-  {%- assign day_span = 6 -%}
-{%- else -%}
-  {%- assign day_span = 4 -%}
-{%- endif -%}
-
-{%- assign axis_span = 1 -%}
-{%- if shown_days_n == 1 -%}
-  {%- if view == 3 or view == 4 -%}
-    {%- assign axis_span = 2 -%}
-    {%- assign day_span = 11 -%}
-  {%- endif -%}
-{%- endif -%}
-{%- comment -%}
-  The Agenda List full view has no hour axis and, since per-event badges already show people
-  inline, no need for the corner legend either — the left gutter that reserves space for both is
-  dropped entirely (axis_span 0) so the day columns use the full width. The Timeline Grid still
-  needs that space (hour labels + corner legend, since it has no per-event badges of its own).
-{%- endcomment -%}
-{%- assign agenda_full_view = false -%}
-{%- if view == 1 -%}{%- unless data.full_view_grid -%}{%- assign axis_span = 0 -%}{%- assign agenda_full_view = true -%}{%- endunless -%}{%- endif -%}
-
-{%- assign header_pct = data.header_pct | times: header_pct_scale -%}
-
-{%- assign total_cols = day_span | times: shown_days_n | plus: axis_span -%}
-{%- assign day_width_pct = day_span | times: 100.0 | divided_by: total_cols -%}
-
-{%- assign allday_pct = data.allday_pct -%}
-{%- assign allday_max_rows = data.allday_max_rows -%}
-{%- if shown_days_n == 1 -%}
-  {%- assign day0_max_row = -1 -%}
-  {%- for bar in data.allday_bars -%}
-    {%- if bar.start_col == 0 and bar.row > day0_max_row -%}
-      {%- assign day0_max_row = bar.row -%}
-    {%- endif -%}
-  {%- endfor -%}
-  {%- assign allday_max_rows = day0_max_row | plus: 1 -%}
-  {%- assign allday_pct = allday_max_rows | times: data.allday_row_pct -%}
-{%- endif -%}
-{%- comment -%}
-  All-day items already appear at the top of the agenda list itself for these views — the
-  single-day views (2/3/4, data.single_day.agenda) and, now, the full view's own Agenda List
-  style too (data.days[].agenda, agenda_full_view) — see the agenda loop(s) below. Showing them
-  again as bars up here would just duplicate them. Zeroing allday_pct also reclaims that header
-  space for the list (bigger grid_pct below) and, as a side effect, drops the top-left calendar
-  icon too (it's gated on allday_pct > 0, and doesn't apply once there's nothing left to point at
-  up here). The full view's Timeline Grid style (data.full_view_grid) keeps the bars — its
-  per-day content is segments/events chips, not agenda_row, so it has no other way to show them.
-{%- endcomment -%}
-{%- if view != 1 or agenda_full_view -%}
-  {%- assign allday_pct = 0 -%}
-  {%- assign allday_max_rows = 0 -%}
-{%- endif -%}
-{%- assign grid_pct = data.grid_pct | plus: data.allday_pct | minus: allday_pct -%}
-
-<div class="layout layout--col gap--none relative" id="cal-root" data-days-n="{{ shown_days_n }}" data-axis-span="{{ axis_span }}">
-  {% if data.error and data.has_events == false %}
-
-    <div class="flex flex--col flex--center-x flex--center-y w--full h--full text--center p--6 gap--small" >
-      <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/event_busy/default/48px.svg" alt="" class="h--auto w--max-8 lg:w--max-12">
-      <span class="title title--large">{{ data.unavailable_label }}</span>
-      <span class="description text--gray-50 w--max-[85cqw]" data-clamp="3">{{ data.error }}</span>
-    </div>
-  {% else %}
-
-    {%- comment -%}
-      The person-badge legend in the top-left corner is redundant on any view that renders the
-      agenda list (view 2/3/4, and now the full view's own Agenda List style) — each event
-      already carries its own (bigger) badge there. Only the Timeline Grid still shows it, since
-      its chip/chip_body rendering has no per-event badges of its own.
-    {%- endcomment -%}
-    {%- assign show_badge_overlay = false -%}
-    {%- if data.people.size > 0 and view == 1 and data.full_view_grid -%}{%- assign show_badge_overlay = true -%}{%- endif -%}
-
-    {%- assign gutter_pct = header_pct | plus: allday_pct -%}
-    {%- assign header_allday_rows = 1 -%}
-    {%- if allday_pct > 0 -%}{%- assign header_allday_rows = allday_max_rows | plus: 1 -%}{%- endif -%}
-    {%- assign header_allday_total_units = day_span | times: shown_days_n | plus: axis_span -%}
-    {%- capture header_allday_row_tracks -%}
-      {{- header_pct }}cqh
-      {%- if allday_pct > 0 -%}{% for r in (1..allday_max_rows) %} {{ data.allday_row_pct }}cqh{% endfor %}{%- endif -%}
-    {%- endcapture -%}
-
-    {%- comment -%}
-      The Agenda List full view renders its own header+all-day+body as one combined grid further
-      below instead (see agenda_full_view) — a day column with no all-day event of its own can
-      then start its agenda list right after its own last occupied all-day row (or at the very
-      top if it has none), rather than every column being pinned below the tallest column's
-      all-day band regardless of whether it needs that space. Timeline Grid and the single-day
-      views keep this original shared bar unchanged.
-    {%- endcomment -%}
-    {%- unless agenda_full_view -%}
-    <div class="grid gap--none h--[{{ gutter_pct }}cqh] h--min-[{{ gutter_pct }}cqh] bg--black flex-none relative" style="grid-template-columns:repeat({{ header_allday_total_units }}, 1fr);grid-template-rows:{{ header_allday_row_tracks | strip }};overflow:hidden;">
-
-      {% if axis_span > 0 %}
-      <div class="col--span-{{ axis_span }} bg--black flex flex--col flex--center-x flex--center-y p--0.5" style="grid-row:1 / span {{ header_allday_rows }};overflow:hidden;">
-        {% if show_badge_overlay %}
-          {%- assign badge_count = data.people.size -%}
-          {%- if badge_count > 8 -%}{%- assign badge_count = 8 -%}{%- endif -%}
-          {%- assign badge_cols = 1 -%}
-          {%- if axis_span >= 2 or badge_count >= 5 or view == 2 -%}{%- assign badge_cols = 2 -%}{%- endif -%}
-          {%- assign badge_rows = badge_count | plus: badge_cols | minus: 1 | divided_by: badge_cols -%}
-          {%- assign badge_cols_x_rows = badge_cols | times: badge_rows -%}
-          {%- assign badge_is_odd = true -%}
-          {%- if badge_cols_x_rows == badge_count -%}{%- assign badge_is_odd = false -%}{%- endif -%}
-          {%- assign axis_width_pct = axis_span | times: 100.0 | divided_by: total_cols -%}
-          {%- assign badge_col_gap_px = badge_cols | minus: 1 | times: 5 -%}
-          {%- assign badge_row_gap_px = badge_rows | minus: 1 | times: 5 -%}
-          {%- capture badge_w_expr -%}calc(({{ axis_width_pct }}cqw - {{ badge_col_gap_px }}px) / {{ badge_cols }} * 0.9){%- endcapture -%}
-          {%- capture badge_h_expr -%}calc(({{ gutter_pct }}cqh - {{ badge_row_gap_px }}px) / {{ badge_rows }} * 0.9){%- endcapture -%}
-          <div class="grid w--auto gap--xsmall grid--cols-{{ badge_cols }} flex--center-x" style="justify-items:center;">
-            {%- for b in data.people limit: 8 -%}
-              {%- assign badge_extra_cls = "" -%}
-              {%- if forloop.last and badge_is_odd and badge_cols == 2 -%}{%- assign badge_extra_cls = "col--span-2" -%}{%- endif -%}
-              {%- render "badge_circle", badge_w_expr: badge_w_expr, badge_h_expr: badge_h_expr, b: b, hue: b.hue, fg: b.fg, extra_cls: badge_extra_cls -%}
-            {%- endfor -%}
-          </div>
-        {% elsif allday_pct > 0 %}
-          <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/today/default/48px.svg" alt="{{ data.all_day_label }}" class="w--3 h--3 lg:w--5 lg:h--5" style="filter:invert(1);">
-        {% endif %}
-      </div>
-      {% endif %}
-
-      {% for day in data.days limit: shown_days_n %}
-
-        {%- comment -%}
-          Current-day header invert is scoped to the Timeline Grid full-view style only (view == 1
-          and data.full_view_grid) — every other view (single-day views, and the Agenda List full
-          view's own header further below) keeps its existing today treatment unchanged.
-        {%- endcomment -%}
-        {%- assign day_header_invert = false -%}
-        {%- if day.is_today and view == 1 and data.full_view_grid -%}{%- assign day_header_invert = true -%}{%- endif -%}
-
-        <div class="col--span-{{ day_span }} flex flex--col flex--center-x flex--center-y border--v-1 cal-day-cell" data-day-idx="{{ forloop.index0 }}" style="grid-row:1;">
-
-          <div class="rounded--small px--2.5 py--0.5 w--max-full flex {% if shown_days_n == 1 %}flex--row flex--center-y flex--center-x gap--small{% else %}flex--col flex--center-x gap--xsmall{% endif %} w--min-0 {% if day_header_invert %}bg--white{% endif %}" style="overflow:hidden;">
-
-            <span class="title {{ head_title_cls }} block w--min-0{% if shown_days_n == 1 %} no-shrink{% endif %}{% if data.rss_headline and shown_days_n != 1 %} {% if day.is_today %}cal-day-underline--today{% else %}cal-day-underline{% endif %}{% endif %}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;"><span class="{% if day_header_invert %}text--gray-30{% else %}text--gray-50{% endif %}">{{ day.label_short_weekday }}</span> <span class="{% if day_header_invert %}text--black{% else %}text--white{% endif %} font--bold">{{ day.label_short_rest }}</span></span>
-            {% if data.rss_headline and day.icon %}
-              <span class="flex flex--row flex--center-y gap--xsmall no-shrink">
-                <img class="{% if view == 1 %} w--6 h--6 lg:w--8 lg:h--8 {% else %} w--4 h--4 {% endif %} no-shrink" style="{% unless day_header_invert %}filter:invert(1);{% endunless %}{% if data.weather_stale %} brightness(0.65);{% endif %}" src="{{ day.icon }}">
-                <span class="label {% if view == 1 %}label--large lg:label--xlarge{% else %}label--base{% endif %} {% if day_header_invert %}text--black{% elsif data.weather_stale %}text--gray-50{% else %}text--white{% endif %} w--min-0">
-                <svg viewBox="0 0 10 10" class="{% if view == 1 %} w--4 h--4 {% else %} w--3 h--3 {% endif %} mr--0.5 no-shrink" fill="#999"><polygon points="5,1 9,8 1,8"/></svg>
-                <span class="mr--1">{{ day.temp.high }}°{{ data.temp_unit }}</span>
-                <svg viewBox="0 0 10 10" class="{% if view == 1 %} w--4 h--4 {% else %} w--3 h--3 {% endif %} mr--0.5 no-shrink" fill="#999"><polygon points="5,9 1,2 9,2"/></svg>
-                <span>{{ day.temp.low }}°{{ data.temp_unit }}</span></span>
-              </span>
-            {% endif %}
-          </div>
-        </div>
-      {% endfor %}
-
-      {% if allday_pct > 0 %}
-        {%- assign allday_days_last_idx = shown_days_n | minus: 1 -%}
-        {% for r in (1..allday_max_rows) %}
-          {%- assign allday_grid_row = r | plus: 1 -%}
-          {%- assign allday_fill_row0 = r | minus: 1 -%}
-          {% for d in (0..allday_days_last_idx) %}
-            {%- assign allday_fill_has_bar = false -%}
-            {%- for bar in data.allday_bars -%}
-              {%- assign allday_fill_bar_end = bar.start_col | plus: bar.span -%}
-              {%- if d >= bar.start_col and d < allday_fill_bar_end and bar.row == allday_fill_row0 -%}{%- assign allday_fill_has_bar = true -%}{%- endif -%}
-            {%- endfor -%}
-            {% assign allday_fill_col = day_span | times: d | plus: axis_span | plus: 1 %}
-            {%- comment -%}
-              Empty all-day cell: the bg--gray-75 fill above is the whole signal now — no diagonal
-              hatch layered on top (dropped: it was pure decoration on an already-distinct light
-              gray cell, and repeating patterns like this are exactly what causes e-ink ghosting).
-            {%- endcomment -%}
-            <div class="bg--gray-75 border--v-1 cal-allday-fill relative" data-day-idx="{{ d }}" style="grid-column:{{ allday_fill_col }} / span {{ day_span }};grid-row:{{ allday_grid_row }};"></div>
-          {% endfor %}
-        {% endfor %}
-        {% for bar in data.allday_bars %}
-          {% if bar.start_col < shown_days_n %}
-
-          {% assign allday_visible_span = shown_days_n | minus: bar.start_col %}
-          {% if bar.span <= allday_visible_span %}
-            {% assign allday_visible_span = bar.span %}
-          {% endif %}
-
-          {% assign allday_col_start = day_span | times: bar.start_col | plus: axis_span | plus: 1 %}
-          {% assign allday_bar_span = day_span | times: allday_visible_span %}
-          {% assign allday_row_num = bar.row | plus: 2 %}
-          {% assign ad_border_color = "currentColor" %}
-          {% if bar.fg == "white" %}{% assign ad_border_color = "#888888" %}{% endif %}
-          <div class="bg--{{ bar.hue }} flex flex--row flex--center-x flex--center-y cal-fit-box rounded--none relative cal-allday-bar-el" data-start-col="{{ bar.start_col }}" data-span="{{ allday_visible_span }}" style="grid-column:{{ allday_col_start }} / span {{ allday_bar_span }};grid-row:{{ allday_row_num }};overflow:hidden;border-bottom:1px solid {{ ad_border_color }};border-left:1px solid {{ ad_border_color }};">
-            <span class="title {{ chip_title_cls }} text--{{ bar.fg }} cal-fit-text cal-fit-clip cal-allday-title w--min-0" data-fit-min="9" data-fit-max="90">{{ bar.title }}</span>
-          </div>
-          {% endif %}
-        {% endfor %}
-      {% endif %}
-    </div>
-    {%- endunless -%}
-
-    {% if data.alerts_pct > 0 and agenda_full_view == false %}
-      <div class="h--[{{ data.alerts_pct }}cqh] h--min-[{{ data.alerts_pct }}cqh] flex-none flex flex--row flex--center-y bg--gray-30 px--2" style="overflow:hidden;">
-        <span class="label label--small font--bold text--white w--min-0 block" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">⚠ Unavailable for a while: {{ data.calendar_alerts | join: ", " }}</span>
-      </div>
+  <div class="metro-header flex flex--row flex--center-y flex--wrap gap--medium px--3 py--2 flex-none">
+    <span class="metro-title title title--large font--bold">{{ metro.i18n.today | default: "Today" }}</span>
+    {% if metro.date_label %}<span class="metro-date label label--base text--gray-40">{{ metro.date_label }}</span>{% endif %}
+    <span class="metro-window label label--small text--gray-40">{{ metro.window_label }}</span>
+    <div class="grow"></div>
+    {% if metro.header_weather.hi %}
+      <span class="metro-weather flex flex--row flex--center-y gap--xsmall">
+        {% if metro.header_weather.icon %}<img class="metro-wicon image--adaptive" src="{{ metro.header_weather.icon }}">{% endif %}
+        <span class="metro-temp title title--base">{{ metro.header_weather.hi }}&deg;<span class="text--gray-40"> / {{ metro.header_weather.lo }}&deg;</span></span>
+        {% assign rain_pct = metro.i18n.rain_pct | default: "{n}% rain" | replace: "{n}", metro.header_weather.rain_chance %}
+        <span class="metro-cond label label--small text--gray-40">{{ metro.header_weather.condition }} &middot; {{ rain_pct }}</span>
+      </span>
     {% endif %}
+  </div>
 
-    {%- comment -%}
-      half_horizontal/half_vertical/quadrant are too small for a legible timeline grid — they get
-      a plain time+title list instead (data.single_day.agenda, built in transform.js). The full
-      view keeps its own shared multi-day grid.
-    {%- endcomment -%}
-    {%- if view == 2 or view == 3 or view == 4 -%}
-      {%- comment -%}
-        How many rows actually fit — and the "and N more" indicator for whatever doesn't — is
-        handled by TRMNL's own overflow engine (framework docs: /framework/docs/3.3/overflow)
-        rather than a hardcoded per-view guess: it measures the real rendered space at runtime
-        and hides/counts on its own. half_horizontal additionally gets 2 columns (it has roughly
-        twice the usable width of the other two).
-      {%- endcomment -%}
-      {%- if view == 2 -%}
-        <div class="columns w--full h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none p--2" data-overflow-max-cols="2" data-overflow-counter="true" style="box-sizing:border-box;">
-          <div class="column gap--xsmall">
-      {%- else -%}
-        <div class="flex flex--col gap--xsmall w--full h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none p--2" data-overflow="true" data-overflow-max-height="auto" data-overflow-counter="true" style="box-sizing:border-box;">
-      {%- endif -%}
-        {% for item in data.single_day.agenda %}
-          {%- render "agenda_row", item: item, axis_cls: axis_cls, event_title_cls: event_title_cls -%}
-        {% else %}
-          <div class="w--full h--full flex flex--center-x flex--center-y">
-            <span class="label {{ axis_cls }} text--gray-50">{{ data.nothing_scheduled_label }}</span>
-          </div>
-        {% endfor %}
-      {%- if view == 2 -%}
-          </div>
-        </div>
-      {%- else -%}
-        </div>
-      {%- endif -%}
-    {%- else -%}
-    {%- if data.full_view_grid -%}
-      {%- comment -%}
-        Timeline Grid — the original hour-by-hour visual schedule, kept as a user-selectable
-        alternative to the Agenda List below (Full View Style setting) rather than removed.
-      {%- endcomment -%}
-      {%- assign event_pad_cls = "pt--1 pb--2" -%}
-      {%- assign pad_x_cls = "px--2" -%}
-      {%- capture axis_row_tracks -%}{% for row in data.hour_rows %}{{ row.pct }}fr {% endfor %}{%- endcapture -%}
-      <div class="grid gap--none h--[{{ grid_pct }}cqh] h--min-[{{ grid_pct }}cqh] flex-none relative">
-        <div class="col--span-{{ axis_span }} cal-axis-col" style="display:grid;grid-template-rows:{{ axis_row_tracks | strip }};">
-          {% for row in data.hour_rows %}
+  <div class="divider divider--on-white flex-none"></div>
 
-            <div class="w--full flex flex--row {% if row.period %}gap--distribute{% else %}flex--right{% endif %} cal-row cal-fit-box relative pr--2 {% if row.current %}bg--black{% elsif row.shade == 1 %}bg--gray-65{% endif %}" data-hour-shade="{{ row.shade }}" data-hour-current="{{ row.current }}" {% if row.current %}style="border-top:1px solid #888888;"{% endif %}>
+  <div class="metro-canvas relative grow w--full">
+    <svg class="metro-svg absolute" style="inset:0;width:100%;height:100%;pointer-events:none;"></svg>
+  </div>
 
-                {% if row.period %}<span class="cal-axis-period {% if row.current %}text--gray-70{% else %}text--gray-15{% endif %} ml--1 mr--1">{{ row.period }}</span>{% endif %}<span class="label {{ axis_cls }} {% if row.bold %}font--bold {% endif %}{% if row.current %}text--white {% endif %}cal-fit-text cal-axis-text{% if row.important %} cal-axis-important{% endif %} inline-block text--right hours" data-fit-min="8" data-fit-max="40">{{ row.hour }}</span>
-            </div>
-          {% endfor %}
-        </div>
-        {% for day in data.days limit: shown_days_n %}
-          {%- assign day_idx = forloop.index0 -%}
-          {%- assign day_has_allday = false -%}
-          {%- for bar in data.allday_bars -%}
-            {%- assign bar_end_col = bar.start_col | plus: bar.span -%}
-            {%- if day_idx >= bar.start_col and day_idx < bar_end_col -%}{%- assign day_has_allday = true -%}{%- endif -%}
-          {%- endfor -%}
-          {%- assign day_is_empty = false -%}
-          {%- if day.events.size == 0 and day_has_allday == false -%}{%- assign day_is_empty = true -%}{%- endif -%}
-          <div class="col--span-{{ day_span }} flex flex--col gap--none border--v-1 relative cal-day-cell" data-day-idx="{{ day_idx }}" style="overflow:hidden;">
-
-            {% assign seg_cum_pct = 0 %}
-            {% for seg in day.segments %}
-              {% if seg.night %}
-
-                {% assign seg_bg = "bg--gray-30" %}
-              {% elsif day.is_today and seg.past %}
-
-                {% assign seg_bg = "bg--gray-75" %}
-                {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-70" %}{% endif %}
-              {% elsif day.is_today %}
-                {% assign seg_bg = "" %}
-                {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-75" %}{% endif %}
-              {% else %}
-                {% assign seg_bg = "bg--gray-75" %}
-                {% if seg.shade == 1 %}{% assign seg_bg = "bg--gray-70" %}{% endif %}
-              {% endif %}
-              {%- assign seg_pct_of_cell = seg.pct | times: 100.0 | divided_by: grid_pct -%}
-              <div class="w--full cal-row {{ seg_bg }} relative" style="height:{{ seg_pct_of_cell }}%;{% if seg.night %}border-bottom:1px solid rgba(255,255,255,0.2);{% endif %}">
-                {% if seg.weather == "rain" %}
-                  <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2714%27 height=%2714%27 viewBox=%270 0 14 14%27%3E%3Cg stroke=%27%23888888%27 stroke-width=%271.6%27 stroke-linecap=%27round%27%3E%3Cline x1=%2711%27 y1=%271%27 x2=%278%27 y2=%277%27/%3E%3Cline x1=%274%27 y1=%278%27 x2=%271%27 y2=%2714%27/%3E%3C/g%3E%3C/svg%3E');image-rendering:-moz-crisp-edges;image-rendering:pixelated;background-position:0 -{{ seg_cum_pct }}cqh;"></div>
-                {% elsif seg.weather == "storm" %}
-                  <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2728%27 height=%2728%27 viewBox=%270 0 28 28%27%3E%3Cpath fill=%27%23555555%27 d=%27M6 2c-1.8 2.4-3 4.5-3 6.1 0 2.1 1.3 3.9 3 3.9s3-1.8 3-3.9C9 6.5 7.8 4.4 6 2z%27 transform=%27rotate(15 6 6)%27/%3E%3Cpath fill=%27%23555555%27 d=%27M20 2c-1.8 2.4-3 4.5-3 6.1 0 2.1 1.3 3.9 3 3.9s3-1.8 3-3.9C23 6.5 21.8 4.4 20 2z%27 transform=%27rotate(15 20 6)%27/%3E%3Cpath fill=%27%23555555%27 d=%27M13 14c-1.8 2.4-3 4.5-3 6.1 0 2.1 1.3 3.9 3 3.9s3-1.8 3-3.9c0-1.6-1.2-3.7-3-6.1z%27 transform=%27rotate(15 13 18)%27/%3E%3C/svg%3E');image-rendering:-moz-crisp-edges;image-rendering:pixelated;background-position:0 -{{ seg_cum_pct }}cqh;"></div>
-                {% elsif seg.weather == "snow" %}
-                  <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2728%27 height=%2728%27 viewBox=%270 0 28 28%27%3E%3Cg stroke=%27%23999999%27 stroke-width=%271%27 stroke-linecap=%27round%27%3E%3Cg transform=%27translate(7,7)%27%3E%3Cline x1=%27-3%27 y1=%270%27 x2=%273%27 y2=%270%27/%3E%3Cline x1=%270%27 y1=%27-3%27 x2=%270%27 y2=%273%27/%3E%3Cline x1=%27-2.1%27 y1=%27-2.1%27 x2=%272.1%27 y2=%272.1%27/%3E%3Cline x1=%27-2.1%27 y1=%272.1%27 x2=%272.1%27 y2=%27-2.1%27/%3E%3C/g%3E%3Cg transform=%27translate(20,18)%27%3E%3Cline x1=%27-3%27 y1=%270%27 x2=%273%27 y2=%270%27/%3E%3Cline x1=%270%27 y1=%27-3%27 x2=%270%27 y2=%273%27/%3E%3Cline x1=%27-2.1%27 y1=%27-2.1%27 x2=%272.1%27 y2=%272.1%27/%3E%3Cline x1=%27-2.1%27 y1=%272.1%27 x2=%272.1%27 y2=%27-2.1%27/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');image-rendering:-moz-crisp-edges;image-rendering:pixelated;background-position:0 -{{ seg_cum_pct }}cqh;"></div>
-                {% elsif seg.weather %}
-                  <div class="absolute inset--0" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2728%27 height=%2728%27 viewBox=%270 0 28 28%27%3E%3Crect x=%270%27 y=%277%27 width=%2714%27 height=%272.5%27 rx=%271.25%27 fill=%27%23aaaaaa%27/%3E%3Crect x=%2714%27 y=%2718%27 width=%2714%27 height=%272.5%27 rx=%271.25%27 fill=%27%23aaaaaa%27/%3E%3C/svg%3E');image-rendering:-moz-crisp-edges;image-rendering:pixelated;background-position:0 -{{ seg_cum_pct }}cqh;"></div>
-                {% endif %}
-              </div>
-              {% assign seg_cum_pct = seg_cum_pct | plus: seg.pct %}
-            {% endfor %}
-            {%- comment -%}
-              A day with nothing scheduled (no timed events, no all-day item) used to get a
-              diagonal hatch pattern layered over its hour shading — replaced with a flat light
-              gray fill: same "nothing here" signal, no repeating pattern for the e-ink panel to
-              ghost on.
-            {%- endcomment -%}
-            {% if day_is_empty %}
-              <div class="absolute inset--0 bg--gray-75" style="pointer-events:none;"></div>
-            {% endif %}
-            {% for event in day.events %}
-
-              {%- assign event_box_h = event.box_height_pct | default: event.height_pct -%}
-              <div class="absolute pr--0.5 pb--0.5 relative z--1" style="top:{{ event.top_pct }}%;height:{{ event_box_h }}%;left:calc({{ event.lane_index }} * 100% / {{ event.nlanes }});width:calc(100% / {{ event.nlanes }});">
-                {%- assign event_clip = true -%}
-                {% render "chip", hue: event.hue, title: event.title, flex_dir: "flex--col", size_class: "h--full w--full", size_style: "", pad_cls: event_pad_cls, radius_cls: "rounded--xsmall", title_cls: event_title_cls, fit_min: 11, clip: event_clip, pad_x_cls: pad_x_cls %}
-              </div>
-            {% endfor %}
-          </div>
-        {% endfor %}
-      </div>
-    {%- else -%}
-    {%- comment -%}
-      Agenda List — one agenda-list column per visible day (up to 3), each with its own overflow
-      — same row markup as the single-day views (agenda_row), just fed day.agenda instead of
-      data.single_day.agenda. Unlike every other view, the header (date/weather), the all-day
-      bars, AND this body are all ONE combined grid here (rows: header, then one per all-day
-      row, then a final body row spanning the rest) rather than two stacked grids — that's what
-      lets a day with no all-day event of its own start its agenda right after the header
-      (grid-row 2), reclaiming the space other columns need for their own bars, instead of every
-      column being pinned below the tallest column's all-day band. A day WITH bars starts right
-      after its own last one instead (day_body_row_start below); any gap above that (rare: only
-      when a day's bars skip an earlier row that a different day is using) still shows the
-      original hatching rather than being reclaimed, to keep this simple. axis_span is 0 here
-      (see its assignment above) — no leading gutter, no corner legend/icon (per-event badges
-      already show people inline).
-    {%- endcomment -%}
-      {%- assign header_allday_last_row = allday_max_rows | plus: 1 -%}
-      {%- assign alerts_grid_row = header_allday_last_row | plus: 1 -%}
-      {%- assign agenda_total_pct = gutter_pct | plus: grid_pct | plus: data.alerts_pct -%}
-      <div class="grid gap--none h--[{{ agenda_total_pct }}cqh] h--min-[{{ agenda_total_pct }}cqh] flex-none relative" style="grid-template-columns:repeat({{ header_allday_total_units }}, 1fr);grid-template-rows:{{ header_allday_row_tracks | strip }}{% if data.alerts_pct > 0 %} {{ data.alerts_pct }}cqh{% endif %} {{ grid_pct }}cqh;overflow:hidden;">
-        {% for day in data.days limit: shown_days_n %}
-          <div class="col--span-{{ day_span }} bg--black flex flex--col flex--center-x flex--center-y border--v-1 cal-day-cell" data-day-idx="{{ forloop.index0 }}" style="grid-row:1;">
-            <div class="rounded--small px--2.5 py--0.5 w--max-full flex flex--col flex--center-x gap--xsmall w--min-0" style="overflow:hidden;">
-              <span class="title {{ head_title_cls }} block w--min-0{% if data.rss_headline %} {% if day.is_today %}cal-day-underline--today{% else %}cal-day-underline{% endif %}{% endif %}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;"><span class="text--gray-50">{{ day.label_short_weekday }}</span> <span class="text--white font--bold">{{ day.label_short_rest }}</span></span>
-              {% if data.rss_headline and day.icon %}
-                <span class="flex flex--row flex--center-y gap--xsmall no-shrink">
-                  <img class="w--6 h--6 lg:w--8 lg:h--8 no-shrink" style="filter:invert(1){% if data.weather_stale %} brightness(0.65){% endif %};" src="{{ day.icon }}">
-                  <span class="label label--large lg:label--xlarge {% if data.weather_stale %}text--gray-50{% else %}text--white{% endif %} w--min-0">
-                  <svg viewBox="0 0 10 10" class="w--4 h--4 mr--0.5 no-shrink" fill="#999"><polygon points="5,1 9,8 1,8"/></svg>
-                  <span class="mr--1">{{ day.temp.high }}°{{ data.temp_unit }}</span>
-                  <svg viewBox="0 0 10 10" class="w--4 h--4 mr--0.5 no-shrink" fill="#999"><polygon points="5,9 1,2 9,2"/></svg>
-                  <span>{{ day.temp.low }}°{{ data.temp_unit }}</span></span>
-                </span>
-              {% endif %}
-            </div>
-          </div>
-        {% endfor %}
-
-        {% if allday_pct > 0 %}
-          {%- assign allday_days_last_idx = shown_days_n | minus: 1 -%}
-          {% for r in (1..allday_max_rows) %}
-            {%- assign allday_grid_row = r | plus: 1 -%}
-            {%- assign allday_fill_row0 = r | minus: 1 -%}
-            {% for d in (0..allday_days_last_idx) %}
-              {%- assign allday_fill_has_bar = false -%}
-              {%- assign day_last_bar_row0 = -1 -%}
-              {%- for bar in data.allday_bars -%}
-                {%- assign allday_fill_bar_end = bar.start_col | plus: bar.span -%}
-                {%- if d >= bar.start_col and d < allday_fill_bar_end -%}
-                  {%- if bar.row == allday_fill_row0 -%}{%- assign allday_fill_has_bar = true -%}{%- endif -%}
-                  {%- if bar.row > day_last_bar_row0 -%}{%- assign day_last_bar_row0 = bar.row -%}{%- endif -%}
-                {%- endif -%}
-              {%- endfor -%}
-              {%- comment -%} Rows below this day's own last bar are reclaimed by its agenda body below, not hatched. {%- endcomment -%}
-              {%- unless allday_fill_has_bar == false and allday_fill_row0 > day_last_bar_row0 -%}
-                {% assign allday_fill_col = day_span | times: d | plus: 1 %}
-                <div class="bg--gray-75 border--v-1 cal-allday-fill relative" data-day-idx="{{ d }}" style="grid-column:{{ allday_fill_col }} / span {{ day_span }};grid-row:{{ allday_grid_row }};"></div>
-              {%- endunless -%}
-            {% endfor %}
-          {% endfor %}
-          {% for bar in data.allday_bars %}
-            {% if bar.start_col < shown_days_n %}
-            {% assign allday_visible_span = shown_days_n | minus: bar.start_col %}
-            {% if bar.span <= allday_visible_span %}
-              {% assign allday_visible_span = bar.span %}
-            {% endif %}
-            {% assign allday_col_start = day_span | times: bar.start_col | plus: 1 %}
-            {% assign allday_bar_span = day_span | times: allday_visible_span %}
-            {% assign allday_row_num = bar.row | plus: 2 %}
-            {% assign ad_border_color = "currentColor" %}
-            {% if bar.fg == "white" %}{% assign ad_border_color = "#888888" %}{% endif %}
-            <div class="bg--{{ bar.hue }} flex flex--row flex--center-x flex--center-y cal-fit-box rounded--none relative cal-allday-bar-el" data-start-col="{{ bar.start_col }}" data-span="{{ allday_visible_span }}" style="grid-column:{{ allday_col_start }} / span {{ allday_bar_span }};grid-row:{{ allday_row_num }};overflow:hidden;border-bottom:1px solid {{ ad_border_color }};border-left:1px solid {{ ad_border_color }};">
-              <span class="title {{ chip_title_cls }} text--{{ bar.fg }} cal-fit-text cal-fit-clip cal-allday-title w--min-0" data-fit-min="9" data-fit-max="90">{{ bar.title }}</span>
-            </div>
-            {% endif %}
-          {% endfor %}
-        {% endif %}
-
-        {% if data.alerts_pct > 0 %}
-          <div class="flex flex--row flex--center-y bg--gray-30 px--2" style="grid-column:1 / -1;grid-row:{{ alerts_grid_row }};overflow:hidden;">
-            <span class="label label--small font--bold text--white w--min-0 block" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">⚠ Unavailable for a while: {{ data.calendar_alerts | join: ", " }}</span>
-          </div>
-        {% endif %}
-
-        {% for day in data.days limit: shown_days_n %}
-          {%- assign day_idx = forloop.index0 -%}
-          {%- comment -%}
-            A day's body can only reclaim space above its own last all-day row when nothing else
-            spans every column in between — the alerts bar does exactly that (grid-column:1/-1),
-            so a single rectangular grid item can't skip past it to resume below. When alerts is
-            showing, every day's body starts uniformly right after it instead (the pre-reclaim
-            behavior for this one, rare, transient state) rather than partially overlapping it.
-          {%- endcomment -%}
-          {%- if data.alerts_pct > 0 -%}
-            {%- assign day_body_row_start = header_allday_last_row | plus: 2 -%}
-          {%- else -%}
-            {%- assign day_last_bar_row0 = -1 -%}
-            {%- comment -%}
-              allday_pct is 0 for agenda_full_view (all-day items render inline in day.agenda
-              instead, see above) — its bars never occupy grid rows here, so every day's body
-              starts right after the header regardless of data.allday_bars.
-            {%- endcomment -%}
-            {%- if allday_pct > 0 -%}
-              {%- for bar in data.allday_bars -%}
-                {%- assign bar_end = bar.start_col | plus: bar.span -%}
-                {%- if day_idx >= bar.start_col and day_idx < bar_end and bar.row > day_last_bar_row0 -%}{%- assign day_last_bar_row0 = bar.row -%}{%- endif -%}
-              {%- endfor -%}
-            {%- endif -%}
-            {%- assign day_body_row_start = 2 -%}
-            {%- if day_last_bar_row0 > -1 -%}{%- assign day_body_row_start = day_last_bar_row0 | plus: 3 -%}{%- endif -%}
-          {%- endif -%}
-          <div class="col--span-{{ day_span }} flex flex--col gap--xsmall border--v-1 relative cal-day-cell p--1" data-day-idx="{{ day_idx }}" data-overflow="true" data-overflow-max-height="auto" data-overflow-counter="true" style="grid-row:{{ day_body_row_start }} / -1;overflow:hidden;box-sizing:border-box;">
-            {% for item in day.agenda %}
-              {%- render "agenda_row", item: item, axis_cls: axis_cls, event_title_cls: event_title_cls, title_clamp: 3, time_cls: "label--base lg:label--large" -%}
-            {% else %}
-              <div class="w--full h--full flex flex--center-x flex--center-y">
-                <span class="label {{ axis_cls }} text--gray-50">{{ data.nothing_scheduled_label }}</span>
-              </div>
-            {% endfor %}
-          </div>
-        {% endfor %}
-      </div>
-    {%- endif -%}
-    {%- endif -%}
-
-    <div class="grid gap--none h--[{{ data.footer_pct }}cqh] h--min-[{{ data.footer_pct }}cqh] bg--black flex flex--center-y" style="overflow:hidden;">
-      {% if data.rss_headline %}
-        <div class="h--full col--span-{{ shown_days_n | times: day_span | plus: axis_span }} flex flex--row flex--center-y flex--left pl--2 pr--2 w--min-0" style="overflow:hidden;">
-          <span class="label {% if view == 1 %}label--large lg:label--xlarge{% else %}label--base{% endif %} font--bold bg--black text--white w--min-0 w--full block" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;letter-spacing:0.5px;">{%- if data.rss_headline.label -%}<span class="text--gray-50">{{ data.rss_headline.label }}</span><span class="text--gray-50">&nbsp;»&nbsp;</span>{%- endif -%}{%- for t in data.rss_headline.titles -%}{{ t }}{%- unless forloop.last -%}<span class="text--gray-50">&nbsp;•&nbsp;</span>{%- endunless -%}{%- endfor -%}</span>
-        </div>
-      {% else %}
-      {% if axis_span > 0 %}
-      <div class="col--span-{{ axis_span }} flex flex--center-x">
-        <svg class="{% if view == 1 %} w--6 h--6  lg:w--10 lg:h--10 {% else if view == 2 or view == 4 %} hidden {% else %} w--4 h--4 {% endif %} image" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M7.75 2.5C7.75 2.08579 7.41421 1.75 7 1.75C6.58579 1.75 6.25 2.08579 6.25 2.5V4.07926C4.81067 4.19451 3.86577 4.47737 3.17157 5.17157C2.47737 5.86577 2.19451 6.81067 2.07926 8.25H21.9207C21.8055 6.81067 21.5226 5.86577 20.8284 5.17157C20.1342 4.47737 19.1893 4.19451 17.75 4.07926V2.5C17.75 2.08579 17.4142 1.75 17 1.75C16.5858 1.75 16.25 2.08579 16.25 2.5V4.0129C15.5847 4 14.839 4 14 4H10C9.16097 4 8.41527 4 7.75 4.0129V2.5Z" fill="white"/>
-<path fill-rule="evenodd" clip-rule="evenodd" d="M2 12C2 11.161 2 10.4153 2.0129 9.75H21.9871C22 10.4153 22 11.161 22 12V14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14V12ZM17 14C17.5523 14 18 13.5523 18 13C18 12.4477 17.5523 12 17 12C16.4477 12 16 12.4477 16 13C16 13.5523 16.4477 14 17 14ZM17 18C17.5523 18 18 17.5523 18 17C18 16.4477 17.5523 16 17 16C16.4477 16 16 16.4477 16 17C16 17.5523 16.4477 18 17 18ZM13 13C13 13.5523 12.5523 14 12 14C11.4477 14 11 13.5523 11 13C11 12.4477 11.4477 12 12 12C12.5523 12 13 12.4477 13 13ZM13 17C13 17.5523 12.5523 18 12 18C11.4477 18 11 17.5523 11 17C11 16.4477 11.4477 16 12 16C12.5523 16 13 16.4477 13 17ZM7 14C7.55228 14 8 13.5523 8 13C8 12.4477 7.55228 12 7 12C6.44772 12 6 12.4477 6 13C6 13.5523 6.44772 14 7 14ZM7 18C7.55228 18 8 17.5523 8 17C8 16.4477 7.55228 16 7 16C6.44772 16 6 16.4477 6 17C6 17.5523 6.44772 18 7 18Z" fill="white"/>
-</svg>
-      </div>
-      {% endif %}
-        {% for day in data.days limit: shown_days_n %}
-          <div class="h--full  col--span-{{ day_span }} flex flex--row flex--center-x flex--center-y gap--xsmall border--v-1 cal-day-cell" data-day-idx="{{ forloop.index0 }}" style="overflow:hidden;">
-            {% if day.icon %}
-
-              <img class="{{ chip_title_cls }} no-shrink  {% if view == 1 %} w--6 h--6  lg:w--10 lg:h--10 {% else %} w--4 h--4  {% endif %}" style="filter:invert(1){% if data.weather_stale %} brightness(0.65){% endif %};" src="{{ day.icon }}">
-
-              {%- if view <= 4 -%}
-
-                <span class="label {{ chip_title_cls }} bg--black {% if data.weather_stale %}text--gray-50{% else %}text--white{% endif %} w--min-0">
-                <svg viewBox="0 0 10 10" class="w--2 h--2 lg:w--4 lg:h--4 mr--0.5 lg:mr--1 no-shrink" fill="#999"><polygon points="5,1 9,8 1,8"/></svg>
-                <span class="mr--1">{{ day.temp.high }}°{{ data.temp_unit }}</span>
-                <svg viewBox="0 0 10 10" class="w--2 h--2 lg:w--4 lg:h--4 mr--0.5 lg:mr--1 no-shrink" fill="#999"><polygon points="5,9 1,2 9,2"/></svg>
-                <span>{{ day.temp.low }}°{{ data.temp_unit }}</span></span>
-              {%- else -%}
-                <span class="label {{ chip_title_cls }} bg--black {% if data.weather_stale %}text--gray-50{% else %}text--white{% endif %} w--min-0">{{ day.temp.high }}° / {{ day.temp.low }}°</span>
-              {%- endif -%}
-            {% endif %}
-          </div>
-        {% endfor %}
-      {% endif %}
-    </div>
-  {% endif %}
-</div>
+<style>
+  .metro-canvas { overflow: hidden; }
+  .metro-svg { overflow: visible; }
+  .metro-label { line-height: 1.2; padding: 1px 3px; }
+  .metro-corner-legend { padding: 4px 6px; border-radius: 4px; }
+  .metro-hour, .metro-axis-note { white-space: nowrap; padding: 0 2px; }
+  .metro-header--compact .metro-window, .metro-header--compact .metro-cond { display: none; }
+  .metro-header--tiny .metro-date, .metro-header--tiny .metro-weather { display: none; }
+  .metro-wicon { width: 28px; height: 28px; }
+  .metro-header--large .metro-wicon { width: 40px; height: 40px; }
+  .metro-terminus { white-space: nowrap; padding: 0 3px; }
+  .metro-sky { white-space: nowrap; }
+</style>
 
 <script>
 (function () {
-  function padOf(cs, side) {
-    return parseFloat(cs.getPropertyValue('padding-' + side)) || 0;
+  var METRO = {{ metro | json }};
+  var SCRIPT = document.currentScript;
+  var ROOT = SCRIPT && SCRIPT.parentElement ? SCRIPT.parentElement : document;
+  var canvas = ROOT.querySelector('.metro-canvas');
+  var svg = ROOT.querySelector('.metro-svg');
+  var header = ROOT.querySelector('.metro-header');
+  if (!canvas || !svg) return;
+
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  var LEGEND = METRO.legend || [];
+  var DAY_START = METRO.day_start_min, DAY_END = METRO.day_end_min;
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  var HOUR12 = !!METRO.hour12;
+  var I18N = METRO.i18n || { today: 'Today', more: '+{n} more', earlier: '+{n} earlier' };
+  function tr(key, n) { return String(I18N[key] || key).replace('{n}', String(n)); }
+  function timeLabel(min) {
+    var h = Math.floor(min / 60) % 24, m = min % 60;
+    if (!HOUR12) return pad2(h) + ':' + pad2(m);
+    return (h % 12 || 12) + (m ? ':' + pad2(m) : '') + (h < 12 ? 'am' : 'pm');
   }
-  function setPad(el, side, px) {
-    el.style.setProperty('padding-' + side, px + 'px');
+  function hourLabel(h) { return HOUR12 ? ((h % 12 || 12) + (h < 12 ? 'am' : 'pm')) : pad2(h) + ':00'; }
+  function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
+  function svgEl(tag, attrs) { var e = document.createElementNS(SVG_NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  function overlaps(a, b) { return a[0] < b[1] && b[0] < a[1]; }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // ---- device scale + paint ------------------------------------------
+  function uiScale() {
+    try { var v = TRMNLPaint.px(1, { el: canvas, kind: 'ui' }); if (isFinite(v) && v > 0) return v; } catch (e) {}
+    return 1;
   }
-  function fit(el, forced) {
-    var box = el.closest('.cal-fit-box');
-    if (!box) return null;
-    var boxCsForPad = getComputedStyle(box);
-    var padTop = padOf(boxCsForPad, 'top');
-    var padBottom = padOf(boxCsForPad, 'bottom');
-    var minContentH = 14;
-    var contentH = box.clientHeight - padTop - padBottom;
-    if (contentH < minContentH && (padTop > 0 || padBottom > 0)) {
-      var totalPad = padTop + padBottom;
-      var shrink = Math.min(totalPad, minContentH - contentH);
-      padTop = Math.max(0, padTop - shrink * (padTop / totalPad));
-      padBottom = Math.max(0, padBottom - shrink * (padBottom / totalPad));
-      setPad(box, 'top', padTop);
-      setPad(box, 'bottom', padBottom);
-      contentH = box.clientHeight - padTop - padBottom;
+  // On a 1-bit panel every line is solid black and the dash patterns tell
+  // them apart — a dithered gray 3px line is just speckle. Grayscale panels
+  // get the framework-resolved shade for each person's hue.
+  var screenEl = canvas.closest('.screen');
+  var ONE_BIT = !!(screenEl && screenEl.classList.contains('screen--1bit'));
+  var colorCache = {};
+  function colorFor(hue) {
+    if (ONE_BIT) return '#000000';
+    if (!(hue in colorCache)) {
+      var c = null;
+      try { var f = TRMNLPaint.stroke(hue, { el: canvas }); c = f && f.color; } catch (e) {}
+      colorCache[hue] = c || '#000000';
     }
-    var mustClip = el.classList.contains('cal-axis-text') || el.classList.contains('cal-fit-clip');
-    box.style.overflow = mustClip ? 'hidden' : 'visible';
-    el.style.display = 'block';
-    var min = parseInt(el.getAttribute('data-fit-min'), 10) || 11;
-    var max = parseInt(el.getAttribute('data-fit-max'), 10) || 90;
-
-    function setSize(px) {
-      el.style.fontSize = px + 'px';
-      el.style.lineHeight = Math.round(px * 1.15) + 'px';
-    }
-
-    if (forced != null) {
-      el.style.whiteSpace = 'nowrap';
-      el.style.overflowWrap = 'normal';
-      setSize(forced);
-      return forced;
-    }
-
-    if (el.hasAttribute('data-fit-original')) el.textContent = el.getAttribute('data-fit-original');
-    el.style.whiteSpace = 'normal';
-
-    var boxCs = getComputedStyle(box);
-    var padX = padOf(boxCs, 'left') + padOf(boxCs, 'right');
-    var availW = box.clientWidth - padX - 2;
-    if (availW <= 0) { setSize(min); return min; }
-    el.style.maxWidth = availW + 'px';
-
-    function fitsOneLine(px) {
-      return el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= Math.round(px * 1.15) + 2 && el.scrollHeight <= contentH + 1;
-    }
-    var MAX_WRAP_LINES = 3;
-    function fitsWrapped(px) {
-      var lineH = Math.round(px * 1.15);
-      var lines = Math.round(el.scrollHeight / lineH);
-      return el.scrollHeight <= contentH + 1 && el.scrollWidth <= el.clientWidth + 1 && lines <= MAX_WRAP_LINES;
-    }
-
-    setSize(max);
-    if (fitsOneLine(max)) return max;
-    var isMultiWord = /\s/.test(el.textContent);
-    var isTrimmable = !el.classList.contains('cal-axis-text');
-    var absMin = isTrimmable ? 8 : 4;
-
-    function searchMax(lo, hi, test) {
-      setSize(lo);
-      if (!test(lo)) return null;
-      while (hi - lo > 1) {
-        var mid = Math.floor((lo + hi) / 2);
-        setSize(mid);
-        if (test(mid)) { lo = mid; } else { hi = mid; }
-      }
-      return lo;
-    }
-
-    var oneLineSize = searchMax(absMin, max, fitsOneLine);
-
-    var WRAP_MIN = 11;
-    var wrappedSize = null;
-    if (isMultiWord) {
-      el.style.overflowWrap = 'normal';
-      wrappedSize = searchMax(WRAP_MIN, max, fitsWrapped);
-    }
-
-    if (oneLineSize !== null && (wrappedSize === null || wrappedSize <= oneLineSize)) {
-      el.style.overflowWrap = 'anywhere';
-      setSize(oneLineSize);
-      return oneLineSize;
-    }
-    if (wrappedSize !== null) {
-      el.style.overflowWrap = 'normal';
-      setSize(wrappedSize);
-      return wrappedSize;
-    }
-
-    var wrappedAnywhereSize = null;
-    if (isMultiWord && oneLineSize === null) {
-      el.style.overflowWrap = 'anywhere';
-      wrappedAnywhereSize = searchMax(WRAP_MIN, max, fitsWrapped);
-    }
-    if (wrappedAnywhereSize !== null) {
-      el.style.overflowWrap = 'anywhere';
-      setSize(wrappedAnywhereSize);
-      return wrappedAnywhereSize;
-    }
-
-    setSize(absMin);
-    if (isTrimmable) truncateToFit(el, contentH);
-    box.style.overflow = 'hidden';
-    return absMin;
+    return colorCache[hue];
+  }
+  function dashFor(style, S) {
+    if (style === 'dashed') return (9 * S) + ' ' + (6 * S);
+    if (style === 'dotted') return (0.1 * S) + ' ' + (5 * S);
+    if (style === 'dashdot') return (11 * S) + ' ' + (5 * S) + ' ' + (0.1 * S) + ' ' + (5 * S);
+    return null;
+  }
+  function styleStroke(node, p, S) {
+    node.setAttribute('stroke', colorFor(p.hue));
+    node.setAttribute('stroke-width', p.line_width * S);
+    node.setAttribute('stroke-linecap', 'round');
+    node.setAttribute('stroke-linejoin', 'round');
+    node.setAttribute('fill', 'none');
+    var d = dashFor(p.line_style, S);
+    if (d) node.setAttribute('stroke-dasharray', d);
   }
 
-  function truncateToFit(el, contentH) {
-    var original = el.getAttribute('data-fit-original');
-    if (original == null) {
-      original = el.textContent;
-      el.setAttribute('data-fit-original', original);
+  // Polyline with rounded corners: every interior vertex becomes a short
+  // quadratic bend, so a 45° branch reads like a metro line, not a hinge.
+  function roundedPath(pts, r) {
+    if (pts.length < 2) return '';
+    var d = 'M' + pts[0][0] + ',' + pts[0][1];
+    for (var i = 1; i < pts.length - 1; i++) {
+      var A = pts[i - 1], P = pts[i], B = pts[i + 1];
+      var la = Math.hypot(P[0] - A[0], P[1] - A[1]), lb = Math.hypot(B[0] - P[0], B[1] - P[1]);
+      var rr = Math.min(r, la / 2, lb / 2);
+      if (rr <= 0.5) { d += ' L' + P[0] + ',' + P[1]; continue; }
+      var p1 = [P[0] + (A[0] - P[0]) / la * rr, P[1] + (A[1] - P[1]) / la * rr];
+      var p2 = [P[0] + (B[0] - P[0]) / lb * rr, P[1] + (B[1] - P[1]) / lb * rr];
+      d += ' L' + p1[0] + ',' + p1[1] + ' Q' + P[0] + ',' + P[1] + ' ' + p2[0] + ',' + p2[1];
     }
-    el.style.whiteSpace = 'nowrap';
-    el.style.overflowWrap = 'normal';
-    el.textContent = original;
-    if (el.scrollHeight > contentH + 1) return;
-    if (el.scrollWidth <= el.clientWidth + 1) return;
-    var text = original;
-    while (text.length > 1 && el.scrollWidth > el.clientWidth + 1) {
-      text = text.slice(0, -1);
-      el.textContent = text.replace(/[\s.,;:!?-]+$/, '') + '…';
-    }
+    var L = pts[pts.length - 1];
+    return d + ' L' + L[0] + ',' + L[1];
   }
 
-  function capDaysInPortrait(root) {
-    var daysN = parseInt(root.getAttribute('data-days-n'), 10) || 1;
-    var portrait = !!document.querySelector('.screen--portrait');
-    if (!portrait || daysN <= 2) return;
-    var CAP = 2, NEW_SPAN = 6;
-    // Column 1 is reserved for the hour-axis/corner legend only when axis_span > 0 (Timeline
-    // Grid, single-day views) — the Agenda List full view drops that gutter entirely
-    // (axis_span 0), so day columns there start at column 1, not 2.
-    var axisOffset = (parseInt(root.getAttribute('data-axis-span'), 10) || 0) + 1;
-
-    var cells = root.querySelectorAll('.cal-day-cell');
-    for (var i = 0; i < cells.length; i++) {
-      var idx = parseInt(cells[i].getAttribute('data-day-idx'), 10);
-      if (idx >= CAP) { cells[i].style.display = 'none'; }
-      else { cells[i].style.gridColumn = 'span ' + NEW_SPAN; }
-    }
-
-    var fills = root.querySelectorAll('.cal-allday-fill');
-    for (var j = 0; j < fills.length; j++) {
-      var fIdx = parseInt(fills[j].getAttribute('data-day-idx'), 10);
-      if (fIdx >= CAP) { fills[j].style.display = 'none'; continue; }
-      var fCol = NEW_SPAN * fIdx + axisOffset;
-      fills[j].style.gridColumn = fCol + ' / span ' + NEW_SPAN;
-    }
-
-    var bars = root.querySelectorAll('.cal-allday-bar-el');
-    for (var k = 0; k < bars.length; k++) {
-      var bar = bars[k];
-      var sCol = parseInt(bar.getAttribute('data-start-col'), 10);
-      var span = parseInt(bar.getAttribute('data-span'), 10);
-      if (sCol >= CAP) { bar.style.display = 'none'; continue; }
-      var visSpan = Math.min(span, CAP - sCol);
-      var newStart = NEW_SPAN * sCol + axisOffset;
-      bar.style.gridColumn = newStart + ' / span ' + (NEW_SPAN * visSpan);
-    }
+  function dedupe(events) {
+    var seen = {}, out = [];
+    events.forEach(function (e) {
+      var k = e.title + '|' + e.start_min + '|' + e.owner;
+      if (!seen[k]) { seen[k] = true; out.push(e); }
+    });
+    return out;
   }
 
+  // ---- main layout ----------------------------------------------------
   function run() {
-    var root = document.getElementById('cal-root');
-    if (!root) return;
-    capDaysInPortrait(root);
-    var rows = root.querySelectorAll('.cal-row');
-    for (var r = 0; r < rows.length; r++) rows[r].style.overflow = 'hidden';
+    // The framework zooms high-density screens (TRMNL X renders at 2x), so
+    // getBoundingClientRect() is in screen px while style.left/top and the
+    // SVG viewBox are in layout px. Work in layout px throughout and divide
+    // every measurement by the zoom factor Z.
+    var rect = canvas.getBoundingClientRect();
+    var W = canvas.offsetWidth, H = canvas.offsetHeight;
+    if (W < 80 || H < 60 || rect.width < 1) return;
+    var Z = rect.width / W;
+    function measure(node) { var r = node.getBoundingClientRect(); return { w: r.width / Z, h: r.height / Z }; }
 
-    var lgPortrait = !!document.querySelector('.screen--lg.screen--portrait');
+    canvas.querySelectorAll('.metro-gen').forEach(function (n) { n.remove(); });
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
 
-    var titles = root.querySelectorAll('.cal-fit-text:not(.cal-axis-text):not(.cal-allday-title)');
-    for (var i = 0; i < titles.length; i++) {
-      if (lgPortrait) titles[i].setAttribute('data-fit-max', '100');
-      fit(titles[i]);
+    var S = uiScale();
+    var horizontal = METRO.orientation === 'horizontal' ? true
+      : METRO.orientation === 'vertical' ? false
+      : W > H * 1.1;
+    var axisPx = horizontal ? W : H, crossPx = horizontal ? H : W;
+
+    // header density follows the real canvas, not the view name (a TRMNL X
+    // quadrant is bigger than an OG full screen)
+    if (header) {
+      var compact = W < 640 * S || H < 300 * S, tiny = W < 430 * S || H < 200 * S, large = W >= 900 * S && H >= 560 * S;
+      header.classList.toggle('metro-header--compact', compact);
+      header.classList.toggle('metro-header--tiny', tiny);
+      header.classList.toggle('metro-header--large', large);
+      function swap(sel, cls) { var n = header.querySelector(sel); if (n) n.className = n.className.replace(/(^|\s)(title|label)--[a-z]+/g, '') + ' ' + cls; }
+      swap('.metro-title', tiny ? 'title--small' : compact ? 'title--base' : 'title--xlarge');
+      swap('.metro-date', large ? 'label--large' : 'label--base');
+      swap('.metro-temp', large ? 'title--large' : compact ? 'title--small' : 'title--base');
+      swap('.metro-cond', large ? 'label--base' : 'label--small');
     }
 
-    var MIN_LEGIBLE_AXIS_BOX_PX = 10;
+    // geometry constants (device-scaled)
+    var TRACK_STEP = 13 * S, NODE_R = 6 * S, NODE_STROKE = 3 * S;
+    var LINE_GAP = 6 * S, LANE_GAP = 12 * S, LANE_BASE = 14 * S + Math.min(24 * S, crossPx * 0.025), EDGE = 8 * S;
+    var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 9 * S, MIN_DIAG = 10 * S;
+    var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
 
-    function fitSharedGroup(selector, maxOverride) {
-      var all = root.querySelectorAll(selector);
-      var els = [];
-      for (var i = 0; i < all.length; i++) {
-        var box = all[i].closest('.cal-fit-box');
-        if (!box || box.clientHeight <= 0) continue;
-        if (box.clientHeight < MIN_LEGIBLE_AXIS_BOX_PX) {
-          all[i].style.visibility = 'hidden';
-          var siblingPeriod = box.querySelector('.cal-axis-period');
-          if (siblingPeriod) siblingPeriod.style.visibility = 'hidden';
-          continue;
+    function toXY(a, c) { return horizontal ? [a, c] : [c, a]; }
+
+    // ---- probe an hour label for sizing
+    var probe = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute');
+    probe.textContent = HOUR12 ? '12pm' : '00:00';
+    canvas.appendChild(probe);
+    var pr = measure(probe);
+    var hourW = pr.w, hourH = pr.h;
+    probe.remove();
+    var gutterHalf = horizontal ? hourH / 2 + 1 * S : hourW / 2 + 3 * S;
+
+    // ---- tracks: side A = 'left' (up / left of axis), side B = 'right'
+    var sides = { A: [], B: [] };
+    LEGEND.forEach(function (p) { sides[p.side === 'left' ? 'A' : 'B'].push(p); });
+    var trackByKey = {};
+    ['A', 'B'].forEach(function (s) {
+      var sign = s === 'A' ? -1 : 1;
+      sides[s].sort(function (a, b) { return Math.abs(a.track_offset) - Math.abs(b.track_offset); });
+      sides[s].forEach(function (p, i) {
+        p._dist = gutterHalf + TRACK_STEP * (i + 1);
+        p._c = sign * p._dist;
+        p._sign = sign;
+        p._sideKey = s;
+        trackByKey[p.key] = p;
+      });
+    });
+    function bundleHalf(s) { return gutterHalf + TRACK_STEP * sides[s].length + (sides[s].length ? NODE_R : 0); }
+
+    // ---- time window (narrow around now when hours would be too dense)
+    var nowMin = (typeof METRO.now_min === 'number') ? METRO.now_min : null;
+    var totalHours = (DAY_END - DAY_START) / 60;
+    var minPxPerHour = (horizontal ? 46 : 38) * S * (crossPx < 260 * S ? 1.8 : 1); // little cross room = few lanes = fewer hours
+    var winStart = DAY_START, winEnd = DAY_END;
+    if (axisPx / totalHours < minPxPerHour) {
+      var visHours = clamp(Math.floor(axisPx / minPxPerHour), 3, totalHours);
+      var anchor = nowMin != null ? nowMin - 60 : DAY_START;
+      winStart = clamp(Math.floor(anchor / 60) * 60, DAY_START, DAY_END - visHours * 60);
+      winEnd = winStart + visHours * 60;
+    }
+    var winLabel = ROOT.querySelector('.metro-window');
+    if (winLabel) winLabel.textContent = timeLabel(winStart) + ' – ' + timeLabel(winEnd);
+    var axisStart = NODE_R + 2 * S, axisEnd = axisPx - NODE_R - 2 * S; // rings at the window edges stay whole; tracks still run full bleed
+    function aFor(min) { return axisStart + (min - winStart) / (winEnd - winStart) * (axisEnd - axisStart); }
+    var pxPerHour = aFor(60) - aFor(0);
+
+    // ---- events
+    var all = dedupe(METRO.items.filter(function (i) { return i.type === 'event'; }));
+    var earlier = 0, later = 0, visible = [];
+    all.forEach(function (e) {
+      if (!trackByKey[e.owner]) return;
+      if (e.start_min < winStart) earlier++;
+      else if (e.start_min >= winEnd) later++;
+      else visible.push(e);
+    });
+
+    // ---- label density: start from what the canvas size suggests, then
+    // step down the ladder (drop location → smaller title → drop time)
+    // only as far as needed to fit every event
+    var tierPx = Math.min(axisPx, crossPx) / S;
+    // [title class, tag class for time/location]
+    var CLASSES = [['title title--xlarge', 'label label--base'], ['title title--large', 'label label--base'], ['title title--base', 'label label--small'], ['title title--small', 'label label--small'], ['label label--small', 'label label--small']];
+    var ci = tierPx >= 560 ? 0 : tierPx >= 440 ? 1 : tierPx >= 300 ? 2 : tierPx >= 200 ? 3 : 4;
+    var wantTime = axisPx >= 520 * S && crossPx >= 220 * S;
+    var wantLocation = axisPx >= 700 * S && crossPx >= 380 * S;
+    var tiers = [{ cls: CLASSES[ci][0], tag: CLASSES[ci][1], time: wantTime, loc: wantLocation }];
+    if (wantLocation) tiers.push({ cls: CLASSES[ci][0], tag: CLASSES[ci][1], time: wantTime, loc: false });
+    for (var cj = ci + 1; cj < CLASSES.length; cj++) tiers.push({ cls: CLASSES[cj][0], tag: CLASSES[cj][1], time: wantTime, loc: false });
+    if (wantTime) tiers.push({ cls: CLASSES[CLASSES.length - 1][0], tag: CLASSES[CLASSES.length - 1][1], time: false, loc: false });
+    var titleClass, tagClass, showTime, showLocation;
+    var maxTitle = clamp(axisPx * 0.3, 130 * S, 380 * S);
+    var colW = 0;
+    if (!horizontal) {
+      // text column per side, sized so one lane on each side always fits
+      var room = (crossPx - bundleHalf('A') - bundleHalf('B') - 2 * (LANE_BASE + LINE_GAP + EDGE)) / 2;
+      colW = clamp(room, 60 * S, 260 * S);
+    }
+
+    // A sky marker: rain start/stop or sunrise/sunset — an icon plus a short
+    // text, drawn in the band along the top edge (horizontal) or beside the
+    // bundle (vertical), with a guide line across the canvas at its time.
+    function buildMarkerLabel(w) {
+      var n = el('div', 'metro-gen metro-sky flex flex--row flex--center-y gap--xsmall absolute bg--white');
+      n.style.padding = '0 ' + (3 * S) + 'px';
+      var size = hourH * (w.type === 'sun' ? 1.5 : 1.3);
+      var ic = el('img', 'image--adaptive'); ic.src = w.icon; ic.style.width = size + 'px'; ic.style.height = size + 'px';
+      var tx = el('span', 'label label--small ' + (w.type === 'sun' ? 'text--gray-30' : 'font--bold text--black'));
+      tx.style.whiteSpace = 'nowrap';
+      tx.textContent = w.type === 'sun' ? timeLabel(w.at_min) : w.label;
+      n.appendChild(ic); n.appendChild(tx);
+      return n;
+    }
+
+    // Time first, title on its own line below it (then location) — reads like a
+    // departure board, and keeps the block's along-axis width to whichever line
+    // is widest instead of title+time run together.
+    function labelRow(cls) {
+      var n = el('div', cls);
+      n.style.display = 'block'; n.style.whiteSpace = 'nowrap'; // force a real block row regardless of what the label/title classes themselves set
+      return n;
+    }
+    function buildLabel(e) {
+      var p = trackByKey[e.owner];
+      var box = el('div', 'metro-gen metro-label absolute bg--white');
+      if (!horizontal) box.style.textAlign = p._sign < 0 ? 'right' : 'left';
+      if (showTime) {
+        var tm = labelRow('metro-time-tag ' + tagClass + ' text--gray-40');
+        tm.textContent = timeLabel(e.start_min) + '–' + timeLabel(e.end_min);
+        box.appendChild(tm);
+      }
+      var t = labelRow('metro-title-text ' + titleClass + ' font--bold text--black');
+      t.textContent = e.title;
+      t.style.maxWidth = maxTitle + 'px'; t.style.overflow = 'hidden'; t.style.textOverflow = 'ellipsis';
+      box.appendChild(t);
+      if (showLocation && e.location) {
+        var loc = labelRow(tagClass + ' text--gray-45');
+        loc.textContent = e.location;
+        loc.style.maxWidth = (maxTitle * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
+        box.appendChild(loc);
+      }
+      return box;
+    }
+
+    var alerts = METRO.items.filter(function (i) { return (i.type === 'weather' || i.type === 'sun') && i.at_min >= winStart && i.at_min <= winEnd; })
+      .sort(function (a, b) { return a.at_min - b.at_min; });
+    var showAlertLabels = crossPx >= 200 * S && alerts.length > 0;
+    var alertBand = 0;
+    // vertical mode: marker labels sit just outside the bundle on the
+    // quieter side and block the lanes they reach there
+    var obstacles = { A: [], B: [] };
+    var alertSide = null;
+    if (!horizontal && showAlertLabels) {
+      var countA = visible.filter(function (e) { return e._sideKey === 'A'; }).length;
+      var countB = visible.length - countA;
+      alertSide = countA < countB ? 'A' : 'B';
+    }
+    alerts.forEach(function (w) {
+      w._label = buildMarkerLabel(w);
+      canvas.appendChild(w._label);
+      var m = measure(w._label);
+      w._w = m.w; w._h = m.h;
+      if (!showAlertLabels) { w._label.remove(); w._label = null; return; }
+      if (horizontal) alertBand = Math.max(alertBand, w._h + 3 * S);
+      if (alertSide) {
+        var a = aFor(w.at_min);
+        obstacles[alertSide].push({ a0: a - w._h / 2 - 2 * S, a1: a + w._h / 2 + 2 * S, distMax: bundleHalf(alertSide) + 2 * S + w._w });
+      }
+    });
+
+    // ---- line names: in horizontal mode each line starts at its own named
+    // terminus and fans into the bundle at 45° (metro style); when there is
+    // no room for that, or in vertical mode, each line gets a lettered
+    // bullet near its start instead
+    var fan = null;
+    LEGEND.forEach(function (p) {
+      var n = el('span', 'metro-gen metro-terminus label label--small font--bold text--black absolute bg--white');
+      n.textContent = p.name;
+      canvas.appendChild(n);
+      var m = measure(n);
+      p._nameEl = n; p._nameW = m.w; p._nameH = m.h;
+    });
+    if (horizontal && LEGEND.length) {
+      var nameH = Math.max.apply(null, LEGEND.map(function (p) { return p._nameH; }));
+      var maxNameW = Math.max.apply(null, LEGEND.map(function (p) { return p._nameW; }));
+      var fanStep = nameH + 3 * S;
+      var fanLen = 2 * S + maxNameW + 5 * S; // name + gap before the diagonals start
+      // the fan needs a quiet stretch of the axis: try the start, then the end
+      [1, -1].forEach(function (dir) {
+        if (fan) return;
+        var ok = true, ends = {};
+        ['A', 'B'].forEach(function (sk) {
+          var n = sides[sk].length;
+          var reach = fanLen + Math.max(0, fanStep - TRACK_STEP) * n + CORNER; // axis length the fan occupies
+          ends[sk] = reach;
+          var nearest = Infinity;
+          visible.forEach(function (e) {
+            if (e._sideKey !== sk) return;
+            var d = dir > 0 ? e._nodeA - axisStart : axisEnd - Math.max(e._nodeA, e._merge ? e._endA : e._nodeA);
+            nearest = Math.min(nearest, d);
+          });
+          if (n && (reach + NODE_R > nearest || reach > axisPx * 0.28)) ok = false;
+        });
+        if (!ok) return;
+        fan = { step: fanStep, len: fanLen, dir: dir, nameH: nameH };
+        ['A', 'B'].forEach(function (sk) {
+          var n = sides[sk].length;
+          if (!n) return;
+          var a0 = dir > 0 ? 0 : axisPx - ends[sk] - 2 * S, a1 = dir > 0 ? ends[sk] + 2 * S : axisPx;
+          obstacles[sk].push({ a0: a0, a1: a1, distMax: gutterHalf + fanStep * n + nameH / 2, kind: 'obstacle' });
+        });
+      });
+    }
+    if (!fan) LEGEND.forEach(function (p) { p._nameEl.remove(); p._nameEl = null; });
+
+    // ---- corner legend: one swatch + name per person, drawn at the canvas's
+    // visual bottom-left. Built and measured now (fixed size, independent of
+    // the text tier) so it can reserve real lane space instead of floating
+    // over content: "bottom-left" is side B at the axis start in horizontal
+    // mode (side B renders lower on screen), side A at the axis end in
+    // vertical mode (side A renders on the left, the axis end is the bottom).
+    var legend = el('div', 'metro-gen metro-corner-legend absolute bg--white flex flex--col gap--xsmall');
+    LEGEND.forEach(function (p) {
+      var sw = svgEl('svg', { width: 28, height: 9, viewBox: '0 0 28 9' });
+      var ln = svgEl('line', { x1: 2, y1: 4.5, x2: 26, y2: 4.5 });
+      styleStroke(ln, p, S);
+      sw.appendChild(ln);
+      var name = el('span', 'label label--small font--bold text--black');
+      name.style.whiteSpace = 'nowrap';
+      name.textContent = p.name;
+      var row = el('span', 'flex flex--row flex--center-y gap--xsmall');
+      row.appendChild(sw); row.appendChild(name);
+      legend.appendChild(row);
+    });
+    canvas.appendChild(legend);
+    var legendM = measure(legend);
+    legend.remove();
+    var legendSide = horizontal ? 'B' : 'A';
+    var legendPad = EDGE + 4 * S;
+    if (horizontal) obstacles[legendSide].push({ a0: axisStart, a1: axisStart + legendM.w + legendPad, distMax: crossPx });
+    else obstacles[legendSide].push({ a0: axisEnd - legendM.h - legendPad, a1: axisEnd, distMax: crossPx });
+
+    // static per-event facts (independent of the label tier)
+    visible.forEach(function (e) {
+      var p = trackByKey[e.owner];
+      e._p = p;
+      e._sideKey = p._sideKey;
+      e._sign = p._sign;
+      e._nodeA = aFor(e.start_min);
+      e._endA = aFor(Math.max(e.end_min, e.start_min + 5));
+      // interchange: capsule spans every involved track; the branch leaves from
+      // the capsule's outer edge on the owner's side
+      var involved = [p];
+      (e.co_owners || []).forEach(function (k) { if (trackByKey[k]) involved.push(trackByKey[k]); });
+      e._involved = involved;
+      var outer = p._dist;
+      involved.forEach(function (q) { if (q._sign === p._sign) outer = Math.max(outer, q._dist); });
+      e._trackDist = outer + NODE_R;       // branch origin (edge of the ring/capsule)
+      e._trackDistEnd = p._dist + NODE_R;  // merge target (owner's own line)
+    });
+
+    var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped;
+    function layoutAttempt(tier) {
+    titleClass = tier.cls; tagClass = tier.tag; showTime = tier.time; showLocation = tier.loc;
+    canvas.querySelectorAll('.metro-label').forEach(function (n) { n.remove(); });
+    maxLabelThick = 0; // across-axis thickness of the thickest label (height when horizontal, colW when vertical)
+    visible.forEach(function (e) {
+      e._box = buildLabel(e);
+      canvas.appendChild(e._box);
+      var br = measure(e._box);
+      e._w = br.w; e._h = br.h;
+      e._textLen = horizontal ? e._w : e._h;
+      e._minLen = horizontal ? Math.max(90 * S, e._textLen * 0.5) : Infinity; // how short a truncated title may get
+      e._thick = horizontal ? e._h : colW;
+      maxLabelThick = Math.max(maxLabelThick, e._thick);
+    });
+    laneStep = maxLabelThick + LINE_GAP + LANE_GAP;
+    // ---- lane placement, one side at a time (chronological: the earlier
+    // event keeps the inner lane so its label stays next to its time)
+    //
+    // Each lane holds intervals along the axis: lines and texts, tagged
+    // with their owner. A branch always leaves its ring at 45° (the elbow
+    // never moves); what slides along the lane is only the TEXT, and only
+    // over the owner's OWN earlier spur — the later ring then feeds into
+    // the same spur line (a shared branch with several stations on it).
+    // Anything belonging to another line, or another owner's text, makes
+    // the lane unusable for this event, so it tries the next lane out.
+    function placeSide(sideKey, maxLanes, step, obstacles) {
+      var evs = visible.filter(function (e) { return e._sideKey === sideKey; }).sort(function (a, b) { return a._nodeA - b._nodeA; });
+      var bh = bundleHalf(sideKey);
+      var lanes = [];
+      function laneDist(k) { return bh + LANE_BASE + k * step; }
+      function lane(k) { return lanes[k] || (lanes[k] = { items: [] }); }
+      (obstacles || []).forEach(function (o) {
+        for (var k = 0; k < maxLanes && k < 40 && laneDist(k) <= o.distMax; k++) lane(k).items.push({ a0: o.a0, a1: o.a1, owner: null, kind: 'obstacle' });
+      });
+      function itemOverlaps(item, seg) { return item.a0 < seg[1] && seg[0] < item.a1; }
+      // does a diagonal from (a0,d0) to (a1,d1) run through text in the lanes below k?
+      function diagonalCrosses(a0, d0, a1, d1, k) {
+        for (var j = 0; j < k; j++) {
+          if (!lanes[j]) continue;
+          var t0 = laneDist(j) + LINE_GAP, t1 = t0 + maxLabelThick;
+          var f = function (d) { return a0 + (a1 - a0) * (d - d0) / (d1 - d0); };
+          var seg = [Math.min(f(t0), f(t1)), Math.max(f(t0), f(t1))];
+          for (var i = 0; i < lanes[j].items.length; i++) {
+            var it = lanes[j].items[i];
+            if (it.kind === 'text' && itemOverlaps(it, seg)) return true;
+          }
         }
-        els.push(all[i]);
+        return false;
       }
-      var minSize = null;
-      for (var j = 0; j < els.length; j++) {
-        if (maxOverride) els[j].setAttribute('data-fit-max', maxOverride);
-        var s = fit(els[j]);
-        if (s != null && (minSize === null || s < minSize)) minSize = s;
+      // Try lane k for event e, branching forward (dir=1: label after the
+      // elbow) or backward (dir=-1: label before it, for events near the end
+      // of the axis). Returns a scored candidate, or null if the lane can't
+      // take it.
+      function settle(e, k, dir, allowCross) {
+        var ld = laneDist(k);
+        var dy = Math.max(ld - e._trackDist, MIN_DIAG);
+        var elbow = e._nodeA + dir * dy;
+        var L = lane(k), len = e._textLen;
+        var elbow0 = elbow;
+        var natural = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len;
+        var ts = natural, guard = 0, joined = false;
+        function span(ts) { return dir > 0 ? [elbow - CORNER, ts + len + TAIL] : [ts - TAIL, elbow + CORNER]; }
+        // 1. slide the text along the owner's own earlier spur(s);
+        // 2. if someone else's line/text sits under the span, slide the
+        //    whole elbow past it (the diagonal steepens — a last resort,
+        //    penalised below, but better than losing the event)
+        while (guard++ < 80) {
+          var moved = false;
+          for (var i = 0; i < L.items.length && !moved; i++) {
+            var it = L.items[i];
+            if (it.owner === e.owner && it.kind === 'text' && itemOverlaps(it, [ts, ts + len])) {
+              ts = dir > 0 ? it.a1 + LANE_GAP : it.a0 - LANE_GAP - len; moved = true;
+            } else if (it.owner !== e.owner && itemOverlaps(it, span(ts))) {
+              elbow = dir > 0 ? it.a1 + CORNER + LANE_GAP : it.a0 - CORNER - LANE_GAP;
+              ts = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len; moved = true;
+            }
+          }
+          if (!moved) break;
+        }
+        var elbowShift = Math.abs(elbow - elbow0);
+        if (elbowShift > MAX_SHIFT * (dir > 0 ? 0.6 : 0.3)) return null;
+        var sp = span(ts);
+        for (var j = 0; j < L.items.length; j++) {
+          var o = L.items[j];
+          if (!itemOverlaps(o, sp)) continue;
+          if (o.owner !== e.owner) return null;              // still blocked (shouldn't happen after the slide)
+          if (o.kind === 'text' && itemOverlaps(o, [ts, ts + len])) return null;
+          if (o.kind === 'line') joined = true;               // riding the owner's own spur
+        }
+        var fits = ts >= EDGE && ts + len <= axisEnd - EDGE - TAIL;
+        var trunc = null;
+        if (!fits && dir > 0 && ts >= EDGE && ts < axisEnd - EDGE - TAIL) {
+          // overruns the end of the axis: an ellipsised title beats a backward branch
+          var avail = axisEnd - EDGE - TAIL - ts;
+          if (avail >= e._minLen) { trunc = avail; fits = true; }
+        }
+        if (!fits) return null;
+        var crossing = diagonalCrosses(e._nodeA, e._trackDist, elbow, ld, k);
+        if (crossing && !allowCross) return null;
+        var shift = Math.abs(ts - (dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len)) + elbowShift;
+        if (shift > (dir > 0 ? MAX_SHIFT : MAX_SHIFT * 0.5)) return null;
+        return { k: k, dir: dir, elbow: elbow, shift: shift, ld: ld, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift,
+                 score: shift + elbowShift * 1.5 + (elbowShift ? 30 * S : 0) + k * step * 0.15 + (dir < 0 ? 40 * S : 0) + (crossing ? 50 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
       }
-      if (minSize !== null) {
-        for (var k = 0; k < els.length; k++) fit(els[k], minSize);
-      }
+      evs.forEach(function (e, idx) {
+        e._dropped = false;
+        var best = null;
+        // a backward branch (label before its ring) reads out of order, so
+        // it's only on the table when a forward label can't fit before the
+        // end of the axis
+        var dirs = (e._nodeA + LANE_BASE + TEXT_PAD + e._textLen + TAIL > axisEnd - EDGE) ? [1, -1] : [1];
+        for (var k = 0; k < maxLanes; k++) {
+          dirs.forEach(function (dir) {
+            [false, true].forEach(function (allowCross) {
+              var c = settle(e, k, dir, allowCross);
+              if (!c) return;
+              if (allowCross && !c.crossing) return; // identical to the clean candidate
+              if (!best || c.score < best.score) best = c;
+            });
+          });
+          if (best && best.score <= SHIFT_TOL) break; // a clean, unshifted, forward inner lane — done
+        }
+        if (!best) { e._dropped = true; return; }
+        e._lane = best.k; e._elbow = best.elbow; e._laneDist = best.ld; e._dir = best.dir; e._joined = best.joined;
+        e._crossing = best.crossing; e._elbowShift = best.elbowShift;
+        e._textStart = best.textStart;
+        if (best.trunc && best.trunc < e._textLen) {
+          // shorten: first lose the time tag, then ellipsise the title
+          var tm = e._box.querySelector('.metro-time-tag');
+          if (tm) { tm.remove(); var nb0 = measure(e._box); e._w = nb0.w; e._h = nb0.h; e._textLen = horizontal ? e._w : e._h; }
+          if (best.trunc < e._textLen) {
+            var tt = e._box.querySelector('.metro-title-text');
+            var tw = measure(tt).w;
+            tt.style.maxWidth = Math.max(20, tw - (e._textLen - best.trunc) - 1) + 'px';
+            var nb = measure(e._box);
+            e._w = nb.w; e._h = nb.h; e._textLen = horizontal ? e._w : e._h;
+          }
+        }
+        var lineA = best.dir > 0 ? best.elbow - CORNER : e._textStart - TAIL;
+        var lineB = best.dir > 0 ? e._textStart + e._textLen + TAIL : best.elbow + CORNER;
+        // a lone forward branch rejoins the owner's line at the end time when
+        // the event runs long enough; anything else ends in a stub
+        e._merge = false;
+        if (best.dir > 0 && !best.joined) {
+          var mergeDy = Math.max(best.ld - e._trackDistEnd, MIN_DIAG);
+          var mergeStart = e._endA - mergeDy;
+          if (mergeStart >= lineB + 2 * S && e._endA <= axisEnd) {
+            var clear = true, L2 = lane(best.k);
+            for (var m = 0; m < L2.items.length && clear; m++) if (itemOverlaps(L2.items[m], [lineB, mergeStart + CORNER])) clear = false;
+            if (clear && !diagonalCrosses(mergeStart, best.ld, e._endA, e._trackDistEnd, best.k)) { e._merge = true; lineB = mergeStart; }
+          }
+        }
+        e._lineFrom = lineA; e._lineTo = lineB;
+        // a merged loop is closed: nobody else may ride it (owner null)
+        lane(best.k).items.push({ a0: lineA, a1: lineB + (e._merge ? CORNER : 0), owner: e._merge ? null : e.owner, kind: 'line' });
+        lane(best.k).items.push({ a0: e._textStart, a1: e._textStart + e._textLen, owner: e.owner, kind: 'text' });
+      });
+      var used = 0;
+      evs.forEach(function (e) { if (!e._dropped) used = Math.max(used, e._lane + 1); });
+      return used;
     }
-    fitSharedGroup('.cal-axis-important', lgPortrait ? '48' : null);
-    fitSharedGroup('.cal-axis-text:not(.cal-axis-important)', lgPortrait ? '48' : null);
-    fitSharedGroup('.cal-allday-title', null);
 
-    var periodEls = root.querySelectorAll('.cal-axis-period');
-    for (var p = 0; p < periodEls.length; p++) {
-      var periodEl = periodEls[p];
-      var hourEl = periodEl.nextElementSibling;
-      if (!hourEl) continue;
-      var hourPx = parseFloat(hourEl.style.fontSize) || 16;
-      periodEl.style.fontSize = Math.round(hourPx * 0.72) + 'px';
+    function need(sideKey, used, step) {
+      var lanes = bundleHalf(sideKey) + (used ? LANE_BASE + used * step - LANE_GAP : 0);
+      var fanNeed = fan && sides[sideKey].length ? gutterHalf + fan.step * sides[sideKey].length + fan.nameH / 2 : 0;
+      return Math.max(lanes, fanNeed) + EDGE + (sideKey === 'A' ? alertBand : 0);
     }
+    // pass 1: unlimited lanes → how much room does each side want?
+    step = laneStep;
+    usedA = placeSide('A', 40, step, obstacles.A); usedB = placeSide('B', 40, step, obstacles.B);
+    needA = need('A', usedA, step); needB = need('B', usedB, step);
+    var minA = bundleHalf('A') + EDGE + alertBand, minB = bundleHalf('B') + EDGE;
+    if (needA + needB <= crossPx) {
+      // room to spare: spread the lanes a little so a quiet day still uses
+      // the canvas, then centre the leftover
+      var spread = Math.min(laneStep * 2.2, laneStep + (crossPx - needA - needB) / Math.max(1, usedA + usedB));
+      if (spread > step + 1) {
+        step = spread;
+        usedA = placeSide('A', 40, step, obstacles.A); usedB = placeSide('B', 40, step, obstacles.B);
+        needA = need('A', usedA, step); needB = need('B', usedB, step);
+      }
+      spineC = needA + (crossPx - needA - needB) / 2;
+    } else {
+      // pass 2: one lane per side that has events, then hand out extra
+      // lanes to whichever side still wants more, only while they fit
+      var lanesA = usedA ? 1 : 0, lanesB = usedB ? 1 : 0;
+      function fitsLanes(la, lb) { return need('A', la, step) + need('B', lb, step) <= crossPx; }
+      for (var guard = 0; guard < 80; guard++) {
+        var wantA = usedA - lanesA, wantB = usedB - lanesB;
+        if (wantA <= 0 && wantB <= 0) break;
+        var aFirst = wantA >= wantB;
+        if (aFirst && wantA > 0 && fitsLanes(lanesA + 1, lanesB)) { lanesA++; continue; }
+        if (wantB > 0 && fitsLanes(lanesA, lanesB + 1)) { lanesB++; continue; }
+        if (!aFirst && wantA > 0 && fitsLanes(lanesA + 1, lanesB)) { lanesA++; continue; }
+        break;
+      }
+      usedA = placeSide('A', lanesA, step, obstacles.A); usedB = placeSide('B', lanesB, step, obstacles.B);
+      needA = need('A', usedA, step); needB = need('B', usedB, step);
+      spineC = clamp(needA + (crossPx - needA - needB) / 2, minA, crossPx - minB);
+    }
+    dropped = 0;
+    var crossings = 0, slides = 0, backwards = 0;
+    visible.forEach(function (e) {
+      if (e._dropped) { dropped++; return; }
+      if (e._crossing) crossings++;
+      if (e._elbowShift) slides++;
+      if (e._dir < 0) backwards++;
+    });
+    // layout quality: a dropped event is unacceptable, a diagonal through a
+    // label or a slid elbow is ugly, a backward branch mildly so
+    return dropped * 1000 + crossings * 40 + slides * 15 + backwards * 10;
+    }
+
+    // Try the biggest text first and step down only while it improves the
+    // layout; the largest tier with the best quality wins (ties go to the
+    // bigger text).
+    var bestTier = null, bestQ = Infinity;
+    for (var ti = 0; ti < tiers.length; ti++) {
+      var q = layoutAttempt(tiers[ti]);
+      if (q < bestQ) { bestQ = q; bestTier = ti; }
+      if (q === 0) break;
+      if (ti > bestTier + 1) break; // two smaller steps without improvement — stop
+    }
+    if (bestTier !== ti) layoutAttempt(tiers[bestTier]);
+    visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
+    canvas.setAttribute('data-metro-debug', JSON.stringify({
+      W: W, H: H, S: S, Z: Z, horizontal: horizontal, win: [winStart, winEnd], spineC: spineC, step: step, laneStep: laneStep, colW: colW,
+      usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
+      colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
+      events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist)]; })
+    }));
+
+    // ---- draw: now line + alert lines first (under everything)
+    var nowA = null;
+    if (nowMin != null && nowMin >= winStart && nowMin <= winEnd) {
+      nowA = aFor(nowMin);
+      var p0 = toXY(nowA, EDGE), p1 = toXY(nowA, crossPx - EDGE);
+      svg.appendChild(svgEl('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1], stroke: '#000', 'stroke-width': 1.5 * S }));
+    }
+    alerts.forEach(function (w) {
+      var a = aFor(w.at_min);
+      var q0 = toXY(a, EDGE), q1 = toXY(a, crossPx - EDGE);
+      if (w.type === 'sun') svg.appendChild(svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1], stroke: '#555', 'stroke-width': 1.2 * S, 'stroke-linecap': 'round', 'stroke-dasharray': (0.1 * S) + ' ' + (5 * S) }));
+      else svg.appendChild(svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1], stroke: '#333', 'stroke-width': 1.5 * S, 'stroke-dasharray': (6 * S) + ' ' + (4 * S) }));
+    });
+
+    // ---- tracks (full bleed), each starting at its named terminus when fanned
+    LEGEND.forEach(function (p) {
+      var c = spineC + p._c;
+      if (fan) {
+        var i = sides[p._sideKey].indexOf(p);
+        var spreadC = spineC + p._sign * (gutterHalf + fan.step * (i + 1));
+        var d = fan.dir, edge = d > 0 ? 0 : axisPx;
+        var nameEnd = edge + d * (2 * S + p._nameW + 4 * S);
+        var fanStart = edge + d * fan.len;
+        var merge = fanStart + d * Math.abs(spreadC - c);
+        p._nameEl.style.left = (d > 0 ? 2 * S : axisPx - 2 * S - p._nameW) + 'px';
+        p._nameEl.style.top = (spreadC - p._nameH / 2) + 'px';
+        var far = d > 0 ? axisEnd : axisStart;
+        var path = svgEl('path', { d: roundedPath([[nameEnd, spreadC], [fanStart, spreadC], [merge, c], [far, c]], CORNER) });
+        styleStroke(path, p, S);
+        svg.appendChild(path);
+      } else {
+        var t0 = toXY(axisStart, c), t1 = toXY(axisEnd, c);
+        var ln = svgEl('line', { x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1] });
+        styleStroke(ln, p, S);
+        svg.appendChild(ln);
+      }
+    });
+    if (!fan) {
+      // lettered bullets, staggered along the line starts
+      var initials = {}, used = {};
+      LEGEND.forEach(function (p) {
+        var ini = Array.from(p.name)[0] || '?';
+        if (used[ini.toUpperCase()]) ini = Array.from(p.name).slice(0, 2).join('');
+        used[ini.toUpperCase()] = true;
+        initials[p.key] = ini.toUpperCase();
+      });
+      // small enough not to swallow the neighbouring lines; at the quiet end
+      // of the axis (the end in vertical mode: the top is where the day starts)
+      var br = Math.max(NODE_R, Math.min(hourH * 0.55, TRACK_STEP - 1.5 * S));
+      LEGEND.forEach(function (p, i) {
+        var a = horizontal ? axisStart + br + i * (2 * br + 4 * S) : axisEnd - br - i * (2 * br + 4 * S);
+        var xy = toXY(a, spineC + p._c);
+        svg.appendChild(svgEl('circle', { cx: xy[0], cy: xy[1], r: br, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': 2 * S }));
+        var t = svgEl('text', { x: xy[0], y: xy[1], 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': (br * 1.2) + 'px', 'font-weight': '700', fill: '#000' });
+        t.setAttribute('style', 'font-family: inherit;');
+        t.textContent = initials[p.key];
+        svg.appendChild(t);
+      });
+    }
+
+    // ---- branches: every ring gets its 45° diagonal; same-owner spurs that
+    // overlap in a lane are drawn once as one continuous line (a shared
+    // branch), with a single terminus bar at its far end
+    var placed = visible.filter(function (e) { return !e._dropped; });
+    var chains = {};
+    placed.forEach(function (e) {
+      if (e._merge) return;
+      var key = e._sideKey + '|' + e._lane + '|' + e.owner;
+      (chains[key] = chains[key] || []).push(e);
+    });
+    function terminus(a, laneC, p) {
+      var xy = toXY(a, laneC);
+      var b0 = horizontal ? [xy[0], xy[1] - 4 * S] : [xy[0] - 4 * S, xy[1]];
+      var b1 = horizontal ? [xy[0], xy[1] + 4 * S] : [xy[0] + 4 * S, xy[1]];
+      svg.appendChild(svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1], stroke: colorFor(p.hue), 'stroke-width': p.line_width * S, 'stroke-linecap': 'round' }));
+    }
+    Object.keys(chains).forEach(function (key) {
+      var list = chains[key].sort(function (a, b) { return a._lineFrom - b._lineFrom; });
+      var groups = [], cur = null;
+      list.forEach(function (e) {
+        if (cur && e._lineFrom <= cur.to + 1) { cur.to = Math.max(cur.to, e._lineTo); cur.members.push(e); }
+        else { cur = { from: e._lineFrom, to: e._lineTo, members: [e] }; groups.push(cur); }
+      });
+      groups.forEach(function (g) {
+        var p = g.members[0]._p, sign = g.members[0]._sign, laneC = spineC + sign * g.members[0]._laneDist;
+        // The flat run is drawn as a straight spine PLUS each member's own
+        // rounded diagonal into it — two separate paths. A straight spine
+        // that reaches all the way up to (or past) a member's own elbow
+        // pokes through that member's rounded corner, since the corner is
+        // still bending away from the flat line right around there (only
+        // fully flat again once it reaches its own "mouth", CORNER past the
+        // elbow). So the spine is drawn in bridges that stop CORNER short of
+        // every elbow on both sides — exactly the stretch each member's own
+        // path already covers — and only member's own path touches that zone.
+        function bridge(a0, a1) {
+          if (a1 - a0 < 1) return;
+          var seg = svgEl('path', { d: roundedPath([toXY(a0, laneC), toXY(a1, laneC)], 0) });
+          styleStroke(seg, p, S);
+          svg.appendChild(seg);
+        }
+        var sorted = g.members.slice().sort(function (a, b) { return a._elbow - b._elbow; });
+        var prevEnd = g.from;
+        sorted.forEach(function (e) {
+          bridge(prevEnd, e._elbow - CORNER);
+          var pts = [toXY(e._nodeA, spineC + sign * e._trackDist), toXY(e._elbow, laneC), toXY(e._elbow + e._dir * CORNER, laneC)];
+          var path = svgEl('path', { d: roundedPath(pts, CORNER) });
+          styleStroke(path, p, S);
+          svg.appendChild(path);
+          prevEnd = e._elbow + CORNER;
+        });
+        bridge(prevEnd, g.to);
+        var elbows = sorted.map(function (e) { return e._elbow; });
+        if (g.to > Math.max.apply(null, elbows) + CORNER + 1) terminus(g.to, laneC, p);
+        if (g.from < Math.min.apply(null, elbows) - CORNER - 1) terminus(g.from, laneC, p);
+      });
+    });
+    placed.forEach(function (e) {
+      if (!e._merge) return;
+      var p = e._p, sign = e._sign, laneC = spineC + sign * e._laneDist;
+      var pts = [toXY(e._nodeA, spineC + sign * e._trackDist), toXY(e._elbow, laneC), toXY(e._lineTo, laneC), toXY(e._endA, spineC + sign * e._trackDistEnd)];
+      var path = svgEl('path', { d: roundedPath(pts, CORNER) });
+      styleStroke(path, p, S);
+      svg.appendChild(path);
+    });
+
+    // ---- stations (rings / interchange capsules) on top of the lines
+    visible.forEach(function (e) {
+      if (e._dropped) return;
+      var p = e._p;
+      if (e._involved.length > 1) {
+        var cs = e._involved.map(function (q) { return spineC + q._c; });
+        var lo = Math.min.apply(null, cs) - NODE_R, hi = Math.max.apply(null, cs) + NODE_R;
+        var a0 = e._nodeA - NODE_R;
+        var r = svgEl('rect', horizontal
+          ? { x: a0, y: lo, width: 2 * NODE_R, height: hi - lo, rx: NODE_R, ry: NODE_R }
+          : { x: lo, y: a0, width: hi - lo, height: 2 * NODE_R, rx: NODE_R, ry: NODE_R });
+        r.setAttribute('fill', '#fff'); r.setAttribute('stroke', '#000'); r.setAttribute('stroke-width', NODE_STROKE);
+        svg.appendChild(r);
+      } else {
+        var cxy = toXY(e._nodeA, spineC + p._c);
+        var ring = svgEl('circle', { cx: cxy[0], cy: cxy[1], r: NODE_R, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE });
+        svg.appendChild(ring);
+      }
+    });
+
+    // ---- labels: position the measured boxes
+    visible.forEach(function (e) {
+      if (e._dropped) return;
+      var sign = e._sign, b = e._box;
+      var lineC = spineC + sign * e._laneDist;
+      if (horizontal) {
+        b.style.left = e._textStart + 'px';
+        if (sign < 0) b.style.top = (lineC - LINE_GAP - e._h) + 'px';
+        else b.style.top = (lineC + LINE_GAP) + 'px';
+      } else {
+        b.style.top = e._textStart + 'px';
+        if (sign < 0) b.style.left = (lineC - LINE_GAP - colW) + 'px';
+        else b.style.left = (lineC + LINE_GAP) + 'px';
+      }
+    });
+
+    // ---- hour axis in the gutter; density follows the real px per hour
+    var stepOpts = [1, 2, 3, 4, 6, 12], hourStep = 12;
+    for (var si = 0; si < stepOpts.length; si++) if (pxPerHour * stepOpts[si] >= hourW + 10 * S) { hourStep = stepOpts[si]; break; }
+    var reserved = []; // axis intervals already taken by now / overflow notes
+    function axisNote(text, a, align, cls) {
+      var n = el('span', 'metro-gen ' + (cls || 'metro-axis-note label label--small font--bold text--black') + ' absolute bg--white');
+      n.textContent = text;
+      canvas.appendChild(n);
+      var nr = measure(n);
+      var len = horizontal ? nr.w : nr.h, thick = horizontal ? nr.h : nr.w;
+      var start = align === 'start' ? a : align === 'end' ? a - len : a - len / 2;
+      start = clamp(start, 0, axisPx - len);
+      var xy = toXY(start, spineC - thick / 2);
+      n.style.left = xy[0] + 'px'; n.style.top = xy[1] + 'px';
+      reserved.push([start - 2 * S, start + len + 2 * S]);
+      return n;
+    }
+    if (nowA != null) {
+      var dxy = toXY(nowA, spineC);
+      svg.appendChild(svgEl('circle', { cx: dxy[0], cy: dxy[1], r: 3.5 * S, fill: '#000' }));
+      axisNote(timeLabel(nowMin), nowA + 6 * S, 'start');
+    }
+    if (earlier) axisNote(tr('earlier', earlier), axisStart + EDGE, 'start', 'metro-axis-note label label--small text--gray-40');
+    if (later + dropped) axisNote(tr('more', later + dropped), axisEnd - EDGE, 'end', 'metro-axis-note label label--small text--gray-40');
+    var capsules = visible.filter(function (e) { return !e._dropped && e._involved.length > 1; }).map(function (e) { return [e._nodeA - NODE_R - 2 * S, e._nodeA + NODE_R + 2 * S]; });
+    for (var h = Math.ceil(winStart / 60); h * 60 <= winEnd; h++) {
+      if (h % hourStep !== 0) continue;
+      var a = aFor(h * 60);
+      var start = clamp(a - hourW / 2, 0, axisPx - hourW);
+      var ext = [start, start + hourW];
+      var blocked = reserved.concat(capsules).some(function (r) { return overlaps(ext, r); });
+      if (blocked) continue;
+      var lab = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute bg--white');
+      lab.textContent = hourLabel(h % 24);
+      var lxy = toXY(start, spineC - hourH / 2);
+      lab.style.left = lxy[0] + 'px'; lab.style.top = lxy[1] + 'px';
+      canvas.appendChild(lab);
+    }
+
+    // ---- sky marker labels (built + measured earlier)
+    var bandCursor = -Infinity;
+    alerts.forEach(function (w) {
+      if (!w._label) return;
+      var a = aFor(w.at_min), n = w._label;
+      if (horizontal) {
+        var left = a + 4 * S; if (left + w._w > W - EDGE) left = a - 4 * S - w._w;
+        if (left < bandCursor) left = bandCursor; // never overlap the previous marker's text
+        if (left + w._w > W) { n.remove(); return; }
+        bandCursor = left + w._w + 6 * S;
+        n.style.left = left + 'px'; n.style.top = (EDGE / 2) + 'px';
+      } else {
+        var sign = alertSide === 'A' ? -1 : 1;
+        var inner = spineC + sign * (bundleHalf(alertSide) + 2 * S);
+        n.style.left = clamp(sign > 0 ? inner : inner - w._w, 0, Math.max(0, W - w._w)) + 'px';
+        n.style.top = (a - w._h / 2) + 'px';
+      }
+    });
+
+    // ---- corner legend: built early (see below); position it now that spineC
+    // is final, pinned to the canvas's own visual bottom-left corner.
+    legend.style.left = EDGE + 'px';
+    legend.style.bottom = EDGE + 'px';
+    canvas.appendChild(legend);
   }
 
-  function runAfterFonts() {
-    run();
-    setTimeout(run, 400);
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(run).catch(run);
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', runAfterFonts);
-  } else {
-    runAfterFonts();
-  }
+  // Re-run whenever the canvas's own size settles — different render
+  // pipelines reach final layout at different times, and run() is
+  // idempotent, so this is safe to invoke repeatedly.
+  var scheduled = null;
+  function scheduleRun() { if (scheduled) clearTimeout(scheduled); scheduled = setTimeout(run, 60); }
+  scheduleRun();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleRun).catch(scheduleRun);
+  window.addEventListener('load', scheduleRun);
+  if (window.ResizeObserver) new ResizeObserver(scheduleRun).observe(canvas);
 })();
 </script>
+
+</div>
+
 {% endtemplate %}
