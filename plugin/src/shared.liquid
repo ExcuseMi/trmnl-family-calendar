@@ -238,16 +238,32 @@
     });
     function bundleHalf(s) { return gutterHalf + TRACK_STEP * sides[s].length + (sides[s].length ? NODE_R : 0); }
 
-    // ---- time window (narrow around now when hours would be too dense)
+    // ---- time window: first fit to where the day's actual content is (so a
+    // quiet day doesn't stretch its few events across a mostly-empty
+    // DAY_START..DAY_END canvas), then squeeze further around "now" if that
+    // range is still too dense for the canvas to show hour-by-hour.
     var nowMin = (typeof METRO.now_min === 'number') ? METRO.now_min : null;
-    var totalHours = (DAY_END - DAY_START) / 60;
-    var minPxPerHour = (horizontal ? 46 : 38) * S * (crossPx < 260 * S ? 1.8 : 1); // little cross room = few lanes = fewer hours
+    var CONTENT_PAD = 75;   // minutes of breathing room kept on each side of the actual content
+    var MIN_SPAN = 6 * 60;  // never fit tighter than this, even on a nearly-empty day
+    var contentTimes = [];
+    METRO.items.forEach(function (i) { if (i.type === 'event') { contentTimes.push(i.start_min); contentTimes.push(i.end_min); } });
+    if (nowMin != null) contentTimes.push(nowMin);
     var winStart = DAY_START, winEnd = DAY_END;
+    if (contentTimes.length) {
+      var lo = Math.min.apply(null, contentTimes) - CONTENT_PAD;
+      var hi = Math.max.apply(null, contentTimes) + CONTENT_PAD;
+      if (hi - lo < MIN_SPAN) { var mid = (lo + hi) / 2; lo = mid - MIN_SPAN / 2; hi = mid + MIN_SPAN / 2; }
+      winEnd = clamp(Math.ceil(hi / 30) * 30, DAY_START + MIN_SPAN, DAY_END);
+      winStart = clamp(Math.floor(lo / 30) * 30, DAY_START, winEnd - MIN_SPAN);
+    }
+    var totalHours = (winEnd - winStart) / 60;
+    var minPxPerHour = (horizontal ? 46 : 38) * S * (crossPx < 260 * S ? 1.8 : 1); // little cross room = few lanes = fewer hours
     if (axisPx / totalHours < minPxPerHour) {
       var visHours = clamp(Math.floor(axisPx / minPxPerHour), 3, totalHours);
-      var anchor = nowMin != null ? nowMin - 60 : DAY_START;
-      winStart = clamp(Math.floor(anchor / 60) * 60, DAY_START, DAY_END - visHours * 60);
-      winEnd = winStart + visHours * 60;
+      var anchor = nowMin != null ? nowMin - 60 : winStart;
+      var squeezedStart = clamp(Math.floor(anchor / 60) * 60, winStart, winEnd - visHours * 60);
+      winEnd = squeezedStart + visHours * 60;
+      winStart = squeezedStart;
     }
     var winLabel = ROOT.querySelector('.metro-window');
     if (winLabel) winLabel.textContent = timeLabel(winStart) + ' ' + timeLabel(winEnd);

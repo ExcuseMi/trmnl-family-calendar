@@ -110,11 +110,16 @@ whichever side still wants more, only while they fit.
   events, diagonals through text, slid elbows, backward branches); the
   largest tier with the best score wins, and leftover cross space spreads the
   lanes up to 2.2×.
-- Time window: if the axis can't give every hour ~46px (horizontal) / ~38px
-  (vertical), scaled ×1.8 when there is little cross room, the visible window
-  narrows around now (starting an hour before it) and events outside it are
-  summarised as "+N earlier" / "+N more" in the gutter. Hour labels thin out
-  (every 2, 3, 4, 6 hours) to fit.
+- Time window: the axis first fits itself to where the day's actual content
+  is — the earliest event start to the latest event end, padded 75 minutes
+  on each side and including "now" — rather than always spanning the fixed
+  07:00–21:00 day, so a quiet day's events fill the canvas instead of being
+  crammed into one corner of an otherwise-empty one. It never fits tighter
+  than a 6-hour span. If that content-fit range still can't give every hour
+  ~46px (horizontal) / ~38px (vertical), scaled ×1.8 when there is little
+  cross room, it's squeezed further around now (starting an hour before it)
+  and events outside it are summarised as "+N earlier" / "+N more" in the
+  gutter. Hour labels thin out (every 2, 3, 4, 6 hours) to fit.
 - Header: compact (no window, no conditions) under 640px wide or 300px tall;
   tiny (no date, no temperature, small title) under 430×200.
 - Alert labels are skipped below 200px of cross room (the dashed line stays).
