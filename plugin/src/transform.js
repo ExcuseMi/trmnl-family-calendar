@@ -441,6 +441,9 @@ var DEMO_EVENTS = [
 ];
 
 var DEMO_ALLDAY = [
+  { track: 'work', title: 'Office Closed' },
+  { track: 'alex', title: 'PTO' },
+  { track: 'sam', title: 'Conference' },
   { track: 'kids', title: 'School Holiday' },
 ];
 

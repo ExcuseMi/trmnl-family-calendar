@@ -247,12 +247,12 @@
     var LINE_GAP = 6 * S, LANE_GAP = 12 * S, LANE_BASE = 14 * S + Math.min(24 * S, crossPx * 0.025), EDGE = 8 * S;
     var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 9 * S, MIN_DIAG = 10 * S;
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
-    var STATION_RAISE = 32 * S; // how far a track's own line kinks out to "station level" — sized for the station caption's own (smaller-than-an-event) label, and for a short station a smaller raise also means a shallower, less jarring kink instead of a deep sideways "V"
-    var STATION_LABEL_ROOM = STATION_RAISE + 20 * S; // room reserved (in bundleHalf, below) between the spine bundle and the first real lane on a side that has stations — bigger than STATION_RAISE itself because the caption's own box (title + location line) sits centered on the raise and so reaches further out than the raise depth alone; too little room here and a neighboring lane's line/label crowds or overlaps the caption
+    var STATION_RAISE = 32 * S; // how far a track's own line kinks out to "station level"; for a short station a smaller raise also means a shallower, less jarring kink instead of a deep sideways "V"
+    var STATION_GAP = 4 * S; // clear space kept between the raised line itself and the near edge of its caption
 
     function toXY(a, c) { return horizontal ? [a, c] : [c, a]; }
 
-    // ---- probe an hour label for sizing
+    // ---- probe an hour label, and a representative station caption, for sizing
     var probe = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute');
     probe.textContent = HOUR12 ? '12pm' : '00:00';
     canvas.appendChild(probe);
@@ -260,6 +260,32 @@
     var hourW = pr.w, hourH = pr.h;
     probe.remove();
     var gutterHalf = horizontal ? hourH / 2 + 1 * S : hourW / 2 + 3 * S;
+    // fixed at 'label' sizing (not 'title') regardless of what the real
+    // events on the canvas are currently using — a station is meta/status
+    // info, not a primary event, and letting it scale up with everything
+    // else (up to title--xlarge on a big canvas) made it big enough to
+    // physically overlap its own track's ramp geometry. Measured for real
+    // here (title line + tag line, same as an actual caption's shape)
+    // rather than assumed, so STATION_LABEL_ROOM below reserves exactly
+    // what a caption really needs instead of guessing and being wrong for
+    // some font/scale combination.
+    var STATION_TITLE_CLASS = 'label label--base', STATION_TAG_CLASS = 'label label--small';
+    var capProbe = el('div', 'metro-gen absolute');
+    var capProbeTitle = labelRow('metro-title-text ' + STATION_TITLE_CLASS + ' font--bold text--black');
+    capProbeTitle.textContent = 'Mg'; // ascender+descender, for a realistic line height
+    var capProbeTag = labelRow(STATION_TAG_CLASS + ' text--gray-45');
+    capProbeTag.textContent = 'Mg';
+    capProbe.appendChild(capProbeTitle); capProbe.appendChild(capProbeTag);
+    canvas.appendChild(capProbe);
+    var stationCapH = measure(capProbe).h;
+    capProbe.remove();
+    // room reserved (in bundleHalf, below) between the spine bundle and the
+    // first real lane on a side that has stations: the raise itself, plus
+    // clearance, plus the caption's own real height — a caption sits
+    // OUTSIDE the raised line (never straddling/centered on it), so a
+    // neighboring lane can't crowd or cross through it, and the raised
+    // line can't run through the caption's own box either.
+    var STATION_LABEL_ROOM = STATION_RAISE + STATION_GAP + stationCapH;
 
     // ---- tracks: side A = 'left' (up / left of axis), side B = 'right'
     var sides = { A: [], B: [] };
@@ -587,6 +613,20 @@
     // the lane unusable for this event, so it tries the next lane out.
     function placeSide(sideKey, maxLanes, step, obstacles) {
       var evs = visible.filter(function (e) { return e._sideKey === sideKey; }).sort(function (a, b) { return a._nodeA - b._nodeA; });
+      // The earlier event normally keeps the inner (lower) lane — but if the
+      // next one starts before that inner lane's own diagonal would even
+      // finish climbing (nodeA within LANE_BASE of the earlier ring), no
+      // lane assignment for the second one can avoid crossing back through
+      // the first one's now-flat run: its diagonal has to pass through that
+      // height to reach ANY lane at all, low or high. Placing the earlier
+      // one in the inner lane instead — the later one now finishes its own
+      // (smaller) climb before the earlier one's (larger) climb ever
+      // reaches that height — draws the same two branches with no crossing,
+      // so for exactly this tight-start pair, process the later one first.
+      for (var si = 0; si < evs.length - 1; si++) {
+        var e0 = evs[si], e1 = evs[si + 1];
+        if (e0.owner === e1.owner && e1._nodeA - e0._nodeA < LANE_BASE) { evs[si] = e1; evs[si + 1] = e0; }
+      }
       var bh = bundleHalf(sideKey);
       var lanes = [];
       function laneDist(k) { return bh + LANE_BASE + k * step; }
@@ -595,11 +635,17 @@
         for (var k = 0; k < maxLanes && k < 40 && laneDist(k) <= o.distMax; k++) lane(k).items.push({ a0: o.a0, a1: o.a1, owner: null, kind: 'obstacle' });
       });
       function itemOverlaps(item, seg) { return item.a0 < seg[1] && seg[0] < item.a1; }
-      // does a diagonal from (a0,d0) to (a1,d1) run through text in the lanes below k?
+      // does a diagonal from (a0,d0) to (a1,d1) run through a lane's own flat
+      // line, or its text, in the lanes below k? Starts the checked band AT
+      // the line itself (not LINE_GAP above it) — a diagonal reaching a
+      // lane's own height before flattening out crosses that lane's flat
+      // run right there, before ever reaching its text, and that read as
+      // badly (two branches of the very same line crossing each other) as
+      // crossing the text did; checking only the text band let it through.
       function diagonalCrosses(a0, d0, a1, d1, k) {
         for (var j = 0; j < k; j++) {
           if (!lanes[j]) continue;
-          var t0 = laneDist(j) + LINE_GAP, t1 = t0 + maxLabelThick;
+          var t0 = laneDist(j), t1 = t0 + LINE_GAP + maxLabelThick;
           var f = function (d) { return a0 + (a1 - a0) * (d - d0) / (d1 - d0); };
           var seg = [Math.min(f(t0), f(t1)), Math.max(f(t0), f(t1))];
           for (var i = 0; i < lanes[j].items.length; i++) {
@@ -846,16 +892,22 @@
     // any station it passes through, then back to the flat baseline —
     // waypoints in [fromA,toA] order, ready for roundedPath
     function stationPath(baseC, sign, fromA, toA, p) {
-      var pts = [[fromA, baseC]];
+      // Every breakpoint's height comes from stationRaiseAt itself, not an
+      // assumption that fromA/toA sit at baseline — a clip that lands
+      // mid-ramp or mid-shelf (the fan's own merge point can, when a
+      // station's true span reaches all the way to the axis edge, e.g. a
+      // full-day station) must not be treated as if THAT were the
+      // station's real boundary, or it reads as ramping fully down to
+      // baseline right at the clip and then immediately back up for the
+      // fan's own diagonal — a double bend ("squiggle") instead of one.
+      var lo = Math.min(fromA, toA), hi = Math.max(fromA, toA);
+      var marks = [lo, hi];
       p._stations.forEach(function (s) {
-        var s0 = Math.max(s.a0, fromA), s1 = Math.min(s.a1, toA);
-        if (s1 <= s0) return;
-        var rr = Math.min(STATION_RAISE, (s1 - s0) / 2);
-        var peak = baseC + sign * rr;
-        pts.push([s0, baseC], [s0 + rr, peak], [s1 - rr, peak], [s1, baseC]);
+        var rr = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
+        [s.a0, s.a0 + rr, s.a1 - rr, s.a1].forEach(function (a) { if (a > lo && a < hi) marks.push(a); });
       });
-      pts.push([toA, baseC]);
-      return pts;
+      marks.sort(function (a, b) { return a - b; });
+      return marks.map(function (a) { return [a, baseC + sign * stationRaiseAt(p, a)]; });
     }
     // ---- tracks (full bleed), each starting at its named terminus when fanned
     LEGEND.forEach(function (p) {
@@ -886,22 +938,16 @@
     // convention as every other ring in this design), plus a caption built
     // the SAME way a real event's label is (title + location, current text
     // tier, opaque white background) — so it matches everything else on the
-    // map instead of reading as an afterthought, and its own white
-    // background masks any line that happens to run underneath it rather
-    // than showing it crossing through readable text. Centered in the gap
-    // the kink opens up, clear of both the flat baseline and the peak/ring
-    // a real branch's diagonal actually starts from.
-    // fixed at the smallest tier regardless of what the real events on the
-    // canvas are currently using — a station is meta/status info, not a
-    // primary event, and letting it scale up with everything else (up to
-    // title--xlarge on a big canvas) made it big enough to physically
-    // overlap its own track's ramp geometry. Title uses 'label' sizing too
-    // (not 'title'), one notch above the tag/location line — still visibly
-    // the caption's own heading via bold+black vs the tag's gray, but small
-    // enough to actually fit inside STATION_RAISE's gap without the
-    // caption's own box bleeding into the raised line (which read as the
-    // line "clipping" through the text).
-    var STATION_TITLE_CLASS = 'label label--base', STATION_TAG_CLASS = 'label label--small';
+    // map instead of reading as an afterthought. Positioned OUTSIDE the
+    // raised line entirely (past the shelf, away from the spine) rather
+    // than straddling/centered on it — a box centered on a raise only as
+    // deep as STATION_RAISE routinely stood taller than the gap actually
+    // was, so the raised line ran right through the caption's own box
+    // (read as the line "clipping" the text) and, on a side with more than
+    // one track, into whatever lane sat just beyond the reserved room too.
+    // Sitting past the shelf instead means the caption only ever needs
+    // clearance from the ONE flat line directly below it, guaranteed by
+    // STATION_LABEL_ROOM (computed from this same real measured height).
     LEGEND.forEach(function (p) {
       var baseC = spineC + p._c;
       p._stations.forEach(function (s) {
@@ -925,7 +971,8 @@
         canvas.appendChild(box);
         var bm = measure(box);
         var capA = s.a0 + raise + 3 * S;
-        var midC = baseC + p._sign * (raise * 0.5);
+        var capThick = horizontal ? bm.h : bm.w;
+        var midC = baseC + p._sign * (raise + STATION_GAP + capThick / 2);
         if (horizontal) { box.style.left = capA + 'px'; box.style.top = (midC - bm.h / 2) + 'px'; }
         else { box.style.top = capA + 'px'; box.style.left = (midC - bm.w / 2) + 'px'; }
       });
@@ -1023,7 +1070,12 @@
       if (e._dropped) return;
       var p = e._p;
       if (e._involved.length > 1) {
-        var cs = e._involved.map(function (q) { return spineC + q._c; });
+        // each involved track's actual rendered position at this axis point —
+        // not just its flat baseline — since a track passing through one of
+        // its own stations (e.g. an all-day band) sits kinked out to "station
+        // level" here, and the capsule has to reach the line where it really
+        // is, not where it'd be on an ordinary day
+        var cs = e._involved.map(function (q) { return spineC + q._c + q._sign * stationRaiseAt(q, e._nodeA); });
         var lo = Math.min.apply(null, cs) - NODE_R, hi = Math.max.apply(null, cs) + NODE_R;
         var a0 = e._nodeA - NODE_R;
         var r = svgEl('rect', horizontal

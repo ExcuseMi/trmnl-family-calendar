@@ -88,6 +88,30 @@ variables:
       "all_day": [],
       "stations": [
         {
+          "owner": "work",
+          "title": "Office Closed",
+          "location": null,
+          "start_min": 420,
+          "end_min": 1260,
+          "all_day": true
+        },
+        {
+          "owner": "alex",
+          "title": "PTO",
+          "location": null,
+          "start_min": 420,
+          "end_min": 1260,
+          "all_day": true
+        },
+        {
+          "owner": "sam",
+          "title": "Conference",
+          "location": null,
+          "start_min": 420,
+          "end_min": 1260,
+          "all_day": true
+        },
+        {
           "owner": "kids",
           "title": "School Holiday",
           "location": null,
@@ -350,4 +374,3 @@ variables:
         }
       ]
     }
-    
