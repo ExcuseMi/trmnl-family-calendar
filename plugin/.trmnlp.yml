@@ -838,4 +838,5 @@ variables:
     error: null
     unavailable_label: Kalender niet beschikbaar
     all_day_label: Hele dag
+    nothing_scheduled_label: Niets gepland
     has_events: true

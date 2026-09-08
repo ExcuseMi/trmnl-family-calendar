@@ -1,0 +1,10 @@
+{
+  "rain_starts": "Rain starts",
+  "rain_stops": "Rain stops",
+  "storm_starts": "Storm starts",
+  "storm_stops": "Storm stops",
+  "snow_starts": "Snow starts",
+  "snow_stops": "Snow stops",
+  "fog_starts": "Fog starts",
+  "fog_stops": "Fog stops"
+}

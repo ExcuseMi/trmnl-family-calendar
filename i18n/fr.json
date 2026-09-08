@@ -1,0 +1,10 @@
+{
+  "rain_starts": "Début de la pluie",
+  "rain_stops": "Fin de la pluie",
+  "storm_starts": "Début de l'orage",
+  "storm_stops": "Fin de l'orage",
+  "snow_starts": "Début de la neige",
+  "snow_stops": "Fin de la neige",
+  "fog_starts": "Début du brouillard",
+  "fog_stops": "Fin du brouillard"
+}

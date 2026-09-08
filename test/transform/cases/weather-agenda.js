@@ -1,5 +1,5 @@
 module.exports = function (test, h) {
-  const { runTransform, icsWithEvents, okText, okJson, baseInput, assert, assertEqual } = h;
+  const { runTransform, icsWithEvents, okText, okJson, fail, baseInput, assert, assertEqual } = h;
 
   // Pinned, not real "today" — see the same note in timed-layout.js/allday-overflow.js.
   const NOW = Date.parse('2026-09-05T08:00:00Z'); // 2026-09-05 is a Saturday, 08:00 UTC
@@ -50,6 +50,60 @@ module.exports = function (test, h) {
     // NOW is 08:00 — both the 14:00 start and the 16:00 stop are still ahead, so both show.
     const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics', lat_lon: '52.0,4.0' }));
     assertEqual(r.data.single_day.agenda.map((i) => i.title), ['Rain starts', 'Rain stops']);
+  });
+
+  test('a direct transition between two conditions (storm into snow, no clear hour between) emits a stop and a start at the same hour', async () => {
+    function weatherJsonStormThenSnow() {
+      const time = [];
+      const weathercode = [];
+      for (let h = 0; h < 24; h++) {
+        time.push('2026-09-05T' + String(h).padStart(2, '0') + ':00');
+        weathercode.push(h < 10 ? 96 : (h < 14 ? 75 : 0)); // storm 0-9, snow 10-13, clear from 14
+      }
+      return {
+        daily: { sunrise: ['2026-09-05T06:00'], sunset: ['2026-09-05T20:00'], temperature_2m_max: [20], temperature_2m_min: [12] },
+        hourly: { time, weathercode },
+      };
+    }
+    const fetchImpl = async (url) => {
+      if (url.includes('open-meteo')) return okJson(weatherJsonStormThenSnow());
+      return okText(icsWithEvents([]));
+    };
+    const { run } = runTransform(fetchImpl, NOW);
+    const r = await run(baseInput({ calendars_simple: 'https://example.com/a.ics', lat_lon: '52.0,4.0', view_days: '1' }));
+    const marks = r.data.days[0].agenda.map((i) => ({ time: i.time, title: i.title }));
+    assertEqual(marks, [
+      { time: '0:00', title: 'Storm starts' },
+      { time: '10:00', title: 'Storm stops' },
+      { time: '10:00', title: 'Snow starts' },
+      { time: '14:00', title: 'Snow stops' },
+    ], 'a direct condition change should stop the old one and start the new one at the same hour, not just silently swap');
+  });
+
+  test('a non-English locale fetches and uses its own translated weather marker text', async () => {
+    const fetchImpl = async (url) => {
+      if (url.includes('open-meteo')) return okJson(weatherJsonWithRain());
+      if (url.includes('/i18n/fr.json')) return okJson({ rain_starts: 'Début de la pluie', rain_stops: 'Fin de la pluie' });
+      return okText(icsWithEvents([]));
+    };
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput({ calendars_simple: 'https://example.com/a.ics', lat_lon: '52.0,4.0', view_days: '1' });
+    input.trmnl.user.locale = 'fr';
+    const r = await run(input);
+    assertEqual(r.data.days[0].agenda.map((i) => i.title), ['Début de la pluie', 'Fin de la pluie']);
+  });
+
+  test('a non-English locale falls back to English weather text when the fetch fails and nothing is cached yet', async () => {
+    const fetchImpl = async (url) => {
+      if (url.includes('open-meteo')) return okJson(weatherJsonWithRain());
+      if (url.includes('/i18n/fr.json')) return fail(500);
+      return okText(icsWithEvents([]));
+    };
+    const { run } = runTransform(fetchImpl, NOW);
+    const input = baseInput({ calendars_simple: 'https://example.com/a.ics', lat_lon: '52.0,4.0', view_days: '1' });
+    input.trmnl.user.locale = 'fr';
+    const r = await run(input);
+    assertEqual(r.data.days[0].agenda.map((i) => i.title), ['Rain starts', 'Rain stops']);
   });
 
   test('a day with no rain at all has no weather markers in its agenda', async () => {

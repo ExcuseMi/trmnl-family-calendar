@@ -86,12 +86,27 @@ async function run(input) {
     }
   });
 
-  const [calendarResults, sky, rssResult] = await Promise.all([
+  const localeCode = localeCodeOf(locale);
+  const shouldFetchWeatherI18n = WEATHER_I18N_LOCALES.includes(localeCode);
+
+  const [calendarResults, sky, rssResult, weatherI18nFetched] = await Promise.all([
     Promise.all(calendarFetches),
     fetchSky(location, daysN, fahrenheit, deadline),
     fetchRssHeadline(rssUrl, rssLabel, deadline),
+    shouldFetchWeatherI18n ? fetchWeatherI18n(localeCode, deadline) : Promise.resolve(null),
   ]);
   let rssHeadline = rssResult;
+
+  let weatherI18n = WEATHER_TEXT_FALLBACK;
+  let weatherI18nState = null;
+  if (shouldFetchWeatherI18n) {
+    if (weatherI18nFetched) {
+      weatherI18nState = { code: localeCode, data: weatherI18nFetched };
+    } else if (prevState.weatherI18n && prevState.weatherI18n.code === localeCode) {
+      weatherI18nState = prevState.weatherI18n;
+    }
+    if (weatherI18nState) weatherI18n = weatherI18nState.data;
+  }
 
   const occ = [];
   for (const r of calendarResults) {
@@ -292,7 +307,7 @@ async function run(input) {
   endH = Math.max(endH, startH + 1);
 
   const alertsPct = calendarAlerts.length ? ALERTS_ROW_PCT : 0;
-  const grid = layoutNative(rawDays, alldayBars, startH, endH, coreStartH, coreEndH, nowH, sky.sunMarks, sky.hourlyWeather, calendarColors, HEADER_PCT, is12h, newsPct, alertsPct);
+  const grid = layoutNative(rawDays, alldayBars, startH, endH, coreStartH, coreEndH, nowH, sky.sunMarks, sky.hourlyWeather, calendarColors, HEADER_PCT, is12h, newsPct, alertsPct, weatherI18n);
 
   // The single-day views (half_horizontal/half_vertical/quadrant) show only rawDays[0], rendered
   // as a plain time+title list rather than a timeline grid — a grid this small is more cramped
@@ -326,11 +341,11 @@ async function run(input) {
         },
       };
     });
-  const agendaWeather = rainTransitions((sky.hourlyWeather || {})[0])
+  const agendaWeather = weatherTransitions((sky.hourlyWeather || {})[0])
     .filter((m) => !nowIsKnown || m.h >= nowH)
     .map((m) => {
       const timeLabel = fmtTime(dayBounds[0].d0Epoch + m.h * 3600000, tz, is12h);
-      return { sortH: m.h, item: rainMarkerItem(m.starting, timeLabel) };
+      return { sortH: m.h, item: weatherMarkerItem(m.kind, m.starting, timeLabel, weatherI18n) };
     });
   const agendaItems = agendaAllDay.concat(
     agendaTimed.concat(agendaWeather).sort((a, b) => a.sortH - b.sortH).map((x) => x.item)
@@ -353,6 +368,7 @@ async function run(input) {
     error: err,
     unavailable_label: unavailableText(locale),
     all_day_label: allDayText(locale),
+    nothing_scheduled_label: nothingScheduledText(locale),
     has_events: alldayBars.length > 0 || rawDays.some((d) => d.timed.length),
     weather_error: sky.error,
     weather_stale: weatherStale,
@@ -363,6 +379,7 @@ async function run(input) {
   const trmnl_state = {
     weather: { sunMarks: sky.sunMarks, hourlyWeather: sky.hourlyWeather, dailyTemps: sky.dailyTemps },
     weatherFetchedAt,
+    weatherI18n: weatherI18nState,
     news: rssHeadline || null,
     calendarDown,
     calendarNames,
@@ -422,6 +439,7 @@ function emptyResult(tzname, tz, locale, daysN, is12h, msg) {
     error: msg,
     unavailable_label: unavailableText(locale),
     all_day_label: allDayText(locale),
+    nothing_scheduled_label: nothingScheduledText(locale),
     has_events: false,
     weather_error: null,
     weather_stale: false,
@@ -621,14 +639,24 @@ function localeOf(input) {
   return "en";
 }
 
+function localeCodeOf(locale) {
+  return String(locale).toLowerCase().split(/[-_]/)[0];
+}
+
+function uiText(locale) {
+  return UI_TEXT[localeCodeOf(locale)] || UI_TEXT.en;
+}
+
 function unavailableText(locale) {
-  const code = String(locale).toLowerCase().split(/[-_]/)[0];
-  return (UNAVAILABLE[code] || UNAVAILABLE.en);
+  return uiText(locale).unavailable;
 }
 
 function allDayText(locale) {
-  const code = String(locale).toLowerCase().split(/[-_]/)[0];
-  return (ALL_DAY_LABEL[code] || ALL_DAY_LABEL.en);
+  return uiText(locale).all_day;
+}
+
+function nothingScheduledText(locale) {
+  return uiText(locale).nothing_scheduled;
 }
 
 function userTz(input) {
@@ -804,46 +832,48 @@ function advanceNthDayMonth(civil, monthStep, byMonthDay, byDayNth, byDayNthWd) 
   return next;
 }
 
-const I18N = {
-  en: {
-    wd: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
-    months_short: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-    unavailable: "Calendar unavailable",
-    all_day: "All day",
-  },
-  nl: {
-    wd: ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"],
-    months: ["Januari", "Februari", "Maart", "April", "Mei", "Juni", "Juli", "Augustus", "September", "Oktober", "November", "December"],
-    months_short: ["Jan", "Feb", "Mrt", "Apr", "Mei", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"],
-    unavailable: "Kalender niet beschikbaar",
-    all_day: "Hele dag",
-  },
-  fr: {
-    wd: ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"],
-    months: ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"],
-    months_short: ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"],
-    unavailable: "Agenda indisponible",
-    all_day: "Journée",
-  },
-  de: {
-    wd: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
-    months: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
-    months_short: ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"],
-    unavailable: "Kalender nicht verfügbar",
-    all_day: "Ganztägig",
-  },
-  es: {
-    wd: ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
-    months: ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"],
-    months_short: ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],
-    unavailable: "Calendario no disponible",
-    all_day: "Todo el día",
-  },
+// Weekday/month names are handled entirely by Intl (localeDatePart, below) — no translation
+// file needed there. The only strings that get fetched are the weather condition messages
+// ("Rain starts", "Fog stops", ...): those are new copy introduced for the agenda-list weather
+// markers and have no Intl equivalent, so i18n/{code}.json on GitHub holds them for each
+// non-English locale and fetchWeatherI18n() below pulls the one matching the viewer's locale at
+// render time. English is excluded here (WEATHER_TEXT_FALLBACK below already *is* the English
+// copy) so an English viewer never pays for a fetch that would only echo back what's already
+// inline.
+const WEATHER_I18N_LOCALES = ["nl", "fr", "de", "es"];
+const WEATHER_I18N_BASE_URL = "https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/i18n/";
+const WEATHER_TEXT_FALLBACK = {
+  rain_starts: "Rain starts", rain_stops: "Rain stops",
+  storm_starts: "Storm starts", storm_stops: "Storm stops",
+  snow_starts: "Snow starts", snow_stops: "Snow stops",
+  fog_starts: "Fog starts", fog_stops: "Fog stops",
 };
 
-const UNAVAILABLE = Object.fromEntries(Object.entries(I18N).map(([code, t]) => [code, t.unavailable]));
-const ALL_DAY_LABEL = Object.fromEntries(Object.entries(I18N).map(([code, t]) => [code, t.all_day]));
+async function fetchWeatherI18n(code, deadline) {
+  try {
+    const budget = msUntil(deadline);
+    if (budget <= 0) throw new Error("timed out");
+    const resp = await fetchWithTimeout(WEATHER_I18N_BASE_URL + code + ".json", Math.min(budget, 3000), {});
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const json = await resp.json();
+    if (!json || typeof json.rain_starts !== "string" || typeof json.rain_stops !== "string") {
+      throw new Error("malformed i18n payload");
+    }
+    return json;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Short static UI chrome text — kept inline (not fetched) since it must always render even if
+// GitHub is unreachable and there's no cached copy yet (e.g. the plugin's very first run).
+const UI_TEXT = {
+  en: { unavailable: "Calendar unavailable", all_day: "All day", nothing_scheduled: "Nothing scheduled" },
+  nl: { unavailable: "Kalender niet beschikbaar", all_day: "Hele dag", nothing_scheduled: "Niets gepland" },
+  fr: { unavailable: "Agenda indisponible", all_day: "Journée", nothing_scheduled: "Rien de prévu" },
+  de: { unavailable: "Kalender nicht verfügbar", all_day: "Ganztägig", nothing_scheduled: "Nichts geplant" },
+  es: { unavailable: "Calendario no disponible", all_day: "Todo el día", nothing_scheduled: "Nada programado" },
+};
 
 const _weekdayFmtCache = new Map();
 const _monthFmtCache = new Map();
@@ -865,18 +895,14 @@ function localeDatePart(locale, width, kind, y, mo, d) {
 }
 
 function dayLabel(civil, locale) {
-  const code = String(locale).toLowerCase().split(/[-_]/)[0];
-  const t = I18N[code];
-  const wd = t ? t.wd[civilWeekday(civil.y, civil.mo, civil.d)] : localeDatePart(locale, "short", "weekday", civil.y, civil.mo, civil.d);
-  const month = t ? t.months[civil.mo - 1] : localeDatePart(locale, "long", "month", civil.y, civil.mo, civil.d);
+  const wd = localeDatePart(locale, "short", "weekday", civil.y, civil.mo, civil.d);
+  const month = localeDatePart(locale, "long", "month", civil.y, civil.mo, civil.d);
   return wd + " " + civil.d + " " + month;
 }
 
 function dayLabelShortParts(civil, locale) {
-  const code = String(locale).toLowerCase().split(/[-_]/)[0];
-  const t = I18N[code];
-  const wd = t ? t.wd[civilWeekday(civil.y, civil.mo, civil.d)] : localeDatePart(locale, "short", "weekday", civil.y, civil.mo, civil.d);
-  const month = t ? t.months_short[civil.mo - 1] : localeDatePart(locale, "short", "month", civil.y, civil.mo, civil.d);
+  const wd = localeDatePart(locale, "short", "weekday", civil.y, civil.mo, civil.d);
+  const month = localeDatePart(locale, "short", "month", civil.y, civil.mo, civil.d);
   return { weekday: wd, rest: civil.d + " " + month };
 }
 
@@ -1197,29 +1223,36 @@ function dayIcon(hours) {
   return ICON_BASE + (kind ? ICON_FILE[kind] : "wi-day-sunny.svg");
 }
 
-const RAIN_START_ICON = ICON_BASE + "wi-day-rain.svg";
-const RAIN_STOP_ICON = ICON_BASE + "wi-day-sunny.svg";
+const CLEAR_ICON = ICON_BASE + "wi-day-sunny.svg";
+const WEATHER_MARKER_HUE = { storm: "purple", snow: "cyan", rain: "blue", fog: "gray-30" };
 
-// The grid view shows rain via per-hour hatching, but the agenda list views have no per-hour
-// visual at all — so rain is surfaced there as its own marker "event" at the hour it starts and
-// the hour it stops. Scoped to rain specifically (not storm/snow/fog), matching how this was
-// asked for; dayWeather is the same {hour: "rain"|"storm"|"snow"|"fog"} map segments use.
-function rainTransitions(dayWeather) {
+// The grid view shows weather via per-hour hatching, but the agenda list views have no per-hour
+// visual at all — so a weather condition starting or stopping is surfaced there as its own
+// marker "event" at the hour it starts and the hour it stops. dayWeather is the same
+// {hour: "rain"|"storm"|"snow"|"fog"} map segments use; a change straight from one condition to
+// another (e.g. rain into snow, with no clear hour between) emits both a "stops" and a "starts"
+// marker at that same hour.
+function weatherTransitions(dayWeather) {
   const marks = [];
-  let wasRaining = false;
+  let prevKind = null;
   for (let h = 0; h < 24; h++) {
-    const isRaining = (dayWeather || {})[h] === "rain";
-    if (isRaining !== wasRaining) marks.push({ h, starting: isRaining });
-    wasRaining = isRaining;
+    const kind = (dayWeather || {})[h] || null;
+    if (kind !== prevKind) {
+      if (prevKind) marks.push({ h, kind: prevKind, starting: false });
+      if (kind) marks.push({ h, kind, starting: true });
+    }
+    prevKind = kind;
   }
   return marks;
 }
 
-function rainMarkerItem(starting, timeLabel) {
+function weatherMarkerItem(kind, starting, timeLabel, weatherI18n) {
+  const t = weatherI18n || WEATHER_TEXT_FALLBACK;
+  const hue = starting ? WEATHER_MARKER_HUE[kind] : "yellow";
   return {
-    time: timeLabel, title: starting ? "Rain starts" : "Rain stops",
-    hue: colorClass(starting ? "blue" : "yellow"), fg: "black",
-    current: false, badges: [], icon_url: starting ? RAIN_START_ICON : RAIN_STOP_ICON,
+    time: timeLabel, title: t[kind + (starting ? "_starts" : "_stops")] || WEATHER_TEXT_FALLBACK[kind + (starting ? "_starts" : "_stops")],
+    hue: colorClass(hue), fg: foregroundFor(hue),
+    current: false, badges: [], icon_url: starting ? ICON_BASE + ICON_FILE[kind] : CLEAR_ICON,
   };
 }
 
@@ -1416,7 +1449,7 @@ function round4(x) {
 
 const EXTENSION_WEIGHT = 0.8;
 
-function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd, nowH, sunMarks, hourlyWeather, calendarColors, headerPct, is12h, newsPct, alertsPct) {
+function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd, nowH, sunMarks, hourlyWeather, calendarColors, headerPct, is12h, newsPct, alertsPct, weatherI18n) {
   outerStart = Math.max(0, Math.min(23, Math.trunc(outerStart)));
   outerEnd = Math.max(outerStart + 1, Math.min(24, Math.trunc(outerEnd)));
   coreStart = Math.max(outerStart, Math.min(23, Math.trunc(coreStart)));
@@ -1570,13 +1603,13 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
         },
       };
     });
-    const agendaWeather = rainTransitions(dayWeather).map((m) => {
+    const agendaWeather = weatherTransitions(dayWeather).map((m) => {
       // Matches real events' own "H:MM" time labels (fmtTime), not the bare axis-style hour
       // digit (hourRows[h].hour) — mixing "14" in among "10:00–10:30" etc. would look wrong.
       const hourDisplay = is12h ? m.h % 12 || 12 : m.h;
       const period = is12h ? (m.h < 12 ? " AM" : " PM") : "";
       const timeLabel = hourDisplay + ":00" + period;
-      return { sortH: m.h, item: rainMarkerItem(m.starting, timeLabel) };
+      return { sortH: m.h, item: weatherMarkerItem(m.kind, m.starting, timeLabel, weatherI18n) };
     });
     const agenda = agendaEvents.concat(agendaWeather)
       .sort((a, b) => a.sortH - b.sortH)
