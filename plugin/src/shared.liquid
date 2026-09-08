@@ -125,6 +125,17 @@
   {%- assign allday_max_rows = day0_max_row | plus: 1 -%}
   {%- assign allday_pct = allday_max_rows | times: data.allday_row_pct -%}
 {%- endif -%}
+{%- comment -%}
+  All-day items already appear at the top of the agenda list itself for these views (see the
+  agenda loop below) — showing them again as bars up here would just duplicate them. Zeroing
+  allday_pct also reclaims that header space for the list (bigger grid_pct below) and, as a side
+  effect, drops the top-left calendar icon too (it's gated on allday_pct > 0, and doesn't apply
+  once there's nothing left to point at up here).
+{%- endcomment -%}
+{%- if view != 1 -%}
+  {%- assign allday_pct = 0 -%}
+  {%- assign allday_max_rows = 0 -%}
+{%- endif -%}
 {%- assign grid_pct = data.grid_pct | plus: data.allday_pct | minus: allday_pct -%}
 
 <div class="layout layout--col gap--none relative" id="cal-root" data-days-n="{{ shown_days_n }}">
