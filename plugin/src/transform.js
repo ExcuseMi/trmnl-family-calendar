@@ -314,17 +314,27 @@ async function run(input) {
   }));
   const agendaTimed = day0.timed
     .filter((e) => !nowIsKnown || e.h1 > nowH)
-    .sort((a, b) => a.h0 - b.h0)
     .map((e) => {
       const color = e.hueOverride || hueOf(e.calIdx, calendarColors);
       return {
-        time: e.label, title: e.title,
-        hue: colorClass(color), fg: foregroundFor(color),
-        current: nowIsKnown && e.h0 <= nowH && e.h1 > nowH,
-        badges: e.personBadges || [],
+        sortH: e.h0,
+        item: {
+          time: e.label, title: e.title,
+          hue: colorClass(color), fg: foregroundFor(color),
+          current: nowIsKnown && e.h0 <= nowH && e.h1 > nowH,
+          badges: e.personBadges || [],
+        },
       };
     });
-  const agendaItems = agendaAllDay.concat(agendaTimed).slice(0, AGENDA_SANITY_CAP);
+  const agendaWeather = rainTransitions((sky.hourlyWeather || {})[0])
+    .filter((m) => !nowIsKnown || m.h >= nowH)
+    .map((m) => {
+      const timeLabel = fmtTime(dayBounds[0].d0Epoch + m.h * 3600000, tz, is12h);
+      return { sortH: m.h, item: rainMarkerItem(m.starting, timeLabel) };
+    });
+  const agendaItems = agendaAllDay.concat(
+    agendaTimed.concat(agendaWeather).sort((a, b) => a.sortH - b.sortH).map((x) => x.item)
+  ).slice(0, AGENDA_SANITY_CAP);
 
   const viewPeopleSeen = new Set();
   const viewPeople = [];
@@ -1187,6 +1197,32 @@ function dayIcon(hours) {
   return ICON_BASE + (kind ? ICON_FILE[kind] : "wi-day-sunny.svg");
 }
 
+const RAIN_START_ICON = ICON_BASE + "wi-day-rain.svg";
+const RAIN_STOP_ICON = ICON_BASE + "wi-day-sunny.svg";
+
+// The grid view shows rain via per-hour hatching, but the agenda list views have no per-hour
+// visual at all — so rain is surfaced there as its own marker "event" at the hour it starts and
+// the hour it stops. Scoped to rain specifically (not storm/snow/fog), matching how this was
+// asked for; dayWeather is the same {hour: "rain"|"storm"|"snow"|"fog"} map segments use.
+function rainTransitions(dayWeather) {
+  const marks = [];
+  let wasRaining = false;
+  for (let h = 0; h < 24; h++) {
+    const isRaining = (dayWeather || {})[h] === "rain";
+    if (isRaining !== wasRaining) marks.push({ h, starting: isRaining });
+    wasRaining = isRaining;
+  }
+  return marks;
+}
+
+function rainMarkerItem(starting, timeLabel) {
+  return {
+    time: timeLabel, title: starting ? "Rain starts" : "Rain stops",
+    hue: colorClass(starting ? "blue" : "yellow"), fg: "black",
+    current: false, badges: [], icon_url: starting ? RAIN_START_ICON : RAIN_STOP_ICON,
+  };
+}
+
 function splitIsoLocal(iso) {
   const [datePart, timePart] = iso.split("T");
   const [y, mo, d] = datePart.split("-").map(Number);
@@ -1522,17 +1558,29 @@ function layoutNative(days, alldayBars, outerStart, outerEnd, coreStart, coreEnd
     // everything), and it excludes all-day items — the full view's own all-day bars (above,
     // spanning multiple days with continuation styling) are the right tool for those already;
     // repeating them per-day here would just duplicate them without showing that continuity.
-    const agenda = [...d.timed]
-      .sort((a, b) => a.h0 - b.h0)
-      .map((ev) => {
-        const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);
-        return {
+    const agendaEvents = d.timed.map((ev) => {
+      const color = ev.hueOverride || hueOf(ev.calIdx, calendarColors);
+      return {
+        sortH: ev.h0,
+        item: {
           time: ev.label, title: ev.title,
           hue: colorClass(color), fg: foregroundFor(color),
           current: hasNow && ev.h0 <= nowH && ev.h1 > nowH,
           badges: ev.personBadges || [],
-        };
-      })
+        },
+      };
+    });
+    const agendaWeather = rainTransitions(dayWeather).map((m) => {
+      // Matches real events' own "H:MM" time labels (fmtTime), not the bare axis-style hour
+      // digit (hourRows[h].hour) — mixing "14" in among "10:00–10:30" etc. would look wrong.
+      const hourDisplay = is12h ? m.h % 12 || 12 : m.h;
+      const period = is12h ? (m.h < 12 ? " AM" : " PM") : "";
+      const timeLabel = hourDisplay + ":00" + period;
+      return { sortH: m.h, item: rainMarkerItem(m.starting, timeLabel) };
+    });
+    const agenda = agendaEvents.concat(agendaWeather)
+      .sort((a, b) => a.sortH - b.sortH)
+      .map((x) => x.item)
       .slice(0, AGENDA_SANITY_CAP);
 
     outDays.push({

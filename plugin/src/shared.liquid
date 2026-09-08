@@ -53,8 +53,9 @@
       <div class="w--full flex flex--col gap--xsmall text--{{ item.fg }} px--2 py--1" style="min-width:0;">
         <div class="w--full flex flex--row flex--center-y gap--small" style="min-width:0;">
           {% if item.time %}<span class="label {{ axis_cls }} text--{{ item.fg }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
+          {% if item.icon_url %}<img src="{{ item.icon_url }}" class="w--[20px] h--[20px] no-shrink" style="margin-left:auto;{% if item.fg == 'white' %}filter:invert(1);{% endif %}">{% endif %}
           {% if item.badges and item.badges.size > 0 %}
-            <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;margin-left:auto;">
+            <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;{% unless item.icon_url %}margin-left:auto;{% endunless %}">
               {% for badge in item.badges limit: 2 %}
                 {%- render "badge_circle", badge_w_expr: "22px", badge_h_expr: "22px", b: badge, hue: badge.hue, fg: badge.fg, extra_cls: "" -%}
               {% endfor %}
@@ -67,6 +68,7 @@
       <div class="w--full flex flex--row flex--center-y gap--small text--{{ item.fg }} px--2 py--1" style="min-width:0;">
         {% if item.time %}<span class="label {{ axis_cls }} text--{{ item.fg }} font--bold no-shrink" style="flex:0 0 auto;">{{ item.time }}</span>{% endif %}
         <span class="title {{ event_title_cls }} text--{{ item.fg }}" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.title }}</span>
+        {% if item.icon_url %}<img src="{{ item.icon_url }}" class="w--[20px] h--[20px] no-shrink"{% if item.fg == 'white' %} style="filter:invert(1);"{% endif %}>{% endif %}
         {% if item.badges and item.badges.size > 0 %}
           <span class="flex flex--row gap--xsmall no-shrink" style="flex:0 0 auto;">
             {% for badge in item.badges limit: 2 %}
