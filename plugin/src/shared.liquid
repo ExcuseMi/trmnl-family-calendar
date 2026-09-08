@@ -383,6 +383,27 @@
       }
       return 0;
     }
+    // How far the terminus fan has pulled a line off its own baseline at a
+    // given axis position: nothing until the fan's merge point, then a 45°
+    // ramp out to the spread position it holds for the last stretch before
+    // its name. (Reads fan/spineC, which are settled by the time anything
+    // calls this.)
+    function fanOffsetAt(p, a) {
+      if (!fan) return 0;
+      var i = sides[p._sideKey].indexOf(p);
+      var delta = spineC + p._sign * (gutterHalf + fan.step * (i + 1)) - (spineC + p._c);
+      if (!delta) return 0;
+      var d = fan.dir, fanStart = (d > 0 ? 0 : axisPx) + d * fan.len;
+      return delta * clamp(1 - d * (a - fanStart) / Math.abs(delta), 0, 1);
+    }
+    // Where a track's line ACTUALLY is at an axis position — baseline, plus
+    // any station kink, plus any fan spread. Rings and capsules have to be
+    // put here rather than on the bare baseline, or they float off the line
+    // wherever it has moved (an all-day band ending in the fan zone put
+    // every end-of-day ring ~60px away from its own track).
+    function lineCAt(p, a) {
+      return spineC + p._c + p._sign * stationRaiseAt(p, a) + fanOffsetAt(p, a);
+    }
 
     // ---- events
     var all = dedupe(METRO.items.filter(function (i) { return i.type === 'event'; }));
@@ -643,18 +664,27 @@
       // badly (two branches of the very same line crossing each other) as
       // crossing the text did; checking only the text band let it through.
       function diagonalCrosses(a0, d0, a1, d1, k) {
+        if (d1 === d0) return false;
+        var f = function (d) { return a0 + (a1 - a0) * (d - d0) / (d1 - d0); };
+        var lo = Math.min(d0, d1), hi = Math.max(d0, d1);
         for (var j = 0; j < k; j++) {
           if (!lanes[j]) continue;
-          var t0 = laneDist(j), t1 = t0 + LINE_GAP + maxLabelThick;
-          var f = function (d) { return a0 + (a1 - a0) * (d - d0) / (d1 - d0); };
-          var seg = [Math.min(f(t0), f(t1)), Math.max(f(t0), f(t1))];
           for (var i = 0; i < lanes[j].items.length; i++) {
             var it = lanes[j].items[i];
             // a diagonal visibly crossing straight through another line's
             // own flat run reads just as badly as crossing through its
             // text — both get flagged and scored the same way, not just
             // the text case
-            if ((it.kind === 'text' || it.kind === 'line') && itemOverlaps(it, seg)) return true;
+            if (it.kind !== 'text' && it.kind !== 'line') continue;
+            // Test the band this item is REALLY drawn at, not the lane's
+            // nominal distance. A lane index maps to a different drawn
+            // distance per track (each branch's reach is measured from its
+            // own ring), so checking the nominal one tested empty space and
+            // waved through diagonals that visibly cut across a label.
+            var t0 = it.d != null ? it.d : laneDist(j), t1 = t0 + LINE_GAP + maxLabelThick;
+            if (lo > t1 || hi < t0) continue; // this diagonal never reaches that band
+            var seg = [Math.min(f(t0), f(t1)), Math.max(f(t0), f(t1))];
+            if (itemOverlaps(it, seg)) return true;
           }
         }
         return false;
@@ -767,7 +797,7 @@
         e._lane = best.k; e._elbow = best.elbow; e._laneDist = best.ld; e._dir = best.dir; e._joined = best.joined;
         e._crossing = best.crossing; e._elbowShift = best.elbowShift;
         e._textStart = best.textStart;
-        lane(best.k).items.push({ a0: Math.min(e._nodeA, best.elbow), a1: Math.max(e._nodeA, best.elbow), owner: null, kind: 'diag', dir: best.dir });
+        lane(best.k).items.push({ a0: Math.min(e._nodeA, best.elbow), a1: Math.max(e._nodeA, best.elbow), owner: null, kind: 'diag', dir: best.dir, d: best.ld });
         if (best.trunc && best.trunc < e._textLen) {
           // shorten: first lose the time tag, then ellipsise the title
           var tm = e._box.querySelector('.metro-time-tag');
@@ -796,8 +826,8 @@
         }
         e._lineFrom = lineA; e._lineTo = lineB;
         // a merged loop is closed: nobody else may ride it (owner null)
-        lane(best.k).items.push({ a0: lineA, a1: lineB + (e._merge ? CORNER : 0), owner: e._merge ? null : e.owner, kind: 'line', dir: best.dir });
-        lane(best.k).items.push({ a0: e._textStart, a1: e._textStart + e._textLen, owner: e.owner, kind: 'text', dir: best.dir });
+        lane(best.k).items.push({ a0: lineA, a1: lineB + (e._merge ? CORNER : 0), owner: e._merge ? null : e.owner, kind: 'line', dir: best.dir, d: best.ld });
+        lane(best.k).items.push({ a0: e._textStart, a1: e._textStart + e._textLen, owner: e.owner, kind: 'text', dir: best.dir, d: best.ld });
       });
       var used = 0;
       evs.forEach(function (e) { if (!e._dropped) used = Math.max(used, e._lane + 1); });
@@ -926,10 +956,12 @@
         if (d < 0) legPts = legPts.slice().reverse();
         var path = svgEl('path', { d: roundedPath([[nameEnd, spreadC], [fanStart, spreadC]].concat(legPts), CORNER) });
         styleStroke(path, p, S);
+        path.setAttribute('data-metro-role', 'track'); path.setAttribute('data-metro-owner', p.key);
         svg.appendChild(path);
       } else {
         var ln = svgEl('path', { d: roundedPath(stationPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
         styleStroke(ln, p, S);
+        ln.setAttribute('data-metro-role', 'track'); ln.setAttribute('data-metro-owner', p.key);
         svg.appendChild(ln);
       }
     });
@@ -953,8 +985,16 @@
       p._stations.forEach(function (s) {
         var raise = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
         [s.a0, s.a1].forEach(function (a) {
-          var xy = toXY(a, baseC);
-          svg.appendChild(svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R * 0.7, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8 }));
+          // a ring marks a real boundary time. Where a station runs to the
+          // edge of the visible window — an all-day band always does, and
+          // any station can be clipped there — that edge is not a boundary,
+          // it's just where the day stops being drawn: no ring. (It would
+          // also land past the end of a fanned line, floating in space.)
+          if (a <= axisStart + 1 || a >= axisEnd - 1) return;
+          var xy = toXY(a, lineCAt(p, a));
+          var sring = svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R * 0.7, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8 });
+          sring.setAttribute('data-metro-role', 'station-ring'); sring.setAttribute('data-metro-owner', p.key);
+          svg.appendChild(sring);
         });
         var box = el('div', 'metro-gen metro-label absolute bg--white');
         var availW = clamp((s.a1 - s.a0) - raise * 2, 70 * S, maxTitle);
@@ -971,8 +1011,11 @@
         canvas.appendChild(box);
         var bm = measure(box);
         var capA = s.a0 + raise + 3 * S;
-        var capThick = horizontal ? bm.h : bm.w;
-        var midC = baseC + p._sign * (raise + STATION_GAP + capThick / 2);
+        // exactly where this track's own line WOULD run if it hadn't kinked
+        // out for the station: the kink vacates that space for the whole
+        // span, so the caption lands in a gap nothing else is using — no
+        // clearance arithmetic, and no line to clip through the text
+        var midC = baseC;
         if (horizontal) { box.style.left = capA + 'px'; box.style.top = (midC - bm.h / 2) + 'px'; }
         else { box.style.top = capA + 'px'; box.style.left = (midC - bm.w / 2) + 'px'; }
       });
@@ -992,7 +1035,9 @@
       LEGEND.forEach(function (p, i) {
         var a = horizontal ? axisStart + br + i * (2 * br + 4 * S) : axisEnd - br - i * (2 * br + 4 * S);
         var xy = toXY(a, spineC + p._c);
-        svg.appendChild(svgEl('circle', { cx: xy[0], cy: xy[1], r: br, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': 2 * S }));
+        var bullet = svgEl('circle', { cx: xy[0], cy: xy[1], r: br, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': 2 * S });
+        bullet.setAttribute('data-metro-role', 'bullet');
+        svg.appendChild(bullet);
         var t = svgEl('text', { x: xy[0], y: xy[1], 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': (br * 1.2) + 'px', 'font-weight': '700', fill: '#000' });
         t.setAttribute('style', 'font-family: inherit;');
         t.textContent = initials[p.key];
@@ -1038,6 +1083,7 @@
           if (a1 - a0 < 1) return;
           var seg = svgEl('path', { d: roundedPath([toXY(a0, laneC), toXY(a1, laneC)], 0) });
           styleStroke(seg, p, S);
+          seg.setAttribute('data-metro-role', 'branch'); seg.setAttribute('data-metro-owner', p.key);
           svg.appendChild(seg);
         }
         var sorted = g.members.slice().sort(function (a, b) { return a._elbow - b._elbow; });
@@ -1047,6 +1093,7 @@
           var pts = [toXY(e._nodeA, spineC + sign * e._trackDist), toXY(e._elbow, laneC), toXY(e._elbow + e._dir * CORNER, laneC)];
           var path = svgEl('path', { d: roundedPath(pts, CORNER) });
           styleStroke(path, p, S);
+          path.setAttribute('data-metro-role', 'branch'); path.setAttribute('data-metro-owner', p.key);
           svg.appendChild(path);
           prevEnd = e._elbow + CORNER;
         });
@@ -1062,6 +1109,7 @@
       var pts = [toXY(e._nodeA, spineC + sign * e._trackDist), toXY(e._elbow, laneC), toXY(e._lineTo, laneC), toXY(e._endA, spineC + sign * e._trackDistEnd)];
       var path = svgEl('path', { d: roundedPath(pts, CORNER) });
       styleStroke(path, p, S);
+      path.setAttribute('data-metro-role', 'branch'); path.setAttribute('data-metro-owner', p.key);
       svg.appendChild(path);
     });
 
@@ -1075,17 +1123,19 @@
         // its own stations (e.g. an all-day band) sits kinked out to "station
         // level" here, and the capsule has to reach the line where it really
         // is, not where it'd be on an ordinary day
-        var cs = e._involved.map(function (q) { return spineC + q._c + q._sign * stationRaiseAt(q, e._nodeA); });
+        var cs = e._involved.map(function (q) { return lineCAt(q, e._nodeA); });
         var lo = Math.min.apply(null, cs) - NODE_R, hi = Math.max.apply(null, cs) + NODE_R;
         var a0 = e._nodeA - NODE_R;
         var r = svgEl('rect', horizontal
           ? { x: a0, y: lo, width: 2 * NODE_R, height: hi - lo, rx: NODE_R, ry: NODE_R }
           : { x: lo, y: a0, width: hi - lo, height: 2 * NODE_R, rx: NODE_R, ry: NODE_R });
         r.setAttribute('fill', '#fff'); r.setAttribute('stroke', '#000'); r.setAttribute('stroke-width', NODE_STROKE);
+        r.setAttribute('data-metro-role', 'capsule'); r.setAttribute('data-metro-owner', e.owner);
         svg.appendChild(r);
       } else {
-        var cxy = toXY(e._nodeA, spineC + p._c + p._sign * stationRaiseAt(p, e._nodeA));
+        var cxy = toXY(e._nodeA, lineCAt(p, e._nodeA));
         var ring = svgEl('circle', { cx: cxy[0], cy: cxy[1], r: NODE_R, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE });
+        ring.setAttribute('data-metro-role', 'ring'); ring.setAttribute('data-metro-owner', e.owner);
         svg.appendChild(ring);
       }
     });
@@ -1125,7 +1175,9 @@
     }
     if (nowA != null) {
       var dxy = toXY(nowA, spineC);
-      svg.appendChild(svgEl('circle', { cx: dxy[0], cy: dxy[1], r: 3.5 * S, fill: '#000' }));
+      var nowDot = svgEl('circle', { cx: dxy[0], cy: dxy[1], r: 3.5 * S, fill: '#000' });
+      nowDot.setAttribute('data-metro-role', 'now');
+      svg.appendChild(nowDot);
       axisNote(timeLabel(nowMin), nowA + 6 * S, 'start');
     }
     if (earlier) axisNote(tr('earlier', earlier), axisStart + EDGE, 'start', 'metro-axis-note label label--small text--gray-40');
