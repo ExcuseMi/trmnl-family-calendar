@@ -299,9 +299,10 @@ async function run(input) {
   // header above, for every view — this is deliberately in addition, not instead), then every
   // timed event still relevant from now on (already-ended ones are dropped; one in progress right
   // now is kept and flagged `current` so the template can call it out). How many of these
-  // actually fit, and the "+N more" row past that, is a per-view layout decision made in the
-  // template, not here. AGENDA_SANITY_CAP is just a hard ceiling against a pathological day, not
-  // a display cap.
+  // actually fit — and the "and N more" indicator for the rest — is handled by TRMNL's own
+  // overflow engine in the template (data-overflow/data-overflow-counter), which measures real
+  // rendered space at runtime; AGENDA_SANITY_CAP here is just a hard ceiling against a
+  // pathological day's payload size, not a display cap.
   const day0 = rawDays[0];
   const day0AlldayBars = alldayBars.filter((b) => b.startCol === 0);
   const nowIsKnown = nowH !== null && nowH !== undefined;
