@@ -457,7 +457,7 @@
         {% for day in data.days limit: shown_days_n %}
           <div class="col--span-{{ day_span }} flex flex--col gap--xsmall border--v-1 relative cal-day-cell p--1" data-day-idx="{{ forloop.index0 }}" data-overflow="true" data-overflow-max-height="auto" data-overflow-counter="true" style="overflow:hidden;box-sizing:border-box;">
             {% for item in day.agenda %}
-              {%- render "agenda_row", item: item, axis_cls: axis_cls, event_title_cls: event_title_cls, title_clamp: 3, time_cls: "label--small" -%}
+              {%- render "agenda_row", item: item, axis_cls: axis_cls, event_title_cls: event_title_cls, title_clamp: 3, time_cls: "label--base lg:label--large" -%}
             {% else %}
               <div class="w--full h--full flex flex--center-x flex--center-y">
                 <span class="label {{ axis_cls }} text--gray-50">Nothing scheduled</span>
