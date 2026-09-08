@@ -324,10 +324,22 @@
     var pxPerHour = aFor(60) - aFor(0);
 
     // ---- stations: convert each track's raw minute ranges to clamped
-    // axis-unit segments now that aFor()/axisStart/axisEnd exist
+    // axis-unit segments now that aFor()/axisStart/axisEnd exist.
+    //
+    // An all-day-derived station's [start,end] is DAY_START..DAY_END —
+    // once clamped to the (usually much narrower) visible axis, that's
+    // effectively the WHOLE line, so instead of a short kink it just
+    // shifts the entire day's baseline sideways with no real "station"
+    // read at all. Give it a short, fixed-width flag at the start of the
+    // axis instead — same visual language as a real station, sized to
+    // actually look like one regardless of how wide the visible window is.
+    var ALLDAY_STATION_LEN = 90 * S;
     LEGEND.forEach(function (p) {
       p._stations = p._stations.map(function (st) {
-        return { a0: clamp(aFor(st.start_min), axisStart, axisEnd), a1: clamp(aFor(st.end_min), axisStart, axisEnd), title: st.title, location: st.location || null };
+        var a0, a1;
+        if (st.all_day) { a0 = axisStart; a1 = Math.min(axisStart + ALLDAY_STATION_LEN, axisEnd); }
+        else { a0 = clamp(aFor(st.start_min), axisStart, axisEnd); a1 = clamp(aFor(st.end_min), axisStart, axisEnd); }
+        return { a0: a0, a1: a1, title: st.title, location: st.location || null };
       }).filter(function (s) { return s.a1 > s.a0; });
     });
     // the raise (in c-units) a track's own line sits at, at a given axis
