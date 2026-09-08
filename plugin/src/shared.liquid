@@ -3,7 +3,7 @@
 {% template badge_circle %}
   {%- assign badge_border_color = "currentColor" -%}
   {%- if fg == "white" -%}{%- assign badge_border_color = "#888888" -%}{%- endif -%}
-  <span class="rounded--small no-shrink flex flex--center-x flex--center-y text--{{ fg }} bg--{{ hue }} font--bold w--min-0 h--min-0 {{ extra_cls }}" style="width:min({{ badge_w_expr }}, {{ badge_h_expr }});height:min({{ badge_w_expr }}, {{ badge_h_expr }});font-size:calc(min({{ badge_w_expr }}, {{ badge_h_expr }}) * 0.55);line-height:1;border:2px solid {{ badge_border_color }};box-sizing:border-box;">
+  <span class="rounded--small no-shrink flex flex--center-x flex--center-y bg--{{ hue }} font--bold w--min-0 h--min-0 {{ extra_cls }}" style="width:min({{ badge_w_expr }}, {{ badge_h_expr }});height:min({{ badge_w_expr }}, {{ badge_h_expr }});font-size:calc(min({{ badge_w_expr }}, {{ badge_h_expr }}) * 0.55);line-height:1;border:2px solid {{ badge_border_color }};box-sizing:border-box;color:{{ fg }};">
     {%- if b.is_everyone -%}
       <img src="https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsoutlined/group/default/48px.svg" alt="{{ b.person }}" style="width:65%;height:65%;{% if fg == 'white' %}filter:invert(1);{% endif %}">
     {%- else -%}
@@ -15,14 +15,14 @@
 {% template chip_body %}
 
   <div class="w--full h--full flex flex--row flex--center-x flex--center-y w--min-0">
-    <span class="title {{ title_cls }} text--{{ fg }} text--center cal-fit-text{% if clip %} cal-fit-clip{% endif %} {{ pad_x_cls }} w--min-0" data-fit-min="{{ fit_min }}" data-fit-max="60">{{ title }}</span>
+    <span class="title {{ title_cls }} text--center cal-fit-text{% if clip %} cal-fit-clip{% endif %} {{ pad_x_cls }} w--min-0" style="color:{{ fg }};" data-fit-min="{{ fit_min }}" data-fit-max="60">{{ title }}</span>
   </div>
 {% endtemplate %}
 
 {% template chip %}
   {%- assign border_color = "currentColor" -%}
   {%- if fg == "white" -%}{%- assign border_color = "#888888" -%}{%- endif -%}
-  <div class="{{ size_class }} bg--{{ hue }} text--{{ fg }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border:2px solid {{ border_color }};box-shadow:2px 2px 0 0 {{ border_color }};">
+  <div class="{{ size_class }} bg--{{ hue }} w--full {{ pad_cls }} {{ radius_cls }} flex {{ flex_dir }} flex--center-y cal-fit-box relative" style="overflow:hidden;{{ size_style }}border:2px solid {{ border_color }};box-shadow:2px 2px 0 0 {{ border_color }};color:{{ fg }};">
     {%- render "chip_body", title: title, fg: fg, title_cls: title_cls, fit_min: fit_min, clip: clip, pad_x_cls: pad_x_cls -%}
   </div>
 {% endtemplate %}
@@ -250,8 +250,8 @@
           {% assign allday_row_num = bar.row | plus: 2 %}
           {% assign ad_border_color = "currentColor" %}
           {% if bar.fg == "white" %}{% assign ad_border_color = "#888888" %}{% endif %}
-          <div class="bg--{{ bar.hue }} text--{{ bar.fg }} flex flex--row flex--center-x flex--center-y cal-fit-box rounded--none relative cal-allday-bar-el" data-start-col="{{ bar.start_col }}" data-span="{{ allday_visible_span }}" style="grid-column:{{ allday_col_start }} / span {{ allday_bar_span }};grid-row:{{ allday_row_num }};overflow:hidden;border-bottom:1px solid {{ ad_border_color }};border-left:1px solid {{ ad_border_color }};">
-            <span class="title {{ chip_title_cls }} text--{{ bar.fg }} cal-fit-text cal-fit-clip cal-allday-title w--min-0" data-fit-min="9" data-fit-max="90">{{ bar.title }}</span>
+          <div class="bg--{{ bar.hue }} flex flex--row flex--center-x flex--center-y cal-fit-box rounded--none relative cal-allday-bar-el" data-start-col="{{ bar.start_col }}" data-span="{{ allday_visible_span }}" style="grid-column:{{ allday_col_start }} / span {{ allday_bar_span }};grid-row:{{ allday_row_num }};overflow:hidden;border-bottom:1px solid {{ ad_border_color }};border-left:1px solid {{ ad_border_color }};color:{{ bar.fg }};">
+            <span class="title {{ chip_title_cls }} cal-fit-text cal-fit-clip cal-allday-title w--min-0" data-fit-min="9" data-fit-max="90">{{ bar.title }}</span>
           </div>
           {% endif %}
         {% endfor %}
