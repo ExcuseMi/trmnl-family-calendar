@@ -378,8 +378,27 @@
       winEnd = squeezedStart + visHours * 60;
       winStart = squeezedStart;
     }
+    // ---- express sections -----------------------------------------------
+    // The whole day is on the board, but the quiet ends of it are run at
+    // speed. Cropping the early morning and late evening away (which is what
+    // the window above does on its own) loses the shape of the day: you
+    // cannot see that nothing happens before eight, only that the board
+    // starts there. Compressing instead keeps the whole day present and
+    // still gives the busy hours the room they need.
+    //
+    // aFor() is piecewise from here on: minutes inside the busy stretch get
+    // the full scale, minutes outside it get EXPRESS_RATE of it. Everything
+    // downstream asks aFor() for positions, so the rest of the map needs to
+    // know nothing about this.
+    var EXPRESS_RATE = 0.22;         // how much axis a quiet minute is worth
+    var MIN_EXPRESS_MIN = 45;        // shorter than this is not worth compressing
+    var busyFrom = winStart, busyTo = winEnd;
+    var dayFrom = DAY_START, dayTo = DAY_END;
+    if (busyFrom - dayFrom < MIN_EXPRESS_MIN) busyFrom = dayFrom;
+    if (dayTo - busyTo < MIN_EXPRESS_MIN) busyTo = dayTo;
+    var headMin = busyFrom - dayFrom, tailMin = dayTo - busyTo, busyMin = busyTo - busyFrom;
     var winLabel = ROOT.querySelector('.metro-window');
-    if (winLabel) winLabel.textContent = timeLabel(winStart) + ' ' + timeLabel(winEnd);
+    if (winLabel) winLabel.textContent = timeLabel(dayFrom) + ' ' + timeLabel(dayTo);
     // ---- line names: every line begins at its own named terminus, and the
     // axis body starts after a column wide enough to hold them. Naming the
     // start of each line is what a transit map does, and it means the map
@@ -404,8 +423,20 @@
     // ALONG the axis, which is its width lying down and its height standing up
     var nameCol = LEGEND.length ? 2 * S + (horizontal ? maxNameW : nameH) + 6 * S : 0;
     var axisStart = NODE_R + 2 * S + nameCol, axisEnd = axisPx - NODE_R - 2 * S; // rings at the window edges stay whole; tracks still run full bleed
-    function aFor(min) { return axisStart + (min - winStart) / (winEnd - winStart) * (axisEnd - axisStart); }
-    var pxPerHour = aFor(60) - aFor(0);
+    // weighted minutes: a quiet one counts for less axis than a busy one
+    var weighted = busyMin + (headMin + tailMin) * EXPRESS_RATE;
+    var pxPerMin = (axisEnd - axisStart) / (weighted || 1);
+    function aFor(min) {
+      var m = clamp(min, dayFrom, dayTo);
+      var w = 0;
+      if (m <= busyFrom) w = (m - dayFrom) * EXPRESS_RATE;
+      else if (m <= busyTo) w = headMin * EXPRESS_RATE + (m - busyFrom);
+      else w = headMin * EXPRESS_RATE + busyMin + (m - busyTo) * EXPRESS_RATE;
+      return axisStart + w * pxPerMin;
+    }
+    // the scale of the busy stretch — what the hour labels are spaced by
+    var pxPerHour = 60 * pxPerMin;
+    function isExpress(min) { return min < busyFrom || min > busyTo; }
 
     // ---- stations: convert each track's raw minute ranges to clamped
     // axis-unit segments now that aFor()/axisStart/axisEnd exist.
@@ -854,17 +885,37 @@
         // the event runs long enough; anything else ends in a stub
         e._merge = false;
         if (best.dir > 0 && !best.joined) {
+          // The line comes back down AFTER the event, not during it: the
+          // descent used to start a diagonal's width before the end time and
+          // land on the trunk exactly at it, so the last stretch of the
+          // event was drawn as already leaving. The flat run now holds until
+          // the end time and the rejoin happens beyond it — which also means
+          // the end tick has flat rail to sit on.
           var mergeDy = Math.max(best.ld - e._trackDistEnd, MIN_DIAG);
-          var mergeStart = e._endA - mergeDy;
-          if (mergeStart >= best.elbow + CORNER + 2 * S && e._endA <= axisEnd) {
+          var mergeAt = e._endA + best.dir * mergeDy;
+          // The rejoin must be finished before this line's next event wants
+          // the trunk back. Coming down late reserves lane space across the
+          // following event's start, which pushes it to a deeper lane —
+          // whose own rejoin is longer still, so the next one goes deeper
+          // again. One long meeting could rake the whole band open. If the
+          // descent does not fit in the gap, end on a stub instead.
+          var nextA = Infinity;
+          evs.forEach(function (o) {
+            if (o === e || o._laneOwner !== e._laneOwner) return;
+            if (o._nodeA > e._endA && o._nodeA < nextA) nextA = o._nodeA;
+          });
+          var fitsBeforeNext = best.dir < 0 || mergeAt + CORNER <= nextA - CORNER;
+          if (fitsBeforeNext && e._endA >= best.elbow + CORNER + 2 * S && mergeAt <= axisEnd - EDGE) {
             var clear = true, L2 = lane(best.k);
-            for (var m = 0; m < L2.items.length && clear; m++) if (itemOverlaps(L2.items[m], [lineB, mergeStart + CORNER])) clear = false;
-            if (clear && !diagonalCrosses(mergeStart, best.ld, e._endA, e._trackDistEnd, best.k)) { e._merge = true; lineB = mergeStart; }
+            for (var m = 0; m < L2.items.length && clear; m++) if (itemOverlaps(L2.items[m], [lineB, mergeAt + CORNER])) clear = false;
+            if (clear && !diagonalCrosses(e._endA, best.ld, mergeAt, e._trackDistEnd, best.k)) {
+              e._merge = true; e._mergeAt = mergeAt; lineB = e._endA;
+            }
           }
         }
         e._lineFrom = lineA; e._lineTo = lineB;
         // a merged loop is closed: nobody else may ride it (owner null)
-        lane(best.k).items.push({ a0: lineA, a1: lineB + (e._merge ? CORNER : 0), owner: e._merge ? null : e.owner, kind: 'line', dir: best.dir, d: best.ld });
+        lane(best.k).items.push({ a0: lineA, a1: (e._merge ? e._mergeAt + CORNER : lineB), owner: e._merge ? null : e.owner, kind: 'line', dir: best.dir, d: best.ld });
         lane(best.k).items.push({ a0: e._textStart, a1: e._textStart + e._textLen, owner: e.owner, kind: 'text', dir: best.dir, d: best.ld });
       });
       var used = 0;
@@ -1080,7 +1131,7 @@
     if (bestTier !== ti) layoutAttempt(tiers[bestTier]);
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
     canvas.setAttribute('data-metro-debug', JSON.stringify({
-      W: W, H: H, S: S, Z: Z, horizontal: horizontal, win: [winStart, winEnd], spineC: spineC, step: step, laneStep: laneStep, colW: colW,
+      W: W, H: H, S: S, Z: Z, horizontal: horizontal, win: [dayFrom, dayTo], busy: [busyFrom, busyTo], spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
@@ -1132,9 +1183,10 @@
     // ---- draw: now line + alert lines first (under everything)
     var nowA = null;
     if (nowMin != null && nowMin >= winStart && nowMin <= winEnd) {
+      // no rule across the whole map: each line carries a car at the
+      // current time, which says the same thing on the line it applies to
+      // instead of drawing a wall through everybody's day
       nowA = aFor(nowMin);
-      var p0 = toXY(nowA, EDGE), p1 = toXY(nowA, crossPx - EDGE);
-      svg.appendChild(svgEl('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1], stroke: '#000', 'stroke-width': 1.5 * S }));
     }
     alerts.forEach(function (w) {
       var a = aFor(w.at_min);
@@ -1307,6 +1359,15 @@
       });
     });
 
+    // a point `dist` along the way from (a0,c0) toward (a1,c1), in axis/cross
+    // units — used to end the solid junction fillet exactly where the
+    // branch's own line takes over
+    function alongDiagonal(a0, c0, a1, c1, dist) {
+      var da = a1 - a0, dc = c1 - c0, len = Math.hypot(da, dc) || 1;
+      var t = Math.min(dist, len);
+      return [a0 + da / len * t, c0 + dc / len * t];
+    }
+
     // ---- branches: every ring gets its 45° diagonal; same-owner spurs that
     // overlap in a lane are drawn once as one continuous line (a shared
     // branch), with a single terminus bar at its far end
@@ -1364,8 +1425,25 @@
           // the trunk and floats there — the fillet then curves a stub that
           // was never attached to anything.
           var trunkC = spineC + sign * (e._trackDist - NODE_R);
-          var pts = [toXY(e._diagFrom - e._dir * 2 * CORNER, trunkC), toXY(e._diagFrom, trunkC),
-                     toXY(e._elbow, laneC), toXY(e._elbow + e._dir * CORNER, laneC)];
+          // The fillet where the branch leaves the trunk is drawn on its
+          // own, solid, and the branch proper starts after it. The fillet
+          // has to run a little way ALONG the trunk to curve away
+          // tangentially, and on a dashed or dotted line that short overlay
+          // lands out of phase with the trunk's own dashes — you could see
+          // the branch's dots sitting on the main line before it left.
+          // Solid, it is a junction rather than a second dotted line.
+          var tip = alongDiagonal(e._diagFrom, trunkC, e._elbow, laneC, 2 * CORNER);
+          var fork = svgEl('path', { d: roundedPath([
+            toXY(e._diagFrom - e._dir * 2 * CORNER, trunkC),
+            toXY(e._diagFrom, trunkC),
+            toXY(tip[0], tip[1]),
+          ], CORNER) });
+          styleStroke(fork, p, S);
+          fork.removeAttribute('stroke-dasharray');
+          fork.setAttribute('data-metro-role', 'branch'); fork.setAttribute('data-metro-owner', p.key);
+          svg.appendChild(fork);
+
+          var pts = [toXY(tip[0], tip[1]), toXY(e._elbow, laneC), toXY(e._elbow + e._dir * CORNER, laneC)];
           var path = svgEl('path', { d: roundedPath(pts, CORNER) });
           styleStroke(path, p, S);
           path.setAttribute('data-metro-role', 'branch'); path.setAttribute('data-metro-owner', p.key);
@@ -1385,9 +1463,17 @@
       // before leaving it, and carry on along it after coming back, so both
       // junctions curve instead of snapping
       var fromC = spineC + sign * (e._trackDist - NODE_R), backC = spineC + sign * (e._trackDistEnd - NODE_R);
-      var pts = [toXY(e._diagFrom - e._dir * 2 * CORNER, fromC), toXY(e._diagFrom, fromC),
-                 toXY(e._elbow, laneC), toXY(e._lineTo, laneC),
-                 toXY(e._endA, backC), toXY(e._endA + e._dir * 2 * CORNER, backC)];
+      var tipOut = alongDiagonal(e._diagFrom, fromC, e._elbow, laneC, 2 * CORNER);
+      var tipIn = alongDiagonal(e._mergeAt, backC, e._lineTo, laneC, 2 * CORNER);
+      [[e._diagFrom - e._dir * 2 * CORNER, fromC, e._diagFrom, fromC, tipOut],
+       [e._mergeAt + e._dir * 2 * CORNER, backC, e._mergeAt, backC, tipIn]].forEach(function (f) {
+        var fk = svgEl('path', { d: roundedPath([toXY(f[0], f[1]), toXY(f[2], f[3]), toXY(f[4][0], f[4][1])], CORNER) });
+        styleStroke(fk, p, S);
+        fk.removeAttribute('stroke-dasharray');
+        fk.setAttribute('data-metro-role', 'branch'); fk.setAttribute('data-metro-owner', p.key);
+        svg.appendChild(fk);
+      });
+      var pts = [toXY(tipOut[0], tipOut[1]), toXY(e._elbow, laneC), toXY(e._lineTo, laneC), toXY(tipIn[0], tipIn[1])];
       var path = svgEl('path', { d: roundedPath(pts, CORNER) });
       styleStroke(path, p, S);
       path.setAttribute('data-metro-role', 'branch'); path.setAttribute('data-metro-owner', p.key);

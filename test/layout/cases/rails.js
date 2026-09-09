@@ -11,9 +11,10 @@ module.exports = function (test, h) {
 
   const ROOMY = VIEWPORTS.find((v) => v.name === 'x-landscape');
 
-  // axis px per minute, read off the window the layout actually chose
+  // axis px per minute in the BUSY stretch — the quiet ends run compressed,
+  // so the whole-day average would understate the scale events are drawn at
   function scale(rep) {
-    const [from, to] = rep.debug.win;
+    const [from, to] = rep.debug.busy || rep.debug.win;
     return rep.canvas.w / (to - from);
   }
 

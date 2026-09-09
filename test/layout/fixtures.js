@@ -106,10 +106,23 @@ const tightPair = base({
   ],
 });
 
+// A full 24-hour day whose events all sit in the middle of it: the quiet
+// early morning and late evening are what the express sections compress.
+const fullDay = base({
+  day_start_min: 0, day_end_min: 1440, window_label: '00:00 24:00', now_min: 600,
+  items: [
+    ev('Standup', 'work', 540, 555, { track_width: 4 }),
+    ev('Workshop', 'work', 600, 690, { track_width: 4 }),
+    ev('Dentist', 'alex', 780, 825, { side: 'right', hue: 'orange-40', track_offset: 10 }),
+    ev('Swim', 'sam', 900, 960, { side: 'right', hue: 'green-40', track_style: 'dashed', track_offset: 20 }),
+  ],
+});
+
 module.exports = [
   { name: 'busy-day', metro: busyDay },
   { name: 'all-day-every-track', metro: allDayEveryTrack },
   { name: 'waypoint-station', metro: waypointStation },
   { name: 'quiet-day', metro: quietDay },
   { name: 'tight-pair', metro: tightPair },
+  { name: 'full-day', metro: fullDay },
 ];

@@ -128,27 +128,69 @@ function tr(strings, key, n) {
   return n == null ? v : v.replace('{n}', String(n));
 }
 
-// "Tue 8 Sep" / "di 8 sep" / "mar. 8 sept." — header date, in the account's
-// own language via Intl; falls back to English names if Intl rejects the tag.
-function dateLabel(civil, locale) {
-  if (!civil) return null;
-  var d = new Date(Date.UTC(civil.y, civil.mo - 1, civil.d));
-  try {
-    return new Intl.DateTimeFormat(locale || 'en', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d);
-  } catch (e) {
-    return new Intl.DateTimeFormat('en', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d);
+// Weekday and month names come from Intl, one part at a time and cached.
+// Formatters are not cheap to build and the same handful get asked for over
+// and over, and taking the parts separately means the label can be composed
+// per locale rather than accepting whatever order a full format string
+// produces. Some locales return a trailing dot or a lowercase name; both are
+// tidied here so the header reads consistently.
+var _weekdayFmtCache = {}, _monthFmtCache = {};
+function localeDatePart(locale, width, kind, y, mo, d) {
+  var key = locale + '|' + width;
+  var cache = kind === 'weekday' ? _weekdayFmtCache : _monthFmtCache;
+  var fmt = cache[key];
+  if (!fmt) {
+    var opts = { timeZone: 'UTC' };
+    opts[kind] = width;
+    try {
+      fmt = new Intl.DateTimeFormat(locale, opts);
+    } catch (e) {
+      fmt = new Intl.DateTimeFormat('en', opts);
+    }
+    cache[key] = fmt;
   }
+  var raw = fmt.format(new Date(Date.UTC(y, mo - 1, d))).replace(/\.$/, '');
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
-// 12-hour clocks where the locale defaults to them (en-US, ...), unless the
-// Time Format setting says otherwise.
+// "Tue 8 Sep" / "Di 8 sep" / "Mar 8 sept" — header date, in the board's own
+// language.
+function dateLabel(civil, locale) {
+  if (!civil) return null;
+  var loc = locale || 'en';
+  var wd = localeDatePart(loc, 'short', 'weekday', civil.y, civil.mo, civil.d);
+  var month = localeDatePart(loc, 'short', 'month', civil.y, civil.mo, civil.d);
+  return wd + ' ' + civil.d + ' ' + month;
+}
+
+// 12-hour clocks where the locale itself uses them, unless the setting says
+// otherwise. Ask Intl rather than keeping a list of regions: the runtime
+// already knows every locale's clock convention, a hand-kept list is wrong
+// the moment it meets a locale nobody thought of, and "does en-IE use a
+// 12-hour clock" is not a question this file should be answering from
+// memory.
+var _hourCycleCache = {};
+function localeUses12h(locale) {
+  var key = String(locale || 'en');
+  if (key in _hourCycleCache) return _hourCycleCache[key];
+  var out = false;
+  try {
+    var ro = new Intl.DateTimeFormat(key, { hour: 'numeric' }).resolvedOptions();
+    // hourCycle is the modern answer (h11/h12 are the 12-hour ones); hour12
+    // is the older one. A bare "en" resolves to a 12-hour clock, which is
+    // not what a TRMNL account defaulting to "en" wants, so that one case
+    // stays explicit.
+    out = ro.hourCycle ? (ro.hourCycle === 'h11' || ro.hourCycle === 'h12') : !!ro.hour12;
+    if (key.toLowerCase() === 'en') out = false;
+  } catch (e) { out = false; }
+  _hourCycleCache[key] = out;
+  return out;
+}
+
 function resolveHour12(timeFormatRaw, locale) {
   if (timeFormatRaw === '12h') return true;
   if (timeFormatRaw === '24h') return false;
-  // only an explicit 12-hour region (en-US, en-CA, en-AU, ...) defaults to
-  // 12h — a bare "en" account (the TRMNL default) keeps a 24-hour clock
-  var region = /-([A-Za-z]{2})$/.exec(String(locale || ''));
-  return !!region && ['US', 'CA', 'AU', 'NZ', 'PH', 'IN'].indexOf(region[1].toUpperCase()) !== -1;
+  return localeUses12h(locale);
 }
 
 // ---------------------------------------------------------------------
@@ -481,7 +523,15 @@ function demoOwnTrack(name, file) {
   return demoCalendar(name, file, [{ match: { type: 'any' }, track: name }]);
 }
 var DEMO_CONFIG = {
-  locale: 'en',
+  // Springfield is American, so the demo reads American: US date order and a
+  // 12-hour clock, both set here rather than inherited from the account, so
+  // the demo looks the same on every device. The zone is deliberately NOT
+  // American — it stays European so that the "config overrides the account"
+  // path is exercised by the demo every device runs on first boot, instead
+  // of only by a test.
+  locale: 'en-US',
+  timeZone: 'Europe/Brussels',
+  timeFormat: '12h',
   tracks: [
     { name: 'Homer', side: 'left' },
     { name: 'Marge', color: 'orange-40' },
@@ -937,7 +987,20 @@ function parseConfig(raw) {
   }
   if (!data || typeof data !== 'object') data = {};
 
-  var timeZone = typeof data.timeZone === 'string' && data.timeZone.trim() ? data.timeZone.trim() : null;
+  function str(v) { return typeof v === 'string' && v.trim() ? v.trim() : null; }
+  // A config can set its own locale, zone and clock. All three are about how
+  // this board should read rather than whose account it is on, so they beat
+  // the account settings — a family board hanging in a Belgian kitchen may
+  // still want a US-format demo, and the person configuring it is the one
+  // who knows.
+  var timeZone = str(data.timeZone);
+  var locale = str(data.locale);
+  var timeFormat = (function () {
+    var v = str(data.timeFormat);
+    if (!v) return null;
+    v = v.toLowerCase();
+    return v === '12h' || v === '24h' || v === 'auto' ? v : null;
+  })();
 
   var tracks = {};
   var everyoneTrack = null;
@@ -975,7 +1038,7 @@ function parseConfig(raw) {
     calendars.push({ name: name, url: item.url.trim(), rules: rules, headers: headers, includeDescription: includeDescription });
   });
 
-  return { calendars: calendars, tracks: tracks, timeZone: timeZone, globalRules: globalRules, everyoneTrack: everyoneTrack };
+  return { calendars: calendars, tracks: tracks, timeZone: timeZone, locale: locale, timeFormat: timeFormat, globalRules: globalRules, everyoneTrack: everyoneTrack };
 }
 
 // A replace that never double-matches an empty-string-capable pattern
@@ -1228,13 +1291,16 @@ async function run(input) {
   var latLonRaw = cf(input, 'lat_lon').trim();
   var orientationRaw = cf(input, 'orientation').trim().toLowerCase();
   var orientation = (orientationRaw === 'horizontal' || orientationRaw === 'vertical') ? orientationRaw : 'auto';
-  var locale = (function () {
-    // a config timeZone/locale is only known after parsing; the account locale is the default
-    try { var d = JSON.parse(configRaw); if (d && typeof d.locale === 'string' && d.locale.trim()) return d.locale.trim(); } catch (e) {}
-    return userLocale(input);
-  })();
+  // Parse once, up front: locale, zone and clock all come from the config
+  // when it sets them, and the demo is driven by a config too, so both paths
+  // read the same three settings from the same place. (Demo mode may still
+  // fall back to the built-in day further down; that fallback keeps whatever
+  // locale and clock were resolved here.)
+  var effectiveCfg = (useDemo || !configRaw) ? parseConfig(JSON.stringify(DEMO_CONFIG)) : parseConfig(configRaw);
+  var locale = effectiveCfg.locale || userLocale(input);
   var strings = stringsFor(locale);
-  var hour12 = resolveHour12(cf(input, 'time_format').trim().toLowerCase(), locale);
+  var hour12 = resolveHour12(
+    (effectiveCfg.timeFormat || cf(input, 'time_format').trim()).toLowerCase(), locale);
   var extra = { orientation: orientation, locale: locale, strings: strings, hour12: hour12 };
 
   var deadline = Date.now() + 4200;
@@ -1244,7 +1310,7 @@ async function run(input) {
     // the account's own zone/offset (still falling back to UTC) so the
     // "now" marker and any real weather fetch land on the viewer's
     // actual local day, not an arbitrary fixed one.
-    var demoTz = resolveTz(null, input);
+    var demoTz = resolveTz(effectiveCfg.timeZone, input);
     var demoNowMin = null;
     var demoDate = null;
     try {
@@ -1261,8 +1327,7 @@ async function run(input) {
     // straight back to the built-in Springfield data rather than an empty
     // board, so the demo is never blank.
     try {
-      var demoParsed = parseConfig(JSON.stringify(DEMO_CONFIG));
-      var demoMetro = await buildFromConfig(input, demoParsed, liveWeather, demoExtra);
+      var demoMetro = await buildFromConfig(input, effectiveCfg, liveWeather, demoExtra);
       // Every demo member has something on every day, so all of them must
       // come back. Anything less means some calendars failed while others
       // answered — a stale CDN copy, a 404 on a newly added file — and a
@@ -1286,7 +1351,7 @@ async function run(input) {
     return { metro: buildFromDemo(liveWeather, demoNowMin, demoExtra) };
   }
 
-  var parsed = parseConfig(configRaw); // never throws — falls back to a bare URL list on invalid JSON
+  var parsed = effectiveCfg; // never throws — falls back to a bare URL list on invalid JSON
   if (!parsed.calendars.length) {
     return { metro: buildFromDemo(null, null, extra) }; // nothing usable in the config — degrade to demo rather than error the render
   }
