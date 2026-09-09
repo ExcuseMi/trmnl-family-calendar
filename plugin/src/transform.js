@@ -412,39 +412,42 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
 // ---------------------------------------------------------------------
 
 var DEMO_TRACKS = [
-  { key: 'work', name: 'Work', side: 'left', hue: 'black', track_offset: -10, line_width: 4, line_style: 'solid' },
-  { key: 'alex', name: 'Alex', side: 'right', hue: 'orange-40', track_offset: 10, line_width: 3, line_style: 'solid' },
-  { key: 'sam', name: 'Sam', side: 'right', hue: 'green-40', track_offset: 20, line_width: 3, line_style: 'dashed' },
-  { key: 'kids', name: 'Kids', side: 'right', hue: 'purple-40', track_offset: 30, line_width: 3, line_style: 'dotted' },
+  { key: 'homer', name: 'Homer', side: 'left', hue: 'black', track_offset: -10, line_width: 4, line_style: 'solid' },
+  { key: 'marge', name: 'Marge', side: 'right', hue: 'orange-40', track_offset: 10, line_width: 3, line_style: 'solid' },
+  { key: 'kids', name: 'Bart & Lisa', side: 'right', hue: 'purple-40', track_offset: 20, line_width: 3, line_style: 'dotted' },
+  { key: 'maggie', name: 'Maggie', side: 'right', hue: 'green-40', track_offset: 30, line_width: 3, line_style: 'dashed' },
 ];
 
-// A deliberately busy day: back-to-back work meetings (lane stacking), a
-// long workshop (a branch that rejoins the spine), two- and three-track
-// interchanges, and an evening cluster on the family side.
+// A deliberately busy day in Springfield: two meetings starting minutes
+// apart on one line (lane stacking), two- and four-track interchanges, a
+// long day at school and a shift at the plant as waypoint stations, and an
+// evening cluster once everyone is home.
 var DEMO_EVENTS = [
-  { track: 'alex', title: 'Yoga', startMin: 7 * 60 + 30, endMin: 8 * 60 + 30, location: 'Studio 9' },
-  { track: 'work', title: 'Team Standup', startMin: 8 * 60, endMin: 8 * 60 + 15 },
-  { track: 'kids', interchange_with: ['sam'], title: 'School Run', startMin: 8 * 60 + 15, endMin: 8 * 60 + 45 },
-  { track: 'work', title: 'Quick Sync', startMin: 8 * 60 + 20, endMin: 8 * 60 + 35 },
-  { track: 'work', title: 'Client Workshop', startMin: 9 * 60, endMin: 10 * 60 + 30, location: 'Room 4B' },
-  { track: 'alex', title: 'Dentist', startMin: 10 * 60, endMin: 10 * 60 + 45 },
-  { track: 'work', title: '1:1 with Priya', startMin: 11 * 60, endMin: 11 * 60 + 30 },
-  { track: 'alex', interchange_with: ['work'], title: 'Lunch with Alex', startMin: 12 * 60, endMin: 13 * 60, location: 'The Garden Cafe' },
-  { track: 'work', title: 'Design Review', startMin: 14 * 60, endMin: 15 * 60 },
-  { track: 'work', title: 'Sprint Planning', startMin: 15 * 60 + 30, endMin: 17 * 60 },
-  { track: 'kids', title: 'Pick Up Kids', startMin: 16 * 60, endMin: 16 * 60 + 20 },
-  { track: 'sam', title: 'Swim Training', startMin: 16 * 60 + 30, endMin: 17 * 60 + 30, location: 'City Pool' },
-  { track: 'kids', title: 'Piano Lesson', startMin: 17 * 60, endMin: 17 * 60 + 45 },
-  { track: 'alex', title: 'Groceries', startMin: 17 * 60 + 30, endMin: 18 * 60 },
-  { track: 'alex', interchange_with: ['sam', 'kids'], title: 'Family Dinner', startMin: 18 * 60 + 30, endMin: 19 * 60 + 30 },
-  { track: 'sam', title: 'Book Club', startMin: 19 * 60 + 45, endMin: 21 * 60 },
+  { track: 'marge', interchange_with: ['kids'], title: 'School Run', startMin: 7 * 60 + 45, endMin: 8 * 60 + 15 },
+  { track: 'homer', title: 'Shift Briefing', startMin: 8 * 60, endMin: 8 * 60 + 15 },
+  { track: 'homer', title: 'Donut Run', startMin: 8 * 60 + 20, endMin: 8 * 60 + 35 },
+  { track: 'marge', title: 'Dr. Hibbert', startMin: 10 * 60, endMin: 10 * 60 + 45 },
+  { track: 'homer', title: '1:1 with Mr. Burns', startMin: 11 * 60, endMin: 11 * 60 + 30, location: 'The Office' },
+  { track: 'marge', interchange_with: ['homer'], title: 'Lunch at Krusty Burger', startMin: 12 * 60, endMin: 13 * 60 },
+  { track: 'homer', title: 'Safety Inspection', startMin: 14 * 60, endMin: 15 * 60 },
+  { track: 'kids', title: 'Sax Practice', startMin: 15 * 60 + 30, endMin: 16 * 60 + 15, location: 'Band Room' },
+  { track: 'marge', interchange_with: ['kids'], title: 'Pick Up', startMin: 16 * 60, endMin: 16 * 60 + 20 },
+  { track: 'kids', title: 'Skate Park', startMin: 16 * 60 + 30, endMin: 17 * 60 + 30 },
+  { track: 'marge', title: 'Groceries', startMin: 17 * 60 + 30, endMin: 18 * 60, location: 'Kwik-E-Mart' },
+  { track: 'marge', interchange_with: ['homer', 'kids', 'maggie'], title: 'Family Dinner', startMin: 18 * 60 + 30, endMin: 19 * 60 + 30 },
+  { track: 'homer', title: "Moe's Tavern", startMin: 19 * 60 + 45, endMin: 21 * 60 },
+  { track: 'kids', title: 'Itchy & Scratchy', startMin: 20 * 60, endMin: 20 * 60 + 30 },
+];
+
+// Waypoint stations: the line kinks out to "station level" for the span
+// rather than branching, for a place you simply ARE for a while.
+var DEMO_STATIONS = [
+  { track: 'homer', title: 'Sector 7-G', location: 'Springfield Nuclear', startMin: 9 * 60, endMin: 17 * 60 },
+  { track: 'kids', title: 'Springfield Elementary', location: 'Room 4', startMin: 8 * 60 + 30, endMin: 15 * 60 },
 ];
 
 var DEMO_ALLDAY = [
-  { track: 'work', title: 'Office Closed' },
-  { track: 'alex', title: 'PTO' },
-  { track: 'sam', title: 'Conference' },
-  { track: 'kids', title: 'School Holiday' },
+  { track: 'maggie', title: 'With Grampa' },
 ];
 
 var DEMO_WEATHER_MILESTONES = [
@@ -473,7 +476,10 @@ function buildFromDemo(weather, nowMin, extra) {
     nowMin != null ? nowMin : DEMO_NOW_MIN,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     DEMO_ALLDAY,
-    Object.assign({}, extra || {}, { sun: (w.sun && w.sun.length) ? w.sun : DEMO_SUN })
+    Object.assign({}, extra || {}, { sun: (w.sun && w.sun.length) ? w.sun : DEMO_SUN }),
+    DEMO_STATIONS.map(function (st) {
+      return { track: st.track, title: st.title, location: st.location || null, startMin: st.startMin, endMin: st.endMin };
+    })
   );
 }
 

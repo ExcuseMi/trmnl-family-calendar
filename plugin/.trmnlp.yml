@@ -49,8 +49,8 @@ variables:
       },
       "legend": [
         {
-          "key": "work",
-          "name": "Work",
+          "key": "homer",
+          "name": "Homer",
           "side": "left",
           "hue": "black",
           "track_offset": -10,
@@ -58,8 +58,8 @@ variables:
           "line_style": "solid"
         },
         {
-          "key": "alex",
-          "name": "Alex",
+          "key": "marge",
+          "name": "Marge",
           "side": "right",
           "hue": "orange-40",
           "track_offset": 10,
@@ -67,53 +67,43 @@ variables:
           "line_style": "solid"
         },
         {
-          "key": "sam",
-          "name": "Sam",
-          "side": "right",
-          "hue": "green-40",
-          "track_offset": 20,
-          "line_width": 3,
-          "line_style": "dashed"
-        },
-        {
           "key": "kids",
-          "name": "Kids",
+          "name": "Bart & Lisa",
           "side": "right",
           "hue": "purple-40",
-          "track_offset": 30,
+          "track_offset": 20,
           "line_width": 3,
           "line_style": "dotted"
+        },
+        {
+          "key": "maggie",
+          "name": "Maggie",
+          "side": "right",
+          "hue": "green-40",
+          "track_offset": 30,
+          "line_width": 3,
+          "line_style": "dashed"
         }
       ],
       "all_day": [],
       "stations": [
         {
-          "owner": "work",
-          "title": "Office Closed",
-          "location": null,
-          "start_min": 420,
-          "end_min": 1260,
-          "all_day": true
-        },
-        {
-          "owner": "alex",
-          "title": "PTO",
-          "location": null,
-          "start_min": 420,
-          "end_min": 1260,
-          "all_day": true
-        },
-        {
-          "owner": "sam",
-          "title": "Conference",
-          "location": null,
-          "start_min": 420,
-          "end_min": 1260,
-          "all_day": true
+          "owner": "homer",
+          "title": "Sector 7-G",
+          "location": "Springfield Nuclear",
+          "start_min": 540,
+          "end_min": 1020
         },
         {
           "owner": "kids",
-          "title": "School Holiday",
+          "title": "Springfield Elementary",
+          "location": "Room 4",
+          "start_min": 510,
+          "end_min": 900
+        },
+        {
+          "owner": "maggie",
+          "title": "With Grampa",
           "location": null,
           "start_min": 420,
           "end_min": 1260,
@@ -130,12 +120,14 @@ variables:
         },
         {
           "type": "event",
-          "title": "Yoga",
-          "start_min": 450,
-          "end_min": 510,
-          "location": "Studio 9",
-          "owner": "alex",
-          "co_owners": [],
+          "title": "School Run",
+          "start_min": 465,
+          "end_min": 495,
+          "location": null,
+          "owner": "marge",
+          "co_owners": [
+            "kids"
+          ],
           "side": "right",
           "hue": "orange-40",
           "track_width": 3,
@@ -144,11 +136,11 @@ variables:
         },
         {
           "type": "event",
-          "title": "Team Standup",
+          "title": "Shift Briefing",
           "start_min": 480,
           "end_min": 495,
           "location": null,
-          "owner": "work",
+          "owner": "homer",
           "co_owners": [],
           "side": "left",
           "hue": "black",
@@ -158,27 +150,11 @@ variables:
         },
         {
           "type": "event",
-          "title": "School Run",
-          "start_min": 495,
-          "end_min": 525,
-          "location": null,
-          "owner": "kids",
-          "co_owners": [
-            "sam"
-          ],
-          "side": "right",
-          "hue": "purple-40",
-          "track_width": 3,
-          "track_style": "dotted",
-          "track_offset": 30
-        },
-        {
-          "type": "event",
-          "title": "Quick Sync",
+          "title": "Donut Run",
           "start_min": 500,
           "end_min": 515,
           "location": null,
-          "owner": "work",
+          "owner": "homer",
           "co_owners": [],
           "side": "left",
           "hue": "black",
@@ -188,25 +164,11 @@ variables:
         },
         {
           "type": "event",
-          "title": "Client Workshop",
-          "start_min": 540,
-          "end_min": 630,
-          "location": "Room 4B",
-          "owner": "work",
-          "co_owners": [],
-          "side": "left",
-          "hue": "black",
-          "track_width": 4,
-          "track_style": "solid",
-          "track_offset": -10
-        },
-        {
-          "type": "event",
-          "title": "Dentist",
+          "title": "Dr. Hibbert",
           "start_min": 600,
           "end_min": 645,
           "location": null,
-          "owner": "alex",
+          "owner": "marge",
           "co_owners": [],
           "side": "right",
           "hue": "orange-40",
@@ -216,11 +178,11 @@ variables:
         },
         {
           "type": "event",
-          "title": "1:1 with Priya",
+          "title": "1:1 with Mr. Burns",
           "start_min": 660,
           "end_min": 690,
-          "location": null,
-          "owner": "work",
+          "location": "The Office",
+          "owner": "homer",
           "co_owners": [],
           "side": "left",
           "hue": "black",
@@ -230,13 +192,13 @@ variables:
         },
         {
           "type": "event",
-          "title": "Lunch with Alex",
+          "title": "Lunch at Krusty Burger",
           "start_min": 720,
           "end_min": 780,
-          "location": "The Garden Cafe",
-          "owner": "alex",
+          "location": null,
+          "owner": "marge",
           "co_owners": [
-            "work"
+            "homer"
           ],
           "side": "right",
           "hue": "orange-40",
@@ -246,11 +208,11 @@ variables:
         },
         {
           "type": "event",
-          "title": "Design Review",
+          "title": "Safety Inspection",
           "start_min": 840,
           "end_min": 900,
           "location": null,
-          "owner": "work",
+          "owner": "homer",
           "co_owners": [],
           "side": "left",
           "hue": "black",
@@ -266,51 +228,39 @@ variables:
         },
         {
           "type": "event",
-          "title": "Sprint Planning",
+          "title": "Sax Practice",
           "start_min": 930,
-          "end_min": 1020,
-          "location": null,
-          "owner": "work",
-          "co_owners": [],
-          "side": "left",
-          "hue": "black",
-          "track_width": 4,
-          "track_style": "solid",
-          "track_offset": -10
-        },
-        {
-          "type": "event",
-          "title": "Pick Up Kids",
-          "start_min": 960,
-          "end_min": 980,
-          "location": null,
+          "end_min": 975,
+          "location": "Band Room",
           "owner": "kids",
           "co_owners": [],
           "side": "right",
           "hue": "purple-40",
           "track_width": 3,
           "track_style": "dotted",
-          "track_offset": 30
-        },
-        {
-          "type": "event",
-          "title": "Swim Training",
-          "start_min": 990,
-          "end_min": 1050,
-          "location": "City Pool",
-          "owner": "sam",
-          "co_owners": [],
-          "side": "right",
-          "hue": "green-40",
-          "track_width": 3,
-          "track_style": "dashed",
           "track_offset": 20
         },
         {
           "type": "event",
-          "title": "Piano Lesson",
-          "start_min": 1020,
-          "end_min": 1065,
+          "title": "Pick Up",
+          "start_min": 960,
+          "end_min": 980,
+          "location": null,
+          "owner": "marge",
+          "co_owners": [
+            "kids"
+          ],
+          "side": "right",
+          "hue": "orange-40",
+          "track_width": 3,
+          "track_style": "solid",
+          "track_offset": 10
+        },
+        {
+          "type": "event",
+          "title": "Skate Park",
+          "start_min": 990,
+          "end_min": 1050,
           "location": null,
           "owner": "kids",
           "co_owners": [],
@@ -318,15 +268,15 @@ variables:
           "hue": "purple-40",
           "track_width": 3,
           "track_style": "dotted",
-          "track_offset": 30
+          "track_offset": 20
         },
         {
           "type": "event",
           "title": "Groceries",
           "start_min": 1050,
           "end_min": 1080,
-          "location": null,
-          "owner": "alex",
+          "location": "Kwik-E-Mart",
+          "owner": "marge",
           "co_owners": [],
           "side": "right",
           "hue": "orange-40",
@@ -340,10 +290,11 @@ variables:
           "start_min": 1110,
           "end_min": 1170,
           "location": null,
-          "owner": "alex",
+          "owner": "marge",
           "co_owners": [
-            "sam",
-            "kids"
+            "homer",
+            "kids",
+            "maggie"
           ],
           "side": "right",
           "hue": "orange-40",
@@ -353,17 +304,17 @@ variables:
         },
         {
           "type": "event",
-          "title": "Book Club",
+          "title": "Moe's Tavern",
           "start_min": 1185,
           "end_min": 1260,
           "location": null,
-          "owner": "sam",
+          "owner": "homer",
           "co_owners": [],
-          "side": "right",
-          "hue": "green-40",
-          "track_width": 3,
-          "track_style": "dashed",
-          "track_offset": 20
+          "side": "left",
+          "hue": "black",
+          "track_width": 4,
+          "track_style": "solid",
+          "track_offset": -10
         },
         {
           "type": "sun",
@@ -371,6 +322,20 @@ variables:
           "kind": "sunset",
           "icon": "https://trmnl.com/images/plugins/weather/wi-sunset.svg",
           "label": "Sunset"
+        },
+        {
+          "type": "event",
+          "title": "Itchy & Scratchy",
+          "start_min": 1200,
+          "end_min": 1230,
+          "location": null,
+          "owner": "kids",
+          "co_owners": [],
+          "side": "right",
+          "hue": "purple-40",
+          "track_width": 3,
+          "track_style": "dotted",
+          "track_offset": 20
         }
       ]
     }

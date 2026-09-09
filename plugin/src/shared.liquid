@@ -350,7 +350,22 @@
     }
     var winLabel = ROOT.querySelector('.metro-window');
     if (winLabel) winLabel.textContent = timeLabel(winStart) + ' ' + timeLabel(winEnd);
-    var axisStart = NODE_R + 2 * S, axisEnd = axisPx - NODE_R - 2 * S; // rings at the window edges stay whole; tracks still run full bleed
+    // ---- line names: every line begins at its own named terminus, and the
+    // axis body starts after a column wide enough to hold them. Naming the
+    // start of each line is what a transit map does, and it means the map
+    // needs no legend at all — the name is on the line it belongs to rather
+    // than in a key you have to look things up in.
+    LEGEND.forEach(function (p) {
+      var n = el('span', 'metro-gen metro-terminus label label--small font--bold text--black absolute bg--white');
+      n.textContent = p.name;
+      canvas.appendChild(n);
+      var m = measure(n);
+      p._nameEl = n; p._nameW = m.w; p._nameH = m.h;
+    });
+    var nameH = LEGEND.length ? Math.max.apply(null, LEGEND.map(function (p) { return p._nameH; })) : 0;
+    var maxNameW = LEGEND.length ? Math.max.apply(null, LEGEND.map(function (p) { return p._nameW; })) : 0;
+    var nameCol = LEGEND.length ? 2 * S + maxNameW + 6 * S : 0;
+    var axisStart = NODE_R + 2 * S + nameCol, axisEnd = axisPx - NODE_R - 2 * S; // rings at the window edges stay whole; tracks still run full bleed
     function aFor(min) { return axisStart + (min - winStart) / (winEnd - winStart) * (axisEnd - axisStart); }
     var pxPerHour = aFor(60) - aFor(0);
 
@@ -518,80 +533,10 @@
       }
     });
 
-    // ---- line names: in horizontal mode each line starts at its own named
-    // terminus and fans into the bundle at 45° (metro style); when there is
-    // no room for that, or in vertical mode, each line gets a lettered
-    // bullet near its start instead
-    var fan = null;
-    LEGEND.forEach(function (p) {
-      var n = el('span', 'metro-gen metro-terminus label label--small font--bold text--black absolute bg--white');
-      n.textContent = p.name;
-      canvas.appendChild(n);
-      var m = measure(n);
-      p._nameEl = n; p._nameW = m.w; p._nameH = m.h;
-    });
-    if (horizontal && LEGEND.length) {
-      var nameH = Math.max.apply(null, LEGEND.map(function (p) { return p._nameH; }));
-      var maxNameW = Math.max.apply(null, LEGEND.map(function (p) { return p._nameW; }));
-      var fanStep = nameH + 3 * S;
-      var fanLen = 2 * S + maxNameW + 5 * S; // name + gap before the diagonals start
-      // the fan needs a quiet stretch of the axis: try the start, then the end
-      [1, -1].forEach(function (dir) {
-        if (fan) return;
-        var ok = true, ends = {};
-        ['A', 'B'].forEach(function (sk) {
-          var n = sides[sk].length;
-          var reach = fanLen + Math.max(0, fanStep - TRACK_STEP) * n + CORNER; // axis length the fan occupies
-          ends[sk] = reach;
-          var nearest = Infinity;
-          visible.forEach(function (e) {
-            if (e._sideKey !== sk) return;
-            var d = dir > 0 ? e._nodeA - axisStart : axisEnd - Math.max(e._nodeA, e._merge ? e._endA : e._nodeA);
-            nearest = Math.min(nearest, d);
-          });
-          if (n && (reach + NODE_R > nearest || reach > axisPx * 0.28)) ok = false;
-        });
-        if (!ok) return;
-        fan = { step: fanStep, len: fanLen, dir: dir, nameH: nameH };
-        ['A', 'B'].forEach(function (sk) {
-          var n = sides[sk].length;
-          if (!n) return;
-          var a0 = dir > 0 ? 0 : axisPx - ends[sk] - 2 * S, a1 = dir > 0 ? ends[sk] + 2 * S : axisPx;
-          obstacles[sk].push({ a0: a0, a1: a1, distMax: gutterHalf + fanStep * n + nameH / 2, kind: 'obstacle' });
-        });
-      });
-    }
-    if (!fan) LEGEND.forEach(function (p) { p._nameEl.remove(); p._nameEl = null; });
-
-    // ---- corner legend: one swatch + name per track, drawn at the canvas's
-    // visual bottom-left. Built and measured now (fixed size, independent of
-    // the text tier) so it can reserve real lane space instead of floating
-    // over content: "bottom-left" is side B at the axis start in horizontal
-    // mode (side B renders lower on screen), side A at the axis end in
-    // vertical mode (side A renders on the left, the axis end is the bottom).
-    var legend = el('div', 'metro-gen metro-corner-legend absolute bg--white flex flex--col gap--xsmall');
-    LEGEND.forEach(function (p) {
-      var boxW = 28 * S, boxH = 9 * S;
-      var sw = svgEl('svg', { width: boxW, height: boxH, viewBox: '0 0 ' + boxW + ' ' + boxH });
-      var ln = svgEl('line', { x1: 2 * S, y1: boxH / 2, x2: boxW - 2 * S, y2: boxH / 2 });
-      styleStroke(ln, p, S);
-      var ld = legendDashFor(p.line_style, S);
-      if (ld) ln.setAttribute('stroke-dasharray', ld); else ln.removeAttribute('stroke-dasharray');
-      sw.appendChild(ln);
-      var name = el('span', 'label label--small font--bold text--black');
-      name.style.whiteSpace = 'nowrap';
-      name.textContent = p.name;
-      var row = el('span', 'flex flex--row flex--center-y gap--xsmall');
-      row.appendChild(sw); row.appendChild(name);
-      legend.appendChild(row);
-    });
-    canvas.appendChild(legend);
-    var legendM = measure(legend);
-    legend.remove();
-    var legendSide = horizontal ? 'B' : 'A';
-    var legendPad = EDGE + 4 * S;
-    if (horizontal) obstacles[legendSide].push({ a0: axisStart, a1: axisStart + legendM.w + legendPad, distMax: crossPx });
-    else obstacles[legendSide].push({ a0: axisEnd - legendM.h - legendPad, a1: axisEnd, distMax: crossPx });
+    // The terminus column is already reserved out of the axis, so there is
+    // nothing to negotiate: names always sit at the start, each at its own
+    // line's height. (`fan` is kept as the shape the drawing code reads.)
+    var fan = LEGEND.length ? { len: nameCol, dir: 1, nameH: nameH } : null;
 
     // static per-event facts (independent of the label tier)
     visible.forEach(function (e) {
@@ -634,7 +579,7 @@
     }
     recomputeTrackDists();
 
-    var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped, demand, alloc, sep;
+    var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped, demand, alloc, sep, packedFallback;
     var lastPlaceCrossings = 0; // set by placeSide: how many placements had to accept a crossing
     function layoutAttempt(tier) {
     titleClass = tier.cls; tagClass = tier.tag; showTime = tier.time; showLocation = tier.loc;
@@ -937,9 +882,7 @@
       // names now sit at their own line's height, so the bands already
       // account for them bar the last one's half-height
       var fanNeed = fan && sides[sideKey].length ? extent + fan.nameH / 2 : 0;
-      // the legend sits in the far corner of its own side; with bands
-      // reaching for the canvas edge, one would otherwise be laid over it
-      var legendNeed = sideKey === legendSide ? (horizontal ? legendM.h : legendM.w) + legendPad : 0;
+      var legendNeed = 0; // no legend any more: every line is named at its own terminus
       return Math.max(extent, fanNeed) + EDGE + legendNeed + (sideKey === 'A' ? alertBand : 0);
     }
 
@@ -1018,7 +961,8 @@
     // bundle and hand out lanes to whichever side wants them more, the way
     // this layout worked before bands existed. Better a correct packed map
     // than a beautiful one with a track hanging off the bottom edge.
-    if (!fits(sol)) {
+    packedFallback = !fits(sol);
+    if (packedFallback) {
       step = laneStep;
       var wantA = 0, wantB = 0;
       LEGEND.forEach(function (p) {
@@ -1084,7 +1028,7 @@
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal, win: [winStart, winEnd], spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
-      bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
+      bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx), packed: !!packedFallback,
       colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
       events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist)]; })
     }));
@@ -1142,6 +1086,15 @@
         styleStroke(path, p, S);
         path.setAttribute('data-metro-role', 'track'); path.setAttribute('data-metro-owner', p.key);
         svg.appendChild(path);
+        // a terminal bar at each end, the transit-map mark for where a line
+        // starts and stops rather than simply running out of canvas
+        [[nameEnd, spreadC], [far, lineCAt(p, far)]].forEach(function (at) {
+          var b0 = toXY(at[0], at[1] - NODE_R), b1 = toXY(at[0], at[1] + NODE_R);
+          var cap = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1],
+            stroke: colorFor(p.hue), 'stroke-width': (p.line_width + 1) * S, 'stroke-linecap': 'round' });
+          cap.setAttribute('data-metro-role', 'terminal'); cap.setAttribute('data-metro-owner', p.key);
+          svg.appendChild(cap);
+        });
       } else {
         var ln = svgEl('path', { d: roundedPath(stationPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
         styleStroke(ln, p, S);
@@ -1212,30 +1165,6 @@
         else { box.style.top = capA + 'px'; box.style.left = (midC - bm.w / 2) + 'px'; }
       });
     });
-    if (!fan) {
-      // lettered bullets, staggered along the line starts
-      var initials = {}, used = {};
-      LEGEND.forEach(function (p) {
-        var ini = Array.from(p.name)[0] || '?';
-        if (used[ini.toUpperCase()]) ini = Array.from(p.name).slice(0, 2).join('');
-        used[ini.toUpperCase()] = true;
-        initials[p.key] = ini.toUpperCase();
-      });
-      // small enough not to swallow the neighbouring lines; at the quiet end
-      // of the axis (the end in vertical mode: the top is where the day starts)
-      var br = Math.max(NODE_R, Math.min(hourH * 0.55, TRACK_STEP - 1.5 * S));
-      LEGEND.forEach(function (p, i) {
-        var a = horizontal ? axisStart + br + i * (2 * br + 4 * S) : axisEnd - br - i * (2 * br + 4 * S);
-        var xy = toXY(a, spineC + p._c);
-        var bullet = svgEl('circle', { cx: xy[0], cy: xy[1], r: br, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': 2 * S });
-        bullet.setAttribute('data-metro-role', 'bullet');
-        svg.appendChild(bullet);
-        var t = svgEl('text', { x: xy[0], y: xy[1], 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': (br * 1.2) + 'px', 'font-weight': '700', fill: '#000' });
-        t.setAttribute('style', 'font-family: inherit;');
-        t.textContent = initials[p.key];
-        svg.appendChild(t);
-      });
-    }
 
     // ---- branches: every ring gets its 45° diagonal; same-owner spurs that
     // overlap in a lane are drawn once as one continuous line (a shared
@@ -1416,11 +1345,6 @@
       }
     });
 
-    // ---- corner legend: built early (see below); position it now that spineC
-    // is final, pinned to the canvas's own visual bottom-left corner.
-    legend.style.left = EDGE + 'px';
-    legend.style.bottom = EDGE + 'px';
-    canvas.appendChild(legend);
   }
 
   // Re-run whenever the canvas's own size settles — different render

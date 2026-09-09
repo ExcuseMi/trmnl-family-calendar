@@ -45,6 +45,7 @@ module.exports = function (test, h) {
   const OVERLAP_KNOWN = {};
   const PIERCE_KNOWN = {
     'busy-day': 'a work branch climbs through an earlier work label whose ring it starts under',
+    'all-day-every-track': 'same, on two lines: a work branch, and the Family Dinner interchange climbing inside the Kids band it takes its lane from',
     'waypoint-station': 'same: a branch climbing past an earlier label on its own line',
     'tight-pair': 'two events on one line, the second starting under the first label — no lane avoids it and the swap that would does not survive contact with longer runs',
   };
