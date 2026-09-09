@@ -103,23 +103,6 @@
   var STATIONS = METRO.stations || [];
   var DAY_START = METRO.day_start_min, DAY_END = METRO.day_end_min;
 
-  // Same day, same map: a small deterministic generator seeded from today's
-  // own label, so the parts of the drawing that are free to vary (the
-  // river's meander) are stable for a whole day and different the next.
-  // Nothing that carries meaning is allowed to depend on this.
-  function seededRandom(seedStr) {
-    var h = 2166136261;
-    var str = String(seedStr || '');
-    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
-    var a = h >>> 0;
-    return function () {
-      a = (a + 0x6D2B79F5) | 0;
-      var t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
   var HOUR12 = !!METRO.hour12;
   var I18N = METRO.i18n || { today: 'Today', more: '+{n} more', earlier: '+{n} earlier' };
@@ -596,7 +579,7 @@
     }
     recomputeTrackDists();
 
-    var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped, demand, alloc, sep, packedFallback, extentA, extentB;
+    var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped, demand, alloc, sep, packedFallback;
     var lastPlaceCrossings = 0; // set by placeSide: how many placements had to accept a crossing
     function layoutAttempt(tier) {
     titleClass = tier.cls; tagClass = tier.tag; showTime = tier.time; showLocation = tier.loc;
@@ -1016,7 +999,6 @@
     usedA = placeSide('A', sol.A.slots, obstacles.A);
     usedB = placeSide('B', sol.B.slots, obstacles.B);
     needA = sol.needA; needB = sol.needB;
-    extentA = sol.A.extent; extentB = sol.B.extent;
     spineC = clamp(needA + (crossPx - needA - needB) / 2, Math.min(needA, crossPx / 2), Math.max(crossPx - needB, crossPx / 2));
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0;
@@ -1047,61 +1029,10 @@
       W: W, H: H, S: S, Z: Z, horizontal: horizontal, win: [winStart, winEnd], spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
-      extentA: Math.round(extentA), extentB: Math.round(extentB), freeA: Math.round(spineC - extentA), freeB: Math.round(crossPx - (spineC + extentB)), packed: !!packedFallback,
+      packed: !!packedFallback,
       colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
       events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist)]; })
     }));
-
-    // ---- the river: map furniture, drawn behind everything -------------
-    // A transit map is a diagram of a place, and what makes one read as a
-    // place rather than a wiring diagram is the geography behind it. The
-    // river is the day's own landmark: its meander comes from today's date,
-    // so each day draws a map that is recognisably the same city and
-    // visibly not yesterday's — while nothing that carries meaning moves.
-    //
-    // It goes in whichever margin the layout actually left empty, and only
-    // when there is real room; squeezed against the tracks it would read as
-    // a mistake. Banks are strokes with a pale fill between them, so on a
-    // 1-bit panel the fill dithers away and the banks still read.
-    (function drawRiver() {
-      var rnd = seededRandom(METRO.date_label || METRO.window_label || 'today');
-      // It flows BEHIND the map, the way it does on a real transit diagram,
-      // rather than hiding in a margin — on a busy day there is no margin,
-      // and a river tucked into one reads as a stray band anyway. Every
-      // label carries an opaque background, so text stays readable where
-      // the two overlap.
-      var thick = clamp(crossPx * 0.11, 18 * S, 60 * S);
-      var mid = crossPx * (0.28 + rnd() * 0.46);
-      var waves = 2 + Math.floor(rnd() * 3);
-      var amp = thick * (0.45 + rnd() * 0.5);
-      var phase = rnd() * Math.PI * 2;
-      var drift = (rnd() - 0.5) * thick * 1.2; // a slow lean across the map
-      function bank(offset) {
-        var pts = [], n = Math.max(24, waves * 10);
-        for (var i = 0; i <= n; i++) {
-          var t = i / n;
-          var c = mid + offset + drift * (t - 0.5) * 2
-                + Math.sin(phase + t * waves * Math.PI * 2) * amp
-                + Math.sin(phase * 1.7 + t * waves * Math.PI * 3.3) * amp * 0.22;
-          pts.push(toXY(t * axisPx, clamp(c, -thick, crossPx + thick)));
-        }
-        return pts;
-      }
-      function pathFrom(pts, close) {
-        var d = 'M ' + pts[0][0] + ' ' + pts[0][1];
-        for (var i = 1; i < pts.length; i++) d += ' L ' + pts[i][0] + ' ' + pts[i][1];
-        return close ? d + ' Z' : d;
-      }
-      var top = bank(-thick / 2), bot = bank(thick / 2);
-      var fill = svgEl('path', { d: pathFrom(top.concat(bot.slice().reverse()), true), fill: '#f2f2f2', stroke: 'none' });
-      fill.setAttribute('data-metro-role', 'river');
-      svg.appendChild(fill);
-      [top, bot].forEach(function (b) {
-        var ln = svgEl('path', { d: pathFrom(b, false), fill: 'none', stroke: '#dedede', 'stroke-width': 1.2 * S, 'stroke-linecap': 'round' });
-        ln.setAttribute('data-metro-role', 'river');
-        svg.appendChild(ln);
-      });
-    })();
 
     // ---- draw: now line + alert lines first (under everything)
     var nowA = null;
@@ -1338,8 +1269,17 @@
         // the lines can be a long way apart, and a filled bar stretched
         // across that gap dominates everything around it. This is the way a
         // transit map links stations that aren't adjacent anyway.
+        // Dashed, the way a transit map draws an out-of-station
+        // interchange: these lines are not adjacent platforms, they are a
+        // family in different places agreeing to be in the same one. A
+        // solid bar across four bands also reads far heavier than the
+        // event deserves.
         var t0 = toXY(e._nodeA, lo), t1 = toXY(e._nodeA, hi);
-        var tie = svgEl('line', { x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1], stroke: '#000', 'stroke-width': NODE_STROKE * 0.8, 'stroke-linecap': 'round' });
+        var tie = svgEl('line', {
+          x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
+          stroke: '#000', 'stroke-width': NODE_STROKE * 0.7, 'stroke-linecap': 'round',
+          'stroke-dasharray': (NODE_STROKE * 1.2) + ' ' + (NODE_STROKE * 1.6),
+        });
         tie.setAttribute('data-metro-role', 'capsule'); tie.setAttribute('data-metro-owner', e.owner);
         svg.appendChild(tie);
         cs.forEach(function (c) {
@@ -1349,10 +1289,20 @@
           svg.appendChild(node);
         });
       } else {
-        var cxy = toXY(e._nodeA, lineCAt(p, e._nodeA));
-        var ring = svgEl('circle', { cx: cxy[0], cy: cxy[1], r: NODE_R, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE });
-        ring.setAttribute('data-metro-role', 'ring'); ring.setAttribute('data-metro-owner', e.owner);
-        svg.appendChild(ring);
+        // A local stop: a tick across the line, not a ring. On a transit map
+        // the hollow ring means "you can change lines here" — spending it on
+        // every ordinary appointment says every appointment is an
+        // interchange, and a line with eight meetings on it ends up as eight
+        // identical circles. The tick is the standard mark for a stop the
+        // line simply calls at, and it leaves the ring meaning something.
+        var stopC = lineCAt(p, e._nodeA);
+        var s0 = toXY(e._nodeA, stopC - NODE_R), s1 = toXY(e._nodeA, stopC + NODE_R);
+        var tick = svgEl('line', {
+          x1: s0[0], y1: s0[1], x2: s1[0], y2: s1[1],
+          stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE, 'stroke-linecap': 'round',
+        });
+        tick.setAttribute('data-metro-role', 'stop'); tick.setAttribute('data-metro-owner', e.owner);
+        svg.appendChild(tick);
       }
     });
 

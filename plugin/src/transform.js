@@ -414,8 +414,9 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
 var DEMO_TRACKS = [
   { key: 'homer', name: 'Homer', side: 'left', hue: 'black', track_offset: -10, line_width: 4, line_style: 'solid' },
   { key: 'marge', name: 'Marge', side: 'right', hue: 'orange-40', track_offset: 10, line_width: 3, line_style: 'solid' },
-  { key: 'kids', name: 'Bart & Lisa', side: 'right', hue: 'purple-40', track_offset: 20, line_width: 3, line_style: 'dotted' },
-  { key: 'maggie', name: 'Maggie', side: 'right', hue: 'green-40', track_offset: 30, line_width: 3, line_style: 'dashed' },
+  { key: 'bart', name: 'Bart', side: 'right', hue: 'purple-40', track_offset: 20, line_width: 3, line_style: 'dotted' },
+  { key: 'lisa', name: 'Lisa', side: 'right', hue: 'gray-40', track_offset: 30, line_width: 3, line_style: 'dash-dot' },
+  { key: 'maggie', name: 'Maggie', side: 'right', hue: 'green-40', track_offset: 40, line_width: 3, line_style: 'dashed' },
 ];
 
 // A deliberately busy day in Springfield: two meetings starting minutes
@@ -423,27 +424,28 @@ var DEMO_TRACKS = [
 // long day at school and a shift at the plant as waypoint stations, and an
 // evening cluster once everyone is home.
 var DEMO_EVENTS = [
-  { track: 'marge', interchange_with: ['kids'], title: 'School Run', startMin: 7 * 60 + 45, endMin: 8 * 60 + 15 },
+  { track: 'marge', interchange_with: ['bart', 'lisa'], title: 'School Run', startMin: 7 * 60 + 45, endMin: 8 * 60 + 15 },
   { track: 'homer', title: 'Shift Briefing', startMin: 8 * 60, endMin: 8 * 60 + 15 },
   { track: 'homer', title: 'Donut Run', startMin: 8 * 60 + 20, endMin: 8 * 60 + 35 },
   { track: 'marge', title: 'Dr. Hibbert', startMin: 10 * 60, endMin: 10 * 60 + 45 },
   { track: 'homer', title: '1:1 with Mr. Burns', startMin: 11 * 60, endMin: 11 * 60 + 30, location: 'The Office' },
   { track: 'marge', interchange_with: ['homer'], title: 'Lunch at Krusty Burger', startMin: 12 * 60, endMin: 13 * 60 },
   { track: 'homer', title: 'Safety Inspection', startMin: 14 * 60, endMin: 15 * 60 },
-  { track: 'kids', title: 'Sax Practice', startMin: 15 * 60 + 30, endMin: 16 * 60 + 15, location: 'Band Room' },
-  { track: 'marge', interchange_with: ['kids'], title: 'Pick Up', startMin: 16 * 60, endMin: 16 * 60 + 20 },
-  { track: 'kids', title: 'Skate Park', startMin: 16 * 60 + 30, endMin: 17 * 60 + 30 },
+  { track: 'lisa', title: 'Sax Practice', startMin: 15 * 60 + 30, endMin: 16 * 60 + 15, location: 'Band Room' },
+  { track: 'marge', interchange_with: ['bart', 'lisa'], title: 'Pick Up', startMin: 16 * 60, endMin: 16 * 60 + 20 },
+  { track: 'bart', title: 'Skate Park', startMin: 16 * 60 + 30, endMin: 17 * 60 + 30 },
   { track: 'marge', title: 'Groceries', startMin: 17 * 60 + 30, endMin: 18 * 60, location: 'Kwik-E-Mart' },
-  { track: 'marge', interchange_with: ['homer', 'kids', 'maggie'], title: 'Family Dinner', startMin: 18 * 60 + 30, endMin: 19 * 60 + 30 },
+  { track: 'marge', interchange_with: ['homer', 'bart', 'lisa', 'maggie'], title: 'Family Dinner', startMin: 18 * 60 + 30, endMin: 19 * 60 + 30 },
   { track: 'homer', title: "Moe's Tavern", startMin: 19 * 60 + 45, endMin: 21 * 60 },
-  { track: 'kids', title: 'Itchy & Scratchy', startMin: 20 * 60, endMin: 20 * 60 + 30 },
+  { track: 'bart', interchange_with: ['lisa'], title: 'Itchy & Scratchy', startMin: 20 * 60, endMin: 20 * 60 + 30 },
 ];
 
 // Waypoint stations: the line kinks out to "station level" for the span
 // rather than branching, for a place you simply ARE for a while.
 var DEMO_STATIONS = [
   { track: 'homer', title: 'Sector 7-G', location: 'Springfield Nuclear', startMin: 9 * 60, endMin: 17 * 60 },
-  { track: 'kids', title: 'Springfield Elementary', location: 'Room 4', startMin: 8 * 60 + 30, endMin: 15 * 60 },
+  { track: 'bart', title: 'Springfield Elementary', location: 'Room 12', startMin: 8 * 60 + 30, endMin: 15 * 60 },
+  { track: 'lisa', title: 'Springfield Elementary', location: 'Room 4', startMin: 8 * 60 + 30, endMin: 15 * 60 },
 ];
 
 var DEMO_ALLDAY = [

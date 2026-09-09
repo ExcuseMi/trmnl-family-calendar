@@ -107,10 +107,11 @@ module.exports = function (test, h) {
       const rep = layout(f, ROOMY);
       const lines = pathsWhere(rep, 'track').concat(pathsWhere(rep, 'branch'));
       const missed = [], oneSided = [];
-      // only the markers that are meant to sit ON a line: event rings and
-      // station boundary rings. The "now" dot rides the hour axis and the
-      // lettered bullets mark a line's start, so neither is checked here.
-      for (const c of rep.circles.filter((c) => c.role === 'ring' || c.role === 'station-ring')) {
+      // every marker that is meant to sit ON a line: the tick of a local
+      // stop, the ring of an interchange, a station junction. The "now" dot
+      // rides the hour axis and the lettered bullets mark a line's start,
+      // so neither is checked here.
+      for (const c of rep.circles.filter((c) => c.role === 'ring' || c.role === 'station-ring' || c.role === 'stop')) {
         const cx = c.x + c.w / 2, cy = c.y + c.h / 2, r = Math.max(c.w, c.h) / 2;
         let best = Infinity;
         const near = [];

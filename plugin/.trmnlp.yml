@@ -41,92 +41,91 @@ variables:
         "rain_pct": "{n}% rain"
       },
       "header_weather": {
-        "hi": 21,
-        "lo": 13,
-        "condition": "Rain",
-        "rain_chance": 60,
-        "icon": "https://trmnl.com/images/plugins/weather/wi-day-rain.svg"
+        "hi": null,
+        "lo": null,
+        "condition": null,
+        "rain_chance": null
       },
       "legend": [
         {
-          "key": "homer",
+          "key": "p0",
           "name": "Homer",
           "side": "left",
           "hue": "black",
           "track_offset": -10,
           "line_width": 4,
-          "line_style": "solid"
+          "line_style": "solid",
+          "initial": "H"
         },
         {
-          "key": "marge",
+          "key": "p3",
+          "name": "Lisa",
+          "side": "left",
+          "hue": "gray-40",
+          "track_offset": -20,
+          "line_width": 3,
+          "line_style": "dashed",
+          "initial": "L"
+        },
+        {
+          "key": "p1",
           "name": "Marge",
           "side": "right",
           "hue": "orange-40",
           "track_offset": 10,
           "line_width": 3,
-          "line_style": "solid"
+          "line_style": "solid",
+          "initial": "M"
         },
         {
-          "key": "kids",
-          "name": "Bart & Lisa",
+          "key": "p2",
+          "name": "Bart",
           "side": "right",
           "hue": "purple-40",
           "track_offset": 20,
           "line_width": 3,
-          "line_style": "dotted"
+          "line_style": "dashed",
+          "initial": "B"
         },
         {
-          "key": "maggie",
+          "key": "p4",
           "name": "Maggie",
           "side": "right",
-          "hue": "green-40",
+          "hue": "cyan-40",
           "track_offset": 30,
           "line_width": 3,
-          "line_style": "dashed"
+          "line_style": "dotted",
+          "initial": "M"
         }
       ],
       "all_day": [],
       "stations": [
         {
-          "owner": "homer",
-          "title": "Sector 7-G",
-          "location": "Springfield Nuclear",
-          "start_min": 540,
-          "end_min": 1020
-        },
-        {
-          "owner": "kids",
-          "title": "Springfield Elementary",
-          "location": "Room 4",
+          "owner": "p2",
+          "title": "School Day",
+          "location": "Springfield Elementary",
           "start_min": 510,
           "end_min": 900
         },
         {
-          "owner": "maggie",
-          "title": "With Grampa",
-          "location": null,
-          "start_min": 420,
-          "end_min": 1260,
-          "all_day": true
+          "owner": "p3",
+          "title": "School Day",
+          "location": "Springfield Elementary",
+          "start_min": 510,
+          "end_min": 900
         }
       ],
       "items": [
         {
-          "type": "sun",
-          "at_min": 428,
-          "kind": "sunrise",
-          "icon": "https://trmnl.com/images/plugins/weather/wi-sunrise.svg",
-          "label": "Sunrise"
-        },
-        {
           "type": "event",
           "title": "School Run",
-          "start_min": 465,
-          "end_min": 495,
+          "start_min": 480,
+          "end_min": 510,
           "location": null,
-          "owner": "marge",
+          "owner": "p1",
           "co_owners": [
-            "kids"
+            "p2",
+            "p3"
           ],
           "side": "right",
           "hue": "orange-40",
@@ -136,11 +135,11 @@ variables:
         },
         {
           "type": "event",
-          "title": "Shift Briefing",
+          "title": "Shift Handover",
           "start_min": 480,
           "end_min": 495,
-          "location": null,
-          "owner": "homer",
+          "location": "Sector 7-G",
+          "owner": "p0",
           "co_owners": [],
           "side": "left",
           "hue": "black",
@@ -150,25 +149,11 @@ variables:
         },
         {
           "type": "event",
-          "title": "Donut Run",
-          "start_min": 500,
-          "end_min": 515,
+          "title": "Book Club",
+          "start_min": 540,
+          "end_min": 600,
           "location": null,
-          "owner": "homer",
-          "co_owners": [],
-          "side": "left",
-          "hue": "black",
-          "track_width": 4,
-          "track_style": "solid",
-          "track_offset": -10
-        },
-        {
-          "type": "event",
-          "title": "Dr. Hibbert",
-          "start_min": 600,
-          "end_min": 645,
-          "location": null,
-          "owner": "marge",
+          "owner": "p1",
           "co_owners": [],
           "side": "right",
           "hue": "orange-40",
@@ -178,11 +163,25 @@ variables:
         },
         {
           "type": "event",
-          "title": "1:1 with Mr. Burns",
-          "start_min": 660,
-          "end_min": 690,
-          "location": "The Office",
-          "owner": "homer",
+          "title": "Assembly",
+          "start_min": 540,
+          "end_min": 570,
+          "location": null,
+          "owner": "p3",
+          "co_owners": [],
+          "side": "left",
+          "hue": "gray-40",
+          "track_width": 3,
+          "track_style": "dashed",
+          "track_offset": -20
+        },
+        {
+          "type": "event",
+          "title": "Donut Break",
+          "start_min": 600,
+          "end_min": 620,
+          "location": null,
+          "owner": "p0",
           "co_owners": [],
           "side": "left",
           "hue": "black",
@@ -192,14 +191,26 @@ variables:
         },
         {
           "type": "event",
-          "title": "Lunch at Krusty Burger",
+          "title": "Playgroup",
+          "start_min": 630,
+          "end_min": 690,
+          "location": null,
+          "owner": "p4",
+          "co_owners": [],
+          "side": "right",
+          "hue": "cyan-40",
+          "track_width": 3,
+          "track_style": "dotted",
+          "track_offset": 30
+        },
+        {
+          "type": "event",
+          "title": "Grocery Run",
           "start_min": 720,
           "end_min": 780,
-          "location": null,
-          "owner": "marge",
-          "co_owners": [
-            "homer"
-          ],
+          "location": "Kwik-E-Mart",
+          "owner": "p1",
+          "co_owners": [],
           "side": "right",
           "hue": "orange-40",
           "track_width": 3,
@@ -208,11 +219,25 @@ variables:
         },
         {
           "type": "event",
-          "title": "Safety Inspection",
+          "title": "Nap",
+          "start_min": 780,
+          "end_min": 870,
+          "location": null,
+          "owner": "p4",
+          "co_owners": [],
+          "side": "right",
+          "hue": "cyan-40",
+          "track_width": 3,
+          "track_style": "dotted",
+          "track_offset": 30
+        },
+        {
+          "type": "event",
+          "title": "Reactor Core Check",
           "start_min": 840,
           "end_min": 900,
           "location": null,
-          "owner": "homer",
+          "owner": "p0",
           "co_owners": [],
           "side": "left",
           "hue": "black",
@@ -221,94 +246,68 @@ variables:
           "track_offset": -10
         },
         {
-          "type": "weather",
-          "at_min": 900,
-          "icon": "https://trmnl.com/images/plugins/weather/wi-rain.svg",
-          "label": "Rain starts 15:00"
-        },
-        {
           "type": "event",
-          "title": "Sax Practice",
+          "title": "Detention",
           "start_min": 930,
-          "end_min": 975,
-          "location": "Band Room",
-          "owner": "kids",
+          "end_min": 990,
+          "location": "Room 12",
+          "owner": "p2",
           "co_owners": [],
           "side": "right",
           "hue": "purple-40",
           "track_width": 3,
-          "track_style": "dotted",
+          "track_style": "dashed",
           "track_offset": 20
         },
         {
           "type": "event",
-          "title": "Pick Up",
+          "title": "PTA Meeting",
           "start_min": 960,
-          "end_min": 980,
-          "location": null,
-          "owner": "marge",
-          "co_owners": [
-            "kids"
-          ],
+          "end_min": 1020,
+          "location": "Springfield Elementary",
+          "owner": "p1",
+          "co_owners": [],
           "side": "right",
           "hue": "orange-40",
           "track_width": 3,
           "track_style": "solid",
           "track_offset": 10
+        },
+        {
+          "type": "event",
+          "title": "Saxophone Lesson",
+          "start_min": 960,
+          "end_min": 1020,
+          "location": null,
+          "owner": "p3",
+          "co_owners": [],
+          "side": "left",
+          "hue": "gray-40",
+          "track_width": 3,
+          "track_style": "dashed",
+          "track_offset": -20
         },
         {
           "type": "event",
           "title": "Skate Park",
-          "start_min": 990,
-          "end_min": 1050,
+          "start_min": 1020,
+          "end_min": 1080,
           "location": null,
-          "owner": "kids",
+          "owner": "p2",
           "co_owners": [],
           "side": "right",
           "hue": "purple-40",
           "track_width": 3,
-          "track_style": "dotted",
+          "track_style": "dashed",
           "track_offset": 20
         },
         {
           "type": "event",
-          "title": "Groceries",
-          "start_min": 1050,
-          "end_min": 1080,
-          "location": "Kwik-E-Mart",
-          "owner": "marge",
-          "co_owners": [],
-          "side": "right",
-          "hue": "orange-40",
-          "track_width": 3,
-          "track_style": "solid",
-          "track_offset": 10
-        },
-        {
-          "type": "event",
-          "title": "Family Dinner",
-          "start_min": 1110,
-          "end_min": 1170,
-          "location": null,
-          "owner": "marge",
-          "co_owners": [
-            "homer",
-            "kids",
-            "maggie"
-          ],
-          "side": "right",
-          "hue": "orange-40",
-          "track_width": 3,
-          "track_style": "solid",
-          "track_offset": 10
-        },
-        {
-          "type": "event",
           "title": "Moe's Tavern",
-          "start_min": 1185,
-          "end_min": 1260,
-          "location": null,
-          "owner": "homer",
+          "start_min": 1050,
+          "end_min": 1110,
+          "location": "Moe's",
+          "owner": "p0",
           "co_owners": [],
           "side": "left",
           "hue": "black",
@@ -317,25 +316,37 @@ variables:
           "track_offset": -10
         },
         {
-          "type": "sun",
-          "at_min": 1198,
-          "kind": "sunset",
-          "icon": "https://trmnl.com/images/plugins/weather/wi-sunset.svg",
-          "label": "Sunset"
+          "type": "event",
+          "title": "Mensa Meeting",
+          "start_min": 1110,
+          "end_min": 1170,
+          "location": null,
+          "owner": "p3",
+          "co_owners": [],
+          "side": "left",
+          "hue": "gray-40",
+          "track_width": 3,
+          "track_style": "dashed",
+          "track_offset": -20
         },
         {
           "type": "event",
-          "title": "Itchy & Scratchy",
-          "start_min": 1200,
-          "end_min": 1230,
+          "title": "Family Dinner",
+          "start_min": 1140,
+          "end_min": 1200,
           "location": null,
-          "owner": "kids",
-          "co_owners": [],
+          "owner": "p1",
+          "co_owners": [
+            "p0",
+            "p2",
+            "p3",
+            "p4"
+          ],
           "side": "right",
-          "hue": "purple-40",
+          "hue": "orange-40",
           "track_width": 3,
-          "track_style": "dotted",
-          "track_offset": 20
+          "track_style": "solid",
+          "track_offset": 10
         }
       ]
     }
