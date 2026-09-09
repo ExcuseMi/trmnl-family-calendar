@@ -865,11 +865,20 @@
       // offsets below stay inline — there is no utility class for "148px".
       var align = horizontal ? '' : (p._sign < 0 ? ' text--right' : ' text--left');
       var box = el('div', 'metro-gen metro-label absolute text--black' + align);
+      // Standing up, a label is placed by its column, not by its content:
+      // the box starts colW back from the rail and the text fills toward
+      // it. A title wider than the column therefore does not push the box
+      // away from the rail — it grows THROUGH it, which is how "Reactor
+      // Core Check" came to be written across Homer's line and into the
+      // river. The column is the budget; wrap or cut inside it.
+      var textW = horizontal ? maxTitle : colW;
+      if (!horizontal) box.style.maxWidth = colW + 'px';
       if (showTime) {
         var tm = labelRow('metro-time-tag ' + tagClass + ' ' + quietText('text--gray-40'));
         // an en dash between them: two times side by side with only a space
         // read as one string of digits, not as a span
         tm.textContent = timeLabel(e.start_min) + ' \u2013 ' + timeLabel(e.end_min);
+        if (!horizontal) { tm.style.maxWidth = colW + 'px'; tm.style.overflow = 'hidden'; }
         box.appendChild(tm);
       }
       var t = labelRow('metro-title-text ' + titleClass + ' font--bold text--black');
@@ -880,13 +889,13 @@
       // full and costs a line of thickness. Two is the limit: past that a
       // label stops being a caption on a line and becomes a paragraph
       // floating over the map.
-      t.style.maxWidth = maxTitle + 'px';
+      t.style.maxWidth = textW + 'px';
       clampLines(t, 2);
       box.appendChild(t);
       if (showLocation && e.location) {
         var loc = labelRow(tagClass + ' ' + quietText('text--gray-45'));
         loc.textContent = e.location;
-        loc.style.maxWidth = (maxTitle * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
+        loc.style.maxWidth = (horizontal ? maxTitle * 1.3 : colW) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
         box.appendChild(loc);
       }
       return box;
@@ -1820,6 +1829,8 @@
         // the day's first event the car sits at the head of the line, which
         // is exactly where the name is
         p._nameA0 = nameA; p._nameA1 = nameA + nameLen;
+        p._nameC0 = namesAbove ? nameC + nameOff : nameC - nameThick / 2;
+        p._nameC1 = p._nameC0 + nameThick;
         var far = d > 0 ? axisEnd : axisStart;
         var legPts = stationPath(c, p._sign, Math.min(merge, far), Math.max(merge, far), p);
         if (d < 0) legPts = legPts.slice().reverse();
@@ -1939,19 +1950,24 @@
         // out for the station: the kink vacates that space for the whole
         // span, so the caption lands in a gap nothing else is using — no
         // clearance arithmetic, and no line to clip through the text
-        var midC = baseC;
+        // Where this line ACTUALLY runs across the station, not where its
+        // baseline is: the kink raises the line away from the spine, so a
+        // caption measured off the baseline sits in the gap the kink opened
+        // and the raised line is written straight through it.
+        var capMid = s.a0 + raise + (s.a1 - raise - (s.a0 + raise)) / 2;
+        var midC = baseC, capLo = lineCAt(p, capMid), capHi = capLo;
         if (members && members.length > 1) {
           // between the lines WHERE THEY NOW ARE — they have converged for
           // the length of this station, and the caption belongs in the space
           // that opened up between them, not between the baselines they left
-          var mid = s.a0 + raise + (s.a1 - raise - (s.a0 + raise)) / 2;
           var lo2 = Infinity, hi2 = -Infinity;
           members.forEach(function (q) {
-            var c = lineCAt(q, mid);
+            var c = lineCAt(q, capMid);
             if (c < lo2) lo2 = c;
             if (c > hi2) hi2 = c;
           });
           midC = (lo2 + hi2) / 2;
+          capLo = lo2; capHi = hi2;
           // and a bar across the lines at each end of the shared span, so it
           // reads as one station both of them call at rather than two that
           // happen to share a name
@@ -2006,7 +2022,11 @@
           // pushes it across the gutter and over the hour labels. Set it
           // beside the line instead, on the side the kink went.
           box.style.top = capA + 'px';
-          box.style.left = (p._sign > 0 ? midC + STATION_GAP : midC - bm.w - STATION_GAP) + 'px';
+          // Clear of the OUTERMOST line of the station, not of the middle
+          // between them: where two lines have converged for the station,
+          // a caption measured from the midpoint is written straight over
+          // whichever of them is on that side.
+          box.style.left = (p._sign > 0 ? capHi + STATION_GAP : capLo - bm.w - STATION_GAP) + 'px';
         }
       });
     });
@@ -2454,11 +2474,20 @@
         // there anyway.
         // The car is drawn CENTRED on its axis position, so clearing the
         // name means moving its middle half a car past the end of it.
-        var carHalf = CAR_ALONG / 2;
+        var carHalf = CAR_ALONG / 2, carHalfT = carAcross(p) / 2;
         var carA = nowA;
+        // Only when the car would REALLY be under the name. Testing the
+        // axis alone moved every car by its own line's name width, so five
+        // trains all standing at the same minute were drawn at five
+        // different times — which is the one thing the car has to be right
+        // about. Where the name sits clear of the line (there is room above
+        // it) nothing moves.
         if (!riding && p._nameA1 != null
             && carA - carHalf < p._nameA1 + 2 * S && carA + carHalf > p._nameA0 - 2 * S) {
-          carA = p._nameA1 + carHalf + 2 * S;
+          var nc = lineCAt(p, carA);
+          if (nc + carHalfT > p._nameC0 - 2 * S && nc - carHalfT < p._nameC1 + 2 * S) {
+            carA = p._nameA1 + carHalf + 2 * S;
+          }
         }
         var c = riding ? spineC + riding._sign * riding._laneDist : lineCAt(p, carA);
         var xy = toXY(carA, c);

@@ -8,7 +8,8 @@
 module.exports = function (test, h) {
   const { layout, VIEWPORTS, fixtures, pathsWhere, textLabels, overlap, assert } = h;
 
-  const ROOMY = VIEWPORTS.find((v) => v.name === 'x-landscape');
+  const byName = (n) => VIEWPORTS.find((v) => v.name === n);
+  const ROOMY = byName('x-landscape');
   const busy = fixtures.find((f) => f.name === 'busy-day');
 
   function cars(rep) { return rep.circles.filter((c) => c.role === 'car'); }
@@ -113,6 +114,21 @@ module.exports = function (test, h) {
         }
       }
       assert(bad.length === 0, bad.length + ' car(s) over a label: ' + [...new Set(bad)].join('; '));
+    }
+  });
+
+  // Every car marks the SAME moment: they are five readings of one clock.
+  // A per-line nudge (each car pushed clear of its own line's name, which
+  // is a different width on every line) drew five trains at five different
+  // times, on a board where the whole point of the car is where it is.
+  test('every car marks the same moment', () => {
+    for (const v of [ROOMY, byName('x-portrait'), byName('og-half')]) {
+      const rep = layout(busy, v);
+      const axis = (c) => (rep.debug.horizontal ? c.x + c.w / 2 : c.y + c.h / 2);
+      const at = cars(rep).map(axis);
+      const spread = Math.max.apply(null, at) - Math.min.apply(null, at);
+      assert(spread <= 4, 'cars on ' + v.name + ' span ' + Math.round(spread)
+        + 'px of the axis but all say "now"');
     }
   });
 
