@@ -465,6 +465,52 @@ function demoWeather(strings) {
   };
 }
 
+// The demo can also be driven the way a real setup is: this exact config,
+// against ICS files living in this repo's demo/ folder. That keeps the demo
+// honest — it exercises fetching, parsing, the rule engine and track
+// resolution rather than a hand-built shortcut — and doubles as a worked
+// example of the config format. It needs the network, so the hardcoded
+// Springfield data above stays as the offline fallback.
+var DEMO_ICS_BASE = 'https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/';
+function demoCalendar(name, file, rules) {
+  return { name: name, url: DEMO_ICS_BASE + file, rules: rules };
+}
+function demoOwnTrack(name, file) {
+  return demoCalendar(name, file, [{ match: { type: 'any' }, track: name }]);
+}
+var DEMO_CONFIG = {
+  locale: 'en',
+  tracks: [
+    { name: 'Homer', side: 'left' },
+    { name: 'Marge', color: 'orange-40' },
+    { name: 'Bart', color: 'purple-40' },
+    { name: 'Lisa', color: 'gray-40' },
+    { name: 'Maggie', color: 'green-40' },
+  ],
+  calendars: [
+    demoOwnTrack('Homer', 'homer.ics'),
+    demoOwnTrack('Marge', 'marge.ics'),
+    demoOwnTrack('Bart', 'bart.ics'),
+    demoOwnTrack('Lisa', 'lisa.ics'),
+    demoOwnTrack('Maggie', 'maggie.ics'),
+    // One school calendar split by class code, the way a real school feed
+    // is. rename:false throughout — a track assignment rewrites the matched
+    // text into the track's name by default, which would turn "Family
+    // Dinner" into the entire guest list.
+    demoCalendar('School', 'school.ics', [
+      { match: { type: 'word', value: 'L6' }, track: 'Bart', rename: false },
+      { match: { type: 'word', value: 'K3' }, track: 'Lisa', rename: false },
+      { match: { type: 'regex', value: '^(?:L6|K3)\\s+' }, rewrite: '' },
+      { match: { type: 'contains', value: 'School Day' }, station: true },
+    ]),
+    demoCalendar('Family', 'family.ics', [
+      { match: { type: 'contains', value: 'Family Dinner' }, track: ['Marge', 'Homer', 'Bart', 'Lisa', 'Maggie'], rename: false },
+      { match: { type: 'contains', value: 'School Run' }, track: ['Marge', 'Bart', 'Lisa'], rename: false },
+      { match: { type: 'contains', value: 'Spring Break' }, track: 'Bart', allDay: true, rename: false },
+    ]),
+  ],
+};
+
 function buildFromDemo(weather, nowMin, extra) {
   var strings = (extra && extra.strings) || I18N.en;
   var demo = demoWeather(strings);
@@ -1206,7 +1252,18 @@ async function run(input) {
       demoDate = dateLabel(demoToday, locale);
     } catch (e) { /* keep the illustrative fixed DEMO_NOW_MIN on failure */ }
     var liveWeather = latLonRaw ? await fetchWeather(latLonRaw, typeof demoTz === 'string' ? demoTz : 'GMT', deadline, strings) : null;
-    return { metro: buildFromDemo(liveWeather, demoNowMin, Object.assign({ dateLabel: demoDate }, extra)) };
+    var demoExtra = Object.assign({ dateLabel: demoDate }, extra);
+    // Prefer driving the demo through the real pipeline against this repo's
+    // own ICS files, so what it shows is what a working config produces.
+    // Any failure — offline device, GitHub unreachable, a bad fetch — falls
+    // straight back to the built-in Springfield data rather than an empty
+    // board, so the demo is never blank.
+    try {
+      var demoParsed = parseConfig(JSON.stringify(DEMO_CONFIG));
+      var demoMetro = await buildFromConfig(input, demoParsed, liveWeather, demoExtra);
+      if (demoMetro && demoMetro.legend && demoMetro.legend.length) return { metro: demoMetro };
+    } catch (e) { /* fall through to the offline demo below */ }
+    return { metro: buildFromDemo(liveWeather, demoNowMin, demoExtra) };
   }
 
   var parsed = parseConfig(configRaw); // never throws — falls back to a bare URL list on invalid JSON
