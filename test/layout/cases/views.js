@@ -16,6 +16,10 @@ module.exports = function (test, h) {
     { view: 'full', name: 'x-half-vertical', w: 936, h: 1404, classes: 'screen--v2 screen--lg screen--4bit screen--density-2x' },
     { view: 'full', name: 'og-half-vertical', w: 400, h: 480, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
     { view: 'full', name: 'og-quadrant', w: 400, h: 240, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
+    // the shortest board there is: five lines' worth of labels do not fit in
+    // 240px of height, so this is where the layout has to CUT rather than
+    // overflow. It went uncovered, and overflowed.
+    { view: 'full', name: 'og-half-horizontal', w: 800, h: 240, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
   ];
 
   const busy = fixtures.find((f) => f.name === 'busy-day');

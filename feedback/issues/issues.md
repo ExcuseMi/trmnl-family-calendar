@@ -1,10 +1,20 @@
 # Open
 
-- Spurs on a converged shared station dip into the partner's lane. Bart's
-  "Field Trip" branch reaches down into the corridor School Day opened
-  between him and Lisa. Nothing reserves that corridor, so on a busier
-  afternoon a label could land in it. Spurs should branch AWAY from the
-  partner while a shared station has the two lines drawn together.
+- Spurs on a converged shared station sit in the corridor between the two
+  lines. Bart's "Field Trip" branch is in the space School Day opens between
+  him and Lisa. This is not a stray: a track's lanes live on ONE side of its
+  line by construction, and for the inner member of a shared station that
+  side IS the corridor. Making the spur branch the other way needs a track to
+  be able to hold lanes on both sides, which the band layout does not
+  support. The outer line is now capped so it never crosses into the inner
+  line's band, which is as far as this goes without that change.
+
+- `trmnlp lint` reports `field_type: lat_lon` as unknown. The gem vendors the
+  hosted service's field-type allowlist by hand (see its own
+  db/data/form_fields.yml header) and that copy is out of date; the hosted
+  service accepts the field and the weather picker works on the live plugin.
+  Silencing it means downgrading the field to `string` and losing the
+  location picker.
 
 - Improve the fonts: https://trmnl.com/framework/docs/3.3/font_family.
   Partly blocked: the device's Font Family setting (Default / Classic /

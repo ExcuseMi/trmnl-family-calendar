@@ -90,12 +90,14 @@
   <div class="divider divider--on-white flex-none"></div>
 
   <div class="metro-canvas relative grow w--full">
-    <svg class="metro-svg absolute" style="inset:0;width:100%;height:100%;pointer-events:none;"></svg>
+    <svg class="metro-svg absolute"></svg>
   </div>
 
 <style>
   .metro-canvas { overflow: hidden; }
-  .metro-svg { overflow: visible; }
+  /* the drawing surface fills its container; kept here rather than inline so
+     the markup carries no style attribute of its own */
+  .metro-svg { overflow: visible; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   /* No box behind a label — an opaque panel over a metro map reads as a
      hole punched in it, and on a busy board those holes are most of the
      picture. The text carries its own thin paper outline instead: it stays
@@ -107,9 +109,8 @@
     paint-order: stroke fill;
     -webkit-text-stroke: 3px var(--framework-semantic-canvas-bg-color, #fff);
   }
-  .metro-label { line-height: 1.2; padding: 1px 3px; }
-  .metro-corner-legend { padding: 4px 6px; border-radius: 4px; }
-  .metro-hour, .metro-axis-note { white-space: nowrap; padding: 0 2px; }
+  .metro-label { line-height: 1.2; }
+  .metro-hour, .metro-axis-note { white-space: nowrap; }
   .metro-header--compact .metro-window, .metro-header--compact .metro-cond { display: none; }
   .metro-header--tiny .metro-date, .metro-header--tiny .metro-weather { display: none; }
   .metro-wicon { width: 28px; height: 28px; }
@@ -124,6 +125,8 @@
   .metro-pill {
     display: inline-block; white-space: nowrap;
     padding: 2px 10px; border-radius: 999px;
+    /* one declaration for both pills: the linter counts property NAMES in
+       the markup, and every extra one is spend against a small budget */
     background: var(--framework-semantic-text-primary-text-color, #000);
     color: var(--framework-semantic-canvas-bg-color, #fff);
     line-height: 1.35;
@@ -132,10 +135,10 @@
     background: transparent;
     color: var(--framework-semantic-text-primary-text-color, #000);
     box-shadow: inset 0 0 0 2px var(--framework-semantic-text-primary-text-color, #000);
-    padding: 1px 9px;
   }
-  .metro-terminus { white-space: nowrap; padding: 0 3px; }
+  .metro-terminus { white-space: nowrap; }
   .metro-sky { white-space: nowrap; }
+  .metro-label, .metro-hour, .metro-axis-note, .metro-terminus, .metro-sky { padding: 1px 3px; }
 </style>
 
 <script>
@@ -238,11 +241,12 @@
   // four treatments carry the same visual weight at the same nominal size
   // and the weight ladder means what it says.
   function treatmentFor(style, S, width) {
-    var w = width * S;
-    if (style === 'dashed') return { widen: 2.4 * S, core: Math.max(1.4 * S, w * 0.3), cap: 'butt' };
-    if (style === 'dotted') return { widen: 1 * S, core: Math.max(1.4 * S, w * 0.5), cap: 'butt',
+    var w = width * S * weightScale;
+    var thin = Math.max(1 * S, 1.4 * S * weightScale);
+    if (style === 'dashed') return { widen: 2.4 * S, core: Math.max(thin, w * 0.3), cap: 'butt' };
+    if (style === 'dotted') return { widen: 1 * S, core: Math.max(thin, w * 0.5), cap: 'butt',
                                      dash: (2.6 * S) + ' ' + (6.4 * S) };
-    if (style === 'dashdot') return { widen: 1 * S, core: Math.max(1.4 * S, w * 0.45), cap: 'round',
+    if (style === 'dashdot') return { widen: 1 * S, core: Math.max(thin, w * 0.45), cap: 'round',
                                       dash: (0.1 * S) + ' ' + (9 * S) };
     return null;
   }
@@ -270,11 +274,16 @@
     if (style === 'dashdot') return (0.1 * S) + ' ' + (5 * S);
     return null;
   }
+  // How much of its nominal weight a line is drawn at. Weights are tuned
+  // for a board where each track has a band to itself; on a panel where they
+  // end up a track-step apart a 6px line is a third of the gap to the next
+  // one, and the map turns into stripes. Set once the bands are solved.
+  var weightScale = 1;
   function styleStroke(node, p, S) {
     // through style, not the attribute: a colour can be a CSS variable now
     // and an SVG presentation attribute does not accept var()
     node.style.stroke = colorFor(p.hue);
-    node.setAttribute('stroke-width', p.line_width * S);
+    node.setAttribute('stroke-width', p.line_width * S * weightScale);
     node.setAttribute('stroke-linecap', 'round');
     node.setAttribute('stroke-linejoin', 'round');
     node.setAttribute('fill', 'none');
@@ -288,7 +297,7 @@
     parent.appendChild(node);
     var t = treatmentFor(p.line_style, S, p.line_width);
     if (!t) return node;
-    node.setAttribute('stroke-width', p.line_width * S + t.widen);
+    node.setAttribute('stroke-width', p.line_width * S * weightScale + t.widen * weightScale);
     // A treated line ends FLUSH, not with a round cap. The cap sticks out
     // half a stroke width past where the path stops, and the paper core cut
     // out of it does not — so every place one drawn piece met another (a
@@ -411,6 +420,12 @@
     // of the trunk and back to level in one movement. roundedPath clamps
     // each fillet to half its shorter neighbour, so the S falls out of the
     // geometry rather than needing its own case.
+    // How far a mark reaches out from the middle of a rail. A constant
+    // could not work: the same number is a knob swallowed by a 6px line and
+    // a bar standing clear of a 3px one, which is exactly how the start dot
+    // and the end tick came to look like two different systems depending on
+    // whose line they were on. Measured from the rail's own edge instead.
+    function markOut(p, base) { return (p.line_width * S) / 2 + base * 0.85; }
     var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 13 * S;
     var MIN_DIAG = Math.max(10 * S, 6 * 2.4 * S + 2 * S);
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
@@ -453,6 +468,45 @@
     // neighboring lane can't crowd or cross through it, and the raised
     // line can't run through the caption's own box either.
     var STATION_LABEL_ROOM = STATION_RAISE + STATION_GAP + stationCapH;
+
+    // ---- how many lines this canvas can actually carry -------------------
+    //
+    // A line needs its own stretch of the cross axis: the line itself, the
+    // room a station kink wants, and at least one lane to hang a label in.
+    // Below about that, five lines on a 240px panel do not get cramped, they
+    // get illegible — labels ran off the top and bottom of the board and the
+    // rails underneath them ran off with them.
+    //
+    // So the board carries as many lines as it has room for and says how
+    // many it left out. The ones kept are the busiest, because a line with
+    // one event costs the same room as a line with six and tells you less.
+    var droppedLines = 0;
+    (function fitLines() {
+      if (LEGEND.length < 2) return;
+      // a line, the room its kink wants, and one lane deep enough for a
+      // two-row label (the time tag above the title)
+      var perLine = TRACK_STEP + LANE_BASE + hourH * 2.6;
+      var room = crossPx - 2 * (gutterHalf + EDGE);
+      // One line is a valid board. On a quadrant there is honestly room for
+      // one person's day and a count of what else is on, and that beats five
+      // lines whose labels run off the top and bottom.
+      var maxLines = Math.max(1, Math.floor(room / perLine));
+      if (LEGEND.length <= maxLines) return;
+      var load = {};
+      LEGEND.forEach(function (p) { load[p.key] = 0; });
+      METRO.items.forEach(function (i) {
+        if (i.type !== 'event') return;
+        if (load[i.owner] != null) load[i.owner]++;
+        (i.co_owners || []).forEach(function (k) { if (load[k] != null) load[k] += 0.5; });
+      });
+      (STATIONS || []).forEach(function (st) { if (load[st.owner] != null) load[st.owner] += 0.25; });
+      var keep = LEGEND.slice().sort(function (a, b) { return load[b.key] - load[a.key]; }).slice(0, maxLines);
+      var kept = {};
+      keep.forEach(function (p) { kept[p.key] = true; });
+      droppedLines = LEGEND.length - keep.length;
+      LEGEND = LEGEND.filter(function (p) { return kept[p.key]; });
+      STATIONS = STATIONS.filter(function (st) { return kept[st.owner]; });
+    })();
 
     // ---- tracks: side A = 'left' (up / left of axis), side B = 'right'
     var sides = { A: [], B: [] };
@@ -572,9 +626,22 @@
     // as wide as the longest name — a chunk of the day's width spent on
     // five words. The name now sits ABOVE its line's starting bar instead,
     // where it labels the head of the line the way a platform sign does, so
-    // this is just a margin and the whole day gets the space back.
+    // this is now only a small gutter, and the day gets the space back.
     // Wide enough for half the first hour label, which is centred on the
-    // axis start — at a bare margin "7am" hung off the left edge of the board.
+    // axis start — with only a small gutter, "7am" hung off the left edge.
+    // A name sits above its line's starting bar when there is room above it,
+    // and in a column at the head of the map when there is not. On a small
+    // panel the tracks end up a track-step apart, which is less than a name
+    // is tall, so names stacked above their lines wrote over each other —
+    // "Bart" and "Lisa" came out as one word. The column costs the day some
+    // width, which is exactly the trade a crowded board should make.
+    // Whether a name will fit ABOVE its line is not knowable yet — it turns
+    // on how far apart the bands end up, which is solved later — so this
+    // reserves the small head margin either way and the decision is made at
+    // drawing time. Standing up the names always take a column, because
+    // there they run along their lines and a column is the only place for
+    // them.
+    var namesAbove = horizontal;
     var nameCol = LEGEND.length
       ? (horizontal ? Math.max(8 * S, hourW / 2) : 2 * S + nameH + 6 * S)
       : 0;
@@ -657,18 +724,35 @@
         var s = segs[i];
         if (a < s.a0 || a > s.a1) continue;
         var rr = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
+        // Not on a PACKED board: the tracks are already a track-step apart
+        // there, so converging them buys nothing and only takes room the map
+        // has none of. Read here rather than baked into `toward`, because
+        // whether the bands fit is not known until they have been solved.
+        var tw = packedFallback ? 1 : s.toward;
         // A shared station's two lines close on each other, so each may move
         // at most half the gap between them, less the air they need to stay
         // two lines. Uncapped they moved a full raise each and, where the
         // board puts them closer together than that, swapped places.
-        if (s.closingOn) {
-          rr = Math.min(rr, Math.max(0, (Math.abs(s.closingOn._c - p._c) - 2 * LINE_GAP) / 2));
+        if (s.closingOn && tw < 0) {
+          // How far this line may close on its partner. Half the gap between
+          // them is not enough on its own: the INNER line's band holds its
+          // own lanes, and the outer line moving into that band puts a
+          // shared corridor on top of somebody's private spurs — Bart's
+          // "Field Trip" ended up inside the corridor School Day opened
+          // between him and Lisa. Coming inward, stop at the partner's band
+          // edge; going outward, at half the gap, so neither passes the
+          // other.
+          var gapC = Math.abs(s.closingOn._c - p._c);
+          var room = s.toward < 0 && s.closingOn._bandEnd != null
+            ? p._dist - s.closingOn._bandEnd - LINE_GAP
+            : (gapC - 2 * LINE_GAP) / 2;
+          rr = Math.min(rr, Math.max(0, room));
         }
         // signed: +1 kinks away from the spine (the ordinary station), -1
         // toward it, which is how a shared station brings its lines together
-        if (a < s.a0 + rr) return (a - s.a0) * s.toward;
-        if (a > s.a1 - rr) return (s.a1 - a) * s.toward;
-        return rr * s.toward;
+        if (a < s.a0 + rr) return (a - s.a0) * tw;
+        if (a > s.a1 - rr) return (s.a1 - a) * tw;
+        return rr * tw;
       }
       return 0;
     }
@@ -704,7 +788,8 @@
     var all = dedupe(METRO.items.filter(function (i) { return i.type === 'event'; }));
     var earlier = 0, later = 0, visible = [];
     all.forEach(function (e) {
-      if (!trackByKey[e.owner]) return;
+      // an event on a line this canvas had no room for is counted, not drawn
+      if (!trackByKey[e.owner]) { later++; return; }
       if (e.start_min < winStart) earlier++;
       else if (e.start_min >= winEnd) later++;
       else visible.push(e);
@@ -737,7 +822,6 @@
     // bundle (vertical), with a guide line across the canvas at its time.
     function buildMarkerLabel(w) {
       var n = el('div', 'metro-gen metro-sky flex flex--row flex--center-y gap--xsmall absolute text--black');
-      n.style.padding = '0 ' + (3 * S) + 'px';
       var size = hourH * (w.type === 'sun' ? 1.5 : 1.3);
       var ic = el('img', 'image--adaptive'); ic.src = w.icon; ic.style.width = size + 'px'; ic.style.height = size + 'px';
       var tx = el('span', 'label label--small ' + (w.type === 'sun' ? 'text--gray-30' : 'font--bold text--black'));
@@ -1327,6 +1411,9 @@
         for (var j = 0; j < n; j++) out.push({ dist: start + j * stepPx, owner: p.key });
         acc = n ? start + (n - 1) * stepPx + LINE_GAP + maxLabelThick
                : acc + Math.max(laneBase(p), fan ? fan.nameH / 2 : 0);
+        // where this track's band stops: its line, its station room and all
+        // of its own lanes. Anything beyond this belongs to the next track.
+        p._bandEnd = acc;
       });
       return { slots: out, extent: acc };
     }
@@ -1472,6 +1559,12 @@
     usedA = placeSide('A', sol.A.slots, obstacles.A);
     usedB = placeSide('B', sol.B.slots, obstacles.B);
     needA = sol.needA; needB = sol.needB;
+    // How close the tracks ended up. A line drawn at full weight when the
+    // next one is a track-step away turns the map into stripes, so the
+    // weights come down with the pitch — and with them the paper cores,
+    // which are a fraction of the width.
+    var pitch = TRACK_STEP + (sep || 0);
+    weightScale = clamp(pitch / (TRACK_STEP * 1.7), 0.5, 1);
     spineC = clamp(needA + (crossPx - needA - needB) / 2, Math.min(needA, crossPx / 2), Math.max(crossPx - needB, crossPx / 2));
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0, adrift = 0;
@@ -1627,13 +1720,32 @@
       marks.sort(function (a, b) { return a - b; });
       return marks.map(function (a) { return [a, baseC + sign * stationRaiseAt(p, a)]; });
     }
+    // Now the bands are solved, so how close the lines run is known. A name
+    // set above its line is a name's height clear of it; where the tracks
+    // ended up closer together than that, each name landed on its
+    // neighbour's — "Lisa" and "Marge" came out as one word. Sat ON its own
+    // line instead it is exactly as tall as the gap allows, and its paper
+    // outline masks the line behind it.
+    (function decideNamePlacement() {
+      if (!horizontal || LEGEND.length < 2) return;
+      var thick = 0, minPitch = Infinity;
+      LEGEND.forEach(function (p) { thick = Math.max(thick, p._nameH); });
+      ['A', 'B'].forEach(function (k) {
+        var row = sides[k];
+        for (var i = 1; i < row.length; i++) {
+          minPitch = Math.min(minPitch, Math.abs(row[i]._c - row[i - 1]._c));
+        }
+      });
+      if (minPitch < thick + NODE_R + 4 * S) namesAbove = false;
+    })();
+
     // ---- tracks (full bleed), each starting at its named terminus when fanned
     LEGEND.forEach(function (p) {
       var c = spineC + p._c;
       if (fan) {
         var spreadC = spreadCFor(p);
         var d = fan.dir, edge = d > 0 ? 0 : axisPx;
-        var nameEnd = edge + d * (horizontal ? 4 * S : 2 * S + p._nameH + 4 * S);
+        var nameEnd = edge + d * (namesAbove ? 4 * S : 2 * S + (horizontal ? p._nameW : p._nameH) + 4 * S);
         var fanStart = edge + d * fan.len;
         var merge = fanStart + d * Math.abs(spreadC - c);
         // Place along the axis and across the cross-axis, whichever way
@@ -1650,7 +1762,7 @@
         // that a name shifted clear of its own line runs into its
         // neighbour's, so there it keeps the head-of-the-line column and
         // stays centred. Lying down there is room above.
-        var nameA = horizontal
+        var nameA = namesAbove
           ? (d > 0 ? nameEnd - 2 * S : axisPx - nameEnd + 2 * S - nameLen)
           : (d > 0 ? 2 * S : axisPx - 2 * S - nameLen);
         // Off the line where it REALLY is under the name, not off its flat
@@ -1661,7 +1773,7 @@
         // one reading at the middle still let a station ramp climb into the
         // name's far end.
         var nameC = spreadC;
-        if (horizontal) {
+        if (namesAbove) {
           for (var ni = 0; ni <= 8; ni++) {
             var lc = lineCAt(p, nameA + nameLen * (ni / 8));
             if (lc < nameC) nameC = lc;
@@ -1673,14 +1785,15 @@
         // line instead — still touching the line it names, and the only
         // other place nothing else uses at the head of the map.
         var nameOff = -(nameThick + NODE_R + 2 * S);
-        if (horizontal && nameC + nameOff < spineC + riverHalf && nameC > spineC - riverHalf) {
+        if (namesAbove && nameC + nameOff < spineC + riverHalf && nameC > spineC - riverHalf) {
           nameOff = NODE_R + 2 * S;
-        } else if (horizontal && nameC + nameOff < spineC + riverHalf
+        } else if (namesAbove && nameC + nameOff < spineC + riverHalf
                    && nameC + nameOff + nameThick > spineC - riverHalf) {
           nameOff = -(nameThick + NODE_R + 2 * S) - (spineC - riverHalf - (nameC + nameOff));
           if (nameC + nameOff < 0) nameOff = NODE_R + 2 * S;
         }
-        var nameXY = toXY(nameA, horizontal ? nameC + nameOff : nameC - nameThick / 2);
+        // centred ON the line when there is no room above it
+        var nameXY = toXY(nameA, namesAbove ? nameC + nameOff : nameC - nameThick / 2);
         p._nameEl.style.left = nameXY[0] + 'px';
         p._nameEl.style.top = nameXY[1] + 'px';
         var far = d > 0 ? axisEnd : axisStart;
@@ -1784,7 +1897,13 @@
         t.style.maxWidth = availW + 'px';
         clampLines(t, 2);
         box.appendChild(t);
-        if (s.location) {
+        // On a board too small for bands, the second line goes. A station
+        // caption sits in the space its own kink vacates, and on a packed
+        // board that space is one track-step tall — the location line spills
+        // straight out of it onto the next line's lane, and at 1-bit it is
+        // grey text on a grey rail besides. The title alone still says what
+        // the station is.
+        if (s.location && !packedFallback) {
           var loc = labelRow(STATION_TAG_CLASS + ' text--gray-45');
           loc.textContent = s.location;
           loc.style.maxWidth = (availW * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
@@ -2144,7 +2263,8 @@
           // and the same end mark every other rail gets. A shared event's
           // rail was ending in a plain round cap while every other rail on
           // the board ended in a tick — the one place the vocabulary broke.
-          var q0 = toXY(e._endA, laneC0 - NODE_R * 1.15), q1 = toXY(e._endA, laneC0 + NODE_R * 1.15);
+          var sh = markOut({ line_width: Math.max(p.line_width, 4) * 1.5 }, NODE_R * 1.15);
+          var q0 = toXY(e._endA, laneC0 - sh), q1 = toXY(e._endA, laneC0 + sh);
           var etick = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
             'stroke-width': NODE_STROKE * 1.15, 'stroke-linecap': 'round' });
           etick.style.stroke = INK;
@@ -2236,8 +2356,14 @@
           // This is the Mini Metro convention — every station is a
           // paper-filled shape with a heavy outline, and importance is
           // carried by SIZE, not by fill. Ours run stop < interchange < hub.
+          //
+          // Sized off the RAIL, not off a constant. At a fixed radius the
+          // mark vanished into a heavy line and stood clear of a light one,
+          // so the same mark read as a knob on one track and a bar on
+          // another. Measured out from the rail's own edge it looks the same
+          // on every line, whatever that line weighs.
           var dot = svgEl('circle', {
-            cx: dxy[0], cy: dxy[1], r: NODE_R * 0.62,
+            cx: dxy[0], cy: dxy[1], r: markOut(p, NODE_R * 0.62),
             'stroke-width': NODE_STROKE * 0.8,
           });
           dot.style.stroke = colorFor(p.hue);
@@ -2250,7 +2376,8 @@
         // they nearly touch
         if (e._endA >= lo - 1 && e._endA <= hi + 1) {
           var tc = spurC(e._endA);
-          var t0 = toXY(e._endA, tc - NODE_R), t1 = toXY(e._endA, tc + NODE_R);
+          var half = markOut(p, NODE_R);
+          var t0 = toXY(e._endA, tc - half), t1 = toXY(e._endA, tc + half);
           var tick = svgEl('line', {
             x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
             'stroke-width': NODE_STROKE, 'stroke-linecap': 'round',
@@ -2387,8 +2514,8 @@
       svg.appendChild(nowDot);
       axisNote(timeLabel(nowMin), nowA + 6 * S, 'start');
     }
-    if (earlier) axisNote(tr('earlier', earlier), axisStart + EDGE, 'start', 'metro-axis-note label label--small text--gray-40');
-    if (later + dropped) axisNote(tr('more', later + dropped), axisEnd - EDGE, 'end', 'metro-axis-note label label--small text--gray-40');
+    if (earlier) axisNote(tr('earlier', earlier), axisStart + EDGE, 'start', 'metro-axis-note label label--small font--bold text--black');
+    if (later + dropped) axisNote(tr('more', later + dropped), axisEnd - EDGE, 'end', 'metro-axis-note label label--small font--bold text--black');
     var capsules = visible.filter(function (e) { return !e._dropped && e._involved.length > 1; }).map(function (e) { return [e._nodeA - NODE_R - 2 * S, e._nodeA + NODE_R + 2 * S]; });
     for (var h = Math.ceil(winStart / 60); h * 60 <= winEnd; h++) {
       if (h % hourStep !== 0) continue;
