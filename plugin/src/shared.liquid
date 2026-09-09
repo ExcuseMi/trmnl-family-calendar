@@ -63,8 +63,8 @@
         <circle cx="256" cy="256" r="240" mask="url(#metro-mark-cut)"/>
       </svg>
       <span class="metro-title title title--large font--bold">{{ metro.i18n.today | default: "Today" }}</span>
-      {% if metro.date_label %}<span class="metro-date label label--base text--gray-40">{{ metro.date_label }}</span>{% endif %}
-      <span class="metro-window label label--small text--gray-40">{{ metro.window_label }}</span>
+      {% if metro.date_label %}<span class="metro-date metro-pill label label--base font--bold">{{ metro.date_label }}</span>{% endif %}
+      <span class="metro-window metro-pill metro-pill--quiet label label--small font--bold">{{ metro.window_label }}</span>
       <div class="grow"></div>
       {% if metro.header_weather.hi %}
         <span class="metro-weather flex flex--row flex--center-y gap--xsmall">
@@ -106,6 +106,23 @@
   .metro-header--large .metro-mark { width: 42px; height: 42px; }
   .metro-header--tiny .metro-mark { width: 22px; height: 22px; }
   .metro-header--large .metro-wicon { width: 40px; height: 40px; }
+  /* A solid ink badge with the text knocked out of it. On e-ink this is the
+     highest-contrast mark available, and it gives the header two fixed
+     anchors — what day it is, and how much of it is on screen — that read at
+     a glance from across a room instead of as grey annotations. */
+  .metro-pill {
+    display: inline-block; white-space: nowrap;
+    padding: 2px 10px; border-radius: 999px;
+    background: var(--framework-semantic-text-primary-text-color, #000);
+    color: var(--framework-semantic-canvas-bg-color, #fff);
+    line-height: 1.35;
+  }
+  .metro-pill--quiet {
+    background: transparent;
+    color: var(--framework-semantic-text-primary-text-color, #000);
+    box-shadow: inset 0 0 0 2px var(--framework-semantic-text-primary-text-color, #000);
+    padding: 1px 9px;
+  }
   .metro-terminus { white-space: nowrap; padding: 0 3px; }
   .metro-sky { white-space: nowrap; }
 </style>
@@ -174,18 +191,50 @@
     }
     return colorCache[hue];
   }
-  function dashFor(style, S) {
-    if (style === 'dashed') return (9 * S) + ' ' + (6 * S);
-    if (style === 'dotted') return (0.1 * S) + ' ' + (5 * S);
-    if (style === 'dashdot') return (11 * S) + ' ' + (5 * S) + ' ' + (0.1 * S) + ' ' + (5 * S);
+  // ---- line treatments -------------------------------------------------
+  //
+  // Every line is SOLID and thick. A dashed line is a weak mark on e-ink:
+  // it is mostly paper, so it reads as faint however dark the ink is, and at
+  // the sizes this board uses a dotted line all but disappears against the
+  // hour labels. Lines are told apart instead the way a printed transit map
+  // does it — by weight, and by what is knocked OUT of the stroke:
+  //
+  //   plain   a solid bar
+  //   casing  a paper stripe down the middle, so it reads as two parallel
+  //           lines held together
+  //   hatch   paper rungs across it at a regular pitch, the railway hatch
+  //   beads   paper dots down the middle at a wider pitch
+  //
+  // All four keep a continuous black envelope, so they are equally heavy at
+  // a glance and equally legible at 1-bit; what differs is the texture
+  // inside. The overlay is drawn in the CANVAS colour over the same path, so
+  // it inverts with the theme along with everything else.
+  //
+  // The `line_style` field still carries the four names the config and the
+  // transform use; this is where they stop meaning "dash pattern".
+  //
+  // A treated line is drawn WIDER than a plain one by `widen`, because what
+  // the eye weighs is the ink, not the envelope: knocking a paper core out
+  // of a 4px line leaves about 1.3px of ink on each side and it reads as a
+  // hairline beside a solid neighbour. Widening puts the ink back, so all
+  // four treatments carry the same visual weight at the same nominal size
+  // and the weight ladder means what it says.
+  function treatmentFor(style, S, width) {
+    var w = width * S;
+    if (style === 'dashed') return { widen: 2.4 * S, core: Math.max(1.4 * S, w * 0.3), cap: 'butt' };
+    if (style === 'dotted') return { widen: 1 * S, core: Math.max(1.4 * S, w * 0.5), cap: 'butt',
+                                     dash: (2.6 * S) + ' ' + (6.4 * S) };
+    if (style === 'dashdot') return { widen: 1 * S, core: Math.max(1.4 * S, w * 0.45), cap: 'round',
+                                      dash: (0.1 * S) + ' ' + (9 * S) };
     return null;
   }
-  // How long one repeat of a style's dash pattern is. An odd-length
-  // dasharray repeats twice before it comes back round, per SVG.
+  // How long one repeat of a treatment's rung pattern is, so a run of line
+  // drawn as several elements can be given a continuous phase. An
+  // odd-length dasharray repeats twice before it comes back round, per SVG.
   function dashPeriod(style, S) {
-    var d = dashFor(style, S);
-    if (!d) return 0;
-    var parts = d.split(' ').map(Number);
+    var t = treatmentFor(style, S, 3);
+    if (!t || !t.dash) return 0;
+    var parts = t.dash.split(' ').map(Number);
     var sum = 0;
     for (var i = 0; i < parts.length; i++) sum += parts[i];
     return parts.length % 2 ? sum * 2 : sum;
@@ -199,9 +248,8 @@
   // number of repeats across the swatch's own length, so every line style
   // reads as an equally "full" swatch.
   function legendDashFor(style, S) {
-    if (style === 'dashed') return (5 * S) + ' ' + (3 * S);
-    if (style === 'dotted') return (0.1 * S) + ' ' + (4 * S);
-    if (style === 'dashdot') return (6 * S) + ' ' + (2 * S) + ' ' + (0.1 * S) + ' ' + (2 * S);
+    if (style === 'dotted') return (2 * S) + ' ' + (4 * S);
+    if (style === 'dashdot') return (0.1 * S) + ' ' + (5 * S);
     return null;
   }
   function styleStroke(node, p, S) {
@@ -210,8 +258,30 @@
     node.setAttribute('stroke-linecap', 'round');
     node.setAttribute('stroke-linejoin', 'round');
     node.setAttribute('fill', 'none');
-    var d = dashFor(p.line_style, S);
-    if (d) node.setAttribute('stroke-dasharray', d);
+  }
+  // Draw a line and, if its treatment calls for one, the paper overlay that
+  // gives it its texture. The overlay is an exact copy of the same geometry,
+  // so it follows every bend without being computed twice; it carries no
+  // data-metro-role, because it is not a line — it is a hole in one.
+  function paintLine(node, p, S, parent, phase) {
+    styleStroke(node, p, S);
+    parent.appendChild(node);
+    var t = treatmentFor(p.line_style, S, p.line_width);
+    if (!t) return node;
+    node.setAttribute('stroke-width', p.line_width * S + t.widen);
+    var ov = node.cloneNode(false);
+    ov.removeAttribute('data-metro-role');
+    ov.removeAttribute('data-metro-owner');
+    ov.setAttribute('data-metro-overlay', p.key || '');
+    ov.setAttribute('stroke-width', t.core);
+    ov.setAttribute('stroke-linecap', t.cap);
+    if (t.dash) ov.setAttribute('stroke-dasharray', t.dash);
+    else ov.removeAttribute('stroke-dasharray');
+    if (t.dash && phase != null) ov.setAttribute('stroke-dashoffset', phase);
+    else ov.removeAttribute('stroke-dashoffset');
+    ov.style.stroke = PAPER;
+    parent.appendChild(ov);
+    return node;
   }
 
   // Polyline with rounded corners: every interior vertex becomes a short
@@ -289,10 +359,11 @@
         sw.setAttribute('width', abw); sw.setAttribute('height', abh); sw.setAttribute('viewBox', '0 0 ' + abw + ' ' + abh);
         var p = { hue: sw.getAttribute('data-hue'), line_style: sw.getAttribute('data-style'), line_width: 3 };
         var ln = svgEl('line', { x1: 2 * S, y1: abh / 2, x2: abw - 2 * S, y2: abh / 2 });
-        styleStroke(ln, p, S);
-        var ld = legendDashFor(p.line_style, S);
-        if (ld) ln.setAttribute('stroke-dasharray', ld); else ln.removeAttribute('stroke-dasharray');
-        sw.appendChild(ln);
+        paintLine(ln, p, S, sw, null);
+        // the map's own rung pitch is tuned for long lines; over a 20px
+        // swatch it would show one rung and read as a different line
+        var ov = sw.lastChild, ld = legendDashFor(p.line_style, S);
+        if (ov !== ln && ld) ov.setAttribute('stroke-dasharray', ld);
       });
     }
 
@@ -305,7 +376,13 @@
     // train on a short spur poked up through the line above it. The car is
     // NODE_R * 2.4 high (see CAR_H's scale), plus the usual gap between a
     // line and whatever is next to it.
-    var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 9 * S;
+    // A generous fillet. At a small radius a bend is a hinge; at this one a
+    // shallow branch's two opposite fillets meet in the middle with no
+    // straight run between them, which is an S-curve — the line eases out
+    // of the trunk and back to level in one movement. roundedPath clamps
+    // each fillet to half its shorter neighbour, so the S falls out of the
+    // geometry rather than needing its own case.
+    var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 13 * S;
     var MIN_DIAG = Math.max(10 * S, 6 * 2.4 * S + 2 * S);
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
     var STATION_RAISE = 32 * S; // how far a track's own line kinks out to "station level"; for a short station a smaller raise also means a shallower, less jarring kink instead of a deep sideways "V"
@@ -863,7 +940,15 @@
         // A corner radius is a fixed few px whatever the lane depth, which
         // is the whole difference from the old lead: that one grew with the
         // depth, so a deep lane meant leaving an hour early.
-        var elbow = e._nodeA - dir * CORNER;
+        // A SHARED event stays pinned to its tie. The interchange already
+        // draws a heavy bar straight down the board at that minute, and the
+        // spur is going the same way to the same place, so it leaves on that
+        // bar and carries on past the outermost ring. Backing its elbow off
+        // by a corner radius, as a solo event's does, made the spur peel
+        // away a few minutes BEFORE the bar and miss the rings entirely —
+        // Family Dinner left Maggie's line to the left of its own station.
+        var shared0 = e._involved && e._involved.length > 1;
+        var elbow = shared0 ? e._nodeA : e._nodeA - dir * CORNER;
         var L = lane(k), len = e._textLen;
         var elbow0 = elbow;
         var natural = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len;
@@ -919,7 +1004,7 @@
         // MIN_DIAG once the lanes moved out to clear the car, and every
         // branch on the board went vertical at once.
         var LEAD_CAP = Math.max(2 * CORNER, MIN_DIAG);
-        var diagFrom = dy <= LEAD_CAP ? elbow - dir * dy : elbow;
+        var diagFrom = (!shared0 && dy <= LEAD_CAP) ? elbow - dir * dy : elbow;
         // A ramp needs FLAT trunk to leave from. Reaching back into a
         // station's own kink, it left at a point the line had not finished
         // climbing to, so the drop it had to make was bigger than the run it
@@ -1315,7 +1400,8 @@
     if (bestTier !== ti) layoutAttempt(tiers[bestTier]);
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
     canvas.setAttribute('data-metro-debug', JSON.stringify({
-      W: W, H: H, S: S, Z: Z, horizontal: horizontal, win: [dayFrom, dayTo], busy: [busyFrom, busyTo], spineC: spineC, step: step, laneStep: laneStep, colW: colW,
+      W: W, H: H, S: S, Z: Z, horizontal: horizontal,
+      corner: CORNER, minDiag: MIN_DIAG, win: [dayFrom, dayTo], busy: [busyFrom, busyTo], spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
@@ -1487,9 +1573,8 @@
         var fanPts = [[nameEnd, spreadC], [fanStart, spreadC]].concat(legPts)
           .map(function (pt) { return toXY(pt[0], pt[1]); });
         var path = svgEl('path', { d: roundedPath(fanPts, CORNER) });
-        styleStroke(path, p, S);
         path.setAttribute('data-metro-role', 'track'); path.setAttribute('data-metro-owner', p.key);
-        svg.appendChild(path);
+        paintLine(path, p, S, svg, 0);
         p._trunkEl = path;
         // a terminal bar at each end, the transit-map mark for where a line
         // starts and stops rather than simply running out of canvas
@@ -1502,9 +1587,8 @@
         });
       } else {
         var ln = svgEl('path', { d: roundedPath(stationPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
-        styleStroke(ln, p, S);
         ln.setAttribute('data-metro-role', 'track'); ln.setAttribute('data-metro-owner', p.key);
-        svg.appendChild(ln);
+        paintLine(ln, p, S, svg, 0);
         p._trunkEl = ln;
       }
     });
@@ -1668,19 +1752,20 @@
     // Draw one ramp. `pts` are (axis, cross) vertices, the first of which
     // lies on `p`'s trunk at `phaseA` so the dash pattern can be lined up
     // with it. Anything after that is free geometry.
+    // Where a line's rungs are in their cycle after `len` of it has been
+    // drawn, so a run made of several elements is hatched continuously.
+    function phaseAfter(p, len) {
+      var period = dashPeriod(p.line_style, S);
+      if (!(period > 0) || len == null) return null;
+      return ((len % period) + period) % period;
+    }
     function drawRamp(p, pts, phaseA, role, owner) {
       var path = svgEl('path', { d: roundedPath(pts.map(function (q) { return toXY(q[0], q[1]); }), CORNER) });
-      styleStroke(path, p, S);
-      var period = dashPeriod(p.line_style, S);
-      if (period > 0 && phaseA != null) {
-        var L = trunkLenAt(p, phaseA);
-        // A negative offset would shift the pattern the wrong way; SVG takes
-        // the offset modulo the period anyway, so normalise it here.
-        if (L != null) path.setAttribute('stroke-dashoffset', ((L % period) + period) % period);
-      }
       path.setAttribute('data-metro-role', role);
       path.setAttribute('data-metro-owner', owner);
-      svg.appendChild(path);
+      // The lead-in lies ON the trunk, so its rungs have to fall on the
+      // trunk's own — ask the trunk how far along itself the ramp starts.
+      paintLine(path, p, S, svg, phaseA == null ? null : phaseAfter(p, trunkLenAt(p, phaseA)));
       return path;
     }
 
@@ -1747,12 +1832,12 @@
         // elbow). So the spine is drawn in bridges that stop CORNER short of
         // every elbow on both sides — exactly the stretch each member's own
         // path already covers — and only member's own path touches that zone.
+        var lanePhase = null;   // set once the head's ramp is drawn
         function bridge(a0, a1) {
           if (a1 - a0 < 1) return;
           var seg = svgEl('path', { d: roundedPath([toXY(a0, laneC), toXY(a1, laneC)], 0) });
-          styleStroke(seg, p, S);
           seg.setAttribute('data-metro-role', 'branch'); seg.setAttribute('data-metro-owner', p.key);
-          svg.appendChild(seg);
+          paintLine(seg, p, S, svg, lanePhase);
         }
         // ONE ramp per group, at the earliest elbow. A group is a run of
         // this line's events whose rails overlap in one lane, so after the
@@ -1775,8 +1860,13 @@
         var sorted = g.members.slice().sort(function (a, b) { return a._elbow - b._elbow; });
         var head = sorted[0];
         head._ownRamp = true;
+        var headPhaseA = head._diagFrom - head._dir * RAMP_LEAD;
         head._rampEl = drawRamp(p, rampOut(p, head._diagFrom, head._elbow, laneC, head._dir),
-                 head._diagFrom - head._dir * RAMP_LEAD, 'fork', head._laneOwner);
+                 headPhaseA, 'fork', head._laneOwner);
+        // the spine picks the rungs up where the ramp's tail left them
+        var headLen = head._rampEl.getTotalLength ? head._rampEl.getTotalLength() : null;
+        var headStart = trunkLenAt(p, headPhaseA);
+        lanePhase = (headLen != null && headStart != null) ? phaseAfter(p, headStart + headLen) : null;
         bridge(head._elbow + RAMP_LEAD, g.to);
         if (g.to > head._elbow + CORNER + 1) terminus(g.to, laneC, p);
         if (g.from < head._elbow - CORNER - 1) terminus(g.from, laneC, p);
@@ -1820,10 +1910,13 @@
         // solid bar across four bands also reads far heavier than the
         // event deserves.
         var t0 = toXY(e._nodeA, lo), t1 = toXY(e._nodeA, hi);
+        // A SOLID heavy bar, not a dashed hint. When the whole family is in
+        // one place that is the most important thing on the board, and a
+        // thin dotted thread between four lines read as the least. This is
+        // the multi-line interchange every transit map draws heaviest.
         var tie = svgEl('line', {
           x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
-          'stroke-width': NODE_STROKE * 0.7, 'stroke-linecap': 'round',
-          'stroke-dasharray': (NODE_STROKE * 1.2) + ' ' + (NODE_STROKE * 1.6),
+          'stroke-width': NODE_STROKE * 1.15, 'stroke-linecap': 'round',
         });
         // Ink, explicitly. Without a stroke an SVG line is drawn with
         // nothing at all: the tie was in the DOM, the right length, in the
@@ -1834,7 +1927,10 @@
         svg.appendChild(tie);
         cs.forEach(function (c) {
           var xy = toXY(e._nodeA, c);
-          var node = paint(svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R, 'stroke-width': NODE_STROKE }), PAPER, INK);
+          // bigger than a stop's dot and heavier than a station junction:
+          // the size ladder is what says which mark matters most
+          var node = paint(svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R * 1.15,
+            'stroke-width': NODE_STROKE * 1.15 }), PAPER, INK);
           node.setAttribute('data-metro-role', 'ring'); node.setAttribute('data-metro-owner', e.owner);
           svg.appendChild(node);
         });

@@ -54,20 +54,31 @@ module.exports = function (test, h) {
     });
   }
 
-  test('a dashed line\'s ramp carries a dash offset, so its lead-in falls on the trunk\'s own dashes', () => {
-    // The lead-in is drawn on top of the trunk. Without an offset the
-    // overlay starts a fresh pattern and doubles the line visibly; with one
-    // it lands exactly on the trunk's dashes and disappears. This can only
-    // be checked as "the offset was computed at all" — that it is CORRECT is
-    // what the eye checks — but a zero offset on every dashed ramp is the
-    // symptom of the phase logic being dropped, which is how it regressed.
+  test('a hatched line\'s rungs carry a phase, so a ramp\'s lead-in falls on the trunk\'s own', () => {
+    // Lines are solid; what tells them apart is the paper texture knocked
+    // out of them, and for two of the four treatments that texture repeats.
+    // A ramp's lead-in is drawn ON TOP of the trunk, so its rungs have to
+    // land on the trunk's own or the overlay doubles them visibly. This can
+    // only be checked as "a phase was computed at all" — that it is right is
+    // what the eye checks — but a zero phase everywhere is the symptom of
+    // the logic being dropped, which is how it regressed once already.
     const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
-    const dashed = ramps(rep).filter((r) => r.dash);
-    assert(dashed.length > 0, 'no dashed ramps on the busy day at all');
-    const offset = dashed.filter((r) => r.dashOffset > 0);
-    assert(offset.length > 0,
-      'none of the ' + dashed.length + ' dashed ramps has a dash offset: the lead-in '
+    const rungs = (rep.overlays || []).filter((o) => o.dash);
+    assert(rungs.length > 0, 'no hatched or beaded lines on the busy day at all');
+    assert(rungs.some((o) => o.dashOffset > 0),
+      'none of the ' + rungs.length + ' rung patterns has a phase: a ramp\'s lead-in '
       + 'will double the trunk it lies on');
+  });
+
+  test('every line is solid — the texture is knocked out of it, not made of gaps', () => {
+    // A dashed line is mostly paper, so on e-ink it reads faint however dark
+    // the ink is. Every line here keeps a continuous black envelope and is
+    // told apart by weight and by what is punched out of it.
+    const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
+    const dashedLines = pathsWhere(rep, 'track').concat(ramps(rep)).filter((p) => p.dash);
+    assert(dashedLines.length === 0,
+      dashedLines.length + ' line(s) drawn as dashes rather than solid: '
+      + [...new Set(dashedLines.map((p) => p.owner))].join(', '));
   });
 
   // ---- 2. attachment --------------------------------------------------
@@ -134,8 +145,11 @@ module.exports = function (test, h) {
     const bad = [];
     for (const f of fixtures) {
       const rep = layout(f, ROOMY);
-      const S = rep.debug.S || 1;
-      const cap = 2 * 9 * S + 1; // RAMP_LEAD, in the same layout units the debug reports
+      // LEAD_CAP as the layout computes it, not a copy of the number: the
+      // two drifted apart the moment the corner radius grew for the
+      // S-curves, and the copy was the one that was wrong.
+      const cap = Math.max(2 * (rep.debug.corner || 0), rep.debug.minDiag || 0) + 1;
+      assert(cap > 1, 'the layout did not report its corner radius');
       for (const e of eventsIn(rep)) {
         if (e.status !== 'ok' || e.dir < 0) continue;
         const lead = e.elbow - e.diagFrom;

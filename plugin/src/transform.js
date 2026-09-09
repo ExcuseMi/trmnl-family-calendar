@@ -458,11 +458,11 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
 // LINE_STYLES, so a device that loses the network does not also change
 // colour — and no grey is pinned, so a theme still gets to repaint them.
 var DEMO_TRACKS = [
-  { key: 'homer', name: 'Homer', side: 'left', hue: 'black', track_offset: -10, line_width: 4, line_style: 'solid' },
-  { key: 'lisa', name: 'Lisa', side: 'left', hue: 'red-40', track_offset: -20, line_width: 3, line_style: 'dashed' },
-  { key: 'marge', name: 'Marge', side: 'right', hue: 'orange-40', track_offset: 10, line_width: 3, line_style: 'dotted' },
-  { key: 'bart', name: 'Bart', side: 'right', hue: 'purple-40', track_offset: 20, line_width: 3, line_style: 'dashdot' },
-  { key: 'maggie', name: 'Maggie', side: 'right', hue: 'cyan-40', track_offset: 30, line_width: 2.25, line_style: 'dashed' },
+  { key: 'homer', name: 'Homer', side: 'left', hue: 'black', track_offset: -10, line_width: 6, line_style: 'solid' },
+  { key: 'lisa', name: 'Lisa', side: 'left', hue: 'red-40', track_offset: -20, line_width: 5.5, line_style: 'dashed' },
+  { key: 'marge', name: 'Marge', side: 'right', hue: 'orange-40', track_offset: 10, line_width: 5, line_style: 'dotted' },
+  { key: 'bart', name: 'Bart', side: 'right', hue: 'purple-40', track_offset: 20, line_width: 4.5, line_style: 'dashdot' },
+  { key: 'maggie', name: 'Maggie', side: 'right', hue: 'cyan-40', track_offset: 30, line_width: 4, line_style: 'dashed' },
 ];
 
 // A deliberately busy day in Springfield: two meetings starting minutes
@@ -1178,7 +1178,7 @@ function makeTrackRegistry(parsed) {
       // the side's anchor line (first-placed, whichever side that ends up
       // being) is black/bold; everyone else cycles hues in registration order
       t.hue = (configured && hueTokenForColor(configured.color)) || (side === 'left' && idx === 0 ? 'black' : HUE_CYCLE[i % HUE_CYCLE.length]);
-      t.line_width = (side === 'left' && idx === 0) ? 4 : 3;
+      t.line_width = (side === 'left' && idx === 0) ? 6 : 4.5;
       t.initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
     });
     // Dash patterns are handed out GLOBALLY, in the order the lines appear on
@@ -1195,13 +1195,19 @@ function makeTrackRegistry(parsed) {
       if (ta.side !== tb.side) return ta.side === 'left' ? -1 : 1;
       return Math.abs(ta.track_offset) - Math.abs(tb.track_offset);
     });
+    // Weight is the other half of telling lines apart. Every line is solid
+    // and thick, so the ladder runs heavy to light in board order and pairs
+    // with the four treatments — a reader separating two lines has both a
+    // texture and a thickness to go on, and neither depends on colour.
+    var WEIGHTS = [5.5, 5, 4.5, 4, 3.5];
     var styleIdx = 0;
     boardOrder.forEach(function (name) {
       var t = byName[name];
       if (t.side === 'left' && Math.abs(t.track_offset) === TRACK_STEP) { t.line_style = 'solid'; return; }
       var lap = Math.floor(styleIdx / (LINE_STYLES.length - 1));
       t.line_style = LINE_STYLES[1 + (styleIdx % (LINE_STYLES.length - 1))];
-      if (lap > 0) t.line_width = Math.max(1.5, t.line_width - lap * 0.75);
+      t.line_width = WEIGHTS[Math.min(styleIdx, WEIGHTS.length - 1)];
+      if (lap > 0) t.line_width = Math.max(3, t.line_width - lap * 0.5);
       styleIdx++;
     });
   }

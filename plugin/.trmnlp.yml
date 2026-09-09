@@ -53,7 +53,7 @@ variables:
           "side": "left",
           "hue": "black",
           "track_offset": -10,
-          "line_width": 4,
+          "line_width": 6,
           "line_style": "solid",
           "initial": "H"
         },
@@ -63,7 +63,7 @@ variables:
           "side": "left",
           "hue": "red-40",
           "track_offset": -20,
-          "line_width": 3,
+          "line_width": 5.5,
           "line_style": "dashed",
           "initial": "L"
         },
@@ -73,7 +73,7 @@ variables:
           "side": "right",
           "hue": "orange-40",
           "track_offset": 10,
-          "line_width": 3,
+          "line_width": 5,
           "line_style": "dotted",
           "initial": "M"
         },
@@ -83,7 +83,7 @@ variables:
           "side": "right",
           "hue": "purple-40",
           "track_offset": 20,
-          "line_width": 3,
+          "line_width": 4.5,
           "line_style": "dashdot",
           "initial": "B"
         },
@@ -93,7 +93,7 @@ variables:
           "side": "right",
           "hue": "cyan-40",
           "track_offset": 30,
-          "line_width": 2.25,
+          "line_width": 3.5,
           "line_style": "dashed",
           "initial": "M"
         }
@@ -126,7 +126,7 @@ variables:
           "co_owners": [],
           "side": "left",
           "hue": "black",
-          "track_width": 4,
+          "track_width": 6,
           "track_style": "solid",
           "track_offset": -10
         },
@@ -143,7 +143,7 @@ variables:
           ],
           "side": "right",
           "hue": "orange-40",
-          "track_width": 3,
+          "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
         },
@@ -157,7 +157,7 @@ variables:
           "co_owners": [],
           "side": "right",
           "hue": "orange-40",
-          "track_width": 3,
+          "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
         },
@@ -171,7 +171,7 @@ variables:
           "co_owners": [],
           "side": "left",
           "hue": "red-40",
-          "track_width": 3,
+          "track_width": 5.5,
           "track_style": "dashed",
           "track_offset": -20
         },
@@ -185,7 +185,7 @@ variables:
           "co_owners": [],
           "side": "left",
           "hue": "black",
-          "track_width": 4,
+          "track_width": 6,
           "track_style": "solid",
           "track_offset": -10
         },
@@ -199,7 +199,7 @@ variables:
           "co_owners": [],
           "side": "right",
           "hue": "cyan-40",
-          "track_width": 2.25,
+          "track_width": 3.5,
           "track_style": "dashed",
           "track_offset": 30
         },
@@ -213,7 +213,7 @@ variables:
           "co_owners": [],
           "side": "right",
           "hue": "orange-40",
-          "track_width": 3,
+          "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
         },
@@ -227,7 +227,7 @@ variables:
           "co_owners": [],
           "side": "right",
           "hue": "cyan-40",
-          "track_width": 2.25,
+          "track_width": 3.5,
           "track_style": "dashed",
           "track_offset": 30
         },
@@ -241,7 +241,7 @@ variables:
           "co_owners": [],
           "side": "left",
           "hue": "black",
-          "track_width": 4,
+          "track_width": 6,
           "track_style": "solid",
           "track_offset": -10
         },
@@ -255,7 +255,7 @@ variables:
           "co_owners": [],
           "side": "right",
           "hue": "purple-40",
-          "track_width": 3,
+          "track_width": 4.5,
           "track_style": "dashdot",
           "track_offset": 20
         },
@@ -269,7 +269,7 @@ variables:
           "co_owners": [],
           "side": "right",
           "hue": "orange-40",
-          "track_width": 3,
+          "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
         },
@@ -283,7 +283,7 @@ variables:
           "co_owners": [],
           "side": "left",
           "hue": "red-40",
-          "track_width": 3,
+          "track_width": 5.5,
           "track_style": "dashed",
           "track_offset": -20
         },
@@ -297,7 +297,7 @@ variables:
           "co_owners": [],
           "side": "right",
           "hue": "purple-40",
-          "track_width": 3,
+          "track_width": 4.5,
           "track_style": "dashdot",
           "track_offset": 20
         },
@@ -311,7 +311,7 @@ variables:
           "co_owners": [],
           "side": "left",
           "hue": "black",
-          "track_width": 4,
+          "track_width": 6,
           "track_style": "solid",
           "track_offset": -10
         },
@@ -325,7 +325,7 @@ variables:
           "co_owners": [],
           "side": "left",
           "hue": "red-40",
-          "track_width": 3,
+          "track_width": 5.5,
           "track_style": "dashed",
           "track_offset": -20
         },
@@ -344,7 +344,7 @@ variables:
           ],
           "side": "right",
           "hue": "orange-40",
-          "track_width": 3,
+          "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
         }

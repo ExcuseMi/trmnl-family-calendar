@@ -183,6 +183,20 @@ const REPORTER = `
     // neither stroke nor fill is in the DOM, the right size, in the right
     // place, and invisible — which is how the interchange tie disappeared.
     var painted = [];
+    // The paper overlays that give a line its texture. They carry no role —
+    // an overlay is not a line, it is a hole in one — so they are collected
+    // separately, by the attribute that marks them.
+    var overlays = [];
+    svg.querySelectorAll('[data-metro-overlay]').forEach(function (el) {
+      var cs = getComputedStyle(el);
+      overlays.push({
+        owner: el.getAttribute('data-metro-overlay') || null,
+        dash: (cs.strokeDasharray === 'none' ? '' : cs.strokeDasharray) || '',
+        dashOffset: parseFloat(cs.strokeDashoffset) || 0,
+        width: parseFloat(cs.strokeWidth) || 0,
+        stroke: cs.stroke
+      });
+    });
     svg.querySelectorAll('[data-metro-role]').forEach(function (el) {
       var cs = getComputedStyle(el);
       var r = el.getBoundingClientRect();
@@ -204,7 +218,7 @@ const REPORTER = `
     out.id = 'metro-report';
     out.textContent = JSON.stringify({
       canvas: { w: cr.width, h: cr.height },
-      debug: dbg, labels: labels, paths: paths, rects: rects, painted: painted,
+      debug: dbg, labels: labels, paths: paths, rects: rects, painted: painted, overlays: overlays,
       circles: circles.concat(shapeMarkers)
     });
     document.body.appendChild(out);
