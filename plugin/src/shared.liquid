@@ -1229,7 +1229,20 @@
         var prevEnd = g.from;
         sorted.forEach(function (e) {
           bridge(prevEnd, e._elbow - CORNER);
-          var pts = [toXY(e._nodeA, spineC + sign * e._trackDist), toXY(e._elbow, laneC), toXY(e._elbow + e._dir * CORNER, laneC)];
+          // Start a little way BACK along the trunk, so the point where the
+          // branch leaves is an interior vertex and gets the same rounding
+          // every other bend has. Starting the path at the junction made it
+          // an endpoint, which roundedPath cannot fillet — the branch
+          // snapped off the line at a hard angle instead of curving away.
+          // The lead-in lies exactly on the trunk, so it is invisible.
+          // _trackDist sits NODE_R clear of the line (it is where the ring's
+          // EDGE is, which is what the lane maths wants). The drawn branch
+          // has to leave the line itself, or it starts a ring's width above
+          // the trunk and floats there — the fillet then curves a stub that
+          // was never attached to anything.
+          var trunkC = spineC + sign * (e._trackDist - NODE_R);
+          var pts = [toXY(e._nodeA - e._dir * 2 * CORNER, trunkC), toXY(e._nodeA, trunkC),
+                     toXY(e._elbow, laneC), toXY(e._elbow + e._dir * CORNER, laneC)];
           var path = svgEl('path', { d: roundedPath(pts, CORNER) });
           styleStroke(path, p, S);
           path.setAttribute('data-metro-role', 'branch'); path.setAttribute('data-metro-owner', p.key);
@@ -1245,7 +1258,13 @@
     placed.forEach(function (e) {
       if (!e._merge) return;
       var p = e._p, sign = e._sign, laneC = spineC + sign * e._laneDist;
-      var pts = [toXY(e._nodeA, spineC + sign * e._trackDist), toXY(e._elbow, laneC), toXY(e._lineTo, laneC), toXY(e._endA, spineC + sign * e._trackDistEnd)];
+      // same at both ends of a loop that rejoins: lead in along the trunk
+      // before leaving it, and carry on along it after coming back, so both
+      // junctions curve instead of snapping
+      var fromC = spineC + sign * (e._trackDist - NODE_R), backC = spineC + sign * (e._trackDistEnd - NODE_R);
+      var pts = [toXY(e._nodeA - e._dir * 2 * CORNER, fromC), toXY(e._nodeA, fromC),
+                 toXY(e._elbow, laneC), toXY(e._lineTo, laneC),
+                 toXY(e._endA, backC), toXY(e._endA + e._dir * 2 * CORNER, backC)];
       var path = svgEl('path', { d: roundedPath(pts, CORNER) });
       styleStroke(path, p, S);
       path.setAttribute('data-metro-role', 'branch'); path.setAttribute('data-metro-owner', p.key);
