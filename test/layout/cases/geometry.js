@@ -321,6 +321,34 @@ module.exports = function (test, h) {
       'both lines should kink out to station level, only ' + kinked.length + ' did');
   });
 
+  test('a shared station draws its lines TOGETHER, not apart', () => {
+    // A station normally kinks a line away from the spine. Two people at the
+    // same school kinking away from EACH OTHER looked like two unrelated
+    // stations that happened to share a name. Converging instead draws them
+    // alongside each other for the length of the thing they are both at.
+    const f = fixtures.find((x) => x.name === 'shared-station');
+    const rep = layout(f, ROOMY);
+    const owners = new Set(f.metro.stations.map((s) => s.owner));
+    const lines = pathsWhere(rep, 'track').filter((t) => owners.has(t.owner));
+    assert(lines.length === 2, 'expected the two lines that share the station');
+    // the gap between them, at the ends of the board versus in the middle
+    // of the shared span
+    const at = (t, x) => {
+      let best = null;
+      for (const q of t.pts) if (!best || Math.abs(q[0] - x) < Math.abs(best[0] - x)) best = q;
+      return best[1];
+    };
+    const edge = Math.abs(at(lines[0], 8) - at(lines[1], 8));
+    const mid = Math.abs(at(lines[0], rep.canvas.w / 2) - at(lines[1], rep.canvas.w / 2));
+    assert(mid < edge - 8,
+      'the lines should be closer together inside the shared station than outside it: '
+      + Math.round(mid) + 'px vs ' + Math.round(edge) + 'px');
+    // and a bar across them at each end says where it starts and stops
+    const bars = (rep.rects || []).filter((r) => r.role === 'capsule');
+    assert(bars.length >= 2,
+      'expected a bar at each end of the shared span, found ' + bars.length);
+  });
+
   for (const f of fixtures) {
     test('no line name lands in the river: ' + f.name, () => {
       // The track nearest the spine sits close enough that its name went

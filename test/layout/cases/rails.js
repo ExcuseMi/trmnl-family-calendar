@@ -156,4 +156,24 @@ module.exports = function (test, h) {
         + bad.slice(0, 3).join('; '));
     });
   }
+
+  for (const f of fixtures) {
+    test('every label sits by the rail it names: ' + f.name, () => {
+      // A full lane slides labels along it rather than refusing them, and
+      // the slides accumulate: on a line with five wide captions the last
+      // one sat two hours right of its own branch, which reads as a caption
+      // with no branch at all rather than as a caption that moved.
+      const rep = layout(f, ROOMY);
+      const bad = [];
+      for (const e of eventsIn(rep)) {
+        if (e.status !== 'ok') continue;
+        const want = e.dir > 0 ? e.elbow : e.elbow - e.textLen;
+        const drift = Math.abs(e.textStart - want);
+        if (drift > e.textLen) bad.push('"' + e.title + '" is ' + Math.round(drift)
+          + 'px from its rail (label is ' + Math.round(e.textLen) + 'px wide)');
+      }
+      assert(bad.length === 0, bad.length + ' label(s) adrift from their rail: '
+        + bad.slice(0, 4).join('; '));
+    });
+  }
 };

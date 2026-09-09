@@ -96,6 +96,17 @@
 <style>
   .metro-canvas { overflow: hidden; }
   .metro-svg { overflow: visible; }
+  /* No box behind a label — an opaque panel over a metro map reads as a
+     hole punched in it, and on a busy board those holes are most of the
+     picture. The text carries its own thin paper outline instead: it stays
+     legible where a line runs under it, and where nothing does there is
+     nothing to see. paint-order puts the stroke BEHIND the glyphs, so the
+     letterforms keep their real weight instead of being thinned by a
+     centred stroke. */
+  .metro-label, .metro-terminus, .metro-hour, .metro-axis-note, .metro-sky {
+    paint-order: stroke fill;
+    -webkit-text-stroke: 3px var(--framework-semantic-canvas-bg-color, #fff);
+  }
   .metro-label { line-height: 1.2; padding: 1px 3px; }
   .metro-corner-legend { padding: 4px 6px; border-radius: 4px; }
   .metro-hour, .metro-axis-note { white-space: nowrap; padding: 0 2px; }
@@ -533,7 +544,7 @@
       // neighbouring names touch.
       var n = el('span', 'metro-gen metro-terminus label '
         + (horizontal ? 'label--base' : 'label--small')
-        + ' font--bold text--black absolute bg--white text--black');
+        + ' font--bold text--black absolute');
       n.textContent = p.name;
       // Standing up, the lines are only a track-step apart across the map
       // while the names are words wide, so laid flat they pile into each
@@ -587,9 +598,37 @@
     LEGEND.forEach(function (p) {
       p._stations = p._stations.map(function (st) {
         var a0 = clamp(aFor(st.start_min), axisStart, axisEnd), a1 = clamp(aFor(st.end_min), axisStart, axisEnd);
-        return { a0: a0, a1: a1, title: st.title, location: st.location || null, allDay: !!st.all_day, group: st.group || null };
+        return { a0: a0, a1: a1, title: st.title, location: st.location || null, allDay: !!st.all_day, group: st.group || null, toward: 1 };
       }).filter(function (s) { return s.a1 > s.a0; });
     });
+    // A SHARED station pulls its lines TOGETHER. A station normally kinks a
+    // line away from the spine, and two people at the same school kinking
+    // away from each other looked like two unrelated stations that happened
+    // to share a name. Converging instead — the inner line steps out, the
+    // outer line steps in — draws them alongside each other for the length
+    // of the thing they are both at, which is what "they are both here"
+    // looks like on a transit map.
+    //
+    // Decided from board order, not from cross positions, because those are
+    // still being solved when this is read. Members on opposite sides of the
+    // spine keep the ordinary outward kink: converging across the middle
+    // would take them through the hour river.
+    (function orientSharedStations() {
+      var groups = {};
+      LEGEND.forEach(function (p) {
+        p._stations.forEach(function (s) {
+          if (s.group) (groups[s.group] = groups[s.group] || []).push({ p: p, s: s });
+        });
+      });
+      Object.keys(groups).forEach(function (g) {
+        var mem = groups[g];
+        if (mem.length < 2) return;
+        if (mem.some(function (m) { return m.p._sign !== mem[0].p._sign; })) return;
+        mem.sort(function (a, b) { return Math.abs(a.p.track_offset) - Math.abs(b.p.track_offset); });
+        var half = (mem.length - 1) / 2;
+        mem.forEach(function (m, i) { m.s.toward = i <= half ? 1 : -1; });
+      });
+    })();
     // the raise (in c-units) a track's own line sits at, at a given axis
     // position — 0 outside any station, ramping up/down across the same
     // 45° kink stationPath() actually draws (not a flat step), so an
@@ -601,9 +640,11 @@
         var s = segs[i];
         if (a < s.a0 || a > s.a1) continue;
         var rr = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
-        if (a < s.a0 + rr) return a - s.a0;
-        if (a > s.a1 - rr) return s.a1 - a;
-        return rr;
+        // signed: +1 kinks away from the spine (the ordinary station), -1
+        // toward it, which is how a shared station brings its lines together
+        if (a < s.a0 + rr) return (a - s.a0) * s.toward;
+        if (a > s.a1 - rr) return (s.a1 - a) * s.toward;
+        return rr * s.toward;
       }
       return 0;
     }
@@ -671,7 +712,7 @@
     // text, drawn in the band along the top edge (horizontal) or beside the
     // bundle (vertical), with a guide line across the canvas at its time.
     function buildMarkerLabel(w) {
-      var n = el('div', 'metro-gen metro-sky flex flex--row flex--center-y gap--xsmall absolute bg--white text--black');
+      var n = el('div', 'metro-gen metro-sky flex flex--row flex--center-y gap--xsmall absolute text--black');
       n.style.padding = '0 ' + (3 * S) + 'px';
       var size = hourH * (w.type === 'sun' ? 1.5 : 1.3);
       var ic = el('img', 'image--adaptive'); ic.src = w.icon; ic.style.width = size + 'px'; ic.style.height = size + 'px';
@@ -709,7 +750,7 @@
       // up any per-screen overrides a theme sets. Only the arbitrary pixel
       // offsets below stay inline — there is no utility class for "148px".
       var align = horizontal ? '' : (p._sign < 0 ? ' text--right' : ' text--left');
-      var box = el('div', 'metro-gen metro-label absolute bg--white text--black' + align);
+      var box = el('div', 'metro-gen metro-label absolute text--black' + align);
       if (showTime) {
         var tm = labelRow('metro-time-tag ' + tagClass + ' text--gray-40');
         tm.textContent = timeLabel(e.start_min) + ' ' + timeLabel(e.end_min);
@@ -816,6 +857,7 @@
 
     var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped, demand, alloc, sep, packedFallback;
     var lastPlaceCrossings = 0; // set by placeSide: how many placements had to accept a crossing
+    var lastPlaceDrift = 0;     // ...and how many ended up far from the rail they name
     function layoutAttempt(tier) {
     titleClass = tier.cls; tagClass = tier.tag; showTime = tier.time; showLocation = tier.loc;
     canvas.querySelectorAll('.metro-label').forEach(function (n) { n.remove(); });
@@ -1198,10 +1240,18 @@
       });
       var used = 0;
       lastPlaceCrossings = 0;
+      lastPlaceDrift = 0;
       evs.forEach(function (e) {
         if (e._dropped) return;
         used = Math.max(used, e._lane + 1);
         if (e._crossing) lastPlaceCrossings++;
+        // How far a label ended up from the rail it names. A lane that is
+        // full slides labels along it instead of refusing them, and the
+        // slides accumulate: on a line with five wide labels the last one
+        // sat two hours right of its own rail, which reads as a caption with
+        // no branch under it at all. Worth another lane.
+        var drift = Math.abs(e._textStart - (e._dir > 0 ? e._elbow + TEXT_PAD : e._elbow - TEXT_PAD - e._textLen));
+        if (drift > e._textLen * 0.6) lastPlaceDrift++;
       });
       return used;
     }
@@ -1285,6 +1335,9 @@
       // the crossing: two meetings starting within a lane-reach of each
       // other have nowhere to go otherwise.
       if (lastPlaceCrossings) want++;
+      // Same for a label that had to slide most of its own width away from
+      // its rail to find room: another lane puts it back beside it.
+      if (lastPlaceDrift) want++;
       demand[p.key] = Math.max(want, mine ? 1 : 0);
     });
 
@@ -1384,16 +1437,24 @@
     needA = sol.needA; needB = sol.needB;
     spineC = clamp(needA + (crossPx - needA - needB) / 2, Math.min(needA, crossPx / 2), Math.max(crossPx - needB, crossPx / 2));
     dropped = 0;
-    var crossings = 0, slides = 0, backwards = 0;
+    var crossings = 0, slides = 0, backwards = 0, adrift = 0;
     visible.forEach(function (e) {
       if (e._dropped) { dropped++; return; }
       if (e._crossing) crossings++;
       if (e._elbowShift) slides++;
       if (e._dir < 0) backwards++;
+      // A label that had to ride most of its own width away from its rail
+      // to find room has stopped pointing at anything. On a line with five
+      // wide captions the slides accumulate and the last one sat two hours
+      // right of its own branch — which reads as a caption with no branch
+      // at all, not as a caption that moved.
+      var want = e._dir > 0 ? e._elbow + TEXT_PAD : e._elbow - TEXT_PAD - e._textLen;
+      if (Math.abs(e._textStart - want) > e._textLen * 0.6) adrift++;
     });
-    // layout quality: a dropped event is unacceptable, a diagonal through a
-    // label or a slid elbow is ugly, a backward branch mildly so
-    return dropped * 1000 + crossings * 40 + slides * 15 + backwards * 10;
+    // layout quality: a dropped event is unacceptable, a caption that no
+    // longer sits by its own rail nearly as bad, a diagonal through a label
+    // or a slid elbow ugly, a backward branch mildly so
+    return dropped * 1000 + adrift * 45 + crossings * 40 + slides * 15 + backwards * 10;
     }
 
     // Try the biggest text first and step down only while it improves the
@@ -1673,7 +1734,7 @@
           svg.appendChild(sring);
         });
         if (!ownsCaption) return;   // the rings above are per line; the caption is not
-        var box = el('div', 'metro-gen metro-label absolute bg--white text--black');
+        var box = el('div', 'metro-gen metro-label absolute text--black');
         // Lying down a caption may run as long as its station; standing up
         // it has only the column between two lines, so cap it there or two
         // neighbouring stations write straight over each other.
@@ -1716,12 +1777,64 @@
         // clearance arithmetic, and no line to clip through the text
         var midC = baseC;
         if (members && members.length > 1) {
-          var sum = 0;
-          members.forEach(function (q) { sum += spineC + q._c; });
-          midC = sum / members.length;
+          // between the lines WHERE THEY NOW ARE — they have converged for
+          // the length of this station, and the caption belongs in the space
+          // that opened up between them, not between the baselines they left
+          var mid = s.a0 + raise + (s.a1 - raise - (s.a0 + raise)) / 2;
+          var lo2 = Infinity, hi2 = -Infinity;
+          members.forEach(function (q) {
+            var c = lineCAt(q, mid);
+            if (c < lo2) lo2 = c;
+            if (c > hi2) hi2 = c;
+          });
+          midC = (lo2 + hi2) / 2;
+          // and a bar across the lines at each end of the shared span, so it
+          // reads as one station both of them call at rather than two that
+          // happen to share a name
+          [s.a0 + raise, s.a1 - raise].forEach(function (at) {
+            if (at <= axisStart + 1 || at >= axisEnd - 1) return;
+            var los = Infinity, his = -Infinity;
+            members.forEach(function (q) {
+              var c = lineCAt(q, at);
+              if (c < los) los = c;
+              if (c > his) his = c;
+            });
+            var b0 = toXY(at, los), b1 = toXY(at, his);
+            var bar = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1],
+              'stroke-width': NODE_STROKE * 0.9, 'stroke-linecap': 'round' });
+            bar.style.stroke = INK;
+            bar.setAttribute('data-metro-role', 'capsule');
+            bar.setAttribute('data-metro-owner', p.key);
+            svg.appendChild(bar);
+          });
         }
         if (horizontal) {
-          box.style.left = capA + 'px';
+          // Slide along the station's own span until the caption is clear of
+          // the event labels already placed. A station caption is not part
+          // of the lane bookkeeping — it sits in the space the kink vacated —
+          // so nothing else knows to keep out of its way, and on a line with
+          // a meeting inside its own station's span the two wrote over each
+          // other. The station is long; the caption only needs somewhere
+          // along it.
+          var capW = bm.w, capH = bm.h;
+          var limit = s.a1 - raise - capW;
+          var at = capA;
+          for (var tries = 0; tries < 24 && at < limit; tries++) {
+            var clash = null;
+            for (var vi = 0; vi < visible.length; vi++) {
+              var ov = visible[vi];
+              if (ov._dropped || ov._textStart == null) continue;
+              var oc = spineC + ov._sign * ov._laneDist;
+              var oTop = ov._sign < 0 ? oc - LINE_GAP - ov._h : oc + LINE_GAP;
+              if (oTop > midC + capH / 2 || oTop + ov._h < midC - capH / 2) continue;
+              if (ov._textStart > at + capW + 4 * S || ov._textStart + ov._textLen < at - 4 * S) continue;
+              clash = ov; break;
+            }
+            if (!clash) break;
+            at = clash._textStart + clash._textLen + 8 * S;
+          }
+          if (at > limit) at = capA;
+          box.style.left = at + 'px';
           box.style.top = (midC - bm.h / 2) + 'px';
         } else {
           // Standing up, the space the kink vacates is only a kink wide,
@@ -2148,7 +2261,7 @@
     for (var si = 0; si < stepOpts.length; si++) if (pxPerHour * stepOpts[si] >= hourW + 10 * S) { hourStep = stepOpts[si]; break; }
     var reserved = []; // axis intervals already taken by now / overflow notes
     function axisNote(text, a, align, cls) {
-      var n = el('span', 'metro-gen ' + (cls || 'metro-axis-note label label--small font--bold text--black') + ' absolute bg--white text--black');
+      var n = el('span', 'metro-gen ' + (cls || 'metro-axis-note label label--small font--bold text--black') + ' absolute text--black');
       n.textContent = text;
       canvas.appendChild(n);
       var nr = measure(n);
