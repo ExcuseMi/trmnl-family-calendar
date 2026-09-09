@@ -768,7 +768,17 @@
         // it names — which is the main reason the spur read as if its length
         // meant duration.
         var elbow = e._nodeA - dir * CORNER;
+        // Where the branch leaves the trunk. A deep lane needs a long climb,
+        // and for an event early in the day that start can fall off the
+        // board entirely — the branch then appears to arrive from nowhere at
+        // the edge. Keep the fork (and the bit of trunk its fillet needs) on
+        // the canvas; the diagonal just gets steeper than 45° when there is
+        // not room to do it properly, which is the honest compromise: the
+        // event's own time does not move.
         var diagFrom = elbow - dir * dy;
+        var forkFloor = axisStart + 2 * CORNER, forkCeil = axisEnd - 2 * CORNER;
+        diagFrom = clamp(diagFrom, forkFloor, forkCeil);
+        if (dir > 0 ? diagFrom > elbow : diagFrom < elbow) diagFrom = elbow;
         var L = lane(k), len = e._textLen;
         var elbow0 = elbow;
         var natural = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len;
@@ -1424,7 +1434,18 @@
           // has to leave the line itself, or it starts a ring's width above
           // the trunk and floats there — the fillet then curves a stub that
           // was never attached to anything.
-          var trunkC = spineC + sign * (e._trackDist - NODE_R);
+          // Leave from where the line REALLY is at the fork, not from where
+          // it will be at the event. _trackDist is measured at the event's
+          // own minute; the fork happens earlier, and if the line is still
+          // ramping out of a station in between, the two are different
+          // heights. Drawn from the wrong one the branch starts detached and
+          // crosses the ramp instead of forking off it.
+          // An interchange's branch leaves the OUTERMOST line it joins (that
+          // is where its ring is and what _trackDist was measured from), so
+          // the height has to come from that line, not from the nominal
+          // owner's — they can be a whole band apart.
+          var forkTrack = trackByKey[e._laneOwner] || p;
+          var trunkC = lineCAt(forkTrack, e._diagFrom);
           // The fillet where the branch leaves the trunk is drawn on its
           // own, solid, and the branch proper starts after it. The fillet
           // has to run a little way ALONG the trunk to curve away
@@ -1440,7 +1461,7 @@
           ], CORNER) });
           styleStroke(fork, p, S);
           fork.removeAttribute('stroke-dasharray');
-          fork.setAttribute('data-metro-role', 'branch'); fork.setAttribute('data-metro-owner', p.key);
+          fork.setAttribute('data-metro-role', 'fork'); fork.setAttribute('data-metro-owner', e._laneOwner);
           svg.appendChild(fork);
 
           var pts = [toXY(tip[0], tip[1]), toXY(e._elbow, laneC), toXY(e._elbow + e._dir * CORNER, laneC)];
@@ -1462,7 +1483,9 @@
       // same at both ends of a loop that rejoins: lead in along the trunk
       // before leaving it, and carry on along it after coming back, so both
       // junctions curve instead of snapping
-      var fromC = spineC + sign * (e._trackDist - NODE_R), backC = spineC + sign * (e._trackDistEnd - NODE_R);
+      var mergeTrack = trackByKey[e._laneOwner] || p;
+      var fromC = lineCAt(mergeTrack, e._diagFrom);
+      var backC = lineCAt(mergeTrack, e._mergeAt);
       var tipOut = alongDiagonal(e._diagFrom, fromC, e._elbow, laneC, 2 * CORNER);
       var tipIn = alongDiagonal(e._mergeAt, backC, e._lineTo, laneC, 2 * CORNER);
       [[e._diagFrom - e._dir * 2 * CORNER, fromC, e._diagFrom, fromC, tipOut],
@@ -1470,7 +1493,7 @@
         var fk = svgEl('path', { d: roundedPath([toXY(f[0], f[1]), toXY(f[2], f[3]), toXY(f[4][0], f[4][1])], CORNER) });
         styleStroke(fk, p, S);
         fk.removeAttribute('stroke-dasharray');
-        fk.setAttribute('data-metro-role', 'branch'); fk.setAttribute('data-metro-owner', p.key);
+        fk.setAttribute('data-metro-role', 'fork'); fk.setAttribute('data-metro-owner', e._laneOwner);
         svg.appendChild(fk);
       });
       var pts = [toXY(tipOut[0], tipOut[1]), toXY(e._elbow, laneC), toXY(e._lineTo, laneC), toXY(tipIn[0], tipIn[1])];

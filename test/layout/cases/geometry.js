@@ -44,6 +44,7 @@ module.exports = function (test, h) {
   // more events than it saves.
   const OVERLAP_KNOWN = {};
   const PIERCE_KNOWN = {
+    'tight-pair': "three meetings on one line inside an hour: the deepest lane's climb has to start off the left edge of the board, gets clamped onto it, and the steeper diagonal that results cuts across an earlier label on the same line",
     'all-day-every-track': "an interchange climbing inside the band it takes its lane from, on a day where every line also carries an all-day kink",
     'waypoint-station': 'a branch climbing past an earlier label on its own line, where a waypoint station has already raised that line',
   };
@@ -139,6 +140,42 @@ module.exports = function (test, h) {
       }
       assert(missed.length === 0, missed.length + ' ring(s) not centred on any line: ' + missed.slice(0, 6).join('; '));
       assert(oneSided.length === 0, oneSided.length + ' ring(s) with line on one side only: ' + oneSided.slice(0, 6).join('; '));
+    });
+  }
+
+  // ------------------------------------------------------------ junctions
+
+  // Where a branch leaves its line it must actually TOUCH that line. The
+  // fork's height was taken at the event's own minute while the fork is
+  // drawn earlier, so wherever the line was still ramping out of a station
+  // in between, the branch began at one height and the line was at another:
+  // it started in mid-air and crossed the ramp instead of forking off it.
+  for (const f of fixtures) {
+    test('every branch leaves its line from a point on that line: ' + f.name, () => {
+      const rep = layout(f, ROOMY);
+      const forks = pathsWhere(rep, 'fork');
+      assert(forks.length > 0, 'no junction fillets drawn at all');
+      const adrift = [];
+      for (const fk of forks) {
+        const mine = pathsWhere(rep, 'track').filter((t) => t.owner === fk.owner);
+        assert(mine.length > 0, 'fork for a line with no track: ' + fk.owner);
+        // the fork starts on the trunk: its first sampled point is the one
+        // that has to be on it
+        const start = fk.pts[0];
+        let best = Infinity;
+        for (const t of mine) for (const pt of t.pts) {
+          const d = Math.hypot(pt[0] - start[0], pt[1] - start[1]);
+          if (d < best) best = d;
+        }
+        // A fork that lands inside a station's ramp is attached to a
+        // CORNER-rounded curve, and rounding pulls the drawn line up to
+        // about a corner radius off the ideal one. That is the slack here
+        // and nothing more: the bug this guards against started branches
+        // 70 to 500px from their line, in mid-air.
+        if (best > 26) adrift.push(fk.owner + ' by ' + best.toFixed(1) + 'px');
+      }
+      assert(adrift.length === 0,
+        adrift.length + ' branch(es) starting off their own line: ' + adrift.slice(0, 5).join('; '));
     });
   }
 
