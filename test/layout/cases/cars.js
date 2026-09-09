@@ -46,15 +46,18 @@ module.exports = function (test, h) {
   });
 
   test('a car wears its own line colour', () => {
+    // Compared against the line's own DRAWN stroke, not against the hue
+    // token it was assigned: a colour can be a CSS variable now (black and
+    // white resolve through the theme), so the token is not a colour and
+    // only the rendered value can be checked against the rendered value.
     const rep = layout(busy, ROOMY);
-    const hue = {};
-    (rep.debug.colors || []).forEach((c) => { const [k, v] = c.split('='); hue[k] = v; });
+    const strokeOf = {};
+    for (const t of pathsWhere(rep, 'track')) strokeOf[t.owner] = t.stroke;
     for (const car of cars(rep)) {
       assert(car.fill, 'car for ' + car.owner + ' has no fill');
-      const line = busy.metro.legend.filter((t) => t.key === car.owner)[0];
-      assert(line, 'car for an unknown line: ' + car.owner);
-      assert(car.fill === hue[line.hue],
-        'car for ' + car.owner + ' is ' + car.fill + ', its line is ' + hue[line.hue]);
+      assert(strokeOf[car.owner], 'car for a line with no track drawn: ' + car.owner);
+      assert(car.fill === strokeOf[car.owner],
+        'car for ' + car.owner + ' is ' + car.fill + ', its line is ' + strokeOf[car.owner]);
     }
   });
 

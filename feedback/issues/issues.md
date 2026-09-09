@@ -1,5 +1,11 @@
 # Open
 
+- Spurs on a converged shared station dip into the partner's lane. Bart's
+  "Field Trip" branch reaches down into the corridor School Day opened
+  between him and Lisa. Nothing reserves that corridor, so on a busier
+  afternoon a label could land in it. Spurs should branch AWAY from the
+  partner while a shared station has the two lines drawn together.
+
 - Improve the fonts: https://trmnl.com/framework/docs/3.3/font_family.
   Partly blocked: the device's Font Family setting (Default / Classic /
   TRMNL) only redefines `--title-*` and `--label-*` for the roles it names,

@@ -194,6 +194,13 @@
   }
   var colorCache = {};
   function colorFor(hue) {
+    // "black" is a role, not a colour. A line assigned literal black
+    // vanished on a dark board — the anchor track, the heaviest line on the
+    // map, drawn in the same ink as the canvas. Both ends of the greyscale
+    // resolve through the theme instead, so the anchor is whatever "fully
+    // inked" means on that device.
+    if (hue === 'black') return INK;
+    if (hue === 'white') return PAPER;
     if (ONE_BIT) return INK;
     if (!(hue in colorCache)) {
       var c = null;
@@ -264,7 +271,9 @@
     return null;
   }
   function styleStroke(node, p, S) {
-    node.setAttribute('stroke', colorFor(p.hue));
+    // through style, not the attribute: a colour can be a CSS variable now
+    // and an SVG presentation attribute does not accept var()
+    node.style.stroke = colorFor(p.hue);
     node.setAttribute('stroke-width', p.line_width * S);
     node.setAttribute('stroke-linecap', 'round');
     node.setAttribute('stroke-linejoin', 'round');
@@ -626,7 +635,15 @@
         if (mem.some(function (m) { return m.p._sign !== mem[0].p._sign; })) return;
         mem.sort(function (a, b) { return Math.abs(a.p.track_offset) - Math.abs(b.p.track_offset); });
         var half = (mem.length - 1) / 2;
-        mem.forEach(function (m, i) { m.s.toward = i <= half ? 1 : -1; });
+        mem.forEach(function (m, i) {
+          m.s.toward = i <= half ? 1 : -1;
+          // Who this one is closing on, so the kink can be capped at half
+          // the gap between them. Unclamped they each moved a full station
+          // raise and, on a board where the lines sit closer together than
+          // that, swapped places and crossed.
+          var other = mem[m.s.toward > 0 ? i + 1 : i - 1];
+          m.s.closingOn = other ? other.p : null;
+        });
       });
     })();
     // the raise (in c-units) a track's own line sits at, at a given axis
@@ -640,6 +657,13 @@
         var s = segs[i];
         if (a < s.a0 || a > s.a1) continue;
         var rr = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
+        // A shared station's two lines close on each other, so each may move
+        // at most half the gap between them, less the air they need to stay
+        // two lines. Uncapped they moved a full raise each and, where the
+        // board puts them closer together than that, swapped places.
+        if (s.closingOn) {
+          rr = Math.min(rr, Math.max(0, (Math.abs(s.closingOn._c - p._c) - 2 * LINE_GAP) / 2));
+        }
         // signed: +1 kinks away from the spine (the ordinary station), -1
         // toward it, which is how a shared station brings its lines together
         if (a < s.a0 + rr) return (a - s.a0) * s.toward;
@@ -1024,7 +1048,20 @@
             if (it.owner === e.owner && it.dir === dir && it.kind === 'text' && itemOverlaps(it, [ts, ts + len])) {
               ts = dir > 0 ? it.a1 + LANE_GAP : it.a0 - LANE_GAP - len; moved = true;
             } else if ((it.owner !== e.owner || it.dir !== dir) && itemOverlaps(it, span(ts))) {
-              elbow = dir > 0 ? it.a1 + CORNER + LANE_GAP : it.a0 - CORNER - LANE_GAP;
+              // A SHARED event's elbow never moves. It is pinned to the
+              // interchange bar, and sliding it took the spur off the bar
+              // entirely — on one board School Run's elbow slid past its own
+              // END, so the rail did not go flat until after the event was
+              // over and its end mark sat on the lead-in. This lane cannot
+              // take it; try another.
+              var slid = dir > 0 ? it.a1 + CORNER + LANE_GAP : it.a0 - CORNER - LANE_GAP;
+              // A SHARED event's elbow is pinned to the interchange bar, and
+              // may give at most as far as its own end: past that the rail
+              // does not go flat until after the event is over, and its end
+              // mark lands on the lead-in instead of on rail. On one board
+              // School Run's elbow slid a full 40 minutes past its own end.
+              if (shared0 && (dir > 0 ? slid > e._endA - CORNER : slid < e._endA + CORNER)) return null;
+              elbow = slid;
               ts = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len; moved = true;
             }
           }
@@ -1664,7 +1701,8 @@
         [[nameEnd, spreadC], [far, lineCAt(p, far)]].forEach(function (at) {
           var b0 = toXY(at[0], at[1] - NODE_R), b1 = toXY(at[0], at[1] + NODE_R);
           var cap = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1],
-            stroke: colorFor(p.hue), 'stroke-width': (p.line_width + 1) * S, 'stroke-linecap': 'round' });
+            'stroke-width': (p.line_width + 1) * S, 'stroke-linecap': 'round' });
+          cap.style.stroke = colorFor(p.hue);
           cap.setAttribute('data-metro-role', 'terminal'); cap.setAttribute('data-metro-owner', p.key);
           svg.appendChild(cap);
         });
@@ -1724,8 +1762,9 @@
           var sring = svgEl('path', {
             d: 'M ' + (xy[0] - dr) + ' ' + xy[1] + ' L ' + xy[0] + ' ' + (xy[1] - dr)
               + ' L ' + (xy[0] + dr) + ' ' + xy[1] + ' L ' + xy[0] + ' ' + (xy[1] + dr) + ' Z',
-            stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8, 'stroke-linejoin': 'round',
+            'stroke-width': NODE_STROKE * 0.8, 'stroke-linejoin': 'round',
           });
+          sring.style.stroke = colorFor(p.hue);
           // hollow means the CANVAS colour, so the line behind it is masked
           // in either theme — a literal white fill was a white lozenge on a
           // dark board
@@ -1764,8 +1803,9 @@
           [NODE_R * 1.5, NODE_R * 0.8].forEach(function (r, i) {
             var hub = svgEl('circle', {
               cx: hubXY[0], cy: hubXY[1], r: r,
-              stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.9,
+              'stroke-width': NODE_STROKE * 0.9,
             });
+            hub.style.stroke = colorFor(p.hue);
             hub.style.fill = i ? colorFor(p.hue) : PAPER;
             hub.setAttribute('data-metro-role', 'station-ring'); hub.setAttribute('data-metro-owner', p.key);
             svg.appendChild(hub);
@@ -1960,7 +2000,9 @@
       var xy = toXY(a, laneC);
       var b0 = horizontal ? [xy[0], xy[1] - 4 * S] : [xy[0] - 4 * S, xy[1]];
       var b1 = horizontal ? [xy[0], xy[1] + 4 * S] : [xy[0] + 4 * S, xy[1]];
-      svg.appendChild(svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1], stroke: colorFor(p.hue), 'stroke-width': p.line_width * S, 'stroke-linecap': 'round' }));
+      var tb = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1], 'stroke-width': p.line_width * S, 'stroke-linecap': 'round' });
+      tb.style.stroke = colorFor(p.hue);
+      svg.appendChild(tb);
     }
     Object.keys(chains).forEach(function (key) {
       var list = chains[key].sort(function (a, b) { return a._lineFrom - b._lineFrom; });
@@ -1978,7 +2020,28 @@
         // puts the dash phase on the right trunk — the lead-in lies on the
         // outermost line, so that is the one to line the pattern up with.
         var p = trackByKey[g.members[0]._laneOwner] || g.members[0]._p;
+        // A SHARED event's rail is bold. When several people are in one
+        // place that is the heaviest thing on that stretch of the board, and
+        // it needs to look it — but as one heavier line, not as one rail per
+        // person: drawn that way it was a comb of near-identical strokes
+        // that read as a smudge rather than as several lines arriving.
+        if (g.members.some(function (m) { return m._involved && m._involved.length > 1; })) {
+          // Solid ink, not the host line's texture: a shared event is not
+          // one person's line branching, it is all of them in one place, so
+          // it takes the map's heaviest stroke rather than a wider copy of
+          // whichever line it happens to hang off.
+          var bold = {};
+          for (var bk in p) bold[bk] = p[bk];
+          bold.hue = 'black'; bold.line_style = 'solid';
+          bold.line_width = Math.max(p.line_width, 4) * 1.5;
+          p = bold;
+        }
         var sign = g.members[0]._sign, laneC = spineC + sign * g.members[0]._laneDist;
+        // The whole group is drawn at ONE lane height — the first member's —
+        // but each member computed its own, and those differ when one of
+        // them sits inside a station and another does not. A marker placed
+        // from the member's own reading floated off the rail it belongs to.
+        g.members.forEach(function (m) { m._drawnLaneC = laneC; });
         // The flat run is drawn as a straight spine PLUS each member's own
         // rounded diagonal into it — two separate paths. A straight spine
         // that reaches all the way up to (or past) a member's own elbow
@@ -2024,7 +2087,12 @@
         var headStart = trunkLenAt(p, headPhaseA);
         lanePhase = (headLen != null && headStart != null) ? phaseAfter(p, headStart + headLen) : null;
         bridge(head._elbow + RAMP_LEAD, g.to);
-        if (g.to > head._elbow + CORNER + 1) terminus(g.to, laneC, p);
+        // ONE mark per rail end, always the same one. The group's far end
+        // and the last member's own end are the same point, so both a
+        // terminus bar and a stop tick were being drawn there — and where
+        // the event was too short for a tick, only the bar. Same place, two
+        // different shapes depending on the length of the meeting. The tick
+        // is the mark; it is drawn per event, below.
         if (g.from < head._elbow - CORNER - 1) terminus(g.from, laneC, p);
       });
     });
@@ -2065,6 +2133,25 @@
         // family in different places agreeing to be in the same one. A
         // solid bar across four bands also reads far heavier than the
         // event deserves.
+        // The bar has to reach the event's own rail, or the rail hangs off
+        // nothing. Everything else about a shared event is said by ONE bold
+        // rail rather than by one rail per line: drawn as a bundle of five
+        // parallel rails it was a dense comb of near-identical strokes that
+        // read as a smudge, not as five lines arriving somewhere.
+        if (e._laneDist) {
+          var laneC0 = e._drawnLaneC != null ? e._drawnLaneC : spineC + e._sign * e._laneDist;
+          if (e._sign > 0) hi = Math.max(hi, laneC0); else lo = Math.min(lo, laneC0);
+          // and the same end mark every other rail gets. A shared event's
+          // rail was ending in a plain round cap while every other rail on
+          // the board ended in a tick — the one place the vocabulary broke.
+          var q0 = toXY(e._endA, laneC0 - NODE_R * 1.15), q1 = toXY(e._endA, laneC0 + NODE_R * 1.15);
+          var etick = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
+            'stroke-width': NODE_STROKE * 1.15, 'stroke-linecap': 'round' });
+          etick.style.stroke = INK;
+          etick.setAttribute('data-metro-role', 'stop');
+          etick.setAttribute('data-metro-owner', e.owner);
+          svg.appendChild(etick);
+        }
         var t0 = toXY(e._nodeA, lo), t1 = toXY(e._nodeA, hi);
         // A SOLID heavy bar, not a dashed hint. When the whole family is in
         // one place that is the most important thing on the board, and a
@@ -2103,7 +2190,7 @@
         // nothing about duration; the pair of ticks is what carries the
         // time. Where the spur is too short to hold both (a long event, or
         // one that rejoins the line), only the start is marked.
-        var laneC = spineC + e._sign * e._laneDist;
+        var laneC = e._drawnLaneC != null ? e._drawnLaneC : spineC + e._sign * e._laneDist;
         var lo = Math.min(e._lineFrom, e._lineTo), hi = Math.max(e._lineFrom, e._lineTo);
         // A tick marks a minute, so it goes at that minute's axis position —
         // but the spur is not always flat there. Where the elbow had to
@@ -2151,19 +2238,24 @@
           // carried by SIZE, not by fill. Ours run stop < interchange < hub.
           var dot = svgEl('circle', {
             cx: dxy[0], cy: dxy[1], r: NODE_R * 0.62,
-            stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8,
+            'stroke-width': NODE_STROKE * 0.8,
           });
+          dot.style.stroke = colorFor(p.hue);
           dot.style.fill = PAPER;
           dot.setAttribute('data-metro-role', 'stop-start'); dot.setAttribute('data-metro-owner', e.owner);
           svg.appendChild(dot);
         }
-        if (e._endA >= lo - 1 && e._endA <= hi + 1 && Math.abs(e._endA - e._nodeA) >= NODE_R) {
+        // always, however short the event: the start is a dot and the end a
+        // tick, two different shapes, so they read as two marks even when
+        // they nearly touch
+        if (e._endA >= lo - 1 && e._endA <= hi + 1) {
           var tc = spurC(e._endA);
           var t0 = toXY(e._endA, tc - NODE_R), t1 = toXY(e._endA, tc + NODE_R);
           var tick = svgEl('line', {
             x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
-            stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE, 'stroke-linecap': 'round',
+            'stroke-width': NODE_STROKE, 'stroke-linecap': 'round',
           });
+          tick.style.stroke = colorFor(p.hue);
           tick.setAttribute('data-metro-role', 'stop'); tick.setAttribute('data-metro-owner', e.owner);
           svg.appendChild(tick);
         }
@@ -2200,19 +2292,34 @@
         });
         var c = riding ? spineC + riding._sign * riding._laneDist : lineCAt(p, nowA);
         var xy = toXY(nowA, c);
-        var k = (NODE_R * 2.4) / CAR_H;
-        // clear the rail's own stroke, so the wheels sit on top of the line
-        // rather than inside it
-        var lift = CAR_BASE + (p.line_width * S / 2) / k;
-        var g = svgEl('g', {
-          transform: 'translate(' + xy[0] + ',' + xy[1] + ') '
-            + (horizontal ? '' : 'rotate(90) ')
-            + 'scale(' + k + ') translate(' + (-CAR_CX) + ',' + (-lift) + ')',
-          fill: colorFor(p.hue),
-        });
+        var g;
+        if (horizontal) {
+          var k = (NODE_R * 2.4) / CAR_H;
+          // clear the rail's own stroke, so the wheels sit on top of the
+          // line rather than inside it
+          var lift = CAR_BASE + (p.line_width * S / 2) / k;
+          g = svgEl('g', {
+            transform: 'translate(' + xy[0] + ',' + xy[1] + ') '
+              + 'scale(' + k + ') translate(' + (-CAR_CX) + ',' + (-lift) + ')',
+          });
+          CAR_PATHS.forEach(function (d) { g.appendChild(svgEl('path', { d: d })); });
+        } else {
+          // Standing up, the drawn car is wrong twice over: turned on its
+          // side it reads as a train that has fallen over, and a side view
+          // of a train has a front and a back, which a vertical line does
+          // not. A plain rounded block instead — the same weight and the
+          // same "someone is here now", without pretending to a direction.
+          var cw = NODE_R * 1.9, cl = NODE_R * 3.4, off = p.line_width * S / 2;
+          g = svgEl('g', {});
+          g.appendChild(svgEl('rect', {
+            x: p._sign > 0 ? xy[0] + off : xy[0] - off - cw,
+            y: xy[1] - cl / 2, width: cw, height: cl,
+            rx: NODE_R * 0.5, ry: NODE_R * 0.5,
+          }));
+        }
+        g.style.fill = colorFor(p.hue);
         g.setAttribute('data-metro-role', 'car');
         g.setAttribute('data-metro-owner', p.key);
-        CAR_PATHS.forEach(function (d) { g.appendChild(svgEl('path', { d: d })); });
         svg.appendChild(g);
       });
     }

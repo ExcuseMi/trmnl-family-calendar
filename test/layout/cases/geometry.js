@@ -366,4 +366,38 @@ module.exports = function (test, h) {
       assert(bad.length === 0, bad.length + ' line name(s) in the river: ' + bad.slice(0, 3).join('; '));
     });
   }
+
+  test('a shared event gets one BOLD rail, not one rail per line', () => {
+    // Drawn as a bundle of parallel rails, one per person, it was a comb of
+    // near-identical strokes that read as a smudge rather than as several
+    // lines arriving somewhere. One heavier rail says the same thing: when
+    // several people are in one place that is the weightiest thing on that
+    // stretch of the board.
+    const f = fixtures.find((x) => x.name === 'busy-day');
+    const rep = layout(f, ROOMY);
+    const shared = new Set(f.metro.items
+      .filter((i) => i.type === 'event' && (i.co_owners || []).length)
+      .map((i) => i.title));
+    assert(shared.size > 0, 'the busy day has no shared events');
+    const Z = rep.debug.Z || 1;
+    const at = eventsIn(rep).filter((e) => e.status === 'ok' && shared.has(e.title))
+      .map((e) => ({ x: (e.elbow + e.endA) / 2 * Z, y: (rep.debug.spineC + e.sign * e.laneDist) * Z }));
+    assert(at.length > 0, 'no shared event was placed');
+    const flat = pathsWhere(rep, 'branch').concat(pathsWhere(rep, 'fork'));
+    function widthNear(pt) {
+      let best = 0;
+      for (const p of flat) {
+        for (const q of p.pts) {
+          if (Math.abs(q[0] - pt.x) < 20 && Math.abs(q[1] - pt.y) < 8) best = Math.max(best, p.width);
+        }
+      }
+      return best;
+    }
+    const plain = flat.filter((p) => p.width > 0).map((p) => p.width).sort((a, b) => a - b);
+    const median = plain[Math.floor(plain.length / 2)] || 0;
+    const boldest = Math.max.apply(null, at.map(widthNear));
+    assert(boldest > median * 1.2,
+      'a shared event\'s rail should be visibly heavier than an ordinary one: '
+      + boldest.toFixed(1) + 'px vs a typical ' + median.toFixed(1) + 'px');
+  });
 };

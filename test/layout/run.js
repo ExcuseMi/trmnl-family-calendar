@@ -138,6 +138,7 @@ const REPORTER = `
       paths.push({
         role: el.getAttribute('data-metro-role') || 'other',
         owner: el.getAttribute('data-metro-owner') || null,
+        stroke: cs.stroke,
         // the drawn stroke, so a test can ask whether a ramp is in its
         // line's own style rather than only where it goes
         dash: (cs.strokeDasharray === 'none' ? '' : cs.strokeDasharray) || '',
@@ -155,7 +156,9 @@ const REPORTER = `
       var r = el.getBoundingClientRect();
       shapeMarkers.push(Object.assign(rel(r), {
         role: 'car', owner: el.getAttribute('data-metro-owner') || null,
-        fill: el.getAttribute('fill') || null
+        // computed, not the attribute: a colour can be a CSS variable now,
+        // so it is set through style and there is no attribute to read
+        fill: getComputedStyle(el).fill || null
       }));
     });
     svg.querySelectorAll('path[data-metro-role="station-ring"], line[data-metro-role="stop"]').forEach(function (el) {
@@ -239,7 +242,14 @@ function pageFor(metro, screenClasses) {
   const fw = frameworkAssets();
   let html = swapMetro(baseHtml(), metro);
   html = html.split(CSS_URL).join('file://' + fw.css).split(JS_URL).join('file://' + fw.js);
-  html = html.replace('class="screen screen--no-bleed"', 'class="screen screen--no-bleed ' + screenClasses + '"');
+  // Add the device classes to whatever the build put on the screen element,
+  // rather than matching one exact string. The bleed setting changes that
+  // string (`screen--no-bleed` appears only when padding is off), and when
+  // it did, this replace silently did nothing: the page rendered at a
+  // default size and fifteen tests failed looking like layout bugs.
+  const screenTag = /class="screen([^"]*)"/;
+  if (!screenTag.test(html)) throw new Error('the built page has no .screen element to size');
+  html = html.replace(screenTag, (m, rest) => 'class="screen' + rest + ' ' + screenClasses + '"');
   return html.replace('</body>', REPORTER + '</body>');
 }
 
