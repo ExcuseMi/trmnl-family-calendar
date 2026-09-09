@@ -267,6 +267,7 @@ function deepestIntrusion(pathPts, box) {
 function eventsIn(rep) { return (rep.debug.events || []).map((e) => ({
   title: e[0], side: e[1], status: e[2], lane: e[3], dir: e[4],
   nodeA: e[5], elbow: e[6], textStart: e[7], textLen: e[8], trackDist: e[9],
+  merged: e[10] === 'merge',
 })); }
 
 // ---------------------------------------------------------------- viewports

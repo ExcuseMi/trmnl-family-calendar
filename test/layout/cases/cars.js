@@ -30,7 +30,7 @@ module.exports = function (test, h) {
     for (const car of cars(rep)) {
       const cx = car.x + car.w / 2, cy = car.y + car.h / 2;
       // its own track, or one of its own branches — never someone else's
-      const mine = pathsWhere(rep, 'track').concat(pathsWhere(rep, 'branch'))
+      const mine = pathsWhere(rep, 'track').concat(pathsWhere(rep, 'branch'), pathsWhere(rep, 'fork'))
         .filter((p) => p.owner === car.owner);
       let best = Infinity;
       for (const p of mine) for (const pt of p.pts) {

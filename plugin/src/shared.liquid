@@ -636,14 +636,21 @@
     // every attempt, so this is a function rather than a one-off pass.
     function recomputeTrackDists() {
       visible.forEach(function (e) {
-        var p = e._p, outer = p._dist;
-        e._involved.forEach(function (q) { if (q._sign === p._sign) outer = Math.max(outer, q._dist); });
-        // if this event's start (or end) falls inside one of the owner's own
+        // Both ends measure from the line the spur actually touches: the
+        // OUTERMOST track this event joins, which for a solo event is the
+        // owner and for an interchange is the far side of the tie. The end
+        // used to be measured from the nominal owner's line while the
+        // rejoin was drawn against the outermost one, so an interchange's
+        // climb back was scaled for a distance several bands too big — it
+        // came back as a shallow ramp dragging on for hours instead of a
+        // corner just after the event.
+        var p = e._p, lo = trackByKey[e._laneOwner] || p;
+        // if this event's start (or end) falls inside one of that track's own
         // stations, its ring sits on the raised "station level" segment of
         // the line, not the flat baseline — so the branch has to originate
         // (or merge back) from that raised height too
-        e._trackDist = outer + stationRaiseAt(p, e._nodeA) + NODE_R;       // branch origin (edge of the ring/capsule)
-        e._trackDistEnd = p._dist + stationRaiseAt(p, e._endA) + NODE_R;   // merge target (owner's own line)
+        e._trackDist = lo._dist + stationRaiseAt(lo, e._nodeA) + NODE_R;      // branch origin (edge of the ring/capsule)
+        e._trackDistEnd = lo._dist + stationRaiseAt(lo, e._endA) + NODE_R;    // merge target (same line, after the event)
       });
     }
     recomputeTrackDists();
@@ -767,18 +774,15 @@
         // and pushed the whole label a diagonal's width later than the thing
         // it names — which is the main reason the spur read as if its length
         // meant duration.
-        var elbow = e._nodeA - dir * CORNER;
-        // Where the branch leaves the trunk. A deep lane needs a long climb,
-        // and for an event early in the day that start can fall off the
-        // board entirely — the branch then appears to arrive from nowhere at
-        // the edge. Keep the fork (and the bit of trunk its fillet needs) on
-        // the canvas; the diagonal just gets steeper than 45° when there is
-        // not room to do it properly, which is the honest compromise: the
-        // event's own time does not move.
-        var diagFrom = elbow - dir * dy;
-        var forkFloor = axisStart + 2 * CORNER, forkCeil = axisEnd - 2 * CORNER;
-        diagFrom = clamp(diagFrom, forkFloor, forkCeil);
-        if (dir > 0 ? diagFrom > elbow : diagFrom < elbow) diagFrom = elbow;
+        // An interchange already draws a vertical tie: a dashed line at the
+        // event's own minute, stitching together every rail that joins it.
+        // The label's branch is going the same way, to the same place, so it
+        // leaves on that same vertical and simply carries on past the
+        // outermost ring before turning flat. One line down the board
+        // instead of a tie and a diagonal leaving at different angles from
+        // the same point.
+        var iconn = e._involved && e._involved.length > 1;
+        var elbow = iconn ? e._nodeA : e._nodeA - dir * CORNER;
         var L = lane(k), len = e._textLen;
         var elbow0 = elbow;
         var natural = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len;
@@ -811,6 +815,26 @@
         }
         var elbowShift = Math.abs(elbow - elbow0);
         if (elbowShift > MAX_SHIFT * (dir > 0 ? 0.6 : 0.3)) return null;
+        // Where the branch leaves the trunk. Measured from the elbow the
+        // label ACTUALLY got, not the one it asked for: a slid elbow with a
+        // fork still anchored to the old one silently changes the angle,
+        // and for an interchange it un-verticals the drop.
+        // A deep lane needs a long climb, and for an event early in the day
+        // that start can fall off the board entirely — the branch then
+        // appears to arrive from nowhere at the edge. Keep the fork (and the
+        // bit of trunk its fillet needs) on the canvas; the diagonal just
+        // gets steeper than 45° when there is not room to do it properly,
+        // which is the honest compromise: the event's own time does not move.
+        // A 45° fork for a deep lane also starts a long way before the event
+        // — far enough that it rakes across everything in between. Cap how
+        // far back it may reach: past that the drop simply steepens, and at
+        // the limit it is vertical, dropping at the event's own minute. Time
+        // is what this map is for, so the angle is what gives. An
+        // interchange is pinned to that limit outright.
+        var maxLead = iconn ? 0 : Math.max(2 * CORNER, laneStep);
+        var diagFrom = elbow - dir * Math.min(dy, maxLead);
+        diagFrom = clamp(diagFrom, axisStart + 2 * CORNER, axisEnd - 2 * CORNER);
+        if (dir > 0 ? diagFrom > elbow : diagFrom < elbow) diagFrom = elbow;
         var sp = span(ts);
         for (var j = 0; j < L.items.length; j++) {
           var o = L.items[j];
@@ -844,7 +868,16 @@
         var shift = Math.abs(ts - (dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len)) + elbowShift;
         if (shift > (dir > 0 ? MAX_SHIFT : MAX_SHIFT * 0.5)) return null;
         return { k: k, dir: dir, elbow: elbow, diagFrom: diagFrom, shift: shift, ld: rowDist, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift,
-                 score: shift + elbowShift * 1.5 + (elbowShift ? 30 * S : 0) + k * step * 0.15 + (dir < 0 ? 40 * S : 0) + (crossing ? 50 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
+                 // Depth is charged at what it actually costs the reader:
+                 // the dive. A lane one further out is not "one lane
+                 // worse", it is a diagonal that much longer raking across
+                 // the band — and since the branch now leaves before the
+                 // event, that dive starts even earlier. Charging by index
+                 // (k * step * 0.15) made a deep lane cheaper than sliding
+                 // a label a few px, so three events that do not overlap in
+                 // time each took their own lane and the last one dived a
+                 // quarter of the canvas to reach it.
+                 score: shift + elbowShift * 1.5 + (elbowShift ? 30 * S : 0) + dy * 0.5 + (dir < 0 ? 260 * S : 0) + (crossing ? 50 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
       }
       evs.forEach(function (e, idx) {
         e._dropped = false;
@@ -894,7 +927,24 @@
         // a lone forward branch rejoins the owner's line at the end time when
         // the event runs long enough; anything else ends in a stub
         e._merge = false;
-        if (best.dir > 0 && !best.joined) {
+        // A shared event terminates rather than rejoining. Its spur hangs
+        // off the outermost line of several, so the climb back is the
+        // longest one on the board and it lands on a line the event does
+        // not even belong to on its own. It bought nothing: the drop is
+        // vertical on the interchange tie, the terminus bar already says
+        // where the event ends, and the rejoin was the piece that kept
+        // reserving lane space across whatever came next.
+        var shared = e._involved.length > 1;
+        // Only a long event rejoins. A rejoin costs a diagonal's worth of
+        // lane on the way down and another on the way back, reserved right
+        // through whatever comes next, and on an hour-long meeting that
+        // whole loop is over before it reads as one. A terminus bar says
+        // "ends here" in less space and more plainly. Four hours is where a
+        // spur is long enough that a bar at each end starts to look like a
+        // line that was cut rather than one that finished.
+        var MIN_REJOIN_MIN = 240;
+        var longEnough = (e.end_min - e.start_min) >= MIN_REJOIN_MIN;
+        if (best.dir > 0 && !best.joined && !shared && longEnough) {
           // The line comes back down AFTER the event, not during it: the
           // descent used to start a diagonal's width before the end time and
           // land on the trunk exactly at it, so the last stretch of the
@@ -1146,7 +1196,7 @@
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
       colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
-      events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist)]; })
+      events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub']; })
     }));
 
     // ---- the day as a river, drawn behind everything --------------------
@@ -1422,7 +1472,12 @@
         var sorted = g.members.slice().sort(function (a, b) { return a._elbow - b._elbow; });
         var prevEnd = g.from;
         sorted.forEach(function (e) {
-          bridge(prevEnd, e._elbow - CORNER);
+          // The trunk breaks around the elbow only where the branch peels
+          // away from it at an angle. A branch that drops straight down
+          // leaves the trunk untouched, so breaking it there just knocks a
+          // hole in the line either side of the interchange ring.
+          var gap = e._diagFrom === e._elbow ? 0 : CORNER;
+          bridge(prevEnd, e._elbow - gap);
           // Start a little way BACK along the trunk, so the point where the
           // branch leaves is an interior vertex and gets the same rounding
           // every other bend has. Starting the path at the junction made it
@@ -1469,7 +1524,7 @@
           styleStroke(path, p, S);
           path.setAttribute('data-metro-role', 'branch'); path.setAttribute('data-metro-owner', p.key);
           svg.appendChild(path);
-          prevEnd = e._elbow + CORNER;
+          prevEnd = e._elbow + gap;
         });
         bridge(prevEnd, g.to);
         var elbows = sorted.map(function (e) { return e._elbow; });
@@ -1554,10 +1609,25 @@
         // one that rejoins the line), only the start is marked.
         var laneC = spineC + e._sign * e._laneDist;
         var lo = Math.min(e._lineFrom, e._lineTo), hi = Math.max(e._lineFrom, e._lineTo);
+        // A tick marks a minute, so it goes at that minute's axis position —
+        // but the spur is not always flat there. Where the elbow had to
+        // slide forward past the event's own start to dodge something, the
+        // start tick lands on the diagonal, and drawn at lane height it
+        // floats off the line it is supposed to mark. Follow the spur.
+        var forkC = lineCAt(trackByKey[e._laneOwner] || p, e._diagFrom);
+        function spurC(a) {
+          var run = e._elbow - e._diagFrom;
+          if (!run) return laneC;
+          var u = (a - e._diagFrom) / run;
+          if (u <= 0) return forkC;
+          if (u >= 1) return laneC;
+          return forkC + (laneC - forkC) * u;
+        }
         [e._nodeA, e._endA].forEach(function (a, i) {
           if (a < lo - 1 || a > hi + 1) return;
           if (i && Math.abs(e._endA - e._nodeA) < NODE_R) return; // too short to show two
-          var t0 = toXY(a, laneC - NODE_R), t1 = toXY(a, laneC + NODE_R);
+          var tc = spurC(a);
+          var t0 = toXY(a, tc - NODE_R), t1 = toXY(a, tc + NODE_R);
           var tick = svgEl('line', {
             x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
             stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE, 'stroke-linecap': 'round',

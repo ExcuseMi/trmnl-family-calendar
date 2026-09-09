@@ -87,11 +87,15 @@ const waypointStation = base({
 });
 
 // Barely anything on: the layout should use the canvas instead of leaving
-// one line adrift, and must not invent overlaps out of empty space.
+// one line adrift, and must not invent overlaps out of empty space. The
+// five-hour block is the one event on any fixture long enough to be allowed
+// a rejoin, so it is what keeps the "only long solo events rejoin" rule from
+// passing simply because nothing ever rejoins.
 const quietDay = base({
   now_min: 600,
   items: [
     ev('Standup', 'work', 540, 555, { track_width: 4 }),
+    ev('Rehearsal Day', 'kids', 540, 840, { side: 'right', hue: 'purple-40', track_style: 'dotted', track_offset: 30 }),
     ev('Swim Training', 'sam', 990, 1050, { side: 'right', hue: 'green-40', track_style: 'dashed', track_offset: 20 }),
   ],
 });

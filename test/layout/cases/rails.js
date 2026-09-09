@@ -69,4 +69,40 @@ module.exports = function (test, h) {
       'no event carries an end tick: every end is unmarked (' + ticks.length
       + ' ticks for ' + solo.length + ' events)');
   });
+
+  // Rejoins are the exception. A spur that dives to a lane and climbs back
+  // reserves that lane across everything between, and on an hour-long
+  // meeting the whole loop is over before it reads as one — it looked like
+  // a wobble in the line rather than a departure and a return. A shared
+  // event never rejoins at all: its spur hangs off the OUTERMOST line of
+  // several, so the climb back is the longest on the board and lands on a
+  // line the event does not belong to on its own.
+  const MIN_REJOIN_MIN = 240;
+
+  for (const f of fixtures) {
+    test('only a long solo event rejoins its line: ' + f.name, () => {
+      const rep = layout(f, ROOMY);
+      const spec = {};
+      f.metro.items.filter((i) => i.type === 'event').forEach((i) => { spec[i.title] = i; });
+      const bad = [];
+      for (const e of eventsIn(rep)) {
+        if (!e.merged) continue;
+        const item = spec[e.title];
+        if (!item) continue;
+        const mins = item.end_min - item.start_min;
+        if ((item.co_owners || []).length) bad.push('"' + e.title + '" is shared across tracks');
+        else if (mins < MIN_REJOIN_MIN) bad.push('"' + e.title + '" runs only ' + mins + 'min');
+      }
+      assert(bad.length === 0, bad.length + ' event(s) rejoined that should end on a terminus: ' + bad.join('; '));
+    });
+  }
+
+  test('a long solo event still does rejoin — the rule is not "never"', () => {
+    const f = fixtures.find((x) => x.name === 'quiet-day');
+    const rep = layout(f, ROOMY);
+    const merged = eventsIn(rep).filter((e) => e.merged).map((e) => e.title);
+    assert(merged.indexOf('Rehearsal Day') >= 0,
+      'the five-hour block should loop back to its line, got rejoins on: '
+      + (merged.join(', ') || 'nothing'));
+  });
 };

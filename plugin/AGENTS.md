@@ -27,7 +27,7 @@
 * **Spine:** every track's line runs full-bleed along the axis in one bundle; the hour labels live in a gutter in the middle of the bundle (work lines one side, family the other) so branches never cross them. Work is black and 4px; everyone else cycles `hue-40` tokens (resolved via `TRMNLPaint.stroke`) and dash patterns solid/dashed/dotted/dash-dot per side. On 1-bit screens every line is black — patterns identify them.
 * **Symbols** follow standard transit-map grammar (`feedback/research/metro-map-guide.md`), because that vocabulary is what lets the diagram be read without a key: a **tick** across the line for a local stop (the line calls here), a **hollow ring** only for an interchange (you can change lines here), a **dashed tie** joining a ring on each line for an out-of-station interchange (one event on several people's lines, which with bands are rarely adjacent), a **hollow diamond** for a station junction, **concentric rings** for the major hub an all-day landmark gets, a **bar** at each terminus. Spending the ring on every ordinary appointment is the mistake to avoid: it says every appointment is an interchange, and a busy line becomes eight identical circles.
 * **Stations:** a marker at the true start time, never moved. A station junction (where a line kinks out to station level) is a hollow diamond, so a change of state reads differently from something happening on the line. An interchange is a thin tie between the lines it joins with a ring on each, not a filled capsule — with bands the lines can be most of the canvas apart. Rings and ties are placed with `lineCAt()`, the single source of truth for where a line actually is (baseline + station kink + terminus ramp).
-* **Branches:** 45° diagonal to a lane, a run along the lane carrying the label, and — for events long enough — a 45° return that rejoins the line at the end time; otherwise a terminus bar. Rounded bends.
+* **Branches:** 45° diagonal to a lane, a run along the lane carrying the label, and a terminus bar at the end time. Rounded bends. An event **shared across tracks drops vertically** on the interchange tie instead of forking at an angle — the tie is already going where the branch is going, so one line goes down the board instead of two leaving the same point at different angles. **Rejoins are the exception, not the rule:** only a solo event of four hours or more (`MIN_REJOIN_MIN`) climbs back to its line. A shorter loop is over before it reads as one, and reserves lane space across whatever comes next for nothing.
 * **Waypoint stations** (config `station: true`, `transform.js`'s `metro.stations`, not to be confused with the ring-station above): a track's own line kinks out to a shallow "station level" for the event's `[start_min,end_min]` span instead of branching into a lane — rings sit at the true, unmoved boundary times where the 45° kink itself starts/ends (`stationRaiseAt` in `shared.liquid` ramps the raise across that same kink, so a real event's ring landing inside the transition zone still sits exactly on the drawn line). For a status/location block ("Desk booking") that spans real meetings without being one; those meetings still fork off the raised segment normally via `e._trackDist`/`e._trackDistEnd`, which factor in the raise at that event's own axis position.
 * **Lanes:** labels are measured as real DOM boxes, then placed chronologically, innermost lane first. Same-owner branches that overlap in a lane share one spur (the label slides along it; the ring feeds into it). Another owner's line or text blocks the lane. Overrunning the axis end drops the time tag, then ellipsises the title, and only then allows a backward branch. Unplaceable events are counted in "+N more".
 * **Small screens:** text tier ladder (drop location → smaller title → drop time) retried until the fewest events are lost; the visible window narrows around now when hours get too dense; hour labels thin out; header compacts by canvas size, not view name.
@@ -38,6 +38,115 @@
 * **i18n:** strings live in `I18N` in `transform.js` (en/fr/es/de/nl) and reach the template as `metro.i18n`; dates use Intl with the account locale; `time_format` auto = 12h only for US-style locales.
 * **Prohibited:** cards, pills, boxes or borders around text; hardcoded hex colours (use `TRMNLPaint`, black for 1-bit); moving per-pixel layout back into `transform.js`.
 * **Landmarks:** an all-day event is the day's landmark on its line — a full-width band plus the concentric major-hub marker a transit map gives its biggest stations.
-* **Layout tests:** `test/layout/` (`npm test` there) renders the real built page in headless Chromium against fixture METRO payloads and asserts geometry invariants — no two text labels overlapping, no track/branch line running through a label, every ring centred on its line with the line passing through (not stopping at) it, interchange capsules reaching every track they span, all-day bands spanning the window, nothing off-canvas. SVG paths are sampled with `getPointAtLength`, so what is checked is the shape actually drawn. Elements carry `data-metro-role` (`track`/`branch`/`capsule`/`ring`/`station-ring`/`bullet`/`now`) purely so tests can tell them apart — keep them on anything new that gets drawn. A test may be marked `{ known: 'why' }` for a real, understood, unfixed defect: it then reports but doesn't fail the run, and fails if it ever starts passing (so a fix can't land without the marker coming off). Six are marked today, all from lanes being one pool shared by every track on a side.
+* **Layout tests:** see "Testing the layout" below. `test/layout/` (`npm test` there) renders the real built page in headless Chromium against fixture METRO payloads and asserts geometry invariants. Elements carry `data-metro-role` (`track`/`branch`/`fork`/`capsule`/`ring`/`station-ring`/`stop`/`bullet`/`now`/`car`) purely so tests can tell them apart — keep them on anything new that gets drawn.
 * **Debug:** the canvas's `data-metro-debug` attribute lists the chosen orientation, window, spine position, lane counts, resolved colours and every event's placement. Read it with headless Chrome `--dump-dom` on a `trmnlp build` with the device's `screen--*` classes injected.
 * **Local preview:** `.trmnlp.yml` mirrors the demo data (transform runtime disabled) — regenerate it after changing `DEMO_EVENTS`/`DEMO_STATIONS`/`DEMO_ALLDAY` (command in the file's header). `trmnlp lint` reports `lat_lon` as an unknown field type; that is the local linter lagging behind the server.
+
+
+---
+
+## Testing the layout
+
+This suite exists because the layout kept regressing in ways nobody noticed
+until a screenshot arrived. Read this before adding to it, and before
+trusting it.
+
+### What the harness actually does
+
+`test/layout/run.js` runs `trmnlp build`, swaps the baked demo `metro:` block
+for a fixture, loads the page in headless Chromium with the **real** 18MB
+TRMNL framework CSS, waits for the layout to settle, and has the page report
+every drawn thing in one coordinate space (screen px, canvas-relative). SVG
+paths are **sampled** with `getPointAtLength`, never read as control points,
+so a rounded or curved path is checked as the shape it really draws.
+Assertions run out in Node against that report. `layout(fixture, viewport)` is
+memoised per fixture+viewport, so ten tests on one board cost one render.
+
+### The rule that matters: test the truth, not the tidiness
+
+Every assertion in here is one of two kinds, and only one of them catches
+real bugs on its own.
+
+* **Well-formedness** — lines meet, nothing overlaps, markers sit on their
+  line, nothing falls off the canvas. Cheap, fast, and satisfied by drawings
+  that are complete nonsense.
+* **Truthfulness** — the drawing says what the data says. A label is not
+  drawn before the time of the event it names. A rail is as long as its
+  event, not as long as its label. A tick is at the start minute and another
+  at the end minute.
+
+A branch once ran two hours backwards to find room, so "Family Dinner"
+appeared at 17:00 for a 19:00 event. Every well-formedness test passed: the
+line met its trunk, the label collided with nothing, the ring was centred.
+`cases/honesty.js` is the answer to that, and it is the file to extend first
+when a new kind of thing gets drawn. **When a visual bug is reported and the
+suite is green, the missing test is almost always a truthfulness one.**
+
+### Do not trust a green run you have not looked at
+
+Two failure modes have both bitten here, and both look like success:
+
+1. **The invariant is measured against the wrong set of elements.** The ring
+   test compared markers to `track` and `branch` paths only. Where a branch
+   dives just a lane's minimum, the whole diagonal fits inside the corner
+   fillet — so the `branch` path collapses to a point and the `fork` path IS
+   the line. The test reported a tick as adrift by exactly the length of the
+   diagonal it was sitting on, and the "fix" attempts all moved the drawing.
+   *Before believing a geometry failure, print what the marker's nearest
+   neighbours are in every role.*
+2. **The test is wrong and the code is right.** A rail-connection test was
+   written against the elbow when it should have been against the rail end.
+   It went green on a broken build. If a test starts passing right after you
+   change it, re-derive what it asserts from the picture.
+
+### The loop
+
+1. **Reproduce visually first.** Build, screenshot at a real device size,
+   crop and zoom to the defect. Never start from the test output.
+2. **Probe with numbers.** Drop a throwaway `cases/zz-probe.js` that renders
+   one fixture and `assert(false, ...)`s the values you care about (console
+   output from a case is not shown; the assertion message is). Read the
+   canvas's `data-metro-debug` attribute for each event's chosen lane,
+   direction, node/elbow/text positions and track distance.
+3. **Fix, then re-screenshot.** A passing suite is not evidence the picture
+   is right.
+4. **Add the test that would have caught it** — stated as the property, not
+   as the pixel values you just observed.
+5. **Run the whole suite.** It takes a few minutes; run it in the background
+   rather than narrowing to the test you just wrote.
+
+### Writing a good case
+
+* Assert a **property with a reason**, and put the reason in a comment: what
+  broke, what it looked like, why this tolerance and not a tighter one.
+  Every tolerance in this suite has a written justification, because an
+  unexplained one gets loosened silently the next time it fails.
+* **Loop over all fixtures** unless the case is about one specific board.
+  Fixtures are bug reports: `busy-day` (the everyday case), `all-day-every-track`
+  and `waypoint-station` (station kinks moving every line off its baseline),
+  `quiet-day` (must not invent overlaps out of empty space), `tight-pair`
+  (same-owner events minutes apart), `full-day` (express-compressed head and
+  tail). Add a fixture when a bug needs a board shape none of these has.
+* **Failure messages carry the evidence**: which element, where, off by how
+  much. `'3 label(s) with a line through them: "Team Standup" pierced 15px'`
+  is debuggable from CI output alone; `'assertion failed'` costs a full
+  re-derivation.
+* **Check the views.** `og-*` and `x-*`, full/half-horizontal/half-vertical/
+  quadrant, plus portrait. Vertical broke for weeks because one path skipped
+  `toXY`; the test that found it found it on its first run.
+
+### Known issues, not skips
+
+`test(name, fn, { known: 'why' })` marks a real, understood, unfixed defect.
+It reports without failing the run, **and fails if it ever starts passing**,
+so a fix cannot land without the marker coming off. Use it for a genuine
+trade-off you have decided to accept; never to quiet a failure you have not
+diagnosed. The `why` string must name the trade-off, not the symptom.
+
+### Before pushing a layout change
+
+* `cd test/layout && npm test` — 0 failures, and the known-issue count has
+  not grown without a written reason.
+* `./test.sh` at the repo root for `transform.js` and the config editor.
+* Screenshots of the affected views at real device sizes, zoomed on what
+  changed.

@@ -44,7 +44,7 @@ module.exports = function (test, h) {
 
     test('markers sit on their line: ' + v.name, () => {
       const rep = render(busy.metro, v);
-      const lines = pathsWhere(rep, 'track').concat(pathsWhere(rep, 'branch'));
+      const lines = pathsWhere(rep, 'track').concat(pathsWhere(rep, 'branch'), pathsWhere(rep, 'fork'));
       const missed = [];
       for (const c of rep.circles.filter((c) => c.role === 'ring' || c.role === 'station-ring' || c.role === 'stop')) {
         const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
