@@ -1055,7 +1055,7 @@
       function laneDist(k) { return slots[k].dist; }
       function lane(k) { return lanes[k] || (lanes[k] = { items: [] }); }
       (obstacles || []).forEach(function (o) {
-        for (var k = 0; k < maxLanes && laneDist(k) <= o.distMax; k++) lane(k).items.push({ a0: o.a0, a1: o.a1, owner: null, kind: 'obstacle', d: laneDist(k) });
+        for (var k = 0; k < maxLanes && laneDist(k) <= o.distMax; k++) lane(k).items.push({ a0: o.a0, a1: o.a1, owner: null, kind: 'obstacle', d: laneDist(k), bar: o.bar });
       });
       function itemOverlaps(item, seg) { return item.a0 < seg[1] && seg[0] < item.a1; }
       // does a diagonal from (a0,d0) to (a1,d1) run through a lane's own flat
@@ -1158,6 +1158,9 @@
             // sliding through it would drag the label far from its own true
             // time and read as visually out of order, so treat it as a
             // foreign obstacle to route around instead.
+            // an interchange's own bar is not an obstacle to the event that
+            // draws it — the spur leaves ON the bar by design
+            if (it.bar === e) continue;
             if (it.owner === e.owner && it.dir === dir && it.kind === 'text' && itemOverlaps(it, [ts, ts + len])) {
               ts = dir > 0 ? it.a1 + LANE_GAP : it.a0 - LANE_GAP - len; moved = true;
             } else if ((it.owner !== e.owner || it.dir !== dir) && itemOverlaps(it, span(ts))) {
@@ -1233,6 +1236,7 @@
         var sp = span(ts);
         for (var j = 0; j < L.items.length; j++) {
           var o = L.items[j];
+          if (o.bar === e) continue;
           if (!itemOverlaps(o, sp)) continue;
           if (o.owner !== e.owner) return null;              // still blocked (shouldn't happen after the slide)
           if (o.kind === 'text' && itemOverlaps(o, [ts, ts + len])) return null;
@@ -1644,6 +1648,7 @@
     }
     if (bestTier !== ti) layoutAttempt(tiers[bestTier]);
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
+    function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA)]; }); }
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal,
       corner: CORNER, minDiag: MIN_DIAG, win: [dayFrom, dayTo], busy: [busyFrom, busyTo], spineC: spineC, step: step, laneStep: laneStep, colW: colW,
@@ -1651,7 +1656,7 @@
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
       colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
-      events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA)]; })
+      events: eventsDump()
     }));
 
     // ---- the day as a river, drawn behind everything --------------------
@@ -2302,7 +2307,12 @@
         // read as a smudge, not as five lines arriving somewhere.
         if (e._laneDist) {
           var laneC0 = e._drawnLaneC != null ? e._drawnLaneC : spineC + e._sign * e._laneDist;
-          if (e._sign > 0) hi = Math.max(hi, laneC0); else lo = Math.min(lo, laneC0);
+          // The capsule spans the LINES it joins and stops there. Stretched
+          // on down to the rail it feeds it became a long pill reaching
+          // through every label lane on that side, and the captions —
+          // which are HTML over the SVG, each carrying a paper outline —
+          // punched holes straight through its edges. The spur leaves the
+          // capsule and runs to its lane like any other branch.
           // and the same end mark every other rail gets. A shared event's
           // rail was ending in a plain round cap while every other rail on
           // the board ended in a tick — the one place the vocabulary broke.
@@ -2315,35 +2325,28 @@
           etick.setAttribute('data-metro-owner', e.owner);
           svg.appendChild(etick);
         }
-        var t0 = toXY(e._nodeA, lo), t1 = toXY(e._nodeA, hi);
-        // A SOLID heavy bar, not a dashed hint. When the whole family is in
-        // one place that is the most important thing on the board, and a
-        // thin dotted thread between four lines read as the least. This is
-        // the multi-line interchange every transit map draws heaviest.
-        // as heavy as the rail it feeds: the bar and the branch are one move
-        // through the board, and a thin bar into a bold rail read as two
-        // different things meeting
-        var tie = svgEl('line', {
-          x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
-          'stroke-width': Math.max(p.line_width, 4) * 1.5 * S * weightScale,
-          'stroke-linecap': 'round',
+        // ONE capsule, not a bar with a circle stacked on every line. A
+        // ring per track said "here is a stop, and here is another stop,
+        // and another" — five separate marks the reader has to add up —
+        // while the thing being drawn is one place the whole family is in.
+        // The stadium spanning them all is the standard interchange mark on
+        // every transit map, and it reads as a single event at a glance.
+        //
+        // Paper-filled and ink-outlined, so it masks the rails it crosses:
+        // inside an interchange the individual lines are not the point.
+        var capR = NODE_R * 1.15;
+        var k0 = toXY(e._nodeA - capR, lo - capR), k1 = toXY(e._nodeA + capR, hi + capR);
+        var cap = svgEl('rect', {
+          x: Math.min(k0[0], k1[0]), y: Math.min(k0[1], k1[1]),
+          width: Math.abs(k1[0] - k0[0]), height: Math.abs(k1[1] - k0[1]),
+          rx: capR, ry: capR, 'stroke-width': NODE_STROKE * 1.15,
         });
-        // Ink, explicitly. Without a stroke an SVG line is drawn with
-        // nothing at all: the tie was in the DOM, the right length, in the
-        // right place, and completely invisible — leaving three rings on
-        // three lines with no visible reason to be there.
-        tie.style.stroke = INK;
-        tie.setAttribute('data-metro-role', 'capsule'); tie.setAttribute('data-metro-owner', e.owner);
-        svg.appendChild(tie);
-        cs.forEach(function (c) {
-          var xy = toXY(e._nodeA, c);
-          // bigger than a stop's dot and heavier than a station junction:
-          // the size ladder is what says which mark matters most
-          var node = paint(svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R * 1.15,
-            'stroke-width': NODE_STROKE * 1.15 }), PAPER, INK);
-          node.setAttribute('data-metro-role', 'ring'); node.setAttribute('data-metro-owner', e.owner);
-          svg.appendChild(node);
-        });
+        // Ink, explicitly. Without a stroke an SVG shape is drawn with
+        // nothing at all: the old tie was in the DOM, the right length, in
+        // the right place, and completely invisible.
+        cap.style.fill = PAPER; cap.style.stroke = INK;
+        cap.setAttribute('data-metro-role', 'capsule'); cap.setAttribute('data-metro-owner', e.owner);
+        svg.appendChild(cap);
       } else {
         // A local stop: a tick across the line, not a ring. On a transit map
         // the hollow ring means "you can change lines here" — spending it on
@@ -2522,6 +2525,90 @@
       });
     }
     var CAR_CLEAR = CAR_ALONG / 2 + 2 * S;
+
+    // An interchange capsule is a bar straight across the map at one
+    // minute, reaching from the topmost line it joins down to the rail it
+    // feeds. Nothing in the lane bookkeeping knows about it — it is drawn
+    // from the solved positions, after the fact — so every label whose lane
+    // it passes through got written across it. Slide those labels clear
+    // along their own lane: past the capsule if the room is there, back
+    // before it if not, and left where they are if neither fits, since a
+    // label that has jumped an hour from its own branch is worse than one
+    // with a bar behind it.
+    (function dodgeInterchanges() {
+      var caps = [], placed = [];
+      visible.forEach(function (e) {
+        if (e._dropped) return;
+        placed.push(e);
+        if (e._involved.length < 2) return;
+        var cs = e._involved.map(function (q) { return lineCAt(q, e._nodeA); });
+        var lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
+        var r = NODE_R * 1.15 + 3 * S;
+        caps.push({ e: e, a0: e._nodeA - r, a1: e._nodeA + r, c0: lo - r, c1: hi + r });
+        // and the heavy spur dropping from the capsule to its own lane —
+        // the bar the reader sees as one stroke with the capsule
+        if (e._laneDist) {
+          var lc = e._drawnLaneC != null ? e._drawnLaneC : spineC + e._sign * e._laneDist;
+          var bw = Math.max(e._p.line_width, 4) * 1.5 * S * weightScale / 2 + 3 * S;
+          caps.push({ e: e, a0: e._nodeA - bw, a1: e._nodeA + bw,
+                      c0: Math.min(lo, lc), c1: Math.max(hi, lc) });
+        }
+      });
+      if (!caps.length) return;
+      // the cross-axis band a label occupies, on its own side of its rail
+      function band(e) {
+        var lineC = spineC + e._sign * e._laneDist, thick = horizontal ? e._h : colW;
+        return e._sign < 0 ? [lineC - LINE_GAP - thick, lineC - LINE_GAP]
+                           : [lineC + LINE_GAP, lineC + LINE_GAP + thick];
+      }
+      function freeAt(e, at, bd) {
+        if (at < axisStart - EDGE || at + e._textLen > axisEnd + EDGE) return false;
+        for (var i = 0; i < caps.length; i++) {
+          var c = caps[i];
+          if (c.e === e) continue;
+          if (c.c1 < bd[0] || c.c0 > bd[1]) continue;
+          if (at < c.a1 && c.a0 < at + e._textLen) return false;
+        }
+        for (var j = 0; j < placed.length; j++) {
+          var o = placed[j];
+          if (o === e || o._textStart == null) continue;
+          var ob = band(o);
+          if (ob[1] < bd[0] || ob[0] > bd[1]) continue;
+          if (at < o._textStart + o._textLen + 2 * S && o._textStart - 2 * S < at + e._textLen) return false;
+        }
+        return true;
+      }
+      placed.forEach(function (e) {
+        if (e._textStart == null) return;
+        var bd = band(e), hit = null;
+        for (var i = 0; i < caps.length; i++) {
+          var c = caps[i];
+          if (c.e === e) continue;
+          if (c.c1 < bd[0] || c.c0 > bd[1]) continue;
+          if (e._textStart < c.a1 && c.a0 < e._textStart + e._textLen) { hit = c; break; }
+        }
+        if (!hit) return;
+        // and not so far that the caption stops pointing at its own branch:
+        // slid past the next spur it reads as that one's name instead, and
+        // a bar behind a word is a smaller lie than a word on the wrong
+        // rail. Same limit the lane solver scores as "adrift".
+        var want = e._dir > 0 ? e._elbow + TEXT_PAD : e._elbow - TEXT_PAD - e._textLen;
+        var limit = e._textLen * 0.6;
+        var after = hit.a1 + 2 * S, before = hit.a0 - 2 * S - e._textLen;
+        var opts = (Math.abs(after - e._textStart) <= Math.abs(before - e._textStart)
+          ? [after, before] : [before, after]).filter(function (at) { return Math.abs(at - want) <= limit; });
+        for (var k = 0; k < opts.length; k++) {
+          if (freeAt(e, opts[k], bd)) { e._textStart = opts[k]; return; }
+        }
+      });
+      // the debug dump was taken before this pass, so anything it moved has
+      // to be written back — the layout suite reads label positions from
+      // there, and a stale dump means a nudge nothing can test
+      var dbg = JSON.parse(canvas.getAttribute('data-metro-debug'));
+      dbg.events = eventsDump();
+      canvas.setAttribute('data-metro-debug', JSON.stringify(dbg));
+    })();
+
     visible.forEach(function (e) {
       if (e._dropped) return;
       var sign = e._sign, b = e._box;

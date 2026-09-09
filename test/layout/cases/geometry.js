@@ -45,6 +45,17 @@ module.exports = function (test, h) {
   const OVERLAP_KNOWN = {};
   // Three fixtures came off this list when a pierce stopped scoring cheaper
   // than sliding a label. The one left is geometry, not scoring.
+  // On the 800x480 panel the whole map is half the size but the text is
+  // not: a lane is about a line-height deep, so a branch diving to the next
+  // lane out passes within a few px of the label already sitting there. The
+  // pierces below are all 6-10px grazes of that kind, and the only cures
+  // are fewer lanes (fewer events shown) or smaller text than the panel can
+  // carry. Listed so they cannot get worse without the suite saying so.
+  const PIERCE_KNOWN_VIEW = {
+    'busy-day/og-landscape': 'a 480px-deep board packs four lines and three lanes a side: Work\'s rail runs under Alex\'s name, and one kids branch grazes another kids label by 8px.',
+    'all-day-every-track/og-landscape': 'same packing, with every line kinked out for an all-day band on top of it: four branches graze a neighbouring label by 6-8px.',
+    'waypoint-station/og-landscape': 'same packing again, plus a waypoint caption: five 6-8px grazes.',
+  };
   const PIERCE_KNOWN = {
     'tight-pair': 'two 15-minute meetings 20 minutes apart on one line: the second has to reach a deeper lane, and its branch now drops at its own minute rather than easing in from before, so it passes through the first label — which is 20x wider than the gap between them at any text size. The alternatives are a label 500px from the rail it belongs to, or a branch that lies about when the meeting starts.',
   };
@@ -74,19 +85,28 @@ module.exports = function (test, h) {
   // beside their own line by design); running through the middle is not.
   const INTRUSION_TOL = 4;
   for (const f of fixtures) {
-    test('no track or branch line runs through a text label: ' + f.name, () => {
-      const rep = layout(f, ROOMY);
+    for (const vname of ['x-landscape', 'og-landscape']) {
+    test('no track or branch line runs through a text label: ' + f.name + '/' + vname, () => {
+      const rep = layout(f, byName(vname));
       const ls = textLabels(rep);
       const lines = pathsWhere(rep, 'track').concat(pathsWhere(rep, 'branch'), pathsWhere(rep, 'fork'));
+      // A line's NAME is set on the line it names — that is the design, and
+      // its paper outline masks the rail behind it. Only somebody else's
+      // line through a name is a fault.
+      const owns = {};
+      for (const t of f.metro.legend) owns[t.name] = t.key;
       const bad = [];
       for (const box of ls) {
         for (const p of lines) {
+          if (owns[box.text] && owns[box.text] === p.owner) continue;
           const d = deepestIntrusion(p.pts, box);
           if (d > INTRUSION_TOL) bad.push('"' + box.text + '" pierced ' + Math.round(d) + 'px by ' + p.role + ' ' + p.owner);
         }
       }
       assert(bad.length === 0, bad.length + ' label(s) with a line through them: ' + bad.slice(0, 6).join('; '));
-    }, PIERCE_KNOWN[f.name] && { known: PIERCE_KNOWN[f.name] });
+    }, (PIERCE_KNOWN_VIEW[f.name + '/' + vname] || PIERCE_KNOWN[f.name])
+       && { known: PIERCE_KNOWN_VIEW[f.name + '/' + vname] || PIERCE_KNOWN[f.name] });
+    }
   }
 
   // ------------------------------------------------------------ rings sit on the line

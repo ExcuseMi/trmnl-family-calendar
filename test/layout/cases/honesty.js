@@ -8,7 +8,7 @@
 // properties, and only one of them matters to someone reading the board.
 
 module.exports = function (test, h) {
-  const { layout, VIEWPORTS, fixtures, textLabels, assert } = h;
+  const { layout, VIEWPORTS, fixtures, textLabels, eventsIn, assert } = h;
 
   const ROOMY = VIEWPORTS.find((v) => v.name === 'x-landscape');
 
@@ -56,5 +56,33 @@ module.exports = function (test, h) {
       assert(bad.length === 0,
         bad.length + ' label(s) drawn before their own time: ' + bad.slice(0, 4).join('; '));
     });
+  }
+
+  // A caption belongs to ONE branch, and it says so by sitting beside it.
+  // Slid far enough along its lane it stops pointing at anything: the
+  // reader sees a rail with no name and a name with no rail, and pairs the
+  // name with whatever rail happens to be nearest. This is the failure the
+  // layout's own scoring calls "adrift" — it is scored while lanes are
+  // being chosen, and anything that moves a label AFTER that (a dodge
+  // around an interchange, say) has to respect the same limit.
+  for (const f of fixtures) {
+    for (const vname of ['x-landscape', 'og-landscape']) {
+      test('every label stays beside its own branch: ' + f.name + '/' + vname, () => {
+        const rep = layout(f, VIEWPORTS.find((v) => v.name === vname));
+        const bad = [];
+        for (const e of eventsIn(rep)) {
+          if (e.status === 'dropped' || e.textStart == null) continue;
+          // where the caption belongs: just past the elbow, on the side the
+          // branch runs
+          const want = e.dir > 0 ? e.elbow : e.elbow - e.textLen;
+          const off = Math.abs(e.textStart - want);
+          if (off > e.textLen * 0.6 + 12) {
+            bad.push('"' + e.title + '" is ' + Math.round(off) + 'px from its own branch (label is '
+              + Math.round(e.textLen) + 'px wide)');
+          }
+        }
+        assert(bad.length === 0, bad.length + ' adrift label(s): ' + bad.slice(0, 4).join('; '));
+      });
+    }
   }
 };
