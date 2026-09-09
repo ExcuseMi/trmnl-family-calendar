@@ -106,6 +106,11 @@ const REPORTER = `
 (function () {
   var canvas = document.querySelector('.metro-canvas');
   var svg = document.querySelector('.metro-svg');
+  // every completed layout rewrites data-metro-debug, so counting writes
+  // counts layouts — a view that never settles keeps climbing
+  window.__metroRuns = 0;
+  new MutationObserver(function () { window.__metroRuns++; })
+    .observe(canvas, { attributes: true, attributeFilter: ['data-metro-debug'] });
   function report() {
     var cr = canvas.getBoundingClientRect();
     function rel(r) { return { x: r.left - cr.left, y: r.top - cr.top, w: r.width, h: r.height }; }
@@ -162,6 +167,7 @@ const REPORTER = `
     });
     var dbg = null;
     try { dbg = JSON.parse(canvas.getAttribute('data-metro-debug')); } catch (e) {}
+    if (dbg) dbg.runs = window.__metroRuns || 0;
     var out = document.createElement('script');
     out.type = 'application/json';
     out.id = 'metro-report';

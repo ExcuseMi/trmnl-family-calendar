@@ -239,10 +239,18 @@
       : W > H * 1.1;
     var axisPx = horizontal ? W : H, crossPx = horizontal ? H : W;
 
-    // header density follows the real canvas, not the view name (a TRMNL X
-    // quadrant is bigger than an OG full screen)
+    // Header density follows the whole view, not the view name (a TRMNL X
+    // quadrant is bigger than an OG full screen) — and specifically NOT the
+    // canvas. The header sits above the canvas in a column, so its own
+    // height decides how much is left for the canvas: choosing the header
+    // size from the canvas size is a feedback loop, and near a breakpoint it
+    // oscillates forever (a compact header frees height, which asks for a
+    // large header, which takes the height back). The view's own box does
+    // not move when the header changes, so measuring that settles.
     if (header) {
-      var compact = W < 640 * S || H < 300 * S, tiny = W < 430 * S || H < 200 * S, large = W >= 900 * S && H >= 560 * S;
+      var vr = ROOT && ROOT.getBoundingClientRect ? ROOT.getBoundingClientRect() : rect;
+      var vW = (vr.width || rect.width) / Z, vH = (vr.height || rect.height) / Z;
+      var compact = vW < 640 * S || vH < 340 * S, tiny = vW < 430 * S || vH < 230 * S, large = vW >= 900 * S && vH >= 600 * S;
       header.classList.toggle('metro-header--compact', compact);
       header.classList.toggle('metro-header--tiny', tiny);
       header.classList.toggle('metro-header--large', large);
@@ -1064,6 +1072,47 @@
       events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist)]; })
     }));
 
+    // ---- the day as a river, drawn behind everything --------------------
+    // The hour axis runs down the middle of the bundle, and it is the one
+    // thing on the map that is the day itself rather than anything in it.
+    // Drawing it as a river gives the diagram its geography — a transit map
+    // reads as a place partly because of what the lines are crossing — and
+    // it costs nothing in meaning: the water IS the time bar, so the
+    // meander carries no information and cannot mislead. Hour labels sit on
+    // it, the way a river's name does.
+    //
+    // Banks are strokes with a pale fill between them, so on a 1-bit panel
+    // the fill dithers away and the banks still read.
+    (function drawTimeRiver() {
+      var half = Math.max(gutterHalf * 1.35, hourH * 0.9);
+      var amp = Math.min(half * 0.45, TRACK_STEP * 0.5);
+      function bank(offset) {
+        var pts = [], n = 60;
+        for (var i = 0; i <= n; i++) {
+          var t = i / n;
+          var c = spineC + offset
+                + Math.sin(t * Math.PI * 3.1) * amp
+                + Math.sin(0.7 + t * Math.PI * 5.3) * amp * 0.35;
+          pts.push(toXY(t * axisPx, c));
+        }
+        return pts;
+      }
+      function d(pts, close) {
+        var out = 'M ' + pts[0][0] + ' ' + pts[0][1];
+        for (var i = 1; i < pts.length; i++) out += ' L ' + pts[i][0] + ' ' + pts[i][1];
+        return close ? out + ' Z' : out;
+      }
+      var top = bank(-half), bot = bank(half);
+      var fill = svgEl('path', { d: d(top.concat(bot.slice().reverse()), true), fill: '#f1f1f1', stroke: 'none' });
+      fill.setAttribute('data-metro-role', 'river');
+      svg.appendChild(fill);
+      [top, bot].forEach(function (b) {
+        var ln = svgEl('path', { d: d(b, false), fill: 'none', stroke: '#d9d9d9', 'stroke-width': 1.2 * S, 'stroke-linecap': 'round' });
+        ln.setAttribute('data-metro-role', 'river');
+        svg.appendChild(ln);
+      });
+    })();
+
     // ---- draw: now line + alert lines first (under everything)
     var nowA = null;
     if (nowMin != null && nowMin >= winStart && nowMin <= winEnd) {
@@ -1416,7 +1465,10 @@
       var ext = [start, start + hourW];
       var blocked = reserved.concat(capsules).some(function (r) { return overlaps(ext, r); });
       if (blocked) continue;
-      var lab = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute bg--white');
+      // no opaque background: the hour labels sit ON the river, the way a
+      // river's name is lettered along it. Nothing else crosses the gutter
+      // by design, so there is nothing for a background to mask.
+      var lab = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute');
       lab.textContent = hourLabel(h % 24);
       var lxy = toXY(start, spineC - hourH / 2);
       lab.style.left = lxy[0] + 'px'; lab.style.top = lxy[1] + 'px';
@@ -1447,12 +1499,24 @@
   // Re-run whenever the canvas's own size settles — different render
   // pipelines reach final layout at different times, and run() is
   // idempotent, so this is safe to invoke repeatedly.
-  var scheduled = null;
-  function scheduleRun() { if (scheduled) clearTimeout(scheduled); scheduled = setTimeout(run, 60); }
+  // A redraw that lands on exactly the size we already drew at is work with
+  // no result, and it is also how a resize loop keeps itself alive. Remember
+  // the last size laid out and skip the repeat; a real resize still gets
+  // through because the size really differs.
+  var scheduled = null, lastSize = '';
+  function runNow() { lastSize = canvas.offsetWidth + 'x' + canvas.offsetHeight; run(); }
+  function scheduleRun() { if (scheduled) clearTimeout(scheduled); scheduled = setTimeout(runNow, 60); }
+  // The observer path additionally skips a redraw at a size already drawn.
+  // Fonts arriving change text metrics without changing the canvas, so those
+  // triggers must NOT be filtered — only resize is.
+  function scheduleRunIfResized() {
+    if (canvas.offsetWidth + 'x' + canvas.offsetHeight === lastSize) return;
+    scheduleRun();
+  }
   scheduleRun();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleRun).catch(scheduleRun);
   window.addEventListener('load', scheduleRun);
-  if (window.ResizeObserver) new ResizeObserver(scheduleRun).observe(canvas);
+  if (window.ResizeObserver) new ResizeObserver(scheduleRunIfResized).observe(canvas);
 })();
 </script>
 
