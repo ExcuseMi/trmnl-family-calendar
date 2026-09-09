@@ -34,10 +34,30 @@ module.exports = function (test, h) {
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(demoInput(NOW));
     const names = r.metro.legend.map((t) => t.name).sort();
-    assert(names.length > 0, 'demo produced no tracks at all');
-    for (const who of ['Bart', 'Homer', 'Lisa', 'Maggie', 'Marge']) {
-      assert(names.indexOf(who) >= 0, 'no line for ' + who + ' (got ' + names.join(', ') + ')');
-    }
+    // exactly these five: every school and family entry has to be routed to
+    // a person by a rule, so a stray line means a rule stopped matching and
+    // the calendar's own name leaked in as a track
+    assert(names.join(',') === 'Bart,Homer,Lisa,Maggie,Marge',
+      'expected exactly the five family lines, got: ' + names.join(', '));
+  });
+
+  test('a stale copy of one calendar falls back rather than mixing someone else in', async () => {
+    // raw.githubusercontent serves a changed file from cache for a few
+    // minutes, so right after a push some calendars are current and one is
+    // not. That renders a board that is nobody's day, and it must not ship.
+    const stale = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nX-WR-CALNAME:Demo - School\r\n'
+      + 'BEGIN:VEVENT\r\nUID:stale@x\r\nDTSTAMP:20240101T000000Z\r\nSUMMARY:Zwemles L2\r\n'
+      + 'DTSTART:20240101T100000\r\nDTEND:20240101T110000\r\nRRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU\r\n'
+      + 'END:VEVENT\r\nEND:VCALENDAR\r\n';
+    const { run } = runTransform(async (url) => {
+      const file = String(url).split('/').pop();
+      if (file === 'school.ics') return okText(stale);
+      const full = path.join(DEMO_DIR, file);
+      return fs.existsSync(full) ? okText(fs.readFileSync(full, 'utf-8')) : fail(404);
+    }, NOW);
+    const r = await run(demoInput(NOW));
+    const titles = eventItems(r.metro).map((e) => e.title).join(' ');
+    assert(!/Zwemles/.test(titles), 'a stale calendar leaked into the demo: ' + titles);
   });
 
   test('every demo calendar the config names actually exists in demo/', async () => {
@@ -76,6 +96,18 @@ module.exports = function (test, h) {
     assert(dinner, 'no Family Dinner in the demo');
     assert(dinner.co_owners.length >= 3,
       'Family Dinner should join the whole family, got ' + (dinner.co_owners.length + 1) + ' track(s)');
+  });
+
+  test('a partly-resolved demo falls back rather than showing half a family', async () => {
+    // the failure that actually happens: new files not yet on the CDN while
+    // an older one still answers, so some calendars resolve and others 404
+    const { run } = runTransform(serveDemoFiles(['homer.ics', 'marge.ics', 'maggie.ics']), NOW);
+    const r = await run(demoInput(NOW));
+    const names = r.metro.legend.map((t) => t.name).sort();
+    for (const who of ['Bart', 'Homer', 'Lisa', 'Maggie', 'Marge']) {
+      assert(names.indexOf(who) >= 0,
+        'expected the offline fallback (a whole family), got only ' + names.join(', '));
+    }
   });
 
   test('an unreachable GitHub falls back to the built-in day rather than an empty board', async () => {

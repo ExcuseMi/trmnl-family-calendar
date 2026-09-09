@@ -1261,7 +1261,25 @@ async function run(input) {
     try {
       var demoParsed = parseConfig(JSON.stringify(DEMO_CONFIG));
       var demoMetro = await buildFromConfig(input, demoParsed, liveWeather, demoExtra);
-      if (demoMetro && demoMetro.legend && demoMetro.legend.length) return { metro: demoMetro };
+      // Every demo member has something on every day, so all of them must
+      // come back. Anything less means some calendars failed while others
+      // answered — a stale CDN copy, a 404 on a newly added file — and a
+      // half-resolved board (two lines out of five, someone else's events)
+      // is worse than the offline day. "Some lines appeared" is not a
+      // successful demo.
+      // The demo is a known quantity: these five lines, no others. Every
+      // member has something on every day, and every school/family entry
+      // matches a rule that routes it to one of them, so a correct demo
+      // resolves to exactly this set. Anything else means the pipeline read
+      // something other than what this repo ships — a stale CDN copy of one
+      // calendar while the rest are current is the case that actually
+      // happens, and it renders a mixed board that is nobody's day. An
+      // unexpected line is as wrong as a missing one; both fall back.
+      var want = DEMO_CONFIG.tracks.map(function (t) { return t.name; });
+      var got = (demoMetro && demoMetro.legend ? demoMetro.legend : []).map(function (t) { return t.name; });
+      var complete = want.length === got.length
+        && want.every(function (n) { return got.indexOf(n) >= 0; });
+      if (complete) return { metro: demoMetro };
     } catch (e) { /* fall through to the offline demo below */ }
     return { metro: buildFromDemo(liveWeather, demoNowMin, demoExtra) };
   }
