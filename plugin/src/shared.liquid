@@ -139,6 +139,9 @@
   .metro-terminus { white-space: nowrap; }
   .metro-sky { white-space: nowrap; }
   .metro-label, .metro-hour, .metro-axis-note, .metro-terminus, .metro-sky { padding: 1px 3px; }
+  /* the badge is its own background, so it wants no paper outline: white
+     text with a white outline behind it is a white blob */
+  .metro-axis-note.metro-pill { padding: 1px 9px; -webkit-text-stroke: 0; }
 </style>
 
 <script>
@@ -447,7 +450,16 @@
     var pr = measure(probe);
     var hourW = pr.w, hourH = pr.h;
     probe.remove();
-    var gutterHalf = horizontal ? hourH / 2 + 1 * S : hourW / 2 + 3 * S;
+    // The hour scale used to run down the MIDDLE of the board with the
+    // lines split above and below it, which drew a grey band straight
+    // across everybody's day: five people's timelines each cut in half by
+    // the clock. The scale is a header, not a landmark. It sits in a strip
+    // along the leading edge instead — the top when the board is lying
+    // down, the near side when it is stood up — and the lines run the whole
+    // depth of the map uninterrupted.
+    var bandThick = (horizontal ? hourH : hourW) + 8 * S;
+    var bandC = bandThick / 2;        // centre of the strip, in cross units
+    var bandLo = bandThick + 4 * S;   // first cross coordinate the map may use
     // fixed at 'label' sizing (not 'title') regardless of what the real
     // events on the canvas are currently using — a station is meta/status
     // info, not a primary event, and letting it scale up with everything
@@ -492,7 +504,7 @@
       // a line, the room its kink wants, and one lane deep enough for a
       // two-row label (the time tag above the title)
       var perLine = TRACK_STEP + LANE_BASE + hourH * 2.6;
-      var room = crossPx - 2 * (gutterHalf + EDGE);
+      var room = crossPx - bandLo - 2 * EDGE;
       // One line is a valid board. On a quadrant there is honestly room for
       // one person's day and a count of what else is on, and that beats five
       // lines whose labels run off the top and bottom.
@@ -522,7 +534,7 @@
       var sign = s === 'A' ? -1 : 1;
       sides[s].sort(function (a, b) { return Math.abs(a.track_offset) - Math.abs(b.track_offset); });
       sides[s].forEach(function (p, i) {
-        p._dist = gutterHalf + TRACK_STEP * (i + 1);
+        p._dist = TRACK_STEP * (i + 0.5);
         p._c = sign * p._dist;
         p._sign = sign;
         p._sideKey = s;
@@ -536,7 +548,7 @@
       // how far this side's outermost track currently reaches, kink
       // included — read off the live distances, since the band layout
       // re-solves them per attempt rather than packing at a fixed pitch
-      var far = gutterHalf;
+      var far = 0;
       sides[s].forEach(function (p) {
         far = Math.max(far, p._dist + NODE_R + (p._stations.length ? STATION_RAISE + STATION_GAP : 0));
       });
@@ -819,7 +831,7 @@
     var colW = 0;
     if (!horizontal) {
       // text column per side, sized so one lane on each side always fits
-      var room = (crossPx - bundleHalf('A') - bundleHalf('B') - 2 * (LANE_BASE + LINE_GAP + EDGE)) / 2;
+      var room = (crossPx - bandLo - bundleHalf('A') - bundleHalf('B') - 2 * (LANE_BASE + LINE_GAP + EDGE)) / 2;
       colW = clamp(room, 60 * S, 260 * S);
     }
 
@@ -1419,9 +1431,13 @@
     // extra track separation. Returns the lane ladder (innermost first,
     // each rung owned by one track) and how far the side reaches.
     function buildSide(sideKey, lanesFor, stepPx, sepPx) {
-      var acc = gutterHalf, out = [];
-      sides[sideKey].forEach(function (p) {
-        acc += TRACK_STEP + sepPx + capIn(p);
+      var acc = 0, out = [];
+      // Half a pitch for the first track on each side, a whole one after
+      // that: with no gutter left in the middle the two innermost lines
+      // would otherwise sit a double pitch apart, which reads as a missing
+      // line rather than as the middle of the map.
+      sides[sideKey].forEach(function (p, i) {
+        acc += (i ? TRACK_STEP + sepPx : (TRACK_STEP + sepPx) / 2) + capIn(p);
         p._dist = acc;
         p._c = p._sign * acc;
         var n = lanesFor(p), start = acc + laneBase(p);
@@ -1441,9 +1457,9 @@
     // have once a couple of tracks carry an all-day kink; packing still
     // reads correctly there, just with the crossings bands would prevent.
     function buildPacked(sideKey, nLanes, stepPx) {
-      var acc = gutterHalf, out = [];
-      sides[sideKey].forEach(function (p) {
-        acc += TRACK_STEP;
+      var acc = 0, out = [];
+      sides[sideKey].forEach(function (p, i) {
+        acc += i ? TRACK_STEP : TRACK_STEP / 2;
         p._dist = acc;
         p._c = p._sign * acc;
       });
@@ -1493,7 +1509,9 @@
       var A = buildSide('A', lanesFor, stepPx, sepPx), B = buildSide('B', lanesFor, stepPx, sepPx);
       return { A: A, B: B, needA: needOf('A', A.extent), needB: needOf('B', B.extent) };
     }
-    function fits(sol) { return sol.needA + sol.needB <= crossPx; }
+    // the time strip is off the top of the map, so what the two sides have
+    // to fit inside is what it leaves, not the whole canvas
+    function fits(sol) { return sol.needA + sol.needB <= crossPx - bandLo; }
     sep = 0;
     var sol = solve(step, sep);
     // Tighten the lane pitch before taking anyone's lane away: the slack
@@ -1582,7 +1600,9 @@
     // which are a fraction of the width.
     var pitch = TRACK_STEP + (sep || 0);
     weightScale = clamp(pitch / (TRACK_STEP * 1.7), 0.5, 1);
-    spineC = clamp(needA + (crossPx - needA - needB) / 2, Math.min(needA, crossPx / 2), Math.max(crossPx - needB, crossPx / 2));
+    var mapSpan = crossPx - bandLo;
+    spineC = bandLo + clamp(needA + (mapSpan - needA - needB) / 2,
+      Math.min(needA, mapSpan / 2), Math.max(mapSpan - needB, mapSpan / 2));
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0, adrift = 0;
     visible.forEach(function (e) {
@@ -1645,74 +1665,57 @@
     //
     // Banks are strokes with a pale fill between them, so on a 1-bit panel
     // the fill dithers away and the banks still read.
-    var riverHalf = 0;
-    (function drawTimeRiver() {
-      // The river may not be wider than the gutter reserved for it. It used
-      // to run 1.35x that for looks, which put its banks inside the band of
-      // the track nearest the spine — and the car standing on that track's
-      // rail waded into the water.
-      var half = Math.min(gutterHalf, Math.max(gutterHalf * 0.95, hourH * 0.72));
-      riverHalf = half;
-      var amp = Math.min(half * 0.35, TRACK_STEP * 0.4);
-      // The two banks used to carry the SAME wave, so the whole river
-      // translated up and down while the hour labels stayed on the spine —
-      // by mid-afternoon the times were riding one bank instead of sitting
-      // in the water. The banks now mirror each other, so the river breathes
-      // wider and narrower around a centreline that never moves, and every
-      // hour label stays in the middle of it.
-      function widthAt(t) {
-        return half + Math.sin(t * Math.PI * 3.1) * amp * 0.5
-                    + Math.sin(0.7 + t * Math.PI * 5.3) * amp * 0.2;
-      }
-      function bank(side) {
-        var pts = [], n = 60;
-        for (var i = 0; i <= n; i++) {
-          var t = i / n;
-          pts.push(toXY(t * axisPx, spineC + side * widthAt(t)));
-        }
-        return pts;
-      }
-      function d(pts, close) {
-        var out = 'M ' + pts[0][0] + ' ' + pts[0][1];
-        for (var i = 1; i < pts.length; i++) out += ' L ' + pts[i][0] + ' ' + pts[i][1];
-        return close ? out + ' Z' : out;
-      }
-      var top = bank(-1), bot = bank(1);
+    (function drawTimeBand() {
+      // A straight strip along the leading edge, not a meander through the
+      // middle any more: a band that runs beside the map instead of through
+      // it is a scale, and a scale should be flat. Hour labels sit on it,
+      // the way they sit along the edge of a chart.
+      //
       // Themed, not hardcoded. A fixed light grey stayed light when the
       // device flipped to dark mode while the hour labels turned white, and
-      // the times went invisible.
-      //
-      // The river is a wash of the TEXT colour rather than a named grey, at
-      // an opacity low enough to stay behind the hours. That is one rule
-      // that works both ways round: black at 9% on a white canvas, white at
-      // 9% on a black one, so the water is always a shade off the paper and
-      // the times always read. Named greys are absolute, so any one of them
-      // is subtle in one theme and heavy in the other — gray-55 was a slab
-      // in light mode and nearly invisible in dark.
-      var INK = 'var(--framework-semantic-text-primary-text-color, #000)';
-      var fill = svgEl('path', { d: d(top.concat(bot.slice().reverse()), true), stroke: 'none', 'fill-opacity': 0.09 });
+      // the times went invisible. The band is a wash of the TEXT colour at
+      // an opacity low enough to stay behind the hours: black at 9% on a
+      // white canvas, white at 9% on a black one, so the strip is always a
+      // shade off the paper and the times always read.
+      var a0 = toXY(0, 0), a1 = toXY(axisPx, bandThick);
+      var x = Math.min(a0[0], a1[0]), y = Math.min(a0[1], a1[1]);
+      var w = Math.abs(a1[0] - a0[0]), h = Math.abs(a1[1] - a0[1]);
+      var fill = svgEl('rect', { x: x, y: y, width: w, height: h, stroke: 'none', 'fill-opacity': 0.09 });
       fill.style.fill = INK;
       fill.setAttribute('data-metro-role', 'river');
       svg.appendChild(fill);
-      [top, bot].forEach(function (b) {
-        var ln = svgEl('path', { d: d(b, false), fill: 'none', 'stroke-width': 1.2 * S, 'stroke-linecap': 'round', 'stroke-opacity': 0.22 });
-        ln.style.stroke = INK;
-        ln.setAttribute('data-metro-role', 'river');
-        svg.appendChild(ln);
-      });
-    })();
+      // one hairline on the inner edge, so the strip still has a boundary
+      // where the fill dithers away on a 1-bit panel
+      var e0 = toXY(0, bandThick), e1 = toXY(axisPx, bandThick);
+      var edge = svgEl('line', { x1: e0[0], y1: e0[1], x2: e1[0], y2: e1[1],
+        'stroke-width': 1.2 * S, 'stroke-opacity': 0.22 });
+      edge.style.stroke = INK;
+      edge.setAttribute('data-metro-role', 'river');
+      svg.appendChild(edge);
+        })();
 
     // ---- draw: now line + alert lines first (under everything)
     var nowA = null;
-    if (nowMin != null && nowMin >= winStart && nowMin <= winEnd) {
-      // no rule across the whole map: each line carries a car at the
-      // current time, which says the same thing on the line it applies to
-      // instead of drawing a wall through everybody's day
-      nowA = aFor(nowMin);
+    if (nowMin != null && nowMin >= winStart && nowMin <= winEnd) nowA = aFor(nowMin);
+    if (nowA != null) {
+      // One marker for the whole board. A dot in the middle of the old
+      // river said "now" in the one place the eye was not reading, and each
+      // line's car says where that person is but not where the clock is.
+      // A rule across every track answers "what time is it, and who is in
+      // the middle of what" in one look — it is the reference line the rest
+      // of the map is read against, so it is drawn under the lines rather
+      // than over them.
+      var n0 = toXY(nowA, bandThick), n1 = toXY(nowA, crossPx - EDGE / 2);
+      var rule = svgEl('line', { x1: n0[0], y1: n0[1], x2: n1[0], y2: n1[1],
+        'stroke-width': 1.6 * S, 'stroke-linecap': 'round',
+        'stroke-dasharray': (5 * S) + ' ' + (4 * S), 'stroke-opacity': 0.5 });
+      rule.style.stroke = INK;
+      rule.setAttribute('data-metro-role', 'now');
+      svg.appendChild(rule);
     }
     alerts.forEach(function (w) {
       var a = aFor(w.at_min);
-      var q0 = toXY(a, EDGE), q1 = toXY(a, crossPx - EDGE);
+      var q0 = toXY(a, bandThick), q1 = toXY(a, crossPx - EDGE);
       // guide lines are ink at reduced opacity rather than a fixed grey, so
       // they stay a shade under the text in either theme
       var guide = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1], 'stroke-linecap': 'round' });
@@ -1808,19 +1811,13 @@
             if (lc < nameC) nameC = lc;
           }
         }
-        // Above the line by default, but never INTO the river: the track
-        // nearest the spine sits close enough that its name landed in the
-        // water with the hour labels. Where it would, it goes under its own
-        // line instead — still touching the line it names, and the only
-        // other place nothing else uses at the head of the map.
+        // Above the line by default, but never INTO the time strip: the
+        // track nearest it sits close enough that its name landed among the
+        // hours. Where it would, the name goes UNDER its own line instead —
+        // still touching the line it names, and the only other place
+        // nothing else uses at the head of the map.
         var nameOff = -(nameThick + NODE_R + 2 * S);
-        if (namesAbove && nameC + nameOff < spineC + riverHalf && nameC > spineC - riverHalf) {
-          nameOff = NODE_R + 2 * S;
-        } else if (namesAbove && nameC + nameOff < spineC + riverHalf
-                   && nameC + nameOff + nameThick > spineC - riverHalf) {
-          nameOff = -(nameThick + NODE_R + 2 * S) - (spineC - riverHalf - (nameC + nameOff));
-          if (nameC + nameOff < 0) nameOff = NODE_R + 2 * S;
-        }
+        if (namesAbove && nameC + nameOff < bandLo) nameOff = NODE_R + 2 * S;
         // centred ON the line when there is no room above it
         var nameXY = toXY(nameA, namesAbove ? nameC + nameOff : nameC - nameThick / 2);
         p._nameEl.style.left = nameXY[0] + 'px';
@@ -2550,24 +2547,28 @@
     for (var si = 0; si < stepOpts.length; si++) if (pxPerHour * stepOpts[si] >= hourW + 10 * S) { hourStep = stepOpts[si]; break; }
     var reserved = []; // axis intervals already taken by now / overflow notes
     function axisNote(text, a, align, cls) {
-      var n = el('span', 'metro-gen ' + (cls || 'metro-axis-note label label--small font--bold text--black') + ' absolute text--black');
+      // no text--black appended here: the "now" note is an inverted pill,
+      // and forcing the ink colour on it painted ink text on an ink badge
+      var n = el('span', 'metro-gen ' + (cls || 'metro-axis-note label label--small font--bold text--black') + ' absolute');
       n.textContent = text;
       canvas.appendChild(n);
       var nr = measure(n);
       var len = horizontal ? nr.w : nr.h, thick = horizontal ? nr.h : nr.w;
       var start = align === 'start' ? a : align === 'end' ? a - len : a - len / 2;
       start = clamp(start, 0, axisPx - len);
-      var xy = toXY(start, spineC - thick / 2);
+      // never off the leading edge: standing up, a note is as wide as its
+      // words while the strip is only as wide as an hour label, so the
+      // clock badge hung off the side of the board
+      var xy = toXY(start, Math.max(0, bandC - thick / 2));
       n.style.left = xy[0] + 'px'; n.style.top = xy[1] + 'px';
       reserved.push([start - 2 * S, start + len + 2 * S]);
       return n;
     }
     if (nowA != null) {
-      var dxy = toXY(nowA, spineC);
-      var nowDot = paint(svgEl('circle', { cx: dxy[0], cy: dxy[1], r: 3.5 * S }), INK, null);
-      nowDot.setAttribute('data-metro-role', 'now');
-      svg.appendChild(nowDot);
-      axisNote(timeLabel(nowMin), nowA + 6 * S, 'start');
+      // The clock reads as a badge on the scale, at the head of its own
+      // rule — the same solid-ink pill the header uses, so "now" is the
+      // one time on the strip that is stated rather than annotated.
+      axisNote(timeLabel(nowMin), nowA, 'centre', 'metro-axis-note metro-pill label label--small font--bold');
     }
     if (earlier) axisNote(tr('earlier', earlier), axisStart + EDGE, 'start', 'metro-axis-note label label--small font--bold text--black');
     if (later + dropped) axisNote(tr('more', later + dropped), axisEnd - EDGE, 'end', 'metro-axis-note label label--small font--bold text--black');
@@ -2584,7 +2585,7 @@
       // by design, so there is nothing for a background to mask.
       var lab = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute');
       lab.textContent = hourLabel(h % 24);
-      var lxy = toXY(start, spineC - hourH / 2);
+      var lxy = toXY(start, bandC - (horizontal ? hourH : hourW) / 2);
       lab.style.left = lxy[0] + 'px'; lab.style.top = lxy[1] + 'px';
       canvas.appendChild(lab);
     }
