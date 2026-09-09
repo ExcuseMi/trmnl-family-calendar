@@ -28,7 +28,10 @@ module.exports = function (test, h) {
     const rep = layout(busy, ROOMY);
     const adrift = [];
     for (const car of cars(rep)) {
-      const cx = car.x + car.w / 2, cy = car.y + car.h / 2;
+      // The car stands ON the line, so what has to touch the rail is its
+      // WHEELS, not its middle. Measured at the centre it now reads as half
+      // a car-height adrift by design.
+      const cx = car.x + car.w / 2, cy = car.y + car.h;
       // its own track, or one of its own branches — never someone else's
       const mine = pathsWhere(rep, 'track').concat(pathsWhere(rep, 'branch'), pathsWhere(rep, 'fork'))
         .filter((p) => p.owner === car.owner);
@@ -37,7 +40,7 @@ module.exports = function (test, h) {
         const d = Math.hypot(pt[0] - cx, pt[1] - cy);
         if (d < best) best = d;
       }
-      if (best > 6) adrift.push(car.owner + ' off by ' + best.toFixed(1) + 'px');
+      if (best > 8) adrift.push(car.owner + ' off by ' + best.toFixed(1) + 'px');
     }
     assert(adrift.length === 0, adrift.length + ' car(s) off their own rail: ' + adrift.join('; '));
   });

@@ -152,7 +152,71 @@ module.exports = function (test, h) {
       'every branch went vertical: the shallow case has stopped taking the ramp');
   });
 
-  // ---- 4. corners ------------------------------------------------------
+  // ---- 4. what a tick means -------------------------------------------
+
+  for (const f of fixtures) {
+    test('a start is a dot and an end is a tick: ' + f.name, () => {
+      // A tick is a bar drawn ACROSS the line, and the start of a rail is
+      // usually a bend — the ramp arrives at exactly that minute. A tick
+      // there lay over the corner: on a vertical drop it read as the line
+      // overshooting its own rail, on a 45° ramp as a blot. A dot sits ON
+      // the line rather than across it, so it can mark a corner; a tick
+      // cannot. Ends are always on flat rail, so they keep the tick.
+      const rep = layout(f, ROOMY);
+      const Z = rep.debug.Z || 1;
+      const placed = eventsIn(rep).filter((e) => e.status === 'ok');
+      const dots = rep.circles.filter((c) => c.role === 'stop-start');
+      const ticks = rep.circles.filter((c) => c.role === 'stop');
+      const bad = [];
+      for (const t of ticks) {
+        const cx = t.x + t.w / 2;
+        const onStart = placed.some((e) => Math.abs(e.nodeA * Z - cx) < 6);
+        const onEnd = placed.some((e) => Math.abs(e.endA * Z - cx) < 6);
+        if (onStart && !onEnd) bad.push('a tick sits on a start at x' + Math.round(cx));
+      }
+      assert(bad.length === 0, bad.join('; '));
+      assert(dots.length > 0, 'no start dots drawn at all');
+    });
+  }
+
+  test('every placed event is marked at its start by a dot', () => {
+    const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
+    const Z = rep.debug.Z || 1;
+    const dots = rep.circles.filter((c) => c.role === 'stop-start');
+    const interchange = new Set(fixtures.find((x) => x.name === 'busy-day').metro.items
+      .filter((i) => i.type === 'event' && (i.co_owners || []).length).map((i) => i.title));
+    const missing = eventsIn(rep).filter((e) => e.status === 'ok' && !interchange.has(e.title))
+      .filter((e) => !dots.some((d) => Math.abs(d.x + d.w / 2 - e.nodeA * Z) < 8));
+    assert(missing.length === 0,
+      missing.length + ' event(s) with no start dot: ' + missing.map((e) => e.title).join(', '));
+  });
+
+  test('a line leaves its trunk once per run of events sharing a lane', () => {
+    // Two ramps into one flat rail is a line dropping into a place it was
+    // already lying. Counted as: no two ramps of the same owner arrive at
+    // the same lane height within each other's rail.
+    const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
+    const arrivals = {};
+    for (const r of pathsWhere(rep, 'fork')) {
+      if (!r.pts.length) continue;
+      const end = r.pts[r.pts.length - 1];
+      (arrivals[r.owner] = arrivals[r.owner] || []).push(end);
+    }
+    const bad = [];
+    for (const owner of Object.keys(arrivals)) {
+      const list = arrivals[owner];
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          if (Math.abs(list[i][1] - list[j][1]) < 4 && Math.abs(list[i][0] - list[j][0]) < 40) {
+            bad.push('"' + owner + '" ramps in twice at y' + Math.round(list[i][1]));
+          }
+        }
+      }
+    }
+    assert(bad.length === 0, bad.length + ' duplicate ramp(s): ' + bad.slice(0, 3).join('; '));
+  });
+
+  // ---- 5. corners ------------------------------------------------------
 
   test('both of a ramp\'s corners are rounded to the same radius', () => {
     // roundedPath clamps each fillet to half its shorter adjacent segment.

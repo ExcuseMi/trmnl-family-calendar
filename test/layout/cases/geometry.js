@@ -119,7 +119,7 @@ module.exports = function (test, h) {
       // stop, the ring of an interchange, a station junction. The "now" dot
       // rides the hour axis and the lettered bullets mark a line's start,
       // so neither is checked here.
-      for (const c of rep.circles.filter((c) => c.role === 'ring' || c.role === 'station-ring' || c.role === 'stop')) {
+      for (const c of rep.circles.filter((c) => c.role === 'ring' || c.role === 'station-ring' || c.role === 'stop' || c.role === 'stop-start')) {
         const cx = c.x + c.w / 2, cy = c.y + c.h / 2, r = Math.max(c.w, c.h) / 2;
         let best = Infinity;
         const near = [];
@@ -145,7 +145,7 @@ module.exports = function (test, h) {
         // A stop tick may legitimately be the LAST thing on its rail — the
         // rail ends when the event does — so only the markers that are
         // always mid-line have to have line on both sides of them.
-        if (!through && c.role !== 'stop') oneSided.push('(' + Math.round(cx) + ',' + Math.round(cy) + ')');
+        if (!through && c.role !== 'stop' && c.role !== 'stop-start') oneSided.push('(' + Math.round(cx) + ',' + Math.round(cy) + ')');
       }
       assert(missed.length === 0, missed.length + ' ring(s) not centred on any line: ' + missed.slice(0, 6).join('; '));
       assert(oneSided.length === 0, oneSided.length + ' ring(s) with line on one side only: ' + oneSided.slice(0, 6).join('; '));

@@ -19,6 +19,25 @@
 
 # Done
 
+- ~~Let the event title have 2 lines at least.~~ Titles and station captions
+  wrap to two lines before they are cut.
+
+- ~~Increase the label size of the track names, move it above the actual
+  track start.~~ One size up, and sitting on the line's starting bar instead
+  of in a column beside it — which gave the day back the width the column
+  was eating. Standing up they keep the column, because there the names run
+  along their lines and the lines are a track-step apart.
+
+- ~~A rounded dot instead of the first tick.~~ Functionally fine: a filled
+  dot is standard notation for a stop a line calls at, and it stays clear of
+  the hollow ring (interchange) and hollow diamond (station junction). It
+  also solves the thing a tick could not — the start of a rail is usually a
+  bend, and a dot sits ON the line rather than across it.
+
+- ~~Metro car on top of the track; branch further for smaller events.~~ The
+  car is anchored at its wheels now, and the shallowest branch sits a car's
+  height off the trunk so a train on a short spur has room.
+
 - ~~Ramps should be in the style of the track they are on; we need one ramp
   builder that handles all of these, with extensive tests.~~ Every departure
   and rejoin is now one function. The elbow used to be forced solid because

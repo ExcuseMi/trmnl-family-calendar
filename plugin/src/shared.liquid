@@ -299,7 +299,14 @@
     // geometry constants (device-scaled)
     var TRACK_STEP = 20 * S, NODE_R = 6 * S, NODE_STROKE = 3 * S;
     var LINE_GAP = 6 * S, LANE_GAP = 12 * S, LANE_BASE = 14 * S + Math.min(24 * S, crossPx * 0.025), EDGE = 8 * S;
-    var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 9 * S, MIN_DIAG = 10 * S;
+    // The car rides on TOP of whatever line it is on, so a spur has to sit
+    // far enough off the trunk for one to fit between them — at 10*S the
+    // shallowest branch was closer to the trunk than the car is tall, and a
+    // train on a short spur poked up through the line above it. The car is
+    // NODE_R * 2.4 high (see CAR_H's scale), plus the usual gap between a
+    // line and whatever is next to it.
+    var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 9 * S;
+    var MIN_DIAG = Math.max(10 * S, 6 * 2.4 * S + 2 * S);
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
     var STATION_RAISE = 32 * S; // how far a track's own line kinks out to "station level"; for a short station a smaller raise also means a shallower, less jarring kink instead of a deep sideways "V"
     var STATION_GAP = 4 * S; // clear space kept between the raised line itself and the near edge of its caption
@@ -429,7 +436,18 @@
     // needs no legend at all — the name is on the line it belongs to rather
     // than in a key you have to look things up in.
     LEGEND.forEach(function (p) {
-      var n = el('span', 'metro-gen metro-terminus label label--small font--bold text--black absolute bg--white text--black');
+      // One size up from the hour labels. The name of a line is the only
+      // thing on the board that says whose day this row is, and at
+      // label--small it read as an annotation on the map rather than the
+      // label of the line.
+      //
+      // Standing up, it stays small. There the names run ALONG their lines
+      // in a column at the head of the map, so a name's thickness is a line
+      // height and the lines are only a track-step apart — a size up and
+      // neighbouring names touch.
+      var n = el('span', 'metro-gen metro-terminus label '
+        + (horizontal ? 'label--base' : 'label--small')
+        + ' font--bold text--black absolute bg--white text--black');
       n.textContent = p.name;
       // Standing up, the lines are only a track-step apart across the map
       // while the names are words wide, so laid flat they pile into each
@@ -443,9 +461,17 @@
     });
     var nameH = LEGEND.length ? Math.max.apply(null, LEGEND.map(function (p) { return p._nameH; })) : 0;
     var maxNameW = LEGEND.length ? Math.max.apply(null, LEGEND.map(function (p) { return p._nameW; })) : 0;
-    // room at the head of the axis for each line's name — the name's extent
-    // ALONG the axis, which is its width lying down and its height standing up
-    var nameCol = LEGEND.length ? 2 * S + (horizontal ? maxNameW : nameH) + 6 * S : 0;
+    // Room at the head of the axis before the first line starts. The name
+    // used to live in this column, beside its line, so the column had to be
+    // as wide as the longest name — a chunk of the day's width spent on
+    // five words. The name now sits ABOVE its line's starting bar instead,
+    // where it labels the head of the line the way a platform sign does, so
+    // this is just a margin and the whole day gets the space back.
+    // Wide enough for half the first hour label, which is centred on the
+    // axis start — at a bare margin "7am" hung off the left edge of the board.
+    var nameCol = LEGEND.length
+      ? (horizontal ? Math.max(8 * S, hourW / 2) : 2 * S + nameH + 6 * S)
+      : 0;
     var axisStart = NODE_R + 2 * S + nameCol, axisEnd = axisPx - NODE_R - 2 * S; // rings at the window edges stay whole; tracks still run full bleed
     // weighted minutes: a quiet one counts for less axis than a busy one
     var weighted = busyMin + (headMin + tailMin) * EXPRESS_RATE;
@@ -578,6 +604,18 @@
       n.style.display = 'block'; n.style.whiteSpace = 'nowrap'; // force a real block row regardless of what the label/title classes themselves set
       return n;
     }
+    // Let a row wrap, to at most `n` lines, ellipsising what does not fit.
+    // labelRow forces nowrap so every row is a real block; this opts one row
+    // back out of it.
+    function clampLines(n, lines) {
+      n.style.whiteSpace = 'normal';
+      n.style.display = '-webkit-box';
+      n.style.webkitBoxOrient = 'vertical';
+      n.style.setProperty('-webkit-box-orient', 'vertical');
+      n.style.setProperty('-webkit-line-clamp', String(lines));
+      n.style.overflow = 'hidden';
+      n.style.overflowWrap = 'anywhere';
+    }
     function buildLabel(e) {
       var p = trackByKey[e.owner];
       // Alignment is a framework class, not an inline style: text--left /
@@ -593,7 +631,14 @@
       }
       var t = labelRow('metro-title-text ' + titleClass + ' font--bold text--black');
       t.textContent = e.title;
-      t.style.maxWidth = maxTitle + 'px'; t.style.overflow = 'hidden'; t.style.textOverflow = 'ellipsis';
+      // A title may run to TWO lines before it is cut. On one line a long
+      // name ("Reactor Core Check", "Saxophone Lesson") either ate the whole
+      // width budget or lost its tail to an ellipsis; wrapped, it reads in
+      // full and costs a line of thickness. Two is the limit: past that a
+      // label stops being a caption on a line and becomes a paragraph
+      // floating over the map.
+      t.style.maxWidth = maxTitle + 'px';
+      clampLines(t, 2);
       box.appendChild(t);
       if (showLocation && e.location) {
         var loc = labelRow(tagClass + ' text--gray-45');
@@ -863,7 +908,12 @@
         //
         // The budget is the geometry's own: two corner radii is the least
         // run a bend needs to look drawn rather than clipped.
-        var LEAD_CAP = 2 * CORNER;
+        // The shallowest branch is exactly the one that should still ease in
+        // at 45°, so the cap is whatever that drop costs. Anything deeper
+        // goes vertical. Fixed at two corner radii the cap fell below
+        // MIN_DIAG once the lanes moved out to clear the car, and every
+        // branch on the board went vertical at once.
+        var LEAD_CAP = Math.max(2 * CORNER, MIN_DIAG);
         var diagFrom = dy <= LEAD_CAP ? elbow - dir * dy : elbow;
         diagFrom = clamp(diagFrom, axisStart + 2 * CORNER, axisEnd - 2 * CORNER);
         if (dir > 0 ? diagFrom > elbow : diagFrom < elbow) diagFrom = elbow;
@@ -1243,7 +1293,7 @@
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
       colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
-      events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign]; })
+      events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA)]; })
     }));
 
     // ---- the day as a river, drawn behind everything --------------------
@@ -1361,7 +1411,7 @@
       if (fan) {
         var spreadC = spreadCFor(p);
         var d = fan.dir, edge = d > 0 ? 0 : axisPx;
-        var nameEnd = edge + d * (2 * S + (horizontal ? p._nameW : p._nameH) + 4 * S);
+        var nameEnd = edge + d * (horizontal ? 4 * S : 2 * S + p._nameH + 4 * S);
         var fanStart = edge + d * fan.len;
         var merge = fanStart + d * Math.abs(spreadC - c);
         // Place along the axis and across the cross-axis, whichever way
@@ -1371,8 +1421,33 @@
         // of its own line.
         var nameLen = horizontal ? p._nameW : p._nameH;
         var nameThick = horizontal ? p._nameH : p._nameW;
-        var nameA = d > 0 ? 2 * S : axisPx - 2 * S - nameLen;
-        var nameXY = toXY(nameA, spreadC - nameThick / 2);
+        // Sitting ON the line's start bar, just above it: the name labels
+        // the head of the line rather than floating in a column beside it,
+        // and it costs the day no width.
+        // Standing up, the lines are close enough together across the map
+        // that a name shifted clear of its own line runs into its
+        // neighbour's, so there it keeps the head-of-the-line column and
+        // stays centred. Lying down there is room above.
+        var nameA = horizontal
+          ? (d > 0 ? nameEnd - 2 * S : axisPx - nameEnd + 2 * S - nameLen)
+          : (d > 0 ? 2 * S : axisPx - 2 * S - nameLen);
+        // Off the line where it REALLY is under the name, not off its flat
+        // baseline: a track that begins inside one of its own all-day
+        // stations starts raised, and measured from the baseline the name
+        // sat where the line now was and got a stroke through it. Sampled
+        // ACROSS the name's whole width, taking the closest the line comes —
+        // one reading at the middle still let a station ramp climb into the
+        // name's far end.
+        var nameC = spreadC;
+        if (horizontal) {
+          for (var ni = 0; ni <= 8; ni++) {
+            var lc = lineCAt(p, nameA + nameLen * (ni / 8));
+            if (lc < nameC) nameC = lc;
+          }
+        }
+        var nameXY = toXY(nameA, horizontal
+          ? nameC - nameThick - NODE_R - 2 * S
+          : nameC - nameThick / 2);
         p._nameEl.style.left = nameXY[0] + 'px';
         p._nameEl.style.top = nameXY[1] + 'px';
         var far = d > 0 ? axisEnd : axisStart;
@@ -1457,7 +1532,8 @@
                                 : Math.max(60 * S, colW);
         var t = labelRow('metro-title-text ' + STATION_TITLE_CLASS + ' font--bold text--black');
         t.textContent = s.title;
-        t.style.maxWidth = availW + 'px'; t.style.overflow = 'hidden'; t.style.textOverflow = 'ellipsis';
+        t.style.maxWidth = availW + 'px';
+        clampLines(t, 2);
         box.appendChild(t);
         if (s.location) {
           var loc = labelRow(STATION_TAG_CLASS + ' text--gray-45');
@@ -1626,41 +1702,33 @@
           seg.setAttribute('data-metro-role', 'branch'); seg.setAttribute('data-metro-owner', p.key);
           svg.appendChild(seg);
         }
+        // ONE ramp per group, at the earliest elbow. A group is a run of
+        // this line's events whose rails overlap in one lane, so after the
+        // first one the rail is already lying there flat: a second ramp
+        // dropped into a line that was already horizontal, and the tick
+        // marking that event's start landed on its own corner. The line
+        // leaves the trunk once, runs flat past everything in the group, and
+        // each later event is marked by ticks on it — which is what a stop
+        // on a running line looks like.
+        //
+        // Leaving the trunk needs a lead-in BACK along it, so the departure
+        // is an interior vertex and gets the same rounding every other bend
+        // has; started at the junction it would be an endpoint, which
+        // roundedPath cannot fillet, and the branch snapped off at a hard
+        // angle. The lead-in lies exactly on the trunk, dash phase and all,
+        // so it is invisible. It leaves from where the line REALLY is at
+        // that minute — a track still ramping out of a station is not at its
+        // baseline, and drawn from the baseline the branch starts detached
+        // and crosses the ramp instead of forking off it.
         var sorted = g.members.slice().sort(function (a, b) { return a._elbow - b._elbow; });
-        var prevEnd = g.from;
-        sorted.forEach(function (e) {
-          bridge(prevEnd, e._elbow - CORNER);
-          // Start a little way BACK along the trunk, so the point where the
-          // branch leaves is an interior vertex and gets the same rounding
-          // every other bend has. Starting the path at the junction made it
-          // an endpoint, which roundedPath cannot fillet — the branch
-          // snapped off the line at a hard angle instead of curving away.
-          // The lead-in lies exactly on the trunk, so it is invisible.
-          // _trackDist sits NODE_R clear of the line (it is where the ring's
-          // EDGE is, which is what the lane maths wants). The drawn branch
-          // has to leave the line itself, or it starts a ring's width above
-          // the trunk and floats there — the fillet then curves a stub that
-          // was never attached to anything.
-          // Leave from where the line REALLY is at the fork, not from where
-          // it will be at the event. _trackDist is measured at the event's
-          // own minute; the fork happens earlier, and if the line is still
-          // ramping out of a station in between, the two are different
-          // heights. Drawn from the wrong one the branch starts detached and
-          // crosses the ramp instead of forking off it.
-          // An interchange's branch leaves the OUTERMOST line it joins (that
-          // is where its ring is and what _trackDist was measured from), so
-          // the height has to come from that line, not from the nominal
-          // owner's — they can be a whole band apart.
-          var trunkC = lineCAt(p, e._diagFrom);
-          var leadA = e._diagFrom - e._dir * RAMP_LEAD;
-          drawRamp(p, rampOut(e._diagFrom, trunkC, e._elbow, laneC, e._dir),
-                   leadA, 'fork', e._laneOwner);
-          prevEnd = e._elbow + RAMP_LEAD;
-        });
-        bridge(prevEnd, g.to);
-        var elbows = sorted.map(function (e) { return e._elbow; });
-        if (g.to > Math.max.apply(null, elbows) + CORNER + 1) terminus(g.to, laneC, p);
-        if (g.from < Math.min.apply(null, elbows) - CORNER - 1) terminus(g.from, laneC, p);
+        var head = sorted[0];
+        head._ownRamp = true;
+        var trunkC = lineCAt(p, head._diagFrom);
+        drawRamp(p, rampOut(head._diagFrom, trunkC, head._elbow, laneC, head._dir),
+                 head._diagFrom - head._dir * RAMP_LEAD, 'fork', head._laneOwner);
+        bridge(head._elbow + RAMP_LEAD, g.to);
+        if (g.to > head._elbow + CORNER + 1) terminus(g.to, laneC, p);
+        if (g.from < head._elbow - CORNER - 1) terminus(g.from, laneC, p);
       });
     });
     placed.forEach(function (e) {
@@ -1745,27 +1813,36 @@
           if (u >= 1) return laneC;
           return forkC + (laneC - forkC) * u;
         }
-        // The branch now leaves perpendicular AT the start, so the drop is
-        // already the start mark: it is a stroke across the lane at exactly
-        // the minute a tick would be drawn, and collinear with it. Drawing
-        // both put a bar on top of the corner — the vertical appeared to
-        // overshoot the rail and the rail appeared to start beside it
-        // instead of turning into it. Where the drop lands on the start, the
-        // start tick is dropped and the corner is left to read as the corner.
-        var dropMarksStart = e._diagFrom === e._elbow && Math.abs(e._nodeA - e._elbow) < 1;
-        [e._nodeA, e._endA].forEach(function (a, i) {
-          if (!i && dropMarksStart) return;
-          if (a < lo - 1 || a > hi + 1) return;
-          if (i && Math.abs(e._endA - e._nodeA) < NODE_R) return; // too short to show two
-          var tc = spurC(a);
-          var t0 = toXY(a, tc - NODE_R), t1 = toXY(a, tc + NODE_R);
+        // The START is a filled dot, the END a tick.
+        //
+        // A tick is a bar drawn ACROSS the line, and the start of a rail is
+        // usually a bend — the ramp arrives at exactly that minute — so a
+        // tick there lay over the corner: on a vertical drop it read as the
+        // line overshooting its own rail, on a 45° ramp as a blot. A dot
+        // sits ON the line instead of across it, so it reads as a mark on
+        // the corner rather than a second line through it, and the start
+        // gets its mark back.
+        //
+        // A filled dot is standard notation for a stop a line simply calls
+        // at, and it stays clear of the two marks that mean something else
+        // here: the HOLLOW ring is an interchange and the hollow diamond a
+        // station junction. Nothing is overloaded.
+        if (e._nodeA >= lo - 1 && e._nodeA <= hi + 1) {
+          var dxy = toXY(e._nodeA, spurC(e._nodeA));
+          var dot = svgEl('circle', { cx: dxy[0], cy: dxy[1], r: NODE_R * 0.6, fill: colorFor(p.hue) });
+          dot.setAttribute('data-metro-role', 'stop-start'); dot.setAttribute('data-metro-owner', e.owner);
+          svg.appendChild(dot);
+        }
+        if (e._endA >= lo - 1 && e._endA <= hi + 1 && Math.abs(e._endA - e._nodeA) >= NODE_R) {
+          var tc = spurC(e._endA);
+          var t0 = toXY(e._endA, tc - NODE_R), t1 = toXY(e._endA, tc + NODE_R);
           var tick = svgEl('line', {
             x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
             stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE, 'stroke-linecap': 'round',
           });
           tick.setAttribute('data-metro-role', 'stop'); tick.setAttribute('data-metro-owner', e.owner);
           svg.appendChild(tick);
-        });
+        }
       }
     });
 
@@ -1782,7 +1859,11 @@
       'm61.316 35.047c4.9102 15.336 20.336 15.188 29.66 15.09 0.078126 0 0.15234 0 0.22656-0.003907-3.8828-5.2266-12.805-15.086-24.891-15.086z',
       'm93.355 53.309-0.003907-0.003906c-0.015624-0.027344-0.27344-0.46484-0.74609-1.1797-0.51172 0-1.043 0.007812-1.6094 0.011719-0.73438 0.007812-1.5195 0.015625-2.3398 0.015625-9.6523 0-24.695-1.1133-29.43-17.105h-55.727v29.906h86.414c3.375 0 5.4648-0.66406 6.2188-1.9766 0.96094-1.6758 0.054688-4.8359-2.7734-9.6641-0.003906 0-0.003906 0-0.003906-0.003906zm-76.52-7.6484c0 0.55078-0.44922 1-1 1h-7.4297c-0.55078 0-1-0.44922-1-1v-6.1172c0-0.55078 0.44922-1 1-1h7.4297c0.55078 0 1 0.44922 1 1zm12.672 0c0 0.55078-0.44922 1-1 1h-7.4297c-0.55078 0-1-0.44922-1-1v-6.1172c0-0.55078 0.44922-1 1-1h7.4297c0.55078 0 1 0.44922 1 1zm12.672 0c0 0.55078-0.44922 1-1 1h-7.4297c-0.55078 0-1-0.44922-1-1v-6.1172c0-0.55078 0.44922-1 1-1h7.4297c0.55078 0 1 0.44922 1 1zm15.082 13.328c0 0.55469-0.44531 1-1 1h-10.055c-0.55078 0-1-0.44531-1-1v-19.449c0-0.55078 0.44922-1 1-1h10.055c0.55469 0 1 0.44922 1 1z'
     ];
-    var CAR_H = 30, CAR_CX = 50, CAR_CY = 50;
+    // The drawn car occupies y 35..65 in its own viewBox, so 65 is where its
+    // wheels are. Anchoring there instead of at the middle stands the car ON
+    // the rail rather than threading it through the line, which is what a
+    // train on a track looks like and stops the line striking through it.
+    var CAR_H = 30, CAR_CX = 50, CAR_BASE = 65;
     if (nowA != null) {
       LEGEND.forEach(function (p) {
         // riding a spur if one of this line's own events is happening now
@@ -1796,10 +1877,13 @@
         var c = riding ? spineC + riding._sign * riding._laneDist : lineCAt(p, nowA);
         var xy = toXY(nowA, c);
         var k = (NODE_R * 2.4) / CAR_H;
+        // clear the rail's own stroke, so the wheels sit on top of the line
+        // rather than inside it
+        var lift = CAR_BASE + (p.line_width * S / 2) / k;
         var g = svgEl('g', {
           transform: 'translate(' + xy[0] + ',' + xy[1] + ') '
             + (horizontal ? '' : 'rotate(90) ')
-            + 'scale(' + k + ') translate(' + (-CAR_CX) + ',' + (-CAR_CY) + ')',
+            + 'scale(' + k + ') translate(' + (-CAR_CX) + ',' + (-lift) + ')',
           fill: colorFor(p.hue),
         });
         g.setAttribute('data-metro-role', 'car');

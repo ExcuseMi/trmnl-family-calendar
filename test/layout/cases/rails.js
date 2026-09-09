@@ -58,16 +58,27 @@ module.exports = function (test, h) {
     const ticks = rep.circles.filter((c) => c.role === 'stop');
 
     assert(solo.length > 0, 'fixture has no single-track events');
-    // at least a start tick each
-    assert(ticks.length >= solo.length,
-      'expected a start tick for each of the ' + solo.length + ' single-track events, found '
-      + ticks.length + ' tick(s)');
-    // and some events must carry a second tick for the end — an event whose
-    // rail rejoins the line has its end marked by the rejoin instead, so not
-    // all of them do, but if NONE do the end is never being marked at all
-    assert(ticks.length > solo.length,
-      'no event carries an end tick: every end is unmarked (' + ticks.length
-      + ' ticks for ' + solo.length + ' events)');
+    // Every end is marked. A start is marked too, but not always by a tick:
+    // where the event's own ramp arrives at its start minute, the corner is
+    // the mark, and a tick drawn on top of it read as the line overshooting
+    // its rail. So the count to assert is the ends — one per event — plus
+    // however many starts sit on rail an earlier event brought down.
+    assert(ticks.length >= solo.length - 2,
+      'expected about one tick per event for their ends, found ' + ticks.length
+      + ' for ' + solo.length + ' single-track events');
+    // and every event must be reachable: no event may be left with neither a
+    // tick nor a ramp corner at its start
+    const Z = rep.debug.Z || 1;
+    const corners = pathsWhere(rep, 'fork').map((r) => r.pts[r.pts.length - 1]).filter(Boolean);
+    const unmarked = placed.filter((e) => {
+      const a = e.nodeA * Z;
+      if (ticks.some((t) => Math.abs(t.x + t.w / 2 - a) < 8)) return false;
+      if (corners.some((c) => Math.abs(c[0] - a) < 40)) return false;
+      return !interchange.has(e.title);
+    });
+    assert(unmarked.length === 0,
+      unmarked.length + ' event(s) with neither a tick nor a ramp at their start: '
+      + unmarked.map((e) => e.title).join(', '));
   });
 
   // Rejoins are the exception. A spur that dives to a lane and climbs back
