@@ -43,6 +43,25 @@
 
   <div class="metro-header flex flex--col gap--xsmall px--3 py--2 flex-none">
     <div class="metro-header-top flex flex--row flex--center-y flex--wrap gap--medium">
+      <!-- The plugin's mark, inlined because the device renders this template
+           on its own and cannot fetch repo files. Keep in step with
+           assets/icon.svg — same geometry, same single-fill structure; the
+           mask id is namespaced so a mashup rendering several views cannot
+           collide on it. -->
+      <svg class="metro-mark no-shrink" viewBox="0 0 512 512" role="img" aria-label="Metro Calendar" fill="#e05b44">
+        <mask id="metro-mark-cut">
+          <rect width="512" height="512" fill="#fff"/>
+          <g stroke="#000" stroke-width="38" stroke-linecap="round" fill="none">
+            <path d="M96 160 H416"/>
+            <path d="M96 256 H416" stroke-dasharray="60 52"/>
+            <path d="M96 352 H416" stroke-dasharray="1 76"/>
+            <path d="M320 160 V352" stroke-width="26" stroke-dasharray="26 34"/>
+          </g>
+          <g fill="#000"><circle cx="320" cy="160" r="52"/><circle cx="320" cy="256" r="52"/><circle cx="320" cy="352" r="52"/></g>
+          <g fill="#fff"><circle cx="320" cy="160" r="22"/><circle cx="320" cy="256" r="22"/><circle cx="320" cy="352" r="22"/></g>
+        </mask>
+        <circle cx="256" cy="256" r="240" mask="url(#metro-mark-cut)"/>
+      </svg>
       <span class="metro-title title title--large font--bold">{{ metro.i18n.today | default: "Today" }}</span>
       {% if metro.date_label %}<span class="metro-date label label--base text--gray-40">{{ metro.date_label }}</span>{% endif %}
       <span class="metro-window label label--small text--gray-40">{{ metro.window_label }}</span>
@@ -83,6 +102,9 @@
   .metro-header--compact .metro-window, .metro-header--compact .metro-cond { display: none; }
   .metro-header--tiny .metro-date, .metro-header--tiny .metro-weather { display: none; }
   .metro-wicon { width: 28px; height: 28px; }
+  .metro-mark { width: 30px; height: 30px; }
+  .metro-header--large .metro-mark { width: 42px; height: 42px; }
+  .metro-header--tiny .metro-mark { width: 22px; height: 22px; }
   .metro-header--large .metro-wicon { width: 40px; height: 40px; }
   .metro-terminus { white-space: nowrap; padding: 0 3px; }
   .metro-sky { white-space: nowrap; }
@@ -691,7 +713,15 @@
         // grid never tested.
         var dy = Math.max(laneDist(k) - e._trackDist, MIN_DIAG);
         var rowDist = e._trackDist + dy;
-        var elbow = e._nodeA + dir * dy;
+        // The branch leaves the trunk BEFORE the event, so that by the time
+        // it reaches the event's own minute the spur is already flat and can
+        // be marked at the true start and end. Diverging AT the start time
+        // instead put the fork and the stop-tick on the same spot (messy),
+        // and pushed the whole label a diagonal's width later than the thing
+        // it names — which is the main reason the spur read as if its length
+        // meant duration.
+        var elbow = e._nodeA - dir * CORNER;
+        var diagFrom = elbow - dir * dy;
         var L = lane(k), len = e._textLen;
         var elbow0 = elbow;
         var natural = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len;
@@ -747,16 +777,16 @@
         // move for it to happen. Reject the lane outright rather than
         // scoring it, so an already-placed forward event never gets a
         // crossing partner routed on top of it.
-        var diagLo = Math.min(e._nodeA, elbow), diagHi = Math.max(e._nodeA, elbow);
+        var diagLo = Math.min(diagFrom, elbow), diagHi = Math.max(diagFrom, elbow);
         for (var dgi = 0; dgi < L.items.length; dgi++) {
           var dg = L.items[dgi];
           if (dg.kind === 'diag' && dg.dir !== dir && dg.a0 < diagHi && diagLo < dg.a1) return null;
         }
-        var crossing = diagonalCrosses(e._nodeA, e._trackDist, elbow, rowDist, k);
+        var crossing = diagonalCrosses(diagFrom, e._trackDist, elbow, rowDist, k);
         if (crossing && !allowCross) return null;
         var shift = Math.abs(ts - (dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len)) + elbowShift;
         if (shift > (dir > 0 ? MAX_SHIFT : MAX_SHIFT * 0.5)) return null;
-        return { k: k, dir: dir, elbow: elbow, shift: shift, ld: rowDist, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift,
+        return { k: k, dir: dir, elbow: elbow, diagFrom: diagFrom, shift: shift, ld: rowDist, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift,
                  score: shift + elbowShift * 1.5 + (elbowShift ? 30 * S : 0) + k * step * 0.15 + (dir < 0 ? 40 * S : 0) + (crossing ? 50 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
       }
       evs.forEach(function (e, idx) {
@@ -778,10 +808,10 @@
           if (best && best.score <= SHIFT_TOL) break; // a clean, unshifted, forward inner lane — done
         }
         if (!best) { e._dropped = true; return; }
-        e._lane = best.k; e._elbow = best.elbow; e._laneDist = best.ld; e._dir = best.dir; e._joined = best.joined;
+        e._lane = best.k; e._elbow = best.elbow; e._diagFrom = best.diagFrom; e._laneDist = best.ld; e._dir = best.dir; e._joined = best.joined;
         e._crossing = best.crossing; e._elbowShift = best.elbowShift;
         e._textStart = best.textStart;
-        lane(best.k).items.push({ a0: Math.min(e._nodeA, best.elbow), a1: Math.max(e._nodeA, best.elbow), owner: null, kind: 'diag', dir: best.dir, d: best.ld });
+        lane(best.k).items.push({ a0: Math.min(best.diagFrom, best.elbow), a1: Math.max(best.diagFrom, best.elbow), owner: null, kind: 'diag', dir: best.dir, d: best.ld });
         if (best.trunc && best.trunc < e._textLen) {
           // shorten: first lose the time tag, then ellipsise the title
           var tm = e._box.querySelector('.metro-time-tag');
@@ -1241,7 +1271,7 @@
           // the trunk and floats there — the fillet then curves a stub that
           // was never attached to anything.
           var trunkC = spineC + sign * (e._trackDist - NODE_R);
-          var pts = [toXY(e._nodeA - e._dir * 2 * CORNER, trunkC), toXY(e._nodeA, trunkC),
+          var pts = [toXY(e._diagFrom - e._dir * 2 * CORNER, trunkC), toXY(e._diagFrom, trunkC),
                      toXY(e._elbow, laneC), toXY(e._elbow + e._dir * CORNER, laneC)];
           var path = svgEl('path', { d: roundedPath(pts, CORNER) });
           styleStroke(path, p, S);
@@ -1262,7 +1292,7 @@
       // before leaving it, and carry on along it after coming back, so both
       // junctions curve instead of snapping
       var fromC = spineC + sign * (e._trackDist - NODE_R), backC = spineC + sign * (e._trackDistEnd - NODE_R);
-      var pts = [toXY(e._nodeA - e._dir * 2 * CORNER, fromC), toXY(e._nodeA, fromC),
+      var pts = [toXY(e._diagFrom - e._dir * 2 * CORNER, fromC), toXY(e._diagFrom, fromC),
                  toXY(e._elbow, laneC), toXY(e._lineTo, laneC),
                  toXY(e._endA, backC), toXY(e._endA + e._dir * 2 * CORNER, backC)];
       var path = svgEl('path', { d: roundedPath(pts, CORNER) });
@@ -1314,14 +1344,25 @@
         // interchange, and a line with eight meetings on it ends up as eight
         // identical circles. The tick is the standard mark for a stop the
         // line simply calls at, and it leaves the ring meaning something.
-        var stopC = lineCAt(p, e._nodeA);
-        var s0 = toXY(e._nodeA, stopC - NODE_R), s1 = toXY(e._nodeA, stopC + NODE_R);
-        var tick = svgEl('line', {
-          x1: s0[0], y1: s0[1], x2: s1[0], y2: s1[1],
-          stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE, 'stroke-linecap': 'round',
+        //
+        // The ticks go on the SPUR, at the event's true start and end. The
+        // spur's own length is set by how wide its label is, so it says
+        // nothing about duration; the pair of ticks is what carries the
+        // time. Where the spur is too short to hold both (a long event, or
+        // one that rejoins the line), only the start is marked.
+        var laneC = spineC + e._sign * e._laneDist;
+        var lo = Math.min(e._lineFrom, e._lineTo), hi = Math.max(e._lineFrom, e._lineTo);
+        [e._nodeA, e._endA].forEach(function (a, i) {
+          if (a < lo - 1 || a > hi + 1) return;
+          if (i && Math.abs(e._endA - e._nodeA) < NODE_R) return; // too short to show two
+          var t0 = toXY(a, laneC - NODE_R), t1 = toXY(a, laneC + NODE_R);
+          var tick = svgEl('line', {
+            x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
+            stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE, 'stroke-linecap': 'round',
+          });
+          tick.setAttribute('data-metro-role', 'stop'); tick.setAttribute('data-metro-owner', e.owner);
+          svg.appendChild(tick);
         });
-        tick.setAttribute('data-metro-role', 'stop'); tick.setAttribute('data-metro-owner', e.owner);
-        svg.appendChild(tick);
       }
     });
 
