@@ -1608,8 +1608,11 @@
     // position `a`. Measured on the real element, so station kinks and the
     // terminus fan — which make the drawn line longer than the axis span —
     // are included rather than assumed away.
-    function trunkLenAt(p, a) {
-      var el = p._trunkEl;
+    // How far along its own drawn path an element is when it reaches axis
+    // position `a` — the LAST such point, which matters where the path runs
+    // perpendicular for a stretch (a vertical drop has one axis position and
+    // many lengths; the one wanted is the bottom of the drop, not the top).
+    function pathLenAtAxis(el, a) {
       if (!el || !el.getTotalLength) return null;
       var total = el.getTotalLength();
       if (!(total > 0)) return null;
@@ -1619,9 +1622,20 @@
       var ascending = at(total) >= at(0);
       for (var i = 0; i < 24; i++) {
         var mid = (lo + hi) / 2;
-        if ((at(mid) < a) === ascending) lo = mid; else hi = mid;
+        if ((at(mid) <= a) === ascending) lo = mid; else hi = mid;
       }
       return (lo + hi) / 2;
+    }
+    function trunkLenAt(p, a) { return pathLenAtAxis(p._trunkEl, a); }
+    // Where a drawn path actually IS at axis position `a`, in canvas px.
+    // Corners are drawn rounded, so at a bend the line is up to a corner
+    // radius away from the vertex the geometry names — a marker placed on
+    // the vertex sits in the gap inside the elbow rather than on the line.
+    function pointOnPathAtAxis(el, a) {
+      var L = pathLenAtAxis(el, a);
+      if (L == null) return null;
+      var pt = el.getPointAtLength(L);
+      return [pt.x, pt.y];
     }
 
     // Draw one ramp. `pts` are (axis, cross) vertices, the first of which
@@ -1724,7 +1738,7 @@
         var head = sorted[0];
         head._ownRamp = true;
         var trunkC = lineCAt(p, head._diagFrom);
-        drawRamp(p, rampOut(head._diagFrom, trunkC, head._elbow, laneC, head._dir),
+        head._rampEl = drawRamp(p, rampOut(head._diagFrom, trunkC, head._elbow, laneC, head._dir),
                  head._diagFrom - head._dir * RAMP_LEAD, 'fork', head._laneOwner);
         bridge(head._elbow + RAMP_LEAD, g.to);
         if (g.to > head._elbow + CORNER + 1) terminus(g.to, laneC, p);
@@ -1745,7 +1759,7 @@
       var loop = [[e._diagFrom - e._dir * RAMP_LEAD, fromC], [e._diagFrom, fromC],
                   [e._elbow, laneC], [e._lineTo, laneC],
                   [e._mergeAt, backC], [e._mergeAt + e._dir * RAMP_LEAD, backC]];
-      drawRamp(p, loop, e._diagFrom - e._dir * RAMP_LEAD, 'branch', p.key);
+      e._rampEl = drawRamp(p, loop, e._diagFrom - e._dir * RAMP_LEAD, 'branch', p.key);
     });
 
     // ---- stations (rings / interchange capsules) on top of the lines
@@ -1828,8 +1842,26 @@
         // here: the HOLLOW ring is an interchange and the hollow diamond a
         // station junction. Nothing is overloaded.
         if (e._nodeA >= lo - 1 && e._nodeA <= hi + 1) {
-          var dxy = toXY(e._nodeA, spurC(e._nodeA));
-          var dot = svgEl('circle', { cx: dxy[0], cy: dxy[1], r: NODE_R * 0.6, fill: colorFor(p.hue) });
+          // The start is a corner, and the corner is drawn rounded, so the
+          // vertex the geometry names is not where the ink is — up to a
+          // corner radius of daylight sits between them, and the dot floated
+          // inside the elbow. Ask the ramp itself where it is at that
+          // minute. Events riding a rail an earlier one brought down have no
+          // ramp of their own and are on flat line already.
+          var dxy = (e._rampEl && pointOnPathAtAxis(e._rampEl, toXY(e._nodeA, 0)[horizontal ? 0 : 1]))
+                    || toXY(e._nodeA, spurC(e._nodeA));
+          // Hollow, filled with the CANVAS colour, so it masks the line
+          // behind it and reads on a 4px black trunk as clearly as on a
+          // dotted grey one. A solid dot on its own line's colour is the one
+          // thing that cannot be seen: it is the same ink as what it sits on.
+          // This is the Mini Metro convention — every station is a
+          // paper-filled shape with a heavy outline, and importance is
+          // carried by SIZE, not by fill. Ours run stop < interchange < hub.
+          var dot = svgEl('circle', {
+            cx: dxy[0], cy: dxy[1], r: NODE_R * 0.62,
+            stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8,
+          });
+          dot.style.fill = PAPER;
           dot.setAttribute('data-metro-role', 'stop-start'); dot.setAttribute('data-metro-owner', e.owner);
           svg.appendChild(dot);
         }
