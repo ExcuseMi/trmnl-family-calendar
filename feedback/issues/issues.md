@@ -1,12 +1,5 @@
 # Open
 
-- Merge tracks: when having a joined event, have all the tracks
-  participating next to each other ![alt text](image-1.png)
-
-- Merge duplicate events across tracks: School Day should be the same event
-  for both Bart and Lisa ![alt text](image-1.png). Maybe evenly split
-  between on top or below or depending on what would fit best.
-
 - Improve the fonts: https://trmnl.com/framework/docs/3.3/font_family.
   Partly blocked: the device's Font Family setting (Default / Classic /
   TRMNL) only redefines `--title-*` and `--label-*` for the roles it names,
@@ -18,6 +11,32 @@
   leave the big tiers alone.
 
 # Done
+
+- ~~Merge tracks: a joined event's participants next to each other.~~ The
+  lines are laid out as one chain, strongest shared-event link first, and
+  the board is cut once to split it into two sides. Consecutive pairs stay
+  adjacent, including the pair either side of the spine.
+
+- ~~Merge duplicate events across tracks.~~ Anything with the same title
+  over the same minutes is one event on several lines. A shared station
+  still kinks every line it is on — both children really are at school —
+  but it is captioned once, midway between them.
+
+- ~~Show more of the day if needed.~~ The day stretches to fit what is on
+  it, an hour before the first thing and 90 minutes after the last. That
+  tail is what a late event's label runs into.
+
+- ~~Remove the Timeline Orientation setting.~~ Gone from the plugin
+  settings, the transform and the config editor. The timeline runs along
+  whichever side of the canvas is longer, which is the only answer that is
+  ever right.
+
+- ~~Track name can clip into the river.~~ Where the name would land in the
+  water it goes under its own line instead.
+
+- ~~Event name can cover the train car.~~ The one label the car is under
+  steps back by the car's height, and only where the car actually overlaps
+  it along the axis.
 
 - ~~Let the event title have 2 lines at least.~~ Titles and station captions
   wrap to two lines before they are cut.

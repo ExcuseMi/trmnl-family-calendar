@@ -122,6 +122,21 @@ const fullDay = base({
   ],
 });
 
+// One station shared by two lines: both kink (they really are both there)
+// but it is one event, so one caption, set between them. Drawn once per line
+// it appeared twice, on lines that could be at opposite ends of the board.
+const sharedStation = base({
+  stations: [
+    station('sam', 'School Day', 480, 960, { location: 'Springfield Elementary', group: 'g1' }),
+    station('kids', 'School Day', 480, 960, { location: 'Springfield Elementary', group: 'g1' }),
+  ],
+  items: [
+    ev('Standup', 'work', 540, 555, { track_width: 4 }),
+    ev('Assembly', 'kids', 600, 630, { side: 'right', hue: 'purple-40', track_style: 'dotted', track_offset: 30 }),
+    ev('Swim Training', 'sam', 990, 1050, { side: 'right', hue: 'green-40', track_style: 'dashed', track_offset: 20 }),
+  ],
+});
+
 module.exports = [
   { name: 'busy-day', metro: busyDay },
   { name: 'all-day-every-track', metro: allDayEveryTrack },
@@ -129,4 +144,5 @@ module.exports = [
   { name: 'quiet-day', metro: quietDay },
   { name: 'tight-pair', metro: tightPair },
   { name: 'full-day', metro: fullDay },
+  { name: 'shared-station', metro: sharedStation },
 ];

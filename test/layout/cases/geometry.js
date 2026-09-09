@@ -302,4 +302,40 @@ module.exports = function (test, h) {
         + [...new Set(bad)].slice(0, 5).join('; '));
     });
   }
+
+  test('a station shared by two lines kinks both and is captioned once', () => {
+    // Two children at the same school are two kinks — they really are both
+    // there — but it is one School Day. Drawn once per line the caption
+    // appeared twice, on lines that could be at opposite ends of the board.
+    const f = fixtures.find((x) => x.name === 'shared-station');
+    const rep = layout(f, ROOMY);
+    const captions = textLabels(rep).filter((l) => l.text.indexOf('School Day') >= 0);
+    assert(captions.length === 1,
+      'expected one "School Day" caption for the shared station, got ' + captions.length);
+    // and both lines still leave their baseline for it
+    const kinked = pathsWhere(rep, 'track').filter((t) => {
+      const ys = t.pts.map((q) => q[1]);
+      return Math.max(...ys) - Math.min(...ys) > 6;
+    });
+    assert(kinked.length >= 2,
+      'both lines should kink out to station level, only ' + kinked.length + ' did');
+  });
+
+  for (const f of fixtures) {
+    test('no line name lands in the river: ' + f.name, () => {
+      // The track nearest the spine sits close enough that its name went
+      // into the water with the hour labels, which are the one thing on the
+      // board it must never share space with.
+      const rep = layout(f, ROOMY);
+      const hours = textLabels(rep).filter((l) => (' ' + l.cls + ' ').indexOf(' metro-hour ') >= 0);
+      const names = textLabels(rep).filter((l) => (' ' + l.cls + ' ').indexOf(' metro-terminus ') >= 0);
+      const bad = [];
+      for (const n of names) {
+        for (const h of hours) {
+          if (overlap(n, h)) { bad.push('"' + n.text + '" over "' + h.text + '"'); break; }
+        }
+      }
+      assert(bad.length === 0, bad.length + ' line name(s) in the river: ' + bad.slice(0, 3).join('; '));
+    });
+  }
 };

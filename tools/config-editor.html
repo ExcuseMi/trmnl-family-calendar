@@ -162,8 +162,6 @@
             <option value="hv">OG half (vertical)</option>
             <option value="q">OG quadrant</option>
           </select></div>
-        <div class="field"><label>Orientation</label>
-          <select id="pOrientation"><option value="auto">Auto</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></div>
         <div class="field"><label>Language</label>
           <select id="pLocale"><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option><option value="de">Deutsch</option><option value="nl">Nederlands</option><option value="en-US">English (US, 12h)</option></select></div>
         <div class="field"><label>Clock</label>
@@ -780,7 +778,6 @@
       plugin_settings: { instance_name: "Preview", custom_fields_values: {
         use_demo_data: urls.length ? "false" : "true",
         config_json: JSON.stringify(cfg),
-        orientation: document.getElementById("pOrientation").value,
         time_format: document.getElementById("pTime").value,
         lat_lon: document.getElementById("pLatLon").value.trim(),
       } },
@@ -819,7 +816,7 @@
   // ?demo opens the page with the demo configuration loaded and drawn (also handy for screenshots)
   if (/[?&]demo\b/.test(location.search)) {
     var params = new URLSearchParams(location.search);
-    ["pDevice", "pOrientation", "pLocale", "pTime"].forEach(function (id) { var v = params.get(id.slice(1).toLowerCase()); if (v) document.getElementById(id).value = v; });
+    ["pDevice", "pLocale", "pTime"].forEach(function (id) { var v = params.get(id.slice(1).toLowerCase()); if (v) document.getElementById(id).value = v; });
     if (params.get("now")) document.getElementById("pNow").value = params.get("now");
     document.getElementById("loadDemo").click();
     var wait = setInterval(function () {

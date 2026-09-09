@@ -53,16 +53,6 @@ custom_fields:
   name: Calendar Config (JSON)
   description: 'Only used when Use Demo Data is off. Same shape as this project''s calendar-config.json/demo-config.json (or just paste one ICS URL per line): <br /><code>{"timeZone":"...","rules":[...],"tracks":[{"name":"Sam","color":"blue"}],"calendars":[{"name":"Work","url":"https://.../calendar.ics","headers":{"Authorization":"..."},"includeDescription":false,"rules":[{"match":{"type":"any"},"track":"Sam"}]}]}</code><br />Which side each track renders on is balanced automatically by event count once every calendar loads (busiest first, evenly split) &mdash; set <code>"side": "left"</code> or <code>"right"</code> on a track to pin them instead. The first entry in <code>tracks</code> claims any event no rule assigns. Rule <code>match.type</code>: <code>any</code>/<code>all</code>, <code>exact</code>, <code>word</code>, <code>contains</code>, <code>regex</code>, <code>status</code>, <code>weekday</code>, <code>and</code>/<code>or</code> (with <code>matchers</code>). Actions: <code>track</code> (a name or a list — a list becomes a shared interchange), <code>rename</code>, <code>rewrite</code> (+<code>rewriteFull</code>), <code>hide</code>, <code>allDay</code>. Top-level <code>rules</code> apply to every calendar; a calendar''s own rules win. Set <code>includeDescription: true</code> on a calendar to let its rules also match the event description. Recurring events only show if they use <code>RRULE:FREQ=WEEKLY</code> (optionally with BYDAY/UNTIL) or their start date is today; all-day events are not shown yet. (Legacy configs may use <code>people</code>/<code>person</code> in place of <code>tracks</code>/<code>track</code> &mdash; still accepted.)'
   optional: true
-- keyname: orientation
-  field_type: select
-  name: Timeline Orientation
-  description: Auto runs the timeline left-to-right on a landscape canvas and top-to-bottom on a portrait one. Force one if you prefer.
-  options:
-  - Auto: auto
-  - Horizontal (time runs left to right): horizontal
-  - Vertical (time runs top to bottom): vertical
-  default: auto
-  optional: true
 - keyname: time_format
   field_type: select
   name: Time Format

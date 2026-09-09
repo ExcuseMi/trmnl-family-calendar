@@ -26,10 +26,10 @@ variables:
         config_json: ''
   metro:
     {
-      "day_start_min": 420,
-      "day_end_min": 1260,
+      "day_start_min": 360,
+      "day_end_min": 1380,
       "secondary_threshold_min": 30,
-      "window_label": "07:00 21:00",
+      "window_label": "6am 11pm",
       "date_label": "Tue 8 Sep",
       "now_min": 870,
       "orientation": "auto",
@@ -58,20 +58,20 @@ variables:
           "initial": "H"
         },
         {
-          "key": "p3",
-          "name": "Lisa",
+          "key": "p4",
+          "name": "Maggie",
           "side": "left",
-          "hue": "red-40",
+          "hue": "blue-40",
           "track_offset": -20,
           "line_width": 5.5,
           "line_style": "dashed",
-          "initial": "L"
+          "initial": "M"
         },
         {
           "key": "p1",
           "name": "Marge",
           "side": "right",
-          "hue": "orange-40",
+          "hue": "purple-40",
           "track_offset": 10,
           "line_width": 5,
           "line_style": "dotted",
@@ -81,21 +81,21 @@ variables:
           "key": "p2",
           "name": "Bart",
           "side": "right",
-          "hue": "purple-40",
+          "hue": "red-40",
           "track_offset": 20,
           "line_width": 4.5,
           "line_style": "dashdot",
           "initial": "B"
         },
         {
-          "key": "p4",
-          "name": "Maggie",
+          "key": "p3",
+          "name": "Lisa",
           "side": "right",
           "hue": "cyan-40",
           "track_offset": 30,
           "line_width": 3.5,
           "line_style": "dashed",
-          "initial": "M"
+          "initial": "L"
         }
       ],
       "all_day": [],
@@ -105,14 +105,16 @@ variables:
           "title": "School Day",
           "location": "Springfield Elementary",
           "start_min": 510,
-          "end_min": 900
+          "end_min": 900,
+          "group": "s0"
         },
         {
           "owner": "p3",
           "title": "School Day",
           "location": "Springfield Elementary",
           "start_min": 510,
-          "end_min": 900
+          "end_min": 900,
+          "group": "s0"
         }
       ],
       "items": [
@@ -142,7 +144,7 @@ variables:
             "p3"
           ],
           "side": "right",
-          "hue": "orange-40",
+          "hue": "purple-40",
           "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
@@ -156,7 +158,7 @@ variables:
           "owner": "p1",
           "co_owners": [],
           "side": "right",
-          "hue": "orange-40",
+          "hue": "purple-40",
           "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
@@ -169,11 +171,11 @@ variables:
           "location": null,
           "owner": "p3",
           "co_owners": [],
-          "side": "left",
-          "hue": "red-40",
-          "track_width": 5.5,
+          "side": "right",
+          "hue": "cyan-40",
+          "track_width": 3.5,
           "track_style": "dashed",
-          "track_offset": -20
+          "track_offset": 30
         },
         {
           "type": "event",
@@ -197,11 +199,11 @@ variables:
           "location": null,
           "owner": "p4",
           "co_owners": [],
-          "side": "right",
-          "hue": "cyan-40",
-          "track_width": 3.5,
+          "side": "left",
+          "hue": "blue-40",
+          "track_width": 5.5,
           "track_style": "dashed",
-          "track_offset": 30
+          "track_offset": -20
         },
         {
           "type": "event",
@@ -212,7 +214,7 @@ variables:
           "owner": "p1",
           "co_owners": [],
           "side": "right",
-          "hue": "orange-40",
+          "hue": "purple-40",
           "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
@@ -225,11 +227,11 @@ variables:
           "location": null,
           "owner": "p4",
           "co_owners": [],
-          "side": "right",
-          "hue": "cyan-40",
-          "track_width": 3.5,
+          "side": "left",
+          "hue": "blue-40",
+          "track_width": 5.5,
           "track_style": "dashed",
-          "track_offset": 30
+          "track_offset": -20
         },
         {
           "type": "event",
@@ -254,7 +256,7 @@ variables:
           "owner": "p2",
           "co_owners": [],
           "side": "right",
-          "hue": "purple-40",
+          "hue": "red-40",
           "track_width": 4.5,
           "track_style": "dashdot",
           "track_offset": 20
@@ -268,7 +270,7 @@ variables:
           "owner": "p1",
           "co_owners": [],
           "side": "right",
-          "hue": "orange-40",
+          "hue": "purple-40",
           "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
@@ -281,11 +283,11 @@ variables:
           "location": null,
           "owner": "p3",
           "co_owners": [],
-          "side": "left",
-          "hue": "red-40",
-          "track_width": 5.5,
+          "side": "right",
+          "hue": "cyan-40",
+          "track_width": 3.5,
           "track_style": "dashed",
-          "track_offset": -20
+          "track_offset": 30
         },
         {
           "type": "event",
@@ -296,7 +298,7 @@ variables:
           "owner": "p2",
           "co_owners": [],
           "side": "right",
-          "hue": "purple-40",
+          "hue": "red-40",
           "track_width": 4.5,
           "track_style": "dashdot",
           "track_offset": 20
@@ -323,11 +325,11 @@ variables:
           "location": null,
           "owner": "p3",
           "co_owners": [],
-          "side": "left",
-          "hue": "red-40",
-          "track_width": 5.5,
+          "side": "right",
+          "hue": "cyan-40",
+          "track_width": 3.5,
           "track_style": "dashed",
-          "track_offset": -20
+          "track_offset": 30
         },
         {
           "type": "event",
@@ -343,7 +345,7 @@ variables:
             "p4"
           ],
           "side": "right",
-          "hue": "orange-40",
+          "hue": "purple-40",
           "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10

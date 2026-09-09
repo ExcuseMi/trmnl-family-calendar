@@ -340,9 +340,42 @@ function resolveTz(explicitTzname, input) {
 // itself. See that file's own header comment for the full breakdown.
 // ---------------------------------------------------------------------
 
+function timeLabel12(min, extra) {
+  var h = Math.floor(min / 60) % 24, m = min % 60;
+  if (!(extra && extra.hour12)) return pad2(h) + ':' + pad2(m);
+  return (h % 12 || 12) + (m ? ':' + pad2(m) : '') + (h < 12 ? 'am' : 'pm');
+}
 function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, windowLabel, allDayEvents, extra, stationEvents) {
   var trackByKey = {};
   tracks.forEach(function (t) { trackByKey[t.key] = t; });
+
+  // ---- how much of the day is on the board -----------------------------
+  //
+  // A fixed 7am-to-9pm day cut the ends off: an early shift or a late
+  // dinner fell outside it and became a "+1 later" note. It also left a
+  // late event's label nothing to run into — the last thing on the map
+  // ended AT the edge, so its caption had to be ellipsised or turned back
+  // on itself.
+  //
+  // The day now stretches to fit what is actually on it, an hour before the
+  // first thing and an hour and a half after the last, clamped to real
+  // midnight either way. That tail is the room a label needs. The quiet
+  // ends cost almost nothing to show because the client runs them as
+  // express sections rather than at full scale, so a wider day is mostly a
+  // wider view of the same busy hours.
+  var dayLo = DAY_START_MIN, dayHi = DAY_END_MIN;
+  (events || []).forEach(function (e) {
+    if (e.startMin != null) dayLo = Math.min(dayLo, e.startMin);
+    if (e.endMin != null) dayHi = Math.max(dayHi, e.endMin);
+  });
+  (stationEvents || []).forEach(function (e) {
+    if (e.startMin != null) dayLo = Math.min(dayLo, e.startMin);
+    if (e.endMin != null) dayHi = Math.max(dayHi, e.endMin);
+  });
+  if (nowMin != null) { dayLo = Math.min(dayLo, nowMin); dayHi = Math.max(dayHi, nowMin); }
+  var DAY_LO = Math.max(0, Math.floor((dayLo - 60) / 60) * 60);
+  var DAY_HI = Math.min(24 * 60, Math.ceil((dayHi + 90) / 60) * 60);
+  if (DAY_HI - DAY_LO < 8 * 60) DAY_HI = Math.min(24 * 60, DAY_LO + 8 * 60);
 
   // A configured track with nothing on today's board gets no line and no
   // legend entry — otherwise every day carries every ever-configured
@@ -359,7 +392,13 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     (ev.interchange_with || []).forEach(function (key) { if (trackByKey[key]) activeKeys[key] = true; });
   });
   (allDayEvents || []).forEach(function (ev) { if (trackByKey[ev.track]) activeKeys[ev.track] = true; });
-  (stationEvents || []).forEach(function (ev) { if (trackByKey[ev.track]) activeKeys[ev.track] = true; });
+  (stationEvents || []).forEach(function (ev) {
+    if (trackByKey[ev.track]) activeKeys[ev.track] = true;
+    // a station shared across lines keeps EVERY line it is on: two children
+    // at the same school are both at school, and dropping the co-owner as
+    // "inactive" took away one of the two kinks
+    (ev.interchange_with || []).forEach(function (key) { if (trackByKey[key]) activeKeys[key] = true; });
+  });
   tracks = tracks.filter(function (t) { return activeKeys[t.key]; });
   var sideIdx = { left: 0, right: 0 };
   tracks.forEach(function (t) { t.track_offset = TRACK_STEP * (++sideIdx[t.side]) * (t.side === 'left' ? -1 : 1); });
@@ -394,10 +433,18 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
   // than drawing a diagonal/label run, so a status/location block doesn't
   // compete with real meetings for lane space
   var stationsOut = [];
-  (stationEvents || []).forEach(function (ev) {
-    var track = trackByKey[ev.track];
-    if (!track) return;
-    stationsOut.push({ owner: track.key, title: ev.title, location: ev.location || null, start_min: ev.startMin, end_min: ev.endMin });
+  (stationEvents || []).forEach(function (ev, gi) {
+    var owners = [ev.track].concat(ev.interchange_with || []).filter(function (k) { return trackByKey[k]; });
+    if (!owners.length) return;
+    // One station on several lines is still a kink on EACH of them — they
+    // are all really at school — but it is one event, so it gets one
+    // caption. The group id is what lets the client draw the kinks per line
+    // and the caption once.
+    var group = owners.length > 1 ? 's' + gi : null;
+    owners.forEach(function (k) {
+      stationsOut.push({ owner: k, title: ev.title, location: ev.location || null,
+        start_min: ev.startMin, end_min: ev.endMin, group: group });
+    });
   });
   // An all-day event is ALSO a station on its owner's line, spanning the
   // whole day — this now REPLACES the old header-strip rendering (an
@@ -416,7 +463,7 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     var key = ev.title + '|' + track.key;
     if (seenAllDay[key]) return;
     seenAllDay[key] = true;
-    stationsOut.push({ owner: track.key, title: ev.title, location: null, start_min: DAY_START_MIN, end_min: DAY_END_MIN, all_day: true });
+    stationsOut.push({ owner: track.key, title: ev.title, location: null, start_min: DAY_LO, end_min: DAY_HI, all_day: true });
   });
 
   (weatherMilestones || []).forEach(function (w) {
@@ -432,10 +479,12 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
   items.forEach(function (item) { delete item._sortMin; });
 
   return {
-    day_start_min: DAY_START_MIN,
-    day_end_min: DAY_END_MIN,
+    day_start_min: DAY_LO,
+    day_end_min: DAY_HI,
     secondary_threshold_min: SECONDARY_THRESHOLD_MIN, // sub-spur grouping window — client decides sub-spurs, but this constant is config, not geometry
-    window_label: windowLabel,
+    // the day the board actually shows, computed here rather than by the
+    // caller, which cannot know it until the events are in
+    window_label: timeLabel12(DAY_LO, extra) + ' ' + timeLabel12(DAY_HI, extra),
     date_label: (extra && extra.dateLabel) || null,
     now_min: nowMin != null ? nowMin : null, // minutes since local midnight; the client decides whether/where to draw it
     orientation: (extra && extra.orientation) || 'auto', // auto | horizontal | vertical — client picks for auto from the canvas aspect
@@ -1154,31 +1203,109 @@ function makeTrackRegistry(parsed) {
     return (c && (c.side === 'left' || c.side === 'right')) ? c.side : null;
   }
 
-  function finalize() {
-    var loadLeft = 0, loadRight = 0;
-    var decided = {};
-    order.forEach(function (name) {
-      var s = explicitSide(name);
-      if (s) { decided[name] = s; if (s === 'left') loadLeft += counts[name]; else loadRight += counts[name]; }
-    });
-    order.filter(function (name) { return !decided[name]; })
-      .sort(function (a, b) { return counts[b] - counts[a]; }) // heaviest first — best balance from a greedy assignment
-      .forEach(function (name) {
-        var s = loadLeft <= loadRight ? 'left' : 'right';
-        decided[name] = s;
-        if (s === 'left') loadLeft += counts[name]; else loadRight += counts[name];
-      });
+  // How often two tracks are in the same place at the same time. Every
+  // shared event links each pair it joins, and those links decide the ORDER
+  // the lines are laid out in: a family that eats dinner together should not
+  // have to read across two other people's days to see that they did.
+  var affinity = {};
+  function pairKey(a, b) { return a < b ? a + '\u0000' + b : b + '\u0000' + a; }
+  function link(names, weight) {
+    for (var i = 0; i < names.length; i++) {
+      for (var j = i + 1; j < names.length; j++) {
+        var k = pairKey(names[i], names[j]);
+        affinity[k] = (affinity[k] || 0) + (weight == null ? 1 : weight);
+      }
+    }
+  }
+  function affinityOf(a, b) { return affinity[pairKey(a, b)] || 0; }
 
-    var sideIdx = { left: 0, right: 0 };
-    order.forEach(function (name, i) {
-      var t = byName[name], side = decided[name], idx = sideIdx[side]++;
+  // Lay the tracks out as ONE chain, strongest link first, then extended at
+  // whichever end offers the strongest next link. The board is a chain too —
+  // outermost left ... innermost left, spine, innermost right ... outermost
+  // right — so a chain laid along it keeps every consecutive pair adjacent,
+  // including the pair either side of the spine. Cutting it anywhere gives a
+  // valid two-sided layout, which is what lets the split be chosen for
+  // balance without disturbing the order.
+  function affinityChain() {
+    var left = order.slice();
+    if (left.length < 3) return left;
+    var best = null;
+    for (var i = 0; i < left.length; i++) {
+      for (var j = i + 1; j < left.length; j++) {
+        var w = affinityOf(left[i], left[j]);
+        if (!best || w > best.w || (w === best.w && counts[left[i]] + counts[left[j]] > best.c)) {
+          best = { a: left[i], b: left[j], w: w, c: counts[left[i]] + counts[left[j]] };
+        }
+      }
+    }
+    var chain = [best.a, best.b];
+    left = left.filter(function (n) { return n !== best.a && n !== best.b; });
+    while (left.length) {
+      var pick = null;
+      left.forEach(function (n) {
+        [['head', chain[0]], ['tail', chain[chain.length - 1]]].forEach(function (endp) {
+          var w = affinityOf(n, endp[1]);
+          if (!pick || w > pick.w || (w === pick.w && counts[n] > counts[pick.n])) {
+            pick = { n: n, end: endp[0], w: w };
+          }
+        });
+      });
+      if (pick.end === 'head') chain.unshift(pick.n); else chain.push(pick.n);
+      left = left.filter(function (n) { return n !== pick.n; });
+    }
+    return chain;
+  }
+
+  function finalize() {
+    var chain = affinityChain();
+    var total = chain.reduce(function (a, n) { return a + counts[n]; }, 0);
+
+    // Cut the chain once. Everything before the cut goes left, everything
+    // after goes right, and the chain's order is preserved on the board. The
+    // cut is chosen to balance the two sides AND to fall on a weak link, so
+    // the people who are together most stay on one side of the spine; an
+    // explicit `side` in the config rules out any cut that would contradict
+    // it, and if nothing satisfies every pin the balance alone decides.
+    // k runs from -1 (everything right) to length-1 (everything left), so a
+    // board where every track is pinned to one side still has a cut that
+    // honours the pins. The balance term makes those ends expensive, so they
+    // only win when nothing else satisfies the pins.
+    var bestCut = null;
+    for (var k = -1; k < chain.length; k++) {
+      var leftNames = chain.slice(0, k + 1), rightNames = chain.slice(k + 1);
+      var pinOk = leftNames.every(function (n) { return explicitSide(n) !== 'right'; })
+               && rightNames.every(function (n) { return explicitSide(n) !== 'left'; });
+      var lw = leftNames.reduce(function (a, n) { return a + counts[n]; }, 0);
+      var edge = (k < 0 || k >= chain.length - 1);
+      var cost = Math.abs(lw - (total - lw))
+               + (edge ? 0 : affinityOf(chain[k], chain[k + 1]) * 3);
+      if (!bestCut || (pinOk && !bestCut.pinOk) || (pinOk === bestCut.pinOk && cost < bestCut.cost)) {
+        bestCut = { k: k, cost: cost, pinOk: pinOk };
+      }
+    }
+    var cut = bestCut ? bestCut.k : Math.floor((chain.length - 1) / 2);
+
+    // The map's anchor line: black and boldest. The first track the config
+    // names, which is also the one any unassigned event falls back to — the
+    // household's main line. Failing that (a config that names no tracks at
+    // all, or lists none that survived), the busiest line. It used to be
+    // whichever line happened to sit innermost-left, which the chain no
+    // longer decides by load.
+    var configured0 = order.filter(function (n) { return parsed.tracks[n.toLowerCase()]; })[0];
+    var anchor = configured0 || chain.slice().sort(function (a, b) { return counts[b] - counts[a]; })[0];
+
+    var boardOrder = chain.slice();
+    boardOrder.forEach(function (name, pos) {
+      var t = byName[name];
+      var side = pos <= cut ? 'left' : 'right';
+      // the chain runs outward-left to outward-right, so the slot nearest
+      // the spine is the LAST left entry and the FIRST right one
+      var idx = side === 'left' ? cut - pos : pos - cut - 1;
       var configured = parsed.tracks[name.toLowerCase()];
       t.side = side;
       t.track_offset = TRACK_STEP * (idx + 1) * (side === 'left' ? -1 : 1);
-      // the side's anchor line (first-placed, whichever side that ends up
-      // being) is black/bold; everyone else cycles hues in registration order
-      t.hue = (configured && hueTokenForColor(configured.color)) || (side === 'left' && idx === 0 ? 'black' : HUE_CYCLE[i % HUE_CYCLE.length]);
-      t.line_width = (side === 'left' && idx === 0) ? 6 : 4.5;
+      t.hue = (configured && hueTokenForColor(configured.color)) || (name === anchor ? 'black' : HUE_CYCLE[pos % HUE_CYCLE.length]);
+      t.line_width = name === anchor ? 6 : 4.5;
       t.initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
     });
     // Dash patterns are handed out GLOBALLY, in the order the lines appear on
@@ -1190,11 +1317,6 @@ function makeTrackRegistry(parsed) {
     //
     // Past a full lap of the four patterns the lines also thin out, so a
     // sixth track is a thinner dashed rather than a second identical one.
-    var boardOrder = order.slice().sort(function (a, b) {
-      var ta = byName[a], tb = byName[b];
-      if (ta.side !== tb.side) return ta.side === 'left' ? -1 : 1;
-      return Math.abs(ta.track_offset) - Math.abs(tb.track_offset);
-    });
     // Weight is the other half of telling lines apart. Every line is solid
     // and thick, so the ladder runs heavy to light in board order and pairs
     // with the four treatments — a reader separating two lines has both a
@@ -1203,7 +1325,7 @@ function makeTrackRegistry(parsed) {
     var styleIdx = 0;
     boardOrder.forEach(function (name) {
       var t = byName[name];
-      if (t.side === 'left' && Math.abs(t.track_offset) === TRACK_STEP) { t.line_style = 'solid'; return; }
+      if (name === anchor) { t.line_style = 'solid'; return; }
       var lap = Math.floor(styleIdx / (LINE_STYLES.length - 1));
       t.line_style = LINE_STYLES[1 + (styleIdx % (LINE_STYLES.length - 1))];
       t.line_width = WEIGHTS[Math.min(styleIdx, WEIGHTS.length - 1)];
@@ -1214,6 +1336,7 @@ function makeTrackRegistry(parsed) {
 
   return {
     add: add,
+    link: link,
     byName: byName,
     finalize: finalize,
     all: function () {
@@ -1281,6 +1404,7 @@ async function buildFromConfig(input, parsed, weather, extra) {
         // toward side balancing — they have a ring there too, but it's not
         // "their" event the way the primary owner's is
         var interchangeWith = trackNames.slice(1).map(function (n) { return registry.add(n, 0.5).key; });
+        if (trackNames.length > 1) registry.link(trackNames);
         events.push({
           track: primary.key,
           interchange_with: interchangeWith.length ? interchangeWith : undefined,
@@ -1301,6 +1425,46 @@ async function buildFromConfig(input, parsed, weather, extra) {
       // one calendar failing shouldn't blank the whole render — skip it
     }
   }));
+
+  // ---- one event, drawn once -------------------------------------------
+  //
+  // Two calendars can describe the SAME thing. Bart's "L6 School Day" and
+  // Lisa's "L2 School Day" both rename to "School Day", run the same hours,
+  // and are the same school day — but they arrived as two events and were
+  // drawn as two stations with two captions, on lines that could be at
+  // opposite ends of the board. Anything with the same title over the same
+  // minutes is one event on several lines.
+  //
+  // Merging them here rather than in the template also means the layout
+  // learns that those two people are together, which is what decides the
+  // order the lines are laid out in.
+  function mergeAcrossTracks(list) {
+    var byWhat = {}, out = [];
+    list.forEach(function (ev) {
+      var k = ev.title + '\u0000' + ev.startMin + '\u0000' + ev.endMin;
+      var seen = byWhat[k];
+      if (!seen) { byWhat[k] = ev; out.push(ev); return; }
+      var mine = [seen.track].concat(seen.interchange_with || []);
+      if (mine.indexOf(ev.track) >= 0) return;             // the same track twice: a duplicate, drop it
+      seen.interchange_with = (seen.interchange_with || []).concat([ev.track]);
+      if (!seen.location && ev.location) seen.location = ev.location;
+    });
+    return out;
+  }
+  var keyToName = {};
+  Object.keys(registry.byName).forEach(function (n) { keyToName[registry.byName[n].key] = n; });
+  function linkMerged(list) {
+    list.forEach(function (ev) {
+      if (!ev.interchange_with || !ev.interchange_with.length) return;
+      var names = [ev.track].concat(ev.interchange_with)
+        .map(function (k) { return keyToName[k]; }).filter(Boolean);
+      if (names.length > 1) registry.link(names);
+    });
+  }
+  events = mergeAcrossTracks(events);
+  stationEvents = mergeAcrossTracks(stationEvents);
+  linkMerged(events);
+  linkMerged(stationEvents);
 
   events.sort(function (a, b) { return a.startMin - b.startMin; });
   registry.finalize(); // every calendar is in and every event tallied — decide sides now
@@ -1326,8 +1490,12 @@ async function run(input) {
   var useDemo = useDemoRaw !== 'false'; // default true (demo) unless explicitly turned off
   var configRaw = cf(input, 'config_json').trim();
   var latLonRaw = cf(input, 'lat_lon').trim();
-  var orientationRaw = cf(input, 'orientation').trim().toLowerCase();
-  var orientation = (orientationRaw === 'horizontal' || orientationRaw === 'vertical') ? orientationRaw : 'auto';
+  // The timeline runs along whichever side of the canvas is longer. That is
+  // the only answer that is ever right — a vertical timeline on a landscape
+  // panel wastes most of the board — so it is no longer a setting to get
+  // wrong. The field still travels in the payload, always 'auto', because
+  // the template reads it and a device on an older build still sends one.
+  var orientation = 'auto';
   // Parse once, up front: locale, zone and clock all come from the config
   // when it sets them, and the demo is driven by a config too, so both paths
   // read the same three settings from the same place. (Demo mode may still

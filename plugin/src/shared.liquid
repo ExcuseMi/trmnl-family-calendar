@@ -269,6 +269,15 @@
     var t = treatmentFor(p.line_style, S, p.line_width);
     if (!t) return node;
     node.setAttribute('stroke-width', p.line_width * S + t.widen);
+    // A treated line ends FLUSH, not with a round cap. The cap sticks out
+    // half a stroke width past where the path stops, and the paper core cut
+    // out of it does not — so every place one drawn piece met another (a
+    // ramp's lead-in landing on the trunk, its tail meeting the lane spine)
+    // a solid bar appeared across the pattern, breaking the line's texture
+    // on both the branch and the track it came off. Ending flush lets the
+    // next piece pick the pattern straight up. Bends are unaffected: those
+    // are joins, and stroke-linejoin still rounds them.
+    node.setAttribute('stroke-linecap', 'butt');
     var ov = node.cloneNode(false);
     ov.removeAttribute('data-metro-role');
     ov.removeAttribute('data-metro-owner');
@@ -578,7 +587,7 @@
     LEGEND.forEach(function (p) {
       p._stations = p._stations.map(function (st) {
         var a0 = clamp(aFor(st.start_min), axisStart, axisEnd), a1 = clamp(aFor(st.end_min), axisStart, axisEnd);
-        return { a0: a0, a1: a1, title: st.title, location: st.location || null, allDay: !!st.all_day };
+        return { a0: a0, a1: a1, title: st.title, location: st.location || null, allDay: !!st.all_day, group: st.group || null };
       }).filter(function (s) { return s.a1 > s.a0; });
     });
     // the raise (in c-units) a track's own line sits at, at a given axis
@@ -1420,8 +1429,10 @@
     //
     // Banks are strokes with a pale fill between them, so on a 1-bit panel
     // the fill dithers away and the banks still read.
+    var riverHalf = 0;
     (function drawTimeRiver() {
       var half = Math.max(gutterHalf * 1.35, hourH * 0.9);
+      riverHalf = half;
       var amp = Math.min(half * 0.35, TRACK_STEP * 0.4);
       // The two banks used to carry the SAME wave, so the whole river
       // translated up and down while the hour labels stayed on the spine —
@@ -1558,9 +1569,20 @@
             if (lc < nameC) nameC = lc;
           }
         }
-        var nameXY = toXY(nameA, horizontal
-          ? nameC - nameThick - NODE_R - 2 * S
-          : nameC - nameThick / 2);
+        // Above the line by default, but never INTO the river: the track
+        // nearest the spine sits close enough that its name landed in the
+        // water with the hour labels. Where it would, it goes under its own
+        // line instead — still touching the line it names, and the only
+        // other place nothing else uses at the head of the map.
+        var nameOff = -(nameThick + NODE_R + 2 * S);
+        if (horizontal && nameC + nameOff < spineC + riverHalf && nameC > spineC - riverHalf) {
+          nameOff = NODE_R + 2 * S;
+        } else if (horizontal && nameC + nameOff < spineC + riverHalf
+                   && nameC + nameOff + nameThick > spineC - riverHalf) {
+          nameOff = -(nameThick + NODE_R + 2 * S) - (spineC - riverHalf - (nameC + nameOff));
+          if (nameC + nameOff < 0) nameOff = NODE_R + 2 * S;
+        }
+        var nameXY = toXY(nameA, horizontal ? nameC + nameOff : nameC - nameThick / 2);
         p._nameEl.style.left = nameXY[0] + 'px';
         p._nameEl.style.top = nameXY[1] + 'px';
         var far = d > 0 ? axisEnd : axisStart;
@@ -1607,10 +1629,25 @@
     // Sitting past the shelf instead means the caption only ever needs
     // clearance from the ONE flat line directly below it, guaranteed by
     // STATION_LABEL_ROOM (computed from this same real measured height).
+    // One event, one caption. Two children at the same school are two kinks
+    // — they really are both there — but it is one School Day, and drawn
+    // once per line it appeared twice, on lines that could be at opposite
+    // ends of the board. The caption is drawn once for the group and set
+    // midway between the lines it belongs to, so it reads as theirs jointly
+    // rather than as one child's with a stray copy.
+    var capGroups = {};
+    LEGEND.forEach(function (p) {
+      p._stations.forEach(function (s) {
+        if (!s.group) return;
+        (capGroups[s.group] = capGroups[s.group] || []).push(p);
+      });
+    });
     LEGEND.forEach(function (p) {
       var baseC = spineC + p._c;
       p._stations.forEach(function (s) {
         var raise = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
+        var members = s.group ? capGroups[s.group] : null;
+        var ownsCaption = !members || members[0] === p;
         [s.a0, s.a1].forEach(function (a) {
           // a ring marks a real boundary time. Where a station runs to the
           // edge of the visible window — an all-day band always does, and
@@ -1635,6 +1672,7 @@
           sring.setAttribute('data-metro-role', 'station-ring'); sring.setAttribute('data-metro-owner', p.key);
           svg.appendChild(sring);
         });
+        if (!ownsCaption) return;   // the rings above are per line; the caption is not
         var box = el('div', 'metro-gen metro-label absolute bg--white text--black');
         // Lying down a caption may run as long as its station; standing up
         // it has only the column between two lines, so cap it there or two
@@ -1677,6 +1715,11 @@
         // span, so the caption lands in a gap nothing else is using — no
         // clearance arithmetic, and no line to clip through the text
         var midC = baseC;
+        if (members && members.length > 1) {
+          var sum = 0;
+          members.forEach(function (q) { sum += spineC + q._c; });
+          midC = sum / members.length;
+        }
         if (horizontal) {
           box.style.left = capA + 'px';
           box.style.top = (midC - bm.h / 2) + 'px';
@@ -2062,14 +2105,37 @@
     }
 
     // ---- labels: position the measured boxes
+    //
+    // The car stands ON its rail and the label sits just clear of the same
+    // rail on the same side, so where the car is riding a spur the label
+    // covered it: the labels are HTML over the SVG, and an opaque box wins.
+    // The one label the car is under steps back by the car's height. Only
+    // that one, and only where the car actually overlaps it along the axis
+    // — reserving the clearance on every lane would cost the whole board a
+    // car's height for one train.
+    var carRider = null, carA = null;
+    if (nowA != null) {
+      visible.forEach(function (e) {
+        if (e._dropped || carRider) return;
+        if (nowA < e._nodeA - 1 || nowA > e._endA + 1) return;
+        if (nowA < Math.min(e._lineFrom, e._lineTo) - 1 || nowA > Math.max(e._lineFrom, e._lineTo) + 1) return;
+        carRider = e; carA = nowA;
+      });
+    }
+    var CAR_CLEAR = NODE_R * 2.4 + 2 * S;
     visible.forEach(function (e) {
       if (e._dropped) return;
       var sign = e._sign, b = e._box;
       var lineC = spineC + sign * e._laneDist;
+      var duck = 0;
+      if (e === carRider && horizontal
+          && carA + CAR_CLEAR > e._textStart && carA - CAR_CLEAR < e._textStart + e._textLen) {
+        duck = CAR_CLEAR;
+      }
       if (horizontal) {
         b.style.left = e._textStart + 'px';
-        if (sign < 0) b.style.top = (lineC - LINE_GAP - e._h) + 'px';
-        else b.style.top = (lineC + LINE_GAP) + 'px';
+        if (sign < 0) b.style.top = (lineC - LINE_GAP - duck - e._h) + 'px';
+        else b.style.top = (lineC + LINE_GAP + duck) + 'px';
       } else {
         b.style.top = e._textStart + 'px';
         if (sign < 0) b.style.left = (lineC - LINE_GAP - colW) + 'px';
