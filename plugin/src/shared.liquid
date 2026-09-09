@@ -852,13 +852,18 @@
         // were read off the board as the wrong time, which is the one thing
         // this map cannot get wrong.
         //
-        // So there is no lead. Every branch drops (or climbs) perpendicular
-        // at its start and turns flat at the corner: a shared event does it
-        // on the interchange tie that is already drawn there, a solo one on
-        // its own tick. The angle is no longer 45° and no longer constant,
-        // and that is the trade being made — an honest right angle over a
-        // pretty diagonal that lies about when.
-        var elbow = e._nodeA;
+        // So there is no lead beyond the bend itself. The elbow sits ONE
+        // CORNER RADIUS before the start, which is exactly the run the bend
+        // needs, so the line has finished turning by the event's own minute
+        // and the flat rail begins there. Two things follow: the flat run is
+        // the event's duration and nothing else, and the start mark lands on
+        // flat rail rather than on the curve — on the bend it read as a bead
+        // threaded on the corner instead of a stop on a line.
+        //
+        // A corner radius is a fixed few px whatever the lane depth, which
+        // is the whole difference from the old lead: that one grew with the
+        // depth, so a deep lane meant leaving an hour early.
+        var elbow = e._nodeA - dir * CORNER;
         var L = lane(k), len = e._textLen;
         var elbow0 = elbow;
         var natural = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len;
@@ -915,7 +920,29 @@
         // branch on the board went vertical at once.
         var LEAD_CAP = Math.max(2 * CORNER, MIN_DIAG);
         var diagFrom = dy <= LEAD_CAP ? elbow - dir * dy : elbow;
-        diagFrom = clamp(diagFrom, axisStart + 2 * CORNER, axisEnd - 2 * CORNER);
+        // A ramp needs FLAT trunk to leave from. Reaching back into a
+        // station's own kink, it left at a point the line had not finished
+        // climbing to, so the drop it had to make was bigger than the run it
+        // had to make it in: the ramp came out steeper than 45°, parallel to
+        // the kink it was standing on, and the two read as one long climb
+        // with the shelf appearing out of nowhere partway up. Assembly at
+        // 9am, branching off the middle of School Day's kink, was drawn that
+        // way. Where the trunk is not level across the lead, drop vertically
+        // at the event's own minute instead — the shape that needs no run.
+        var leadTrack = trackByKey[e._laneOwner] || e._p;
+        if (diagFrom !== elbow
+            && Math.abs(stationRaiseAt(leadTrack, diagFrom) - stationRaiseAt(leadTrack, elbow)) > 0.5) {
+          diagFrom = elbow;
+        }
+        // And it needs board to leave from. A 45° ramp for an event in the
+        // first minutes of the day starts off the left edge; squeezing it
+        // onto the canvas leaves a diagonal at some third angle that reads
+        // as neither of the two shapes this map draws. Vertical instead —
+        // which needs no run at all, so it always fits.
+        if (diagFrom !== elbow
+            && (diagFrom < axisStart + 2 * CORNER || diagFrom > axisEnd - 2 * CORNER)) {
+          diagFrom = elbow;
+        }
         if (dir > 0 ? diagFrom > elbow : diagFrom < elbow) diagFrom = elbow;
         var sp = span(ts);
         for (var j = 0; j < L.items.length; j++) {
@@ -1657,14 +1684,25 @@
       return path;
     }
 
-    // The vertices of a departure: trunk lead-in, the point it leaves the
-    // trunk, the point it arrives in the lane, and a tail along the lane.
-    // `aFrom`/`cFrom` is where the line REALLY is at the departure, which on
-    // a track passing through one of its own stations is the raised shelf,
-    // not the baseline.
-    function rampOut(aFrom, cFrom, aElbow, laneC, dir) {
-      return [[aFrom - dir * RAMP_LEAD, cFrom], [aFrom, cFrom],
-              [aElbow, laneC], [aElbow + dir * RAMP_LEAD, laneC]];
+    // The vertices of a departure: the trunk lead-in, the point it leaves
+    // the trunk, the point it arrives in the lane, and a tail along the lane.
+    //
+    // The lead-in is a SLICE OF THE TRUNK, not a straight line at the
+    // trunk's height where the branch leaves. Those are the same thing only
+    // while the trunk is level, and it is not level inside one of its own
+    // station kinks: Assembly at 9am left a School Day shelf that had only
+    // existed since 8:57, so its lead-in was drawn flat across the last of
+    // the climb, floating above the line, and the kink's diagonal appeared
+    // to run straight into Assembly's own drop. Taking the trunk's real
+    // breakpoints over that window makes the lead-in lie on the line
+    // whatever the line is doing there — which is the whole point of it.
+    function trunkSlice(p, a0, a1) {
+      var pts = stationPath(spineC + p._c, p._sign, Math.min(a0, a1), Math.max(a0, a1), p);
+      return a1 < a0 ? pts.slice().reverse() : pts;
+    }
+    function rampOut(p, aFrom, aElbow, laneC, dir) {
+      return trunkSlice(p, aFrom - dir * RAMP_LEAD, aFrom)
+        .concat([[aElbow, laneC], [aElbow + dir * RAMP_LEAD, laneC]]);
     }
 
     // ---- branches: every ring gets its 45° diagonal; same-owner spurs that
@@ -1737,8 +1775,7 @@
         var sorted = g.members.slice().sort(function (a, b) { return a._elbow - b._elbow; });
         var head = sorted[0];
         head._ownRamp = true;
-        var trunkC = lineCAt(p, head._diagFrom);
-        head._rampEl = drawRamp(p, rampOut(head._diagFrom, trunkC, head._elbow, laneC, head._dir),
+        head._rampEl = drawRamp(p, rampOut(p, head._diagFrom, head._elbow, laneC, head._dir),
                  head._diagFrom - head._dir * RAMP_LEAD, 'fork', head._laneOwner);
         bridge(head._elbow + RAMP_LEAD, g.to);
         if (g.to > head._elbow + CORNER + 1) terminus(g.to, laneC, p);
@@ -1754,11 +1791,9 @@
       // taken from the trunk at the departure — the lead-in there is the
       // longer of the two trunk overlays and the one an eye follows into
       // the bend.
-      var fromC = lineCAt(p, e._diagFrom);
-      var backC = lineCAt(p, e._mergeAt);
-      var loop = [[e._diagFrom - e._dir * RAMP_LEAD, fromC], [e._diagFrom, fromC],
-                  [e._elbow, laneC], [e._lineTo, laneC],
-                  [e._mergeAt, backC], [e._mergeAt + e._dir * RAMP_LEAD, backC]];
+      var loop = trunkSlice(p, e._diagFrom - e._dir * RAMP_LEAD, e._diagFrom)
+        .concat([[e._elbow, laneC], [e._lineTo, laneC]],
+                trunkSlice(p, e._mergeAt, e._mergeAt + e._dir * RAMP_LEAD));
       e._rampEl = drawRamp(p, loop, e._diagFrom - e._dir * RAMP_LEAD, 'branch', p.key);
     });
 
@@ -1790,6 +1825,11 @@
           'stroke-width': NODE_STROKE * 0.7, 'stroke-linecap': 'round',
           'stroke-dasharray': (NODE_STROKE * 1.2) + ' ' + (NODE_STROKE * 1.6),
         });
+        // Ink, explicitly. Without a stroke an SVG line is drawn with
+        // nothing at all: the tie was in the DOM, the right length, in the
+        // right place, and completely invisible — leaving three rings on
+        // three lines with no visible reason to be there.
+        tie.style.stroke = INK;
         tie.setAttribute('data-metro-role', 'capsule'); tie.setAttribute('data-metro-owner', e.owner);
         svg.appendChild(tie);
         cs.forEach(function (c) {

@@ -179,6 +179,23 @@ const REPORTER = `
         owner: el.getAttribute('data-metro-owner') || null
       }));
     });
+    // Every drawn thing, with the paint it ACTUALLY got. An SVG shape with
+    // neither stroke nor fill is in the DOM, the right size, in the right
+    // place, and invisible — which is how the interchange tie disappeared.
+    var painted = [];
+    svg.querySelectorAll('[data-metro-role]').forEach(function (el) {
+      var cs = getComputedStyle(el);
+      var r = el.getBoundingClientRect();
+      painted.push({
+        role: el.getAttribute('data-metro-role'),
+        owner: el.getAttribute('data-metro-owner') || null,
+        tag: el.tagName.toLowerCase(),
+        stroke: cs.stroke, fill: cs.fill,
+        strokeWidth: parseFloat(cs.strokeWidth) || 0,
+        opacity: parseFloat(cs.opacity),
+        w: r.width, h: r.height
+      });
+    });
     var dbg = null;
     try { dbg = JSON.parse(canvas.getAttribute('data-metro-debug')); } catch (e) {}
     if (dbg) dbg.runs = window.__metroRuns || 0;
@@ -187,7 +204,7 @@ const REPORTER = `
     out.id = 'metro-report';
     out.textContent = JSON.stringify({
       canvas: { w: cr.width, h: cr.height },
-      debug: dbg, labels: labels, paths: paths, rects: rects,
+      debug: dbg, labels: labels, paths: paths, rects: rects, painted: painted,
       circles: circles.concat(shapeMarkers)
     });
     document.body.appendChild(out);

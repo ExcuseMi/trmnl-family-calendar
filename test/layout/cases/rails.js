@@ -137,9 +137,12 @@ module.exports = function (test, h) {
       const bad = [];
       for (const e of drops) {
         const laneY = (rep.debug.spineC + e.sign * e.laneDist) * Z;
-        // only the stretch just before the corner, at that lane's own height:
-        // far-off events on the same lane are somebody else's business
-        const from = (e.elbow - 22) * Z, to = (e.elbow * Z) - 3;
+        // Only the corner's own width before the drop, at that lane's own
+        // height. The artefact this guards against is a stub of exactly one
+        // corner radius attached to the drop; widen the window much past
+        // that and it starts flagging the tail of the PREVIOUS event's rail
+        // in the same lane, which is simply two rails near each other.
+        const from = (e.elbow - 12) * Z, to = (e.elbow * Z) - 3;
         for (const p of lines) {
           for (const pt of p.pts) {
             if (pt[0] >= from && pt[0] <= to && Math.abs(pt[1] - laneY) < 4) {
