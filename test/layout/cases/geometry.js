@@ -132,7 +132,10 @@ module.exports = function (test, h) {
             if ((a[0] * b[0] + a[1] * b[1]) / (la * lb) < 0) { through = true; break; }
           }
         }
-        if (!through) oneSided.push('(' + Math.round(cx) + ',' + Math.round(cy) + ')');
+        // A stop tick may legitimately be the LAST thing on its rail — the
+        // rail ends when the event does — so only the markers that are
+        // always mid-line have to have line on both sides of them.
+        if (!through && c.role !== 'stop') oneSided.push('(' + Math.round(cx) + ',' + Math.round(cy) + ')');
       }
       assert(missed.length === 0, missed.length + ' ring(s) not centred on any line: ' + missed.slice(0, 6).join('; '));
       assert(oneSided.length === 0, oneSided.length + ' ring(s) with line on one side only: ' + oneSided.slice(0, 6).join('; '));

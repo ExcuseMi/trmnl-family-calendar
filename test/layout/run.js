@@ -144,6 +144,13 @@ const REPORTER = `
     // diamond) still have to sit on their line, so report them as markers
     // too — by their bounding box, whose centre is the shape's centre
     var shapeMarkers = [];
+    svg.querySelectorAll('g[data-metro-role="car"]').forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      shapeMarkers.push(Object.assign(rel(r), {
+        role: 'car', owner: el.getAttribute('data-metro-owner') || null,
+        fill: el.getAttribute('fill') || null
+      }));
+    });
     svg.querySelectorAll('path[data-metro-role="station-ring"], line[data-metro-role="stop"]').forEach(function (el) {
       shapeMarkers.push(Object.assign(rel(el.getBoundingClientRect()), {
         role: el.getAttribute('data-metro-role'), owner: el.getAttribute('data-metro-owner') || null

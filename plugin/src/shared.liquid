@@ -388,13 +388,21 @@
     LEGEND.forEach(function (p) {
       var n = el('span', 'metro-gen metro-terminus label label--small font--bold text--black absolute bg--white');
       n.textContent = p.name;
+      // Standing up, the lines are only a track-step apart across the map
+      // while the names are words wide, so laid flat they pile into each
+      // other. Set along the line instead, the way a vertical transit
+      // diagram letters its termini: the name is then only a line-height
+      // wide and cannot reach its neighbour.
+      if (!horizontal) n.style.writingMode = 'vertical-rl';
       canvas.appendChild(n);
       var m = measure(n);
       p._nameEl = n; p._nameW = m.w; p._nameH = m.h;
     });
     var nameH = LEGEND.length ? Math.max.apply(null, LEGEND.map(function (p) { return p._nameH; })) : 0;
     var maxNameW = LEGEND.length ? Math.max.apply(null, LEGEND.map(function (p) { return p._nameW; })) : 0;
-    var nameCol = LEGEND.length ? 2 * S + maxNameW + 6 * S : 0;
+    // room at the head of the axis for each line's name — the name's extent
+    // ALONG the axis, which is its width lying down and its height standing up
+    var nameCol = LEGEND.length ? 2 * S + (horizontal ? maxNameW : nameH) + 6 * S : 0;
     var axisStart = NODE_R + 2 * S + nameCol, axisEnd = axisPx - NODE_R - 2 * S; // rings at the window edges stay whole; tracks still run full bleed
     function aFor(min) { return axisStart + (min - winStart) / (winEnd - winStart) * (axisEnd - axisStart); }
     var pxPerHour = aFor(60) - aFor(0);
@@ -833,14 +841,22 @@
           }
         }
         var lineA = best.dir > 0 ? best.elbow - CORNER : e._textStart - TAIL;
-        var lineB = best.dir > 0 ? e._textStart + e._textLen + TAIL : best.elbow + CORNER;
+        // The rail stops when the event does. It used to run on to wherever
+        // the label finished, which drew a line through time the event does
+        // not occupy — the whole point of putting ticks at the true start
+        // and end was to stop the spur implying a duration it never had.
+        // The label may overhang; the rail may not. (It still has to clear
+        // its own corner, so a five-minute event gets a short stub.) Only
+        // the rail shrinks: the label keeps its own reservation in the lane,
+        // so nothing else moves in on top of the text.
+        var lineB = best.dir > 0 ? Math.max(e._endA, best.elbow + CORNER) : best.elbow + CORNER;
         // a lone forward branch rejoins the owner's line at the end time when
         // the event runs long enough; anything else ends in a stub
         e._merge = false;
         if (best.dir > 0 && !best.joined) {
           var mergeDy = Math.max(best.ld - e._trackDistEnd, MIN_DIAG);
           var mergeStart = e._endA - mergeDy;
-          if (mergeStart >= lineB + 2 * S && e._endA <= axisEnd) {
+          if (mergeStart >= best.elbow + CORNER + 2 * S && e._endA <= axisEnd) {
             var clear = true, L2 = lane(best.k);
             for (var m = 0; m < L2.items.length && clear; m++) if (itemOverlaps(L2.items[m], [lineB, mergeStart + CORNER])) clear = false;
             if (clear && !diagonalCrosses(mergeStart, best.ld, e._endA, e._trackDistEnd, best.k)) { e._merge = true; lineB = mergeStart; }
@@ -1154,15 +1170,30 @@
       if (fan) {
         var spreadC = spreadCFor(p);
         var d = fan.dir, edge = d > 0 ? 0 : axisPx;
-        var nameEnd = edge + d * (2 * S + p._nameW + 4 * S);
+        var nameEnd = edge + d * (2 * S + (horizontal ? p._nameW : p._nameH) + 4 * S);
         var fanStart = edge + d * fan.len;
         var merge = fanStart + d * Math.abs(spreadC - c);
-        p._nameEl.style.left = (d > 0 ? 2 * S : axisPx - 2 * S - p._nameW) + 'px';
-        p._nameEl.style.top = (spreadC - p._nameH / 2) + 'px';
+        // Place along the axis and across the cross-axis, whichever way
+        // round those are. This was written as left=axis / top=cross, which
+        // is only true horizontally — in vertical mode every line's name
+        // landed in a stack in the middle of the map instead of at the head
+        // of its own line.
+        var nameLen = horizontal ? p._nameW : p._nameH;
+        var nameThick = horizontal ? p._nameH : p._nameW;
+        var nameA = d > 0 ? 2 * S : axisPx - 2 * S - nameLen;
+        var nameXY = toXY(nameA, spreadC - nameThick / 2);
+        p._nameEl.style.left = nameXY[0] + 'px';
+        p._nameEl.style.top = nameXY[1] + 'px';
         var far = d > 0 ? axisEnd : axisStart;
         var legPts = stationPath(c, p._sign, Math.min(merge, far), Math.max(merge, far), p);
         if (d < 0) legPts = legPts.slice().reverse();
-        var path = svgEl('path', { d: roundedPath([[nameEnd, spreadC], [fanStart, spreadC]].concat(legPts), CORNER) });
+        // Map through toXY like every other path: these points are in
+        // (axis, cross), which only coincides with (x, y) lying down. Fed
+        // raw, the whole line drew transposed as soon as the canvas stood
+        // up — which is what made the vertical views look scrambled.
+        var fanPts = [[nameEnd, spreadC], [fanStart, spreadC]].concat(legPts)
+          .map(function (pt) { return toXY(pt[0], pt[1]); });
+        var path = svgEl('path', { d: roundedPath(fanPts, CORNER) });
         styleStroke(path, p, S);
         path.setAttribute('data-metro-role', 'track'); path.setAttribute('data-metro-owner', p.key);
         svg.appendChild(path);
@@ -1222,7 +1253,11 @@
           svg.appendChild(sring);
         });
         var box = el('div', 'metro-gen metro-label absolute bg--white');
-        var availW = clamp((s.a1 - s.a0) - raise * 2, 70 * S, maxTitle);
+        // Lying down a caption may run as long as its station; standing up
+        // it has only the column between two lines, so cap it there or two
+        // neighbouring stations write straight over each other.
+        var availW = horizontal ? clamp((s.a1 - s.a0) - raise * 2, 70 * S, maxTitle)
+                                : Math.max(60 * S, colW);
         var t = labelRow('metro-title-text ' + STATION_TITLE_CLASS + ' font--bold text--black');
         t.textContent = s.title;
         t.style.maxWidth = availW + 'px'; t.style.overflow = 'hidden'; t.style.textOverflow = 'ellipsis';
@@ -1258,8 +1293,17 @@
         // span, so the caption lands in a gap nothing else is using — no
         // clearance arithmetic, and no line to clip through the text
         var midC = baseC;
-        if (horizontal) { box.style.left = capA + 'px'; box.style.top = (midC - bm.h / 2) + 'px'; }
-        else { box.style.top = capA + 'px'; box.style.left = (midC - bm.w / 2) + 'px'; }
+        if (horizontal) {
+          box.style.left = capA + 'px';
+          box.style.top = (midC - bm.h / 2) + 'px';
+        } else {
+          // Standing up, the space the kink vacates is only a kink wide,
+          // while the caption is a column wide — centring it on the line
+          // pushes it across the gutter and over the hour labels. Set it
+          // beside the line instead, on the side the kink went.
+          box.style.top = capA + 'px';
+          box.style.left = (p._sign > 0 ? midC + STATION_GAP : midC - bm.w - STATION_GAP) + 'px';
+        }
       });
     });
 
@@ -1414,6 +1458,46 @@
         });
       }
     });
+
+    // ---- where everyone is right now ----------------------------------
+    // A car per line at the current time, in that line's own colour. The
+    // map otherwise shows the whole day laid out flat; this is the one mark
+    // that says which part of it you are actually in. If the person is
+    // inside an event the car rides that event's spur, because that is
+    // where they are; otherwise it sits on their own line.
+    //
+    // Geometry lifted from assets/metro-car.svg, whose drawn content
+    // occupies x 3.5..96.5, y 35..65 of its viewBox.
+    var CAR_PATHS = [
+      'm61.316 35.047c4.9102 15.336 20.336 15.188 29.66 15.09 0.078126 0 0.15234 0 0.22656-0.003907-3.8828-5.2266-12.805-15.086-24.891-15.086z',
+      'm93.355 53.309-0.003907-0.003906c-0.015624-0.027344-0.27344-0.46484-0.74609-1.1797-0.51172 0-1.043 0.007812-1.6094 0.011719-0.73438 0.007812-1.5195 0.015625-2.3398 0.015625-9.6523 0-24.695-1.1133-29.43-17.105h-55.727v29.906h86.414c3.375 0 5.4648-0.66406 6.2188-1.9766 0.96094-1.6758 0.054688-4.8359-2.7734-9.6641-0.003906 0-0.003906 0-0.003906-0.003906zm-76.52-7.6484c0 0.55078-0.44922 1-1 1h-7.4297c-0.55078 0-1-0.44922-1-1v-6.1172c0-0.55078 0.44922-1 1-1h7.4297c0.55078 0 1 0.44922 1 1zm12.672 0c0 0.55078-0.44922 1-1 1h-7.4297c-0.55078 0-1-0.44922-1-1v-6.1172c0-0.55078 0.44922-1 1-1h7.4297c0.55078 0 1 0.44922 1 1zm12.672 0c0 0.55078-0.44922 1-1 1h-7.4297c-0.55078 0-1-0.44922-1-1v-6.1172c0-0.55078 0.44922-1 1-1h7.4297c0.55078 0 1 0.44922 1 1zm15.082 13.328c0 0.55469-0.44531 1-1 1h-10.055c-0.55078 0-1-0.44531-1-1v-19.449c0-0.55078 0.44922-1 1-1h10.055c0.55469 0 1 0.44922 1 1z'
+    ];
+    var CAR_H = 30, CAR_CX = 50, CAR_CY = 50;
+    if (nowA != null) {
+      LEGEND.forEach(function (p) {
+        // riding a spur if one of this line's own events is happening now
+        var riding = null;
+        visible.forEach(function (e) {
+          if (e._dropped || e._p !== p) return;
+          if (nowA < e._nodeA - 1 || nowA > e._endA + 1) return;
+          if (nowA < Math.min(e._lineFrom, e._lineTo) - 1 || nowA > Math.max(e._lineFrom, e._lineTo) + 1) return;
+          riding = e;
+        });
+        var c = riding ? spineC + riding._sign * riding._laneDist : lineCAt(p, nowA);
+        var xy = toXY(nowA, c);
+        var k = (NODE_R * 2.4) / CAR_H;
+        var g = svgEl('g', {
+          transform: 'translate(' + xy[0] + ',' + xy[1] + ') '
+            + (horizontal ? '' : 'rotate(90) ')
+            + 'scale(' + k + ') translate(' + (-CAR_CX) + ',' + (-CAR_CY) + ')',
+          fill: colorFor(p.hue),
+        });
+        g.setAttribute('data-metro-role', 'car');
+        g.setAttribute('data-metro-owner', p.key);
+        CAR_PATHS.forEach(function (d) { g.appendChild(svgEl('path', { d: d })); });
+        svg.appendChild(g);
+      });
+    }
 
     // ---- labels: position the measured boxes
     visible.forEach(function (e) {
