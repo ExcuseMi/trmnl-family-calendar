@@ -6,7 +6,7 @@
 // wrong colour, it is pointing at the wrong person's day.
 
 module.exports = function (test, h) {
-  const { layout, VIEWPORTS, fixtures, pathsWhere, assert } = h;
+  const { layout, VIEWPORTS, fixtures, pathsWhere, textLabels, overlap, assert } = h;
 
   const ROOMY = VIEWPORTS.find((v) => v.name === 'x-landscape');
   const busy = fixtures.find((f) => f.name === 'busy-day');
@@ -28,10 +28,9 @@ module.exports = function (test, h) {
     const rep = layout(busy, ROOMY);
     const adrift = [];
     for (const car of cars(rep)) {
-      // The car stands ON the line, so what has to touch the rail is its
-      // WHEELS, not its middle. Measured at the centre it now reads as half
-      // a car-height adrift by design.
-      const cx = car.x + car.w / 2, cy = car.y + car.h;
+      // The car straddles the line, so its centre is what has to sit on
+      // the rail.
+      const cx = car.x + car.w / 2, cy = car.y + car.h / 2;
       // its own track, or one of its own branches — never someone else's
       const mine = pathsWhere(rep, 'track').concat(pathsWhere(rep, 'branch'), pathsWhere(rep, 'fork'))
         .filter((p) => p.owner === car.owner);
@@ -78,6 +77,58 @@ module.exports = function (test, h) {
       const flat = trackY.reduce((a, b) => a + b, 0) / trackY.length;
       assert(Math.abs(cy - flat) > 3,
         owner + ' is mid-event but the car is still sitting on the trunk');
+    }
+  });
+
+  // The car is the only thing on the board that moves, and before the day's
+  // first event every line's car is parked at the head of its line — which
+  // is where that line's NAME is, and right beside the hour river. Five cars
+  // on five names, and the one nearest the spine wading into the water.
+  const EARLY = JSON.parse(JSON.stringify(busy.metro));
+  EARLY.now_min = EARLY.day_start_min + 5;
+
+  test('no car sits on a line name', () => {
+    const rep = layout({ name: 'busy-early', metro: EARLY }, ROOMY);
+    const names = textLabels(rep).filter((l) => (' ' + l.cls + ' ').indexOf(' metro-terminus ') >= 0);
+    const bad = [];
+    for (const car of cars(rep)) {
+      for (const n of names) {
+        if (overlap(car, n)) bad.push('a car covers "' + n.text + '"');
+      }
+    }
+    assert(bad.length === 0, bad.length + ' car(s) over a line name: ' + [...new Set(bad)].join('; '));
+  });
+
+  test('no car sits on an event label', () => {
+    for (const metro of [busy.metro, EARLY]) {
+      const rep = layout({ name: 'busy-' + metro.now_min, metro: metro }, ROOMY);
+      const bad = [];
+      for (const car of cars(rep)) {
+        for (const l of textLabels(rep)) {
+          if ((' ' + l.cls + ' ').indexOf(' metro-terminus ') >= 0) continue;
+          const o = overlap(car, l);
+          // a glancing corner is the label's own padding; a real overlap
+          // hides the train or the words
+          if (o && o.w > 4 && o.h > 4) bad.push('a car covers "' + l.text.slice(0, 24) + '"');
+        }
+      }
+      assert(bad.length === 0, bad.length + ' car(s) over a label: ' + [...new Set(bad)].join('; '));
+    }
+  });
+
+  test('no car wades into the hour river', () => {
+    // The river is drawn wider than a plain band for looks. It may not be
+    // drawn wider than the gutter reserved for it, or its banks land inside
+    // the band of the track nearest the spine.
+    for (const metro of [busy.metro, EARLY]) {
+      const rep = layout({ name: 'busy-' + metro.now_min, metro: metro }, ROOMY);
+      const river = (rep.paths || []).filter((p) => p.role === 'river');
+      if (!river.length) continue;
+      let lo = Infinity, hi = -Infinity;
+      for (const p of river) for (const q of p.pts) { lo = Math.min(lo, q[1]); hi = Math.max(hi, q[1]); }
+      const bad = cars(rep).filter((c) => c.y + c.h > lo + 2 && c.y < hi - 2);
+      assert(bad.length === 0,
+        bad.length + ' car(s) inside the river band (' + Math.round(lo) + '-' + Math.round(hi) + ')');
     }
   });
 };

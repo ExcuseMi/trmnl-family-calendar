@@ -418,8 +418,8 @@
     // far enough off the trunk for one to fit between them — at 10*S the
     // shallowest branch was closer to the trunk than the car is tall, and a
     // train on a short spur poked up through the line above it. The car is
-    // NODE_R * 2.4 high (see CAR_H's scale), plus the usual gap between a
-    // line and whatever is next to it.
+    // carAcross() wide across the rail, plus the usual gap between a line
+    // and whatever is next to it.
     // A generous fillet. At a small radius a bend is a hinge; at this one a
     // shallow branch's two opposite fillets meet in the middle with no
     // straight run between them, which is an S-curve — the line eases out
@@ -1638,7 +1638,11 @@
     // the fill dithers away and the banks still read.
     var riverHalf = 0;
     (function drawTimeRiver() {
-      var half = Math.max(gutterHalf * 1.35, hourH * 0.9);
+      // The river may not be wider than the gutter reserved for it. It used
+      // to run 1.35x that for looks, which put its banks inside the band of
+      // the track nearest the spine — and the car standing on that track's
+      // rail waded into the water.
+      var half = Math.min(gutterHalf, Math.max(gutterHalf * 0.95, hourH * 0.72));
       riverHalf = half;
       var amp = Math.min(half * 0.35, TRACK_STEP * 0.4);
       // The two banks used to carry the SAME wave, so the whole river
@@ -1812,6 +1816,10 @@
         var nameXY = toXY(nameA, namesAbove ? nameC + nameOff : nameC - nameThick / 2);
         p._nameEl.style.left = nameXY[0] + 'px';
         p._nameEl.style.top = nameXY[1] + 'px';
+        // the axis this name occupies, so the car can keep off it: before
+        // the day's first event the car sits at the head of the line, which
+        // is exactly where the name is
+        p._nameA0 = nameA; p._nameA1 = nameA + nameLen;
         var far = d > 0 ? axisEnd : axisStart;
         var legPts = stationPath(c, p._sign, Math.min(merge, far), Math.max(merge, far), p);
         if (d < 0) legPts = legPts.slice().reverse();
@@ -1876,31 +1884,12 @@
         var raise = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
         var members = s.group ? capGroups[s.group] : null;
         var ownsCaption = !members || members[0] === p;
-        [s.a0, s.a1].forEach(function (a) {
-          // a ring marks a real boundary time. Where a station runs to the
-          // edge of the visible window — an all-day band always does, and
-          // any station can be clipped there — that edge is not a boundary,
-          // it's just where the day stops being drawn: no ring. (It would
-          // also land past the end of a fanned line, floating in space.)
-          if (a <= axisStart + 1 || a >= axisEnd - 1) return;
-          var xy = toXY(a, lineCAt(p, a));
-          // a hollow diamond, not a ring: a station junction is where the
-          // line changes state rather than where something happens on it,
-          // and the different shape says so at a glance
-          var dr = NODE_R * 0.95;
-          var sring = svgEl('path', {
-            d: 'M ' + (xy[0] - dr) + ' ' + xy[1] + ' L ' + xy[0] + ' ' + (xy[1] - dr)
-              + ' L ' + (xy[0] + dr) + ' ' + xy[1] + ' L ' + xy[0] + ' ' + (xy[1] + dr) + ' Z',
-            'stroke-width': NODE_STROKE * 0.8, 'stroke-linejoin': 'round',
-          });
-          sring.style.stroke = colorFor(p.hue);
-          // hollow means the CANVAS colour, so the line behind it is masked
-          // in either theme — a literal white fill was a white lozenge on a
-          // dark board
-          sring.style.fill = PAPER;
-          sring.setAttribute('data-metro-role', 'station-ring'); sring.setAttribute('data-metro-owner', p.key);
-          svg.appendChild(sring);
-        });
+        // No marker at the kink boundaries. A hollow diamond there claimed
+        // to mark the exact minute a station starts and ends, and it does
+        // not: the kink is a 45° ramp whose run is a fixed number of pixels,
+        // so where it begins and ends on the axis is a drawing decision, not
+        // a time. The kink itself already shows the span, and the caption
+        // says which station it is.
         if (!ownsCaption) return;   // the rings above are per line; the caption is not
         var box = el('div', 'metro-gen metro-label absolute text--black');
         // Lying down a caption may run as long as its station; standing up
@@ -2116,7 +2105,14 @@
       var pts = stationPath(spineC + p._c, p._sign, Math.min(a0, a1), Math.max(a0, a1), p);
       return a1 < a0 ? pts.slice().reverse() : pts;
     }
-    function rampOut(p, aFrom, aElbow, laneC, dir, fromRing) {
+    function rampOut(p, aFrom, aElbow, laneC, dir, fromRing, tailTo) {
+      // The tail runs a fixed lead past the elbow so the bend into the lane
+      // has room to be a bend. On an event SHORTER than that lead it ran
+      // past the event's own end, so the end tick sat mid-rail with line
+      // carrying on beyond it. Clamped to where the rail is meant to stop —
+      // which is never closer than a corner radius, so the bend still fits.
+      var tail = aElbow + dir * RAMP_LEAD;
+      if (tailTo != null) tail = dir > 0 ? Math.min(tail, tailTo) : Math.max(tail, tailTo);
       // A SHARED event's branch starts AT its interchange ring, with no
       // lead-in. The lead-in exists so the departure is an interior vertex
       // and gets filleted like every other bend, and it is invisible because
@@ -2125,10 +2121,10 @@
       // somebody else's main line running away from the station. The ring
       // sits exactly on the departure and covers the unfilleted corner.
       if (fromRing) {
-        return [[aFrom, lineCAt(p, aFrom)], [aElbow, laneC], [aElbow + dir * RAMP_LEAD, laneC]];
+        return [[aFrom, lineCAt(p, aFrom)], [aElbow, laneC], [tail, laneC]];
       }
       return trunkSlice(p, aFrom - dir * RAMP_LEAD, aFrom)
-        .concat([[aElbow, laneC], [aElbow + dir * RAMP_LEAD, laneC]]);
+        .concat([[aElbow, laneC], [tail, laneC]]);
     }
 
     // ---- branches: every ring gets its 45° diagonal; same-owner spurs that
@@ -2226,7 +2222,10 @@
         var head = sorted[0];
         head._ownRamp = true;
         var headPhaseA = head._diagFrom - head._dir * RAMP_LEAD;
-        head._rampEl = drawRamp(p, rampOut(p, head._diagFrom, head._elbow, laneC, head._dir, groupShared),
+        // the end the tail runs TOWARD: forward branches stop at the group's
+        // far end, backward ones at its near end
+        head._rampEl = drawRamp(p, rampOut(p, head._diagFrom, head._elbow, laneC, head._dir, groupShared,
+                                           head._dir > 0 ? g.to : g.from),
                  groupShared ? null : headPhaseA, 'fork', head._laneOwner);
         // the spine picks the rungs up where the ramp's tail left them
         var headLen = head._rampEl.getTotalLength ? head._rampEl.getTotalLength() : null;
@@ -2427,17 +2426,17 @@
     // inside an event the car rides that event's spur, because that is
     // where they are; otherwise it sits on their own line.
     //
-    // Geometry lifted from assets/metro-car.svg, whose drawn content
-    // occupies x 3.5..96.5, y 35..65 of its viewBox.
-    var CAR_PATHS = [
-      'm61.316 35.047c4.9102 15.336 20.336 15.188 29.66 15.09 0.078126 0 0.15234 0 0.22656-0.003907-3.8828-5.2266-12.805-15.086-24.891-15.086z',
-      'm93.355 53.309-0.003907-0.003906c-0.015624-0.027344-0.27344-0.46484-0.74609-1.1797-0.51172 0-1.043 0.007812-1.6094 0.011719-0.73438 0.007812-1.5195 0.015625-2.3398 0.015625-9.6523 0-24.695-1.1133-29.43-17.105h-55.727v29.906h86.414c3.375 0 5.4648-0.66406 6.2188-1.9766 0.96094-1.6758 0.054688-4.8359-2.7734-9.6641-0.003906 0-0.003906 0-0.003906-0.003906zm-76.52-7.6484c0 0.55078-0.44922 1-1 1h-7.4297c-0.55078 0-1-0.44922-1-1v-6.1172c0-0.55078 0.44922-1 1-1h7.4297c0.55078 0 1 0.44922 1 1zm12.672 0c0 0.55078-0.44922 1-1 1h-7.4297c-0.55078 0-1-0.44922-1-1v-6.1172c0-0.55078 0.44922-1 1-1h7.4297c0.55078 0 1 0.44922 1 1zm12.672 0c0 0.55078-0.44922 1-1 1h-7.4297c-0.55078 0-1-0.44922-1-1v-6.1172c0-0.55078 0.44922-1 1-1h7.4297c0.55078 0 1 0.44922 1 1zm15.082 13.328c0 0.55469-0.44531 1-1 1h-10.055c-0.55078 0-1-0.44531-1-1v-19.449c0-0.55078 0.44922-1 1-1h10.055c0.55469 0 1 0.44922 1 1z'
-    ];
-    // The drawn car occupies y 35..65 in its own viewBox, so 65 is where its
-    // wheels are. Anchoring there instead of at the middle stands the car ON
-    // the rail rather than threading it through the line, which is what a
-    // train on a track looks like and stops the line striking through it.
-    var CAR_H = 30, CAR_CX = 50, CAR_BASE = 65;
+    // The car is a plain rounded block, the same in every orientation.
+    // A drawn side-on train only works one way up: stood on end it reads as
+    // a train that has fallen over, and it has a front and a back, which a
+    // vertical line does not have. The block carries the same weight and the
+    // same "someone is here right now" without pretending to a direction.
+    // It is centred ON the rail, so the line runs through it end to end.
+    var CAR_ALONG = NODE_R * 3.4;
+    function carAcross(p) {
+      // wider than the rail it sits on, or it is just a thick bit of line
+      return Math.max(NODE_R * 1.9, p.line_width * S * weightScale + 5 * S);
+    }
     if (nowA != null) {
       LEGEND.forEach(function (p) {
         // riding a spur if one of this line's own events is happening now
@@ -2448,33 +2447,29 @@
           if (nowA < Math.min(e._lineFrom, e._lineTo) - 1 || nowA > Math.max(e._lineFrom, e._lineTo) + 1) return;
           riding = e;
         });
-        var c = riding ? spineC + riding._sign * riding._laneDist : lineCAt(p, nowA);
-        var xy = toXY(nowA, c);
-        var g;
-        if (horizontal) {
-          var k = (NODE_R * 2.4) / CAR_H;
-          // clear the rail's own stroke, so the wheels sit on top of the
-          // line rather than inside it
-          var lift = CAR_BASE + (p.line_width * S / 2) / k;
-          g = svgEl('g', {
-            transform: 'translate(' + xy[0] + ',' + xy[1] + ') '
-              + 'scale(' + k + ') translate(' + (-CAR_CX) + ',' + (-lift) + ')',
-          });
-          CAR_PATHS.forEach(function (d) { g.appendChild(svgEl('path', { d: d })); });
-        } else {
-          // Standing up, the drawn car is wrong twice over: turned on its
-          // side it reads as a train that has fallen over, and a side view
-          // of a train has a front and a back, which a vertical line does
-          // not. A plain rounded block instead — the same weight and the
-          // same "someone is here now", without pretending to a direction.
-          var cw = NODE_R * 1.9, cl = NODE_R * 3.4, off = p.line_width * S / 2;
-          g = svgEl('g', {});
-          g.appendChild(svgEl('rect', {
-            x: p._sign > 0 ? xy[0] + off : xy[0] - off - cw,
-            y: xy[1] - cl / 2, width: cw, height: cl,
-            rx: NODE_R * 0.5, ry: NODE_R * 0.5,
-          }));
+        // Early in the day the car is at the head of the line, and so is the
+        // line's name — five cars parked on five names. Nudged clear of it:
+        // the shift is at most a name's width and only happens before the
+        // first thing on that line, when there is nothing else to read
+        // there anyway.
+        // The car is drawn CENTRED on its axis position, so clearing the
+        // name means moving its middle half a car past the end of it.
+        var carHalf = CAR_ALONG / 2;
+        var carA = nowA;
+        if (!riding && p._nameA1 != null
+            && carA - carHalf < p._nameA1 + 2 * S && carA + carHalf > p._nameA0 - 2 * S) {
+          carA = p._nameA1 + carHalf + 2 * S;
         }
+        var c = riding ? spineC + riding._sign * riding._laneDist : lineCAt(p, carA);
+        var xy = toXY(carA, c);
+        var across = carAcross(p);
+        var cw = horizontal ? CAR_ALONG : across;
+        var ch = horizontal ? across : CAR_ALONG;
+        var g = svgEl('g', {});
+        g.appendChild(svgEl('rect', {
+          x: xy[0] - cw / 2, y: xy[1] - ch / 2, width: cw, height: ch,
+          rx: NODE_R * 0.5, ry: NODE_R * 0.5,
+        }));
         g.style.fill = colorFor(p.hue);
         g.setAttribute('data-metro-role', 'car');
         g.setAttribute('data-metro-owner', p.key);
@@ -2500,7 +2495,7 @@
         carRider = e; carA = nowA;
       });
     }
-    var CAR_CLEAR = NODE_R * 2.4 + 2 * S;
+    var CAR_CLEAR = CAR_ALONG / 2 + 2 * S;
     visible.forEach(function (e) {
       if (e._dropped) return;
       var sign = e._sign, b = e._box;
@@ -2508,7 +2503,7 @@
       var duck = 0;
       if (e === carRider && horizontal
           && carA + CAR_CLEAR > e._textStart && carA - CAR_CLEAR < e._textStart + e._textLen) {
-        duck = CAR_CLEAR;
+        duck = Math.max(0, carAcross(e._p) / 2 + 2 * S - LINE_GAP);
       }
       if (horizontal) {
         b.style.left = e._textStart + 'px';
