@@ -253,6 +253,12 @@
   // How long one repeat of a treatment's rung pattern is, so a run of line
   // drawn as several elements can be given a continuous phase. An
   // odd-length dasharray repeats twice before it comes back round, per SVG.
+  // Secondary text — the time tag, a location line, a sun marker. On a
+  // greyscale panel a lighter grey says "this matters less"; on a 1-BIT one
+  // there is no lighter grey, only a dither, and small dithered text under a
+  // paper outline is a smudge. There it goes full ink and earns its
+  // secondary reading from being smaller instead.
+  function quietText(token) { return ONE_BIT ? 'text--black' : token; }
   function dashPeriod(style, S) {
     var t = treatmentFor(style, S, 3);
     if (!t || !t.dash) return 0;
@@ -455,7 +461,7 @@
     var capProbe = el('div', 'metro-gen absolute');
     var capProbeTitle = labelRow('metro-title-text ' + STATION_TITLE_CLASS + ' font--bold text--black');
     capProbeTitle.textContent = 'Mg'; // ascender+descender, for a realistic line height
-    var capProbeTag = labelRow(STATION_TAG_CLASS + ' text--gray-45');
+    var capProbeTag = labelRow(STATION_TAG_CLASS + ' ' + quietText('text--gray-45'));
     capProbeTag.textContent = 'Mg';
     capProbe.appendChild(capProbeTitle); capProbe.appendChild(capProbeTag);
     canvas.appendChild(capProbe);
@@ -824,7 +830,7 @@
       var n = el('div', 'metro-gen metro-sky flex flex--row flex--center-y gap--xsmall absolute text--black');
       var size = hourH * (w.type === 'sun' ? 1.5 : 1.3);
       var ic = el('img', 'image--adaptive'); ic.src = w.icon; ic.style.width = size + 'px'; ic.style.height = size + 'px';
-      var tx = el('span', 'label label--small ' + (w.type === 'sun' ? 'text--gray-30' : 'font--bold text--black'));
+      var tx = el('span', 'label label--small ' + (w.type === 'sun' ? quietText('text--gray-30') : 'font--bold text--black'));
       tx.style.whiteSpace = 'nowrap';
       tx.textContent = w.type === 'sun' ? timeLabel(w.at_min) : w.label;
       n.appendChild(ic); n.appendChild(tx);
@@ -860,8 +866,10 @@
       var align = horizontal ? '' : (p._sign < 0 ? ' text--right' : ' text--left');
       var box = el('div', 'metro-gen metro-label absolute text--black' + align);
       if (showTime) {
-        var tm = labelRow('metro-time-tag ' + tagClass + ' text--gray-40');
-        tm.textContent = timeLabel(e.start_min) + ' ' + timeLabel(e.end_min);
+        var tm = labelRow('metro-time-tag ' + tagClass + ' ' + quietText('text--gray-40'));
+        // an en dash between them: two times side by side with only a space
+        // read as one string of digits, not as a span
+        tm.textContent = timeLabel(e.start_min) + ' \u2013 ' + timeLabel(e.end_min);
         box.appendChild(tm);
       }
       var t = labelRow('metro-title-text ' + titleClass + ' font--bold text--black');
@@ -876,7 +884,7 @@
       clampLines(t, 2);
       box.appendChild(t);
       if (showLocation && e.location) {
-        var loc = labelRow(tagClass + ' text--gray-45');
+        var loc = labelRow(tagClass + ' ' + quietText('text--gray-45'));
         loc.textContent = e.location;
         loc.style.maxWidth = (maxTitle * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
         box.appendChild(loc);
@@ -1581,10 +1589,18 @@
       var want = e._dir > 0 ? e._elbow + TEXT_PAD : e._elbow - TEXT_PAD - e._textLen;
       if (Math.abs(e._textStart - want) > e._textLen * 0.6) adrift++;
     });
-    // layout quality: a dropped event is unacceptable, a caption that no
-    // longer sits by its own rail nearly as bad, a diagonal through a label
-    // or a slid elbow ugly, a backward branch mildly so
-    return dropped * 1000 + adrift * 45 + crossings * 40 + slides * 15 + backwards * 10;
+    // Losing the TIMES costs. Dropping them makes every label narrower,
+    // which makes every other measure here look better, so a ladder that
+    // scored only geometry took the no-times rung as soon as it was allowed
+    // to — and a calendar that does not say when is not a calendar. It is
+    // charged more than any single crossing so the text steps down through
+    // every size it has before the times go.
+    //
+    // Otherwise: a dropped event is unacceptable, a caption that no longer
+    // sits by its own rail nearly as bad, a diagonal through a label or a
+    // slid elbow ugly, a backward branch mildly so.
+    var lost = (tier.time ? 0 : 200) + (tier.loc ? 0 : 15);
+    return dropped * 1000 + lost + adrift * 45 + crossings * 40 + slides * 15 + backwards * 10;
     }
 
     // Try the biggest text first and step down only while it improves the
@@ -1904,7 +1920,7 @@
         // grey text on a grey rail besides. The title alone still says what
         // the station is.
         if (s.location && !packedFallback) {
-          var loc = labelRow(STATION_TAG_CLASS + ' text--gray-45');
+          var loc = labelRow(STATION_TAG_CLASS + ' ' + quietText('text--gray-45'));
           loc.textContent = s.location;
           loc.style.maxWidth = (availW * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
           box.appendChild(loc);
@@ -2100,7 +2116,17 @@
       var pts = stationPath(spineC + p._c, p._sign, Math.min(a0, a1), Math.max(a0, a1), p);
       return a1 < a0 ? pts.slice().reverse() : pts;
     }
-    function rampOut(p, aFrom, aElbow, laneC, dir) {
+    function rampOut(p, aFrom, aElbow, laneC, dir, fromRing) {
+      // A SHARED event's branch starts AT its interchange ring, with no
+      // lead-in. The lead-in exists so the departure is an interior vertex
+      // and gets filleted like every other bend, and it is invisible because
+      // it lies on the trunk in the trunk's own stroke — but a shared
+      // branch is drawn BOLD, so its lead-in showed up as a heavy stretch of
+      // somebody else's main line running away from the station. The ring
+      // sits exactly on the departure and covers the unfilleted corner.
+      if (fromRing) {
+        return [[aFrom, lineCAt(p, aFrom)], [aElbow, laneC], [aElbow + dir * RAMP_LEAD, laneC]];
+      }
       return trunkSlice(p, aFrom - dir * RAMP_LEAD, aFrom)
         .concat([[aElbow, laneC], [aElbow + dir * RAMP_LEAD, laneC]]);
     }
@@ -2144,7 +2170,8 @@
         // it needs to look it — but as one heavier line, not as one rail per
         // person: drawn that way it was a comb of near-identical strokes
         // that read as a smudge rather than as several lines arriving.
-        if (g.members.some(function (m) { return m._involved && m._involved.length > 1; })) {
+        var groupShared = g.members.some(function (m) { return m._involved && m._involved.length > 1; });
+        if (groupShared) {
           // Solid ink, not the host line's texture: a shared event is not
           // one person's line branching, it is all of them in one place, so
           // it takes the map's heaviest stroke rather than a wider copy of
@@ -2199,8 +2226,8 @@
         var head = sorted[0];
         head._ownRamp = true;
         var headPhaseA = head._diagFrom - head._dir * RAMP_LEAD;
-        head._rampEl = drawRamp(p, rampOut(p, head._diagFrom, head._elbow, laneC, head._dir),
-                 headPhaseA, 'fork', head._laneOwner);
+        head._rampEl = drawRamp(p, rampOut(p, head._diagFrom, head._elbow, laneC, head._dir, groupShared),
+                 groupShared ? null : headPhaseA, 'fork', head._laneOwner);
         // the spine picks the rungs up where the ramp's tail left them
         var headLen = head._rampEl.getTotalLength ? head._rampEl.getTotalLength() : null;
         var headStart = trunkLenAt(p, headPhaseA);
@@ -2277,9 +2304,13 @@
         // one place that is the most important thing on the board, and a
         // thin dotted thread between four lines read as the least. This is
         // the multi-line interchange every transit map draws heaviest.
+        // as heavy as the rail it feeds: the bar and the branch are one move
+        // through the board, and a thin bar into a bold rail read as two
+        // different things meeting
         var tie = svgEl('line', {
           x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
-          'stroke-width': NODE_STROKE * 1.15, 'stroke-linecap': 'round',
+          'stroke-width': Math.max(p.line_width, 4) * 1.5 * S * weightScale,
+          'stroke-linecap': 'round',
         });
         // Ink, explicitly. Without a stroke an SVG line is drawn with
         // nothing at all: the tie was in the DOM, the right length, in the
