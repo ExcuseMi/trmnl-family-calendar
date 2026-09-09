@@ -180,6 +180,16 @@
     if (style === 'dashdot') return (11 * S) + ' ' + (5 * S) + ' ' + (0.1 * S) + ' ' + (5 * S);
     return null;
   }
+  // How long one repeat of a style's dash pattern is. An odd-length
+  // dasharray repeats twice before it comes back round, per SVG.
+  function dashPeriod(style, S) {
+    var d = dashFor(style, S);
+    if (!d) return 0;
+    var parts = d.split(' ').map(Number);
+    var sum = 0;
+    for (var i = 0; i < parts.length; i++) sum += parts[i];
+    return parts.length % 2 ? sum * 2 : sum;
+  }
   // The map's own dash periods are tuned for long track lines — over a
   // short, fixed-length legend swatch the same period leaves a visible gap
   // before the swatch's own right edge (worst on 'dotted': a handful of
@@ -1378,6 +1388,7 @@
         styleStroke(path, p, S);
         path.setAttribute('data-metro-role', 'track'); path.setAttribute('data-metro-owner', p.key);
         svg.appendChild(path);
+        p._trunkEl = path;
         // a terminal bar at each end, the transit-map mark for where a line
         // starts and stops rather than simply running out of canvas
         [[nameEnd, spreadC], [far, lineCAt(p, far)]].forEach(function (at) {
@@ -1392,6 +1403,7 @@
         styleStroke(ln, p, S);
         ln.setAttribute('data-metro-role', 'track'); ln.setAttribute('data-metro-owner', p.key);
         svg.appendChild(ln);
+        p._trunkEl = ln;
       }
     });
     // ---- station markers: a hollow ring at each end, sitting exactly where
@@ -1492,13 +1504,77 @@
       });
     });
 
-    // a point `dist` along the way from (a0,c0) toward (a1,c1), in axis/cross
-    // units — used to end the solid junction fillet exactly where the
-    // branch's own line takes over
-    function alongDiagonal(a0, c0, a1, c1, dist) {
-      var da = a1 - a0, dc = c1 - c0, len = Math.hypot(da, dc) || 1;
-      var t = Math.min(dist, len);
-      return [a0 + da / len * t, c0 + dc / len * t];
+    // ---- the ramp builder ------------------------------------------------
+    //
+    // Every place a line leaves its trunk for a lane, or comes back, is the
+    // same shape drawn by the same function: a lead-in lying ON the trunk, a
+    // bend away from it, a straight run to the lane, a bend flat, and a tail
+    // along the lane. Departures and rejoins, 45° and vertical, above the
+    // spine and below, horizontal board and vertical, are all this with
+    // different arguments.
+    //
+    // It used to be two paths — a SOLID "fork" fillet and then the branch —
+    // because the lead-in lies on top of the trunk, and a dashed overlay
+    // starting its own pattern from zero landed out of phase with the
+    // trunk's: you could see the branch's dashes doubled on the main line
+    // before it left. Solid hid that, at the cost of every dashed and dotted
+    // line having a solid elbow, which is not what that line looks like.
+    //
+    // The fix is phase, not paint. Ask the trunk how far along itself the
+    // lead-in starts and offset the ramp's dash pattern by that much: the
+    // overlay then falls exactly on the trunk's own dashes and disappears,
+    // and the ramp can be drawn in the line's real style. One path also
+    // means roundedPath sees both corners at once, so they get equal radius
+    // instead of the second being clamped to half the first.
+    var RAMP_LEAD = 2 * CORNER;
+
+    // How far along its own drawn path a track is when it reaches axis
+    // position `a`. Measured on the real element, so station kinks and the
+    // terminus fan — which make the drawn line longer than the axis span —
+    // are included rather than assumed away.
+    function trunkLenAt(p, a) {
+      var el = p._trunkEl;
+      if (!el || !el.getTotalLength) return null;
+      var total = el.getTotalLength();
+      if (!(total > 0)) return null;
+      var axis = horizontal ? 'x' : 'y';
+      var at = function (L) { return el.getPointAtLength(L)[axis]; };
+      var lo = 0, hi = total;
+      var ascending = at(total) >= at(0);
+      for (var i = 0; i < 24; i++) {
+        var mid = (lo + hi) / 2;
+        if ((at(mid) < a) === ascending) lo = mid; else hi = mid;
+      }
+      return (lo + hi) / 2;
+    }
+
+    // Draw one ramp. `pts` are (axis, cross) vertices, the first of which
+    // lies on `p`'s trunk at `phaseA` so the dash pattern can be lined up
+    // with it. Anything after that is free geometry.
+    function drawRamp(p, pts, phaseA, role, owner) {
+      var path = svgEl('path', { d: roundedPath(pts.map(function (q) { return toXY(q[0], q[1]); }), CORNER) });
+      styleStroke(path, p, S);
+      var period = dashPeriod(p.line_style, S);
+      if (period > 0 && phaseA != null) {
+        var L = trunkLenAt(p, phaseA);
+        // A negative offset would shift the pattern the wrong way; SVG takes
+        // the offset modulo the period anyway, so normalise it here.
+        if (L != null) path.setAttribute('stroke-dashoffset', ((L % period) + period) % period);
+      }
+      path.setAttribute('data-metro-role', role);
+      path.setAttribute('data-metro-owner', owner);
+      svg.appendChild(path);
+      return path;
+    }
+
+    // The vertices of a departure: trunk lead-in, the point it leaves the
+    // trunk, the point it arrives in the lane, and a tail along the lane.
+    // `aFrom`/`cFrom` is where the line REALLY is at the departure, which on
+    // a track passing through one of its own stations is the raised shelf,
+    // not the baseline.
+    function rampOut(aFrom, cFrom, aElbow, laneC, dir) {
+      return [[aFrom - dir * RAMP_LEAD, cFrom], [aFrom, cFrom],
+              [aElbow, laneC], [aElbow + dir * RAMP_LEAD, laneC]];
     }
 
     // ---- branches: every ring gets its 45° diagonal; same-owner spurs that
@@ -1525,7 +1601,15 @@
         else { cur = { from: e._lineFrom, to: e._lineTo, members: [e] }; groups.push(cur); }
       });
       groups.forEach(function (g) {
-        var p = g.members[0]._p, sign = g.members[0]._sign, laneC = spineC + sign * g.members[0]._laneDist;
+        // A spur wears the stroke of the line it GROWS FROM, which for an
+        // interchange is the outermost rail it joins rather than whoever
+        // nominally owns the event. A solid stub sprouting out of a dotted
+        // line reads as a different line arriving; wearing the dotted
+        // pattern reads as that line branching, which is what it is. It also
+        // puts the dash phase on the right trunk — the lead-in lies on the
+        // outermost line, so that is the one to line the pattern up with.
+        var p = trackByKey[g.members[0]._laneOwner] || g.members[0]._p;
+        var sign = g.members[0]._sign, laneC = spineC + sign * g.members[0]._laneDist;
         // The flat run is drawn as a straight spine PLUS each member's own
         // rounded diagonal into it — two separate paths. A straight spine
         // that reaches all the way up to (or past) a member's own elbow
@@ -1567,43 +1651,11 @@
           // is where its ring is and what _trackDist was measured from), so
           // the height has to come from that line, not from the nominal
           // owner's — they can be a whole band apart.
-          var forkTrack = trackByKey[e._laneOwner] || p;
-          var trunkC = lineCAt(forkTrack, e._diagFrom);
-          // The fillet where the branch leaves the trunk is drawn on its
-          // own, solid, and the branch proper starts after it. The fillet
-          // has to run a little way ALONG the trunk to curve away
-          // tangentially, and on a dashed or dotted line that short overlay
-          // lands out of phase with the trunk's own dashes — you could see
-          // the branch's dots sitting on the main line before it left.
-          // Solid, it is a junction rather than a second dotted line.
-          // Hand the two corners equal room. The fork owns the bend off the
-          // trunk and the branch owns the bend into the lane; roundedPath
-          // clamps each fillet to half its shorter adjacent segment, so
-          // taking a fixed 2*CORNER for the fork left the branch nothing on
-          // a shallow drop and its corner came out square beside a round one.
-          var tip = alongDiagonal(e._diagFrom, trunkC, e._elbow, laneC,
-                                  Math.min(2 * CORNER, Math.hypot(e._elbow - e._diagFrom, laneC - trunkC) / 2));
-          var fork = svgEl('path', { d: roundedPath([
-            toXY(e._diagFrom - e._dir * 2 * CORNER, trunkC),
-            toXY(e._diagFrom, trunkC),
-            toXY(tip[0], tip[1]),
-          ], CORNER) });
-          styleStroke(fork, p, S);
-          fork.removeAttribute('stroke-dasharray');
-          fork.setAttribute('data-metro-role', 'fork'); fork.setAttribute('data-metro-owner', e._laneOwner);
-          svg.appendChild(fork);
-
-          // The stub past the corner runs 2*CORNER, not CORNER. roundedPath
-          // clamps a fillet to half the shorter adjacent segment, so a
-          // CORNER-long stub bought a half-radius arc — the corner where the
-          // branch turned flat was visibly tighter than the one where it
-          // left the trunk, and read as a square angle beside a round one.
-          var pts = [toXY(tip[0], tip[1]), toXY(e._elbow, laneC), toXY(e._elbow + e._dir * 2 * CORNER, laneC)];
-          var path = svgEl('path', { d: roundedPath(pts, CORNER) });
-          styleStroke(path, p, S);
-          path.setAttribute('data-metro-role', 'branch'); path.setAttribute('data-metro-owner', p.key);
-          svg.appendChild(path);
-          prevEnd = e._elbow + 2 * CORNER;
+          var trunkC = lineCAt(p, e._diagFrom);
+          var leadA = e._diagFrom - e._dir * RAMP_LEAD;
+          drawRamp(p, rampOut(e._diagFrom, trunkC, e._elbow, laneC, e._dir),
+                   leadA, 'fork', e._laneOwner);
+          prevEnd = e._elbow + RAMP_LEAD;
         });
         bridge(prevEnd, g.to);
         var elbows = sorted.map(function (e) { return e._elbow; });
@@ -1613,28 +1665,19 @@
     });
     placed.forEach(function (e) {
       if (!e._merge) return;
-      var p = e._p, sign = e._sign, laneC = spineC + sign * e._laneDist;
-      // same at both ends of a loop that rejoins: lead in along the trunk
-      // before leaving it, and carry on along it after coming back, so both
-      // junctions curve instead of snapping
-      var mergeTrack = trackByKey[e._laneOwner] || p;
-      var fromC = lineCAt(mergeTrack, e._diagFrom);
-      var backC = lineCAt(mergeTrack, e._mergeAt);
-      var tipOut = alongDiagonal(e._diagFrom, fromC, e._elbow, laneC, 2 * CORNER);
-      var tipIn = alongDiagonal(e._mergeAt, backC, e._lineTo, laneC, 2 * CORNER);
-      [[e._diagFrom - e._dir * 2 * CORNER, fromC, e._diagFrom, fromC, tipOut],
-       [e._mergeAt + e._dir * 2 * CORNER, backC, e._mergeAt, backC, tipIn]].forEach(function (f) {
-        var fk = svgEl('path', { d: roundedPath([toXY(f[0], f[1]), toXY(f[2], f[3]), toXY(f[4][0], f[4][1])], CORNER) });
-        styleStroke(fk, p, S);
-        fk.removeAttribute('stroke-dasharray');
-        fk.setAttribute('data-metro-role', 'fork'); fk.setAttribute('data-metro-owner', e._laneOwner);
-        svg.appendChild(fk);
-      });
-      var pts = [toXY(tipOut[0], tipOut[1]), toXY(e._elbow, laneC), toXY(e._lineTo, laneC), toXY(tipIn[0], tipIn[1])];
-      var path = svgEl('path', { d: roundedPath(pts, CORNER) });
-      styleStroke(path, p, S);
-      path.setAttribute('data-metro-role', 'branch'); path.setAttribute('data-metro-owner', p.key);
-      svg.appendChild(path);
+      var p = trackByKey[e._laneOwner] || e._p, sign = e._sign, laneC = spineC + sign * e._laneDist;
+      // A rejoin is two ramps back to back with the rail between them: out
+      // at the start, flat for the event, back in after it. Drawn as ONE
+      // path so the dashes run continuously round the loop, with the phase
+      // taken from the trunk at the departure — the lead-in there is the
+      // longer of the two trunk overlays and the one an eye follows into
+      // the bend.
+      var fromC = lineCAt(p, e._diagFrom);
+      var backC = lineCAt(p, e._mergeAt);
+      var loop = [[e._diagFrom - e._dir * RAMP_LEAD, fromC], [e._diagFrom, fromC],
+                  [e._elbow, laneC], [e._lineTo, laneC],
+                  [e._mergeAt, backC], [e._mergeAt + e._dir * RAMP_LEAD, backC]];
+      drawRamp(p, loop, e._diagFrom - e._dir * RAMP_LEAD, 'branch', p.key);
     });
 
     // ---- stations (rings / interchange capsules) on top of the lines

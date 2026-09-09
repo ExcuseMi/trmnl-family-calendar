@@ -134,9 +134,16 @@ const REPORTER = `
       var stepPx = 2, pts = [];
       for (var l = 0; l <= len; l += stepPx) pts.push(el.getPointAtLength(l));
       if (len > 0) pts.push(el.getPointAtLength(len));
+      var cs = getComputedStyle(el);
       paths.push({
         role: el.getAttribute('data-metro-role') || 'other',
         owner: el.getAttribute('data-metro-owner') || null,
+        // the drawn stroke, so a test can ask whether a ramp is in its
+        // line's own style rather than only where it goes
+        dash: (cs.strokeDasharray === 'none' ? '' : cs.strokeDasharray) || '',
+        dashOffset: parseFloat(cs.strokeDashoffset) || 0,
+        width: parseFloat(cs.strokeWidth) || 0,
+        len: len,
         pts: ctmPts(el, pts)
       });
     });

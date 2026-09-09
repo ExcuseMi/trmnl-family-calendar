@@ -1,0 +1,212 @@
+'use strict';
+
+// THE RAMP: the shape a line makes leaving its trunk for a lane, and coming
+// back. Every departure and every rejoin on the board is this one shape with
+// different arguments — 45 degrees or vertical, above the spine or below,
+// forward or backward, horizontal board or vertical one. It has broken in
+// most of those variations at least once, so it gets its own file.
+//
+// The two properties that matter and are easy to get wrong:
+//
+//   1. A ramp is part of its line, so it is drawn in that line's stroke. It
+//      used to be forced solid, because the lead-in lies ON the trunk and a
+//      dashed overlay starting its pattern from zero landed out of phase —
+//      you could see the branch's dashes doubled on the main line before it
+//      left. Solid hid that and gave every dashed line a solid elbow.
+//   2. A ramp starts ON the trunk and ends flat in its lane. Detached at
+//      either end it reads as a stray diagonal.
+
+module.exports = function (test, h) {
+  const { layout, VIEWPORTS, fixtures, pathsWhere, eventsIn, assert } = h;
+
+  const ROOMY = VIEWPORTS.find((v) => v.name === 'x-landscape');
+  const VIEWS = ['x-landscape', 'og-landscape', 'x-portrait'].map((n) => VIEWPORTS.find((v) => v.name === n));
+
+  // the tracks a fixture declares, by key
+  function tracksOf(f) {
+    const by = {};
+    (f.metro.legend || []).forEach((t) => { by[t.key] = t; });
+    return by;
+  }
+
+  function ramps(rep) {
+    return pathsWhere(rep, 'fork').concat(pathsWhere(rep, 'branch')).filter((p) => p.len > 4);
+  }
+
+  // ---- 1. style -------------------------------------------------------
+
+  for (const f of fixtures) {
+    test('a ramp is drawn in its own line\'s stroke: ' + f.name, () => {
+      const rep = layout(f, ROOMY);
+      const trunks = {};
+      for (const t of pathsWhere(rep, 'track')) trunks[t.owner] = t;
+      const bad = [];
+      for (const r of ramps(rep)) {
+        const trunk = trunks[r.owner];
+        if (!trunk) continue;
+        if (r.dash !== trunk.dash) {
+          bad.push('"' + r.owner + '" ramp is ' + (r.dash || 'solid')
+            + ' where its line is ' + (trunk.dash || 'solid'));
+        }
+      }
+      assert(bad.length === 0, bad.length + ' ramp(s) not in their line\'s stroke: '
+        + [...new Set(bad)].slice(0, 4).join('; '));
+    });
+  }
+
+  test('a dashed line\'s ramp carries a dash offset, so its lead-in falls on the trunk\'s own dashes', () => {
+    // The lead-in is drawn on top of the trunk. Without an offset the
+    // overlay starts a fresh pattern and doubles the line visibly; with one
+    // it lands exactly on the trunk's dashes and disappears. This can only
+    // be checked as "the offset was computed at all" — that it is CORRECT is
+    // what the eye checks — but a zero offset on every dashed ramp is the
+    // symptom of the phase logic being dropped, which is how it regressed.
+    const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
+    const dashed = ramps(rep).filter((r) => r.dash);
+    assert(dashed.length > 0, 'no dashed ramps on the busy day at all');
+    const offset = dashed.filter((r) => r.dashOffset > 0);
+    assert(offset.length > 0,
+      'none of the ' + dashed.length + ' dashed ramps has a dash offset: the lead-in '
+      + 'will double the trunk it lies on');
+  });
+
+  // ---- 2. attachment --------------------------------------------------
+
+  for (const v of VIEWS) {
+    test('every ramp starts on its own trunk: ' + v.name, () => {
+      const rep = layout(fixtures.find((x) => x.name === 'busy-day'), v);
+      const trunks = {};
+      for (const t of pathsWhere(rep, 'track')) trunks[t.owner] = t;
+      const bad = [];
+      for (const r of pathsWhere(rep, 'fork')) {
+        const trunk = trunks[r.owner];
+        if (!trunk || !r.pts.length) continue;
+        const s = r.pts[0];
+        let best = Infinity;
+        for (const q of trunk.pts) best = Math.min(best, Math.hypot(q[0] - s[0], q[1] - s[1]));
+        // sampled every 2px along both paths, so ~3px is exact contact
+        if (best > 6) bad.push('"' + r.owner + '" starts ' + best.toFixed(1) + 'px off its line');
+      }
+      assert(bad.length === 0, bad.length + ' ramp(s) detached from their trunk: '
+        + bad.slice(0, 4).join('; '));
+    });
+  }
+
+  test('every ramp ends flat, in a lane', () => {
+    const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
+    const bad = [];
+    for (const r of pathsWhere(rep, 'fork')) {
+      if (r.pts.length < 4) continue;
+      // the last few samples must be level: the ramp turns before it stops,
+      // it does not just stop mid-climb
+      const tail = r.pts.slice(-4);
+      const rise = Math.max(...tail.map((q) => q[1])) - Math.min(...tail.map((q) => q[1]));
+      const run = Math.max(...tail.map((q) => q[0])) - Math.min(...tail.map((q) => q[0]));
+      if (rise > 2 && rise > run) bad.push('"' + r.owner + '" still climbing at its end');
+    }
+    assert(bad.length === 0, bad.length + ' ramp(s) end mid-climb: ' + bad.slice(0, 4).join('; '));
+  });
+
+  // ---- 3. the two shapes ----------------------------------------------
+
+  test('a ramp is either 45 degrees or vertical, never a squeezed diagonal', () => {
+    // Steepening a 45-degree ramp to fit a deep lane looked like a mistake,
+    // and easing a vertical one out to 45 made it leave an hour before its
+    // event. So there are two shapes and nothing between: either the run
+    // equals the rise, or there is no run at all.
+    const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
+    const bad = [];
+    for (const e of eventsIn(rep)) {
+      if (e.status !== 'ok') continue;
+      const run = Math.abs(e.elbow - e.diagFrom);
+      const rise = Math.abs(e.laneDist - e.trackDist);
+      if (run < 1) continue;                       // vertical: fine
+      if (Math.abs(run - rise) <= 1) continue;     // 45 degrees: fine
+      bad.push('"' + e.title + '" runs ' + Math.round(run) + ' over a rise of ' + Math.round(rise));
+    }
+    assert(bad.length === 0, bad.length + ' ramp(s) at neither angle: ' + bad.slice(0, 4).join('; '));
+  });
+
+  test('a deep dive goes vertical rather than leaving early', () => {
+    // The bug this replaces: Saxophone Lesson at 16:00 left its line at
+    // 15:00, because a 45-degree ramp to a lane a band away needs an hour of
+    // run. Nothing may leave more than a couple of corner radii early.
+    const bad = [];
+    for (const f of fixtures) {
+      const rep = layout(f, ROOMY);
+      const S = rep.debug.S || 1;
+      const cap = 2 * 9 * S + 1; // RAMP_LEAD, in the same layout units the debug reports
+      for (const e of eventsIn(rep)) {
+        if (e.status !== 'ok' || e.dir < 0) continue;
+        const lead = e.elbow - e.diagFrom;
+        if (lead > cap) bad.push(f.name + ' "' + e.title + '" leaves ' + Math.round(lead) + 'px early');
+      }
+    }
+    assert(bad.length === 0, bad.length + ' branch(es) leave too early: ' + bad.slice(0, 4).join('; '));
+  });
+
+  test('a shallow drop still gets its 45-degree ramp — the rule is not "always vertical"', () => {
+    const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
+    const angled = eventsIn(rep).filter((e) => e.status === 'ok' && Math.abs(e.elbow - e.diagFrom) > 1);
+    assert(angled.length > 0,
+      'every branch went vertical: the shallow case has stopped taking the ramp');
+  });
+
+  // ---- 4. corners ------------------------------------------------------
+
+  test('both of a ramp\'s corners are rounded to the same radius', () => {
+    // roundedPath clamps each fillet to half its shorter adjacent segment.
+    // Drawn as two paths, the fork took a fixed lead and left the branch
+    // nothing, so the corner into the lane came out square beside a round
+    // one. Measured as how far the drawn curve cuts the corner: a square
+    // corner cuts nothing.
+    const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
+    const bad = [];
+    for (const r of pathsWhere(rep, 'fork')) {
+      if (r.pts.length < 12) continue;
+      const cuts = corners(r.pts);
+      if (cuts.length !== 2) continue;
+      const [a, b] = cuts;
+      if (Math.max(a, b) > 1 && Math.min(a, b) < Math.max(a, b) * 0.45) {
+        bad.push('"' + r.owner + '" corners cut ' + a.toFixed(1) + 'px and ' + b.toFixed(1) + 'px');
+      }
+    }
+    assert(bad.length === 0, bad.length + ' ramp(s) with mismatched corners: '
+      + bad.slice(0, 4).join('; '));
+  });
+
+  // How much the drawn path deviates from the straight-line corner at each
+  // turn: sample the direction along the path, find where it swings, and
+  // measure the largest gap between the samples and the corner point.
+  function corners(pts) {
+    const dirs = [];
+    for (let i = 1; i < pts.length; i++) {
+      const dx = pts[i][0] - pts[i - 1][0], dy = pts[i][1] - pts[i - 1][1];
+      const l = Math.hypot(dx, dy);
+      dirs.push(l < 0.01 ? null : [dx / l, dy / l]);
+    }
+    const turns = [];
+    for (let i = 1; i < dirs.length; i++) {
+      if (!dirs[i] || !dirs[i - 1]) continue;
+      const dot = dirs[i][0] * dirs[i - 1][0] + dirs[i][1] * dirs[i - 1][1];
+      if (dot < 0.999) turns.push(i);
+    }
+    // group consecutive turning samples into corners, and measure each
+    // group's length along the path as a proxy for its radius
+    const out = [];
+    let run = [turns[0]];
+    for (let i = 1; i < turns.length; i++) {
+      if (turns[i] - turns[i - 1] <= 2) run.push(turns[i]);
+      else { out.push(runLen(pts, run)); run = [turns[i]]; }
+    }
+    if (turns.length) out.push(runLen(pts, run));
+    return out;
+  }
+  function runLen(pts, run) {
+    let l = 0;
+    for (let i = run[0]; i <= run[run.length - 1] && i < pts.length - 1; i++) {
+      l += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+    }
+    return l;
+  }
+};

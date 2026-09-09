@@ -19,6 +19,16 @@
 
 # Done
 
+- ~~Ramps should be in the style of the track they are on; we need one ramp
+  builder that handles all of these, with extensive tests.~~ Every departure
+  and rejoin is now one function. The elbow used to be forced solid because
+  its lead-in lies ON the trunk and a dashed overlay starting its pattern
+  from zero doubled the line visibly. The fix was phase, not paint: the ramp
+  asks the trunk how far along itself the lead-in starts and offsets its
+  dashes by that much, so the overlay disappears and the ramp can wear the
+  real stroke. A spur wears the line it GROWS FROM, which for an interchange
+  is the outermost rail it joins. `test/layout/cases/ramps.js`, 14 cases.
+
 - ~~buildLabel should use the framework position utilities instead of
   styles.~~ Text alignment is `text--left` / `text--right` now. The
   remaining inline styles are arbitrary pixel offsets and measured
