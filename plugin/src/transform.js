@@ -453,12 +453,16 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
 // Demo path — unchanged hardcoded data.
 // ---------------------------------------------------------------------
 
+// The offline fallback, for when GitHub is unreachable. Hues and patterns
+// match what makeTrackRegistry would assign these five from HUE_CYCLE and
+// LINE_STYLES, so a device that loses the network does not also change
+// colour — and no grey is pinned, so a theme still gets to repaint them.
 var DEMO_TRACKS = [
   { key: 'homer', name: 'Homer', side: 'left', hue: 'black', track_offset: -10, line_width: 4, line_style: 'solid' },
-  { key: 'marge', name: 'Marge', side: 'right', hue: 'orange-40', track_offset: 10, line_width: 3, line_style: 'solid' },
-  { key: 'bart', name: 'Bart', side: 'right', hue: 'purple-40', track_offset: 20, line_width: 3, line_style: 'dotted' },
-  { key: 'lisa', name: 'Lisa', side: 'right', hue: 'gray-40', track_offset: 30, line_width: 3, line_style: 'dash-dot' },
-  { key: 'maggie', name: 'Maggie', side: 'right', hue: 'green-40', track_offset: 40, line_width: 3, line_style: 'dashed' },
+  { key: 'lisa', name: 'Lisa', side: 'left', hue: 'red-40', track_offset: -20, line_width: 3, line_style: 'dashed' },
+  { key: 'marge', name: 'Marge', side: 'right', hue: 'orange-40', track_offset: 10, line_width: 3, line_style: 'dotted' },
+  { key: 'bart', name: 'Bart', side: 'right', hue: 'purple-40', track_offset: 20, line_width: 3, line_style: 'dashdot' },
+  { key: 'maggie', name: 'Maggie', side: 'right', hue: 'cyan-40', track_offset: 30, line_width: 2.25, line_style: 'dashed' },
 ];
 
 // A deliberately busy day in Springfield: two meetings starting minutes
@@ -532,12 +536,17 @@ var DEMO_CONFIG = {
   locale: 'en-US',
   timeZone: 'Europe/Brussels',
   timeFormat: '12h',
+  // No pinned colours. A track's hue and dash pattern are assigned
+  // automatically from the framework's own hue cycle, which is what a THEME
+  // remaps — pin "gray-40" and the line stays that grey whatever theme the
+  // device is set to. Pinning is still available per track for anyone who
+  // wants it; the shipped configs just don't use it.
   tracks: [
     { name: 'Homer', side: 'left' },
-    { name: 'Marge', color: 'orange-40' },
-    { name: 'Bart', color: 'purple-40' },
-    { name: 'Lisa', color: 'gray-40' },
-    { name: 'Maggie', color: 'green-40' },
+    { name: 'Marge' },
+    { name: 'Bart' },
+    { name: 'Lisa' },
+    { name: 'Maggie' },
   ],
   calendars: [
     demoOwnTrack('Homer', 'homer.ics'),
@@ -1170,8 +1179,30 @@ function makeTrackRegistry(parsed) {
       // being) is black/bold; everyone else cycles hues in registration order
       t.hue = (configured && hueTokenForColor(configured.color)) || (side === 'left' && idx === 0 ? 'black' : HUE_CYCLE[i % HUE_CYCLE.length]);
       t.line_width = (side === 'left' && idx === 0) ? 4 : 3;
-      t.line_style = LINE_STYLES[idx % LINE_STYLES.length];
       t.initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
+    });
+    // Dash patterns are handed out GLOBALLY, in the order the lines appear on
+    // the board, not per side. Per side, the second line on the left and the
+    // second on the right both got "dashed" — and since every hue collapses
+    // to the same grey on a greyscale panel, that left two lines a reader
+    // cannot tell apart. Colour is decoration on this hardware; the pattern
+    // is the identity, so it has to be unique.
+    //
+    // Past a full lap of the four patterns the lines also thin out, so a
+    // sixth track is a thinner dashed rather than a second identical one.
+    var boardOrder = order.slice().sort(function (a, b) {
+      var ta = byName[a], tb = byName[b];
+      if (ta.side !== tb.side) return ta.side === 'left' ? -1 : 1;
+      return Math.abs(ta.track_offset) - Math.abs(tb.track_offset);
+    });
+    var styleIdx = 0;
+    boardOrder.forEach(function (name) {
+      var t = byName[name];
+      if (t.side === 'left' && Math.abs(t.track_offset) === TRACK_STEP) { t.line_style = 'solid'; return; }
+      var lap = Math.floor(styleIdx / (LINE_STYLES.length - 1));
+      t.line_style = LINE_STYLES[1 + (styleIdx % (LINE_STYLES.length - 1))];
+      if (lap > 0) t.line_width = Math.max(1.5, t.line_width - lap * 0.75);
+      styleIdx++;
     });
   }
 

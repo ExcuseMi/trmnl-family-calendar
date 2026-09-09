@@ -43,10 +43,10 @@ module.exports = function (test, h) {
   // fixes the tightest version — reorders long runs badly enough to cost
   // more events than it saves.
   const OVERLAP_KNOWN = {};
+  // Three fixtures came off this list when a pierce stopped scoring cheaper
+  // than sliding a label. The one left is geometry, not scoring.
   const PIERCE_KNOWN = {
-    'busy-day': 'a steepened drop to a shared lane clips the corner of an earlier label on the same line by ~15px; the alternative was the drop starting far enough back to rake the whole band',
-    'all-day-every-track': "an interchange climbing inside the band it takes its lane from, on a day where every line also carries an all-day kink",
-    'waypoint-station': 'a branch climbing past an earlier label on its own line, where a waypoint station has already raised that line',
+    'tight-pair': 'two 15-minute meetings 20 minutes apart on one line: the second has to reach a deeper lane, and its branch now drops at its own minute rather than easing in from before, so it passes through the first label — which is 20x wider than the gap between them at any text size. The alternatives are a label 500px from the rail it belongs to, or a branch that lies about when the meeting starts.',
   };
 
   const OVERLAP_TOL = 2;

@@ -100,20 +100,16 @@
       "side": "left"
     },
     {
-      "name": "Alex",
-      "color": "gray-25"
+      "name": "Alex"
     },
     {
-      "name": "Jordan",
-      "color": "gray-40"
+      "name": "Jordan"
     },
     {
-      "name": "Mia",
-      "color": "gray-50"
+      "name": "Mia"
     },
     {
-      "name": "Leo",
-      "color": "gray-60"
+      "name": "Leo"
     }
   ]
 }

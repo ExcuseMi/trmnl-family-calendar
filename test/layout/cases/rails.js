@@ -105,4 +105,41 @@ module.exports = function (test, h) {
       'the five-hour block should loop back to its line, got rejoins on: '
       + (merged.join(', ') || 'nothing'));
   });
+
+  // A spur that drops straight down needs no run-up. The lane spine starts a
+  // corner radius before the elbow so an arriving diagonal has flat line to
+  // land on; with nothing arriving from the left that stretch is a stub
+  // poking out past the corner, and it sits at minutes before the event
+  // began. Reported as "a bit sticking out the left of the track".
+  for (const f of fixtures) {
+    test('a straight-down branch starts at its corner, with nothing before it: ' + f.name, () => {
+      const rep = layout(f, ROOMY);
+      // Forward branches only. A branch near the end of the axis runs
+      // BACKWARD — its label sits before the drop and its rail runs back to
+      // reach it — so line before the drop is the whole point there.
+      const drops = eventsIn(rep).filter((e) => e.status === 'ok' && e.dir > 0 && e.diagFrom === e.elbow);
+      if (!drops.length) { assert(true); return; }
+      const lines = pathsWhere(rep, 'branch').concat(pathsWhere(rep, 'fork'));
+      // the debug attribute reports layout px; the drawn report is in screen
+      // px, which on a 2x-density panel the framework zooms by Z
+      const Z = rep.debug.Z || 1;
+      const bad = [];
+      for (const e of drops) {
+        const laneY = (rep.debug.spineC + e.sign * e.laneDist) * Z;
+        // only the stretch just before the corner, at that lane's own height:
+        // far-off events on the same lane are somebody else's business
+        const from = (e.elbow - 22) * Z, to = (e.elbow * Z) - 3;
+        for (const p of lines) {
+          for (const pt of p.pts) {
+            if (pt[0] >= from && pt[0] <= to && Math.abs(pt[1] - laneY) < 4) {
+              bad.push('"' + e.title + '" has line at x' + Math.round(pt[0])
+                + ', ' + Math.round(e.elbow * Z - pt[0]) + 'px before its drop');
+            }
+          }
+        }
+      }
+      assert(bad.length === 0, bad.length + ' stub(s) before a straight-down drop: '
+        + bad.slice(0, 3).join('; '));
+    });
+  }
 };

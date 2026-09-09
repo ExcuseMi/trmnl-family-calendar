@@ -150,13 +150,27 @@
   // get the framework-resolved shade for each track's hue.
   var screenEl = canvas.closest('.screen');
   var ONE_BIT = !!(screenEl && screenEl.classList.contains('screen--1bit'));
+  // Ink and paper, as the THEME defines them, not as hex. A device in dark
+  // mode paints a black canvas and white text; a marker filled with a
+  // literal #fff was then a solid white blob where a hollow ring should be,
+  // and its literal #000 outline was invisible. These two CSS variables swap
+  // with the theme, so "hollow" means the canvas colour whatever that is and
+  // "drawn" means the text colour. SVG presentation ATTRIBUTES do not accept
+  // var(), so both are applied through .style.
+  var INK = 'var(--framework-semantic-text-primary-text-color, #000)';
+  var PAPER = 'var(--framework-semantic-canvas-bg-color, #fff)';
+  function paint(node, fill, stroke) {
+    if (fill) node.style.fill = fill;
+    if (stroke) node.style.stroke = stroke;
+    return node;
+  }
   var colorCache = {};
   function colorFor(hue) {
-    if (ONE_BIT) return '#000000';
+    if (ONE_BIT) return INK;
     if (!(hue in colorCache)) {
       var c = null;
       try { var f = TRMNLPaint.stroke(hue, { el: canvas }); c = f && f.color; } catch (e) {}
-      colorCache[hue] = c || '#000000';
+      colorCache[hue] = c || INK;
     }
     return colorCache[hue];
   }
@@ -405,7 +419,7 @@
     // needs no legend at all — the name is on the line it belongs to rather
     // than in a key you have to look things up in.
     LEGEND.forEach(function (p) {
-      var n = el('span', 'metro-gen metro-terminus label label--small font--bold text--black absolute bg--white');
+      var n = el('span', 'metro-gen metro-terminus label label--small font--bold text--black absolute bg--white text--black');
       n.textContent = p.name;
       // Standing up, the lines are only a track-step apart across the map
       // while the names are words wide, so laid flat they pile into each
@@ -535,7 +549,7 @@
     // text, drawn in the band along the top edge (horizontal) or beside the
     // bundle (vertical), with a guide line across the canvas at its time.
     function buildMarkerLabel(w) {
-      var n = el('div', 'metro-gen metro-sky flex flex--row flex--center-y gap--xsmall absolute bg--white');
+      var n = el('div', 'metro-gen metro-sky flex flex--row flex--center-y gap--xsmall absolute bg--white text--black');
       n.style.padding = '0 ' + (3 * S) + 'px';
       var size = hourH * (w.type === 'sun' ? 1.5 : 1.3);
       var ic = el('img', 'image--adaptive'); ic.src = w.icon; ic.style.width = size + 'px'; ic.style.height = size + 'px';
@@ -556,8 +570,12 @@
     }
     function buildLabel(e) {
       var p = trackByKey[e.owner];
-      var box = el('div', 'metro-gen metro-label absolute bg--white');
-      if (!horizontal) box.style.textAlign = p._sign < 0 ? 'right' : 'left';
+      // Alignment is a framework class, not an inline style: text--left /
+      // text--right are what the framework documents for this, and they pick
+      // up any per-screen overrides a theme sets. Only the arbitrary pixel
+      // offsets below stay inline — there is no utility class for "148px".
+      var align = horizontal ? '' : (p._sign < 0 ? ' text--right' : ' text--left');
+      var box = el('div', 'metro-gen metro-label absolute bg--white text--black' + align);
       if (showTime) {
         var tm = labelRow('metro-time-tag ' + tagClass + ' text--gray-40');
         tm.textContent = timeLabel(e.start_min) + ' ' + timeLabel(e.end_min);
@@ -767,22 +785,25 @@
         // grid never tested.
         var dy = Math.max(laneDist(k) - e._trackDist, MIN_DIAG);
         var rowDist = e._trackDist + dy;
-        // The branch leaves the trunk BEFORE the event, so that by the time
-        // it reaches the event's own minute the spur is already flat and can
-        // be marked at the true start and end. Diverging AT the start time
-        // instead put the fork and the stop-tick on the same spot (messy),
-        // and pushed the whole label a diagonal's width later than the thing
-        // it names — which is the main reason the spur read as if its length
-        // meant duration.
-        // An interchange already draws a vertical tie: a dashed line at the
-        // event's own minute, stitching together every rail that joins it.
-        // The label's branch is going the same way, to the same place, so it
-        // leaves on that same vertical and simply carries on past the
-        // outermost ring before turning flat. One line down the board
-        // instead of a tie and a diagonal leaving at different angles from
-        // the same point.
-        var iconn = e._involved && e._involved.length > 1;
-        var elbow = iconn ? e._nodeA : e._nodeA - dir * CORNER;
+        // THE BRANCH LEAVES AT THE EVENT'S OWN MINUTE. Nothing about a
+        // branch may be drawn before the thing it names has started.
+        //
+        // It used to leave early, by a 45° diagonal's worth of lead, so that
+        // it was already flat by the start time. How much lead that needed
+        // depended on how deep the lane was, so the deeper the lane the
+        // further back in time the line departed — Saxophone Lesson at 16:00
+        // left its line at 15:00, and Detention's climb started so far back
+        // it ran through the ramp of a station that had not ended yet. Both
+        // were read off the board as the wrong time, which is the one thing
+        // this map cannot get wrong.
+        //
+        // So there is no lead. Every branch drops (or climbs) perpendicular
+        // at its start and turns flat at the corner: a shared event does it
+        // on the interchange tie that is already drawn there, a solo one on
+        // its own tick. The angle is no longer 45° and no longer constant,
+        // and that is the trade being made — an honest right angle over a
+        // pretty diagonal that lies about when.
+        var elbow = e._nodeA;
         var L = lane(k), len = e._textLen;
         var elbow0 = elbow;
         var natural = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len;
@@ -815,24 +836,25 @@
         }
         var elbowShift = Math.abs(elbow - elbow0);
         if (elbowShift > MAX_SHIFT * (dir > 0 ? 0.6 : 0.3)) return null;
-        // Where the branch leaves the trunk. Measured from the elbow the
-        // label ACTUALLY got, not the one it asked for: a slid elbow with a
-        // fork still anchored to the old one silently changes the angle,
-        // and for an interchange it un-verticals the drop.
-        // A deep lane needs a long climb, and for an event early in the day
-        // that start can fall off the board entirely — the branch then
-        // appears to arrive from nowhere at the edge. Keep the fork (and the
-        // bit of trunk its fillet needs) on the canvas; the diagonal just
-        // gets steeper than 45° when there is not room to do it properly,
-        // which is the honest compromise: the event's own time does not move.
-        // A 45° fork for a deep lane also starts a long way before the event
-        // — far enough that it rakes across everything in between. Cap how
-        // far back it may reach: past that the drop simply steepens, and at
-        // the limit it is vertical, dropping at the event's own minute. Time
-        // is what this map is for, so the angle is what gives. An
-        // interchange is pinned to that limit outright.
-        var maxLead = iconn ? 0 : Math.max(2 * CORNER, laneStep);
-        var diagFrom = elbow - dir * Math.min(dy, maxLead);
+        // Two shapes, and only two.
+        //
+        // A shallow drop — one lane off the line, which is most events —
+        // gets the 45° ramp: it leaves the trunk a drop's width early,
+        // which at MIN_DIAG is a few px, and is flat by the start time.
+        // That is the nicer shape and it costs almost nothing in truth.
+        //
+        // A deep drop does not get a shallower version of it. A 45° ramp to
+        // a lane a whole band away starts an HOUR before the meeting —
+        // Saxophone Lesson at 16:00 left its line at 15:00, and Detention's
+        // began so far back it ran through a station ramp that had not
+        // ended yet. Steepening the ramp instead just looks like a mistake.
+        // Past the budget the branch goes fully vertical, leaving at its own
+        // minute, and the drop itself becomes the start mark.
+        //
+        // The budget is the geometry's own: two corner radii is the least
+        // run a bend needs to look drawn rather than clipped.
+        var LEAD_CAP = 2 * CORNER;
+        var diagFrom = dy <= LEAD_CAP ? elbow - dir * dy : elbow;
         diagFrom = clamp(diagFrom, axisStart + 2 * CORNER, axisEnd - 2 * CORNER);
         if (dir > 0 ? diagFrom > elbow : diagFrom < elbow) diagFrom = elbow;
         var sp = span(ts);
@@ -877,7 +899,15 @@
                  // a label a few px, so three events that do not overlap in
                  // time each took their own lane and the last one dived a
                  // quarter of the canvas to reach it.
-                 score: shift + elbowShift * 1.5 + (elbowShift ? 30 * S : 0) + dy * 0.5 + (dir < 0 ? 260 * S : 0) + (crossing ? 50 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
+                 // A line drawn through a label is the worst thing that can
+                 // happen on this board — it costs the reader the word, not
+                 // just the tidiness. Now that branches drop vertically at
+                 // their own minute they can no longer step around a label
+                 // by starting their diagonal earlier, so the only way out
+                 // is a different lane or a slid label. Both are cheaper
+                 // than the crossing, and the score has to say so: at 50*S
+                 // a pierce was cheaper than sliding a label its own width.
+                 score: shift + elbowShift * 1.5 + (elbowShift ? 30 * S : 0) + dy * 0.5 + (dir < 0 ? 260 * S : 0) + (crossing ? 220 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
       }
       evs.forEach(function (e, idx) {
         e._dropped = false;
@@ -914,7 +944,14 @@
             e._w = nb.w; e._h = nb.h; e._textLen = horizontal ? e._w : e._h;
           }
         }
-        var lineA = best.dir > 0 ? best.elbow - CORNER : e._textStart - TAIL;
+        // The lane spine starts a corner radius before the elbow so the
+        // arriving diagonal has flat line to land on. A branch that drops
+        // straight down has nothing arriving from the left, so that run-up
+        // is just a stub poking out past the corner — and being before the
+        // elbow it also read as rail during minutes the event had not
+        // started. It starts at the corner instead.
+        var straightDown = best.diagFrom === best.elbow;
+        var lineA = best.dir > 0 ? (straightDown ? best.elbow : best.elbow - CORNER) : e._textStart - TAIL;
         // The rail stops when the event does. It used to run on to wherever
         // the label finished, which drew a line through time the event does
         // not occupy — the whole point of putting ticks at the true start
@@ -1196,7 +1233,7 @@
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
       colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
-      events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub']; })
+      events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign]; })
     }));
 
     // ---- the day as a river, drawn behind everything --------------------
@@ -1212,15 +1249,22 @@
     // the fill dithers away and the banks still read.
     (function drawTimeRiver() {
       var half = Math.max(gutterHalf * 1.35, hourH * 0.9);
-      var amp = Math.min(half * 0.45, TRACK_STEP * 0.5);
-      function bank(offset) {
+      var amp = Math.min(half * 0.35, TRACK_STEP * 0.4);
+      // The two banks used to carry the SAME wave, so the whole river
+      // translated up and down while the hour labels stayed on the spine —
+      // by mid-afternoon the times were riding one bank instead of sitting
+      // in the water. The banks now mirror each other, so the river breathes
+      // wider and narrower around a centreline that never moves, and every
+      // hour label stays in the middle of it.
+      function widthAt(t) {
+        return half + Math.sin(t * Math.PI * 3.1) * amp * 0.5
+                    + Math.sin(0.7 + t * Math.PI * 5.3) * amp * 0.2;
+      }
+      function bank(side) {
         var pts = [], n = 60;
         for (var i = 0; i <= n; i++) {
           var t = i / n;
-          var c = spineC + offset
-                + Math.sin(t * Math.PI * 3.1) * amp
-                + Math.sin(0.7 + t * Math.PI * 5.3) * amp * 0.35;
-          pts.push(toXY(t * axisPx, c));
+          pts.push(toXY(t * axisPx, spineC + side * widthAt(t)));
         }
         return pts;
       }
@@ -1229,12 +1273,26 @@
         for (var i = 1; i < pts.length; i++) out += ' L ' + pts[i][0] + ' ' + pts[i][1];
         return close ? out + ' Z' : out;
       }
-      var top = bank(-half), bot = bank(half);
-      var fill = svgEl('path', { d: d(top.concat(bot.slice().reverse()), true), fill: '#f1f1f1', stroke: 'none' });
+      var top = bank(-1), bot = bank(1);
+      // Themed, not hardcoded. A fixed light grey stayed light when the
+      // device flipped to dark mode while the hour labels turned white, and
+      // the times went invisible.
+      //
+      // The river is a wash of the TEXT colour rather than a named grey, at
+      // an opacity low enough to stay behind the hours. That is one rule
+      // that works both ways round: black at 9% on a white canvas, white at
+      // 9% on a black one, so the water is always a shade off the paper and
+      // the times always read. Named greys are absolute, so any one of them
+      // is subtle in one theme and heavy in the other — gray-55 was a slab
+      // in light mode and nearly invisible in dark.
+      var INK = 'var(--framework-semantic-text-primary-text-color, #000)';
+      var fill = svgEl('path', { d: d(top.concat(bot.slice().reverse()), true), stroke: 'none', 'fill-opacity': 0.09 });
+      fill.style.fill = INK;
       fill.setAttribute('data-metro-role', 'river');
       svg.appendChild(fill);
       [top, bot].forEach(function (b) {
-        var ln = svgEl('path', { d: d(b, false), fill: 'none', stroke: '#d9d9d9', 'stroke-width': 1.2 * S, 'stroke-linecap': 'round' });
+        var ln = svgEl('path', { d: d(b, false), fill: 'none', 'stroke-width': 1.2 * S, 'stroke-linecap': 'round', 'stroke-opacity': 0.22 });
+        ln.style.stroke = INK;
         ln.setAttribute('data-metro-role', 'river');
         svg.appendChild(ln);
       });
@@ -1251,8 +1309,19 @@
     alerts.forEach(function (w) {
       var a = aFor(w.at_min);
       var q0 = toXY(a, EDGE), q1 = toXY(a, crossPx - EDGE);
-      if (w.type === 'sun') svg.appendChild(svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1], stroke: '#555', 'stroke-width': 1.2 * S, 'stroke-linecap': 'round', 'stroke-dasharray': (0.1 * S) + ' ' + (5 * S) }));
-      else svg.appendChild(svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1], stroke: '#333', 'stroke-width': 1.5 * S, 'stroke-dasharray': (6 * S) + ' ' + (4 * S) }));
+      // guide lines are ink at reduced opacity rather than a fixed grey, so
+      // they stay a shade under the text in either theme
+      var guide = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1], 'stroke-linecap': 'round' });
+      if (w.type === 'sun') {
+        guide.setAttribute('stroke-width', 1.2 * S);
+        guide.setAttribute('stroke-dasharray', (0.1 * S) + ' ' + (5 * S));
+        guide.setAttribute('stroke-opacity', 0.42);
+      } else {
+        guide.setAttribute('stroke-width', 1.5 * S);
+        guide.setAttribute('stroke-dasharray', (6 * S) + ' ' + (4 * S));
+        guide.setAttribute('stroke-opacity', 0.62);
+      }
+      svg.appendChild(paint(guide, null, INK));
     });
 
     // a track's own line/rings kink out to "station level" for the span of
@@ -1359,12 +1428,16 @@
           var sring = svgEl('path', {
             d: 'M ' + (xy[0] - dr) + ' ' + xy[1] + ' L ' + xy[0] + ' ' + (xy[1] - dr)
               + ' L ' + (xy[0] + dr) + ' ' + xy[1] + ' L ' + xy[0] + ' ' + (xy[1] + dr) + ' Z',
-            fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8, 'stroke-linejoin': 'round',
+            stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8, 'stroke-linejoin': 'round',
           });
+          // hollow means the CANVAS colour, so the line behind it is masked
+          // in either theme — a literal white fill was a white lozenge on a
+          // dark board
+          sring.style.fill = PAPER;
           sring.setAttribute('data-metro-role', 'station-ring'); sring.setAttribute('data-metro-owner', p.key);
           svg.appendChild(sring);
         });
-        var box = el('div', 'metro-gen metro-label absolute bg--white');
+        var box = el('div', 'metro-gen metro-label absolute bg--white text--black');
         // Lying down a caption may run as long as its station; standing up
         // it has only the column between two lines, so cap it there or two
         // neighbouring stations write straight over each other.
@@ -1393,9 +1466,9 @@
           [NODE_R * 1.5, NODE_R * 0.8].forEach(function (r, i) {
             var hub = svgEl('circle', {
               cx: hubXY[0], cy: hubXY[1], r: r,
-              fill: i ? colorFor(p.hue) : '#fff',
               stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.9,
             });
+            hub.style.fill = i ? colorFor(p.hue) : PAPER;
             hub.setAttribute('data-metro-role', 'station-ring'); hub.setAttribute('data-metro-owner', p.key);
             svg.appendChild(hub);
           });
@@ -1472,12 +1545,7 @@
         var sorted = g.members.slice().sort(function (a, b) { return a._elbow - b._elbow; });
         var prevEnd = g.from;
         sorted.forEach(function (e) {
-          // The trunk breaks around the elbow only where the branch peels
-          // away from it at an angle. A branch that drops straight down
-          // leaves the trunk untouched, so breaking it there just knocks a
-          // hole in the line either side of the interchange ring.
-          var gap = e._diagFrom === e._elbow ? 0 : CORNER;
-          bridge(prevEnd, e._elbow - gap);
+          bridge(prevEnd, e._elbow - CORNER);
           // Start a little way BACK along the trunk, so the point where the
           // branch leaves is an interior vertex and gets the same rounding
           // every other bend has. Starting the path at the junction made it
@@ -1508,7 +1576,13 @@
           // lands out of phase with the trunk's own dashes — you could see
           // the branch's dots sitting on the main line before it left.
           // Solid, it is a junction rather than a second dotted line.
-          var tip = alongDiagonal(e._diagFrom, trunkC, e._elbow, laneC, 2 * CORNER);
+          // Hand the two corners equal room. The fork owns the bend off the
+          // trunk and the branch owns the bend into the lane; roundedPath
+          // clamps each fillet to half its shorter adjacent segment, so
+          // taking a fixed 2*CORNER for the fork left the branch nothing on
+          // a shallow drop and its corner came out square beside a round one.
+          var tip = alongDiagonal(e._diagFrom, trunkC, e._elbow, laneC,
+                                  Math.min(2 * CORNER, Math.hypot(e._elbow - e._diagFrom, laneC - trunkC) / 2));
           var fork = svgEl('path', { d: roundedPath([
             toXY(e._diagFrom - e._dir * 2 * CORNER, trunkC),
             toXY(e._diagFrom, trunkC),
@@ -1519,12 +1593,17 @@
           fork.setAttribute('data-metro-role', 'fork'); fork.setAttribute('data-metro-owner', e._laneOwner);
           svg.appendChild(fork);
 
-          var pts = [toXY(tip[0], tip[1]), toXY(e._elbow, laneC), toXY(e._elbow + e._dir * CORNER, laneC)];
+          // The stub past the corner runs 2*CORNER, not CORNER. roundedPath
+          // clamps a fillet to half the shorter adjacent segment, so a
+          // CORNER-long stub bought a half-radius arc — the corner where the
+          // branch turned flat was visibly tighter than the one where it
+          // left the trunk, and read as a square angle beside a round one.
+          var pts = [toXY(tip[0], tip[1]), toXY(e._elbow, laneC), toXY(e._elbow + e._dir * 2 * CORNER, laneC)];
           var path = svgEl('path', { d: roundedPath(pts, CORNER) });
           styleStroke(path, p, S);
           path.setAttribute('data-metro-role', 'branch'); path.setAttribute('data-metro-owner', p.key);
           svg.appendChild(path);
-          prevEnd = e._elbow + gap;
+          prevEnd = e._elbow + 2 * CORNER;
         });
         bridge(prevEnd, g.to);
         var elbows = sorted.map(function (e) { return e._elbow; });
@@ -1583,14 +1662,14 @@
         var t0 = toXY(e._nodeA, lo), t1 = toXY(e._nodeA, hi);
         var tie = svgEl('line', {
           x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
-          stroke: '#000', 'stroke-width': NODE_STROKE * 0.7, 'stroke-linecap': 'round',
+          'stroke-width': NODE_STROKE * 0.7, 'stroke-linecap': 'round',
           'stroke-dasharray': (NODE_STROKE * 1.2) + ' ' + (NODE_STROKE * 1.6),
         });
         tie.setAttribute('data-metro-role', 'capsule'); tie.setAttribute('data-metro-owner', e.owner);
         svg.appendChild(tie);
         cs.forEach(function (c) {
           var xy = toXY(e._nodeA, c);
-          var node = svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R, fill: '#fff', stroke: '#000', 'stroke-width': NODE_STROKE });
+          var node = paint(svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R, 'stroke-width': NODE_STROKE }), PAPER, INK);
           node.setAttribute('data-metro-role', 'ring'); node.setAttribute('data-metro-owner', e.owner);
           svg.appendChild(node);
         });
@@ -1623,7 +1702,16 @@
           if (u >= 1) return laneC;
           return forkC + (laneC - forkC) * u;
         }
+        // The branch now leaves perpendicular AT the start, so the drop is
+        // already the start mark: it is a stroke across the lane at exactly
+        // the minute a tick would be drawn, and collinear with it. Drawing
+        // both put a bar on top of the corner — the vertical appeared to
+        // overshoot the rail and the rail appeared to start beside it
+        // instead of turning into it. Where the drop lands on the start, the
+        // start tick is dropped and the corner is left to read as the corner.
+        var dropMarksStart = e._diagFrom === e._elbow && Math.abs(e._nodeA - e._elbow) < 1;
         [e._nodeA, e._endA].forEach(function (a, i) {
+          if (!i && dropMarksStart) return;
           if (a < lo - 1 || a > hi + 1) return;
           if (i && Math.abs(e._endA - e._nodeA) < NODE_R) return; // too short to show two
           var tc = spurC(a);
@@ -1699,7 +1787,7 @@
     for (var si = 0; si < stepOpts.length; si++) if (pxPerHour * stepOpts[si] >= hourW + 10 * S) { hourStep = stepOpts[si]; break; }
     var reserved = []; // axis intervals already taken by now / overflow notes
     function axisNote(text, a, align, cls) {
-      var n = el('span', 'metro-gen ' + (cls || 'metro-axis-note label label--small font--bold text--black') + ' absolute bg--white');
+      var n = el('span', 'metro-gen ' + (cls || 'metro-axis-note label label--small font--bold text--black') + ' absolute bg--white text--black');
       n.textContent = text;
       canvas.appendChild(n);
       var nr = measure(n);
@@ -1713,7 +1801,7 @@
     }
     if (nowA != null) {
       var dxy = toXY(nowA, spineC);
-      var nowDot = svgEl('circle', { cx: dxy[0], cy: dxy[1], r: 3.5 * S, fill: '#000' });
+      var nowDot = paint(svgEl('circle', { cx: dxy[0], cy: dxy[1], r: 3.5 * S }), INK, null);
       nowDot.setAttribute('data-metro-role', 'now');
       svg.appendChild(nowDot);
       axisNote(timeLabel(nowMin), nowA + 6 * S, 'start');

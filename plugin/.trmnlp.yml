@@ -30,10 +30,10 @@ variables:
       "day_end_min": 1260,
       "secondary_threshold_min": 30,
       "window_label": "07:00 21:00",
-      "date_label": "Tue, Sep 8",
+      "date_label": "Tue 8 Sep",
       "now_min": 870,
       "orientation": "auto",
-      "hour12": false,
+      "hour12": true,
       "i18n": {
         "today": "Today",
         "more": "+{n} more",
@@ -61,7 +61,7 @@ variables:
           "key": "p3",
           "name": "Lisa",
           "side": "left",
-          "hue": "gray-40",
+          "hue": "red-40",
           "track_offset": -20,
           "line_width": 3,
           "line_style": "dashed",
@@ -74,7 +74,7 @@ variables:
           "hue": "orange-40",
           "track_offset": 10,
           "line_width": 3,
-          "line_style": "solid",
+          "line_style": "dotted",
           "initial": "M"
         },
         {
@@ -84,7 +84,7 @@ variables:
           "hue": "purple-40",
           "track_offset": 20,
           "line_width": 3,
-          "line_style": "dashed",
+          "line_style": "dashdot",
           "initial": "B"
         },
         {
@@ -93,8 +93,8 @@ variables:
           "side": "right",
           "hue": "cyan-40",
           "track_offset": 30,
-          "line_width": 3,
-          "line_style": "dotted",
+          "line_width": 2.25,
+          "line_style": "dashed",
           "initial": "M"
         }
       ],
@@ -118,23 +118,6 @@ variables:
       "items": [
         {
           "type": "event",
-          "title": "School Run",
-          "start_min": 480,
-          "end_min": 510,
-          "location": null,
-          "owner": "p1",
-          "co_owners": [
-            "p2",
-            "p3"
-          ],
-          "side": "right",
-          "hue": "orange-40",
-          "track_width": 3,
-          "track_style": "solid",
-          "track_offset": 10
-        },
-        {
-          "type": "event",
           "title": "Shift Handover",
           "start_min": 480,
           "end_min": 495,
@@ -149,6 +132,23 @@ variables:
         },
         {
           "type": "event",
+          "title": "School Run",
+          "start_min": 480,
+          "end_min": 510,
+          "location": null,
+          "owner": "p1",
+          "co_owners": [
+            "p2",
+            "p3"
+          ],
+          "side": "right",
+          "hue": "orange-40",
+          "track_width": 3,
+          "track_style": "dotted",
+          "track_offset": 10
+        },
+        {
+          "type": "event",
           "title": "Book Club",
           "start_min": 540,
           "end_min": 600,
@@ -158,7 +158,7 @@ variables:
           "side": "right",
           "hue": "orange-40",
           "track_width": 3,
-          "track_style": "solid",
+          "track_style": "dotted",
           "track_offset": 10
         },
         {
@@ -170,7 +170,7 @@ variables:
           "owner": "p3",
           "co_owners": [],
           "side": "left",
-          "hue": "gray-40",
+          "hue": "red-40",
           "track_width": 3,
           "track_style": "dashed",
           "track_offset": -20
@@ -199,8 +199,8 @@ variables:
           "co_owners": [],
           "side": "right",
           "hue": "cyan-40",
-          "track_width": 3,
-          "track_style": "dotted",
+          "track_width": 2.25,
+          "track_style": "dashed",
           "track_offset": 30
         },
         {
@@ -214,7 +214,7 @@ variables:
           "side": "right",
           "hue": "orange-40",
           "track_width": 3,
-          "track_style": "solid",
+          "track_style": "dotted",
           "track_offset": 10
         },
         {
@@ -227,8 +227,8 @@ variables:
           "co_owners": [],
           "side": "right",
           "hue": "cyan-40",
-          "track_width": 3,
-          "track_style": "dotted",
+          "track_width": 2.25,
+          "track_style": "dashed",
           "track_offset": 30
         },
         {
@@ -256,7 +256,7 @@ variables:
           "side": "right",
           "hue": "purple-40",
           "track_width": 3,
-          "track_style": "dashed",
+          "track_style": "dashdot",
           "track_offset": 20
         },
         {
@@ -270,7 +270,7 @@ variables:
           "side": "right",
           "hue": "orange-40",
           "track_width": 3,
-          "track_style": "solid",
+          "track_style": "dotted",
           "track_offset": 10
         },
         {
@@ -282,7 +282,7 @@ variables:
           "owner": "p3",
           "co_owners": [],
           "side": "left",
-          "hue": "gray-40",
+          "hue": "red-40",
           "track_width": 3,
           "track_style": "dashed",
           "track_offset": -20
@@ -298,7 +298,7 @@ variables:
           "side": "right",
           "hue": "purple-40",
           "track_width": 3,
-          "track_style": "dashed",
+          "track_style": "dashdot",
           "track_offset": 20
         },
         {
@@ -324,7 +324,7 @@ variables:
           "owner": "p3",
           "co_owners": [],
           "side": "left",
-          "hue": "gray-40",
+          "hue": "red-40",
           "track_width": 3,
           "track_style": "dashed",
           "track_offset": -20
@@ -345,7 +345,7 @@ variables:
           "side": "right",
           "hue": "orange-40",
           "track_width": 3,
-          "track_style": "solid",
+          "track_style": "dotted",
           "track_offset": 10
         }
       ]
