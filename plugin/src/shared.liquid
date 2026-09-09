@@ -306,10 +306,14 @@
       });
     });
     function bundleHalf(s) {
-      // a track passing through a station kinks its own line outward, so
-      // that side needs a little extra room before the first real lane
-      var stationRoom = sides[s].some(function (p) { return p._stations.length; }) ? STATION_LABEL_ROOM : 0;
-      return gutterHalf + TRACK_STEP * sides[s].length + (sides[s].length ? NODE_R : 0) + stationRoom;
+      // how far this side's outermost track currently reaches, kink
+      // included — read off the live distances, since the band layout
+      // re-solves them per attempt rather than packing at a fixed pitch
+      var far = gutterHalf;
+      sides[s].forEach(function (p) {
+        far = Math.max(far, p._dist + NODE_R + (p._stations.length ? STATION_RAISE + STATION_GAP : 0));
+      });
+      return far;
     }
 
     // ---- time window: first fit to where the day's actual content is (so a
@@ -383,26 +387,32 @@
       }
       return 0;
     }
-    // How far the terminus fan has pulled a line off its own baseline at a
-    // given axis position: nothing until the fan's merge point, then a 45°
-    // ramp out to the spread position it holds for the last stretch before
-    // its name. (Reads fan/spineC, which are settled by the time anything
-    // calls this.)
-    function fanOffsetAt(p, a) {
-      if (!fan) return 0;
-      var i = sides[p._sideKey].indexOf(p);
-      var delta = spineC + p._sign * (gutterHalf + fan.step * (i + 1)) - (spineC + p._c);
-      if (!delta) return 0;
-      var d = fan.dir, fanStart = (d > 0 ? 0 : axisPx) + d * fan.len;
-      return delta * clamp(1 - d * (a - fanStart) / Math.abs(delta), 0, 1);
-    }
-    // Where a track's line ACTUALLY is at an axis position — baseline, plus
-    // any station kink, plus any fan spread. Rings and capsules have to be
-    // put here rather than on the bare baseline, or they float off the line
-    // wherever it has moved (an all-day band ending in the fan zone put
-    // every end-of-day ring ~60px away from its own track).
+    // Where a track's line ACTUALLY is at an axis position: its baseline
+    // plus any station kink, and — in the stretch where the terminus fan
+    // pulls it out to its own named end — the fan's ramp instead. Mirrors
+    // exactly how the path is built, including the fact that the ramp
+    // starts from wherever the line already was at the merge point (raised,
+    // if a station reaches that far), which is what put end-of-day rings a
+    // dozen px off their own track. Rings and capsules are placed with this
+    // rather than the bare baseline.
+    // Where a line ends up for its named terminus. Each track already has
+    // its own band, far enough from its neighbours to label, so the line
+    // simply runs out to its name at the height it is already at. The old
+    // fan gathered every line into a tight stack near the spine, which with
+    // bands meant each one raking across every band between it and the
+    // middle — the last structural way a track could cross another.
+    function spreadCFor(p) { return spineC + p._c; }
     function lineCAt(p, a) {
-      return spineC + p._c + p._sign * stationRaiseAt(p, a) + fanOffsetAt(p, a);
+      var flat = spineC + p._c + p._sign * stationRaiseAt(p, a);
+      if (!fan) return flat;
+      var spreadC = spreadCFor(p);
+      var delta = Math.abs(spreadC - (spineC + p._c));
+      var d = fan.dir, fanStart = (d > 0 ? 0 : axisPx) + d * fan.len;
+      var u = d * (a - fanStart);
+      if (u <= 0) return spreadC;              // out past the fan: flat at the spread position
+      if (!delta || u >= delta) return flat;   // inside the map proper
+      var atMerge = spineC + p._c + p._sign * stationRaiseAt(p, fanStart + d * delta);
+      return spreadC + (atMerge - spreadC) * (u / delta);
     }
 
     // ---- events
@@ -596,17 +606,36 @@
       var involved = [p];
       (e.co_owners || []).forEach(function (k) { if (trackByKey[k]) involved.push(trackByKey[k]); });
       e._involved = involved;
-      var outer = p._dist;
-      involved.forEach(function (q) { if (q._sign === p._sign) outer = Math.max(outer, q._dist); });
-      // if this event's start (or end) falls inside one of the owner's own
-      // stations, its ring sits on the raised "station level" segment of
-      // the line, not the flat baseline — so the branch has to originate
-      // (or merge back) from that raised height too
-      e._trackDist = outer + stationRaiseAt(p, e._nodeA) + NODE_R;       // branch origin (edge of the ring/capsule)
-      e._trackDistEnd = p._dist + stationRaiseAt(p, e._endA) + NODE_R;   // merge target (owner's own line)
+      // An interchange's ring sits on the OUTERMOST line it joins (the
+      // capsule spans them all and the branch leaves from its outer edge),
+      // so the lane it can reach belongs to that track, not to whoever
+      // nominally owns the event. Ordering within a side is fixed, so this
+      // holds however the bands are later sized.
+      var order = sides[p._sideKey], outermost = p;
+      involved.forEach(function (q) {
+        if (q._sideKey === p._sideKey && order.indexOf(q) > order.indexOf(outermost)) outermost = q;
+      });
+      e._laneOwner = outermost.key;
     });
+    // Where a branch leaves its owner's line and where it merges back. Both
+    // are read off the track distances, which the band layout re-solves on
+    // every attempt, so this is a function rather than a one-off pass.
+    function recomputeTrackDists() {
+      visible.forEach(function (e) {
+        var p = e._p, outer = p._dist;
+        e._involved.forEach(function (q) { if (q._sign === p._sign) outer = Math.max(outer, q._dist); });
+        // if this event's start (or end) falls inside one of the owner's own
+        // stations, its ring sits on the raised "station level" segment of
+        // the line, not the flat baseline — so the branch has to originate
+        // (or merge back) from that raised height too
+        e._trackDist = outer + stationRaiseAt(p, e._nodeA) + NODE_R;       // branch origin (edge of the ring/capsule)
+        e._trackDistEnd = p._dist + stationRaiseAt(p, e._endA) + NODE_R;   // merge target (owner's own line)
+      });
+    }
+    recomputeTrackDists();
 
-    var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped;
+    var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped, demand, alloc, sep;
+    var lastPlaceCrossings = 0; // set by placeSide: how many placements had to accept a crossing
     function layoutAttempt(tier) {
     titleClass = tier.cls; tagClass = tier.tag; showTime = tier.time; showLocation = tier.loc;
     canvas.querySelectorAll('.metro-label').forEach(function (n) { n.remove(); });
@@ -632,28 +661,42 @@
     // the same spur line (a shared branch with several stations on it).
     // Anything belonging to another line, or another owner's text, makes
     // the lane unusable for this event, so it tries the next lane out.
-    function placeSide(sideKey, maxLanes, step, obstacles) {
-      var evs = visible.filter(function (e) { return e._sideKey === sideKey; }).sort(function (a, b) { return a._nodeA - b._nodeA; });
-      // The earlier event normally keeps the inner (lower) lane — but if the
-      // next one starts before that inner lane's own diagonal would even
-      // finish climbing (nodeA within LANE_BASE of the earlier ring), no
-      // lane assignment for the second one can avoid crossing back through
-      // the first one's now-flat run: its diagonal has to pass through that
-      // height to reach ANY lane at all, low or high. Placing the earlier
-      // one in the inner lane instead — the later one now finishes its own
-      // (smaller) climb before the earlier one's (larger) climb ever
-      // reaches that height — draws the same two branches with no crossing,
-      // so for exactly this tight-start pair, process the later one first.
+    // `slots` is this side's lane ladder, innermost first: each rung is a
+    // real cross-axis distance plus the track that owns it. An event may
+    // only take a rung its OWN track owns, so a branch never reaches across
+    // a neighbouring track's line or labels to find room — that whole class
+    // of crossing stops being possible instead of being scored after the
+    // fact. `onlyOwner` restricts the pass to one track (used to measure
+    // what each track wants before the bands are sized).
+    function placeSide(sideKey, slots, obstacles, onlyOwner) {
+      var maxLanes = slots.length;
+      var evs = visible.filter(function (e) { return e._sideKey === sideKey && (!onlyOwner || e._laneOwner === onlyOwner); }).sort(function (a, b) { return a._nodeA - b._nodeA; });
+      // The earlier event normally keeps the inner lane, so its label sits
+      // next to its own time. But when the next event's ring falls UNDER
+      // that label, the later branch has to climb straight through it to
+      // reach any lane further out — there is no free lane that avoids it,
+      // low or high. Giving the inner lane to the later one instead fixes
+      // it: the earlier event, now climbing further, passes that height
+      // before the later one's flat run has started.
+      //
+      // It only helps if the two rings are far enough apart that the
+      // swapped pair doesn't just cross the other way; when they are closer
+      // than a label is thick, nothing avoids it and the order stands.
+      // Only for a genuinely tight pair — the next ring landing before the
+      // inner lane's own diagonal has even finished climbing. Widening this
+      // to "the next ring falls anywhere under the previous label" catches
+      // more crossings but reorders long runs, which breaks the chaining
+      // that lets a track's consecutive events share one spur, and costs
+      // more events than it saves crossings.
       for (var si = 0; si < evs.length - 1; si++) {
         var e0 = evs[si], e1 = evs[si + 1];
-        if (e0.owner === e1.owner && e1._nodeA - e0._nodeA < LANE_BASE) { evs[si] = e1; evs[si + 1] = e0; }
+        if (e0._laneOwner === e1._laneOwner && e1._nodeA - e0._nodeA < LANE_BASE) { evs[si] = e1; evs[si + 1] = e0; }
       }
-      var bh = bundleHalf(sideKey);
       var lanes = [];
-      function laneDist(k) { return bh + LANE_BASE + k * step; }
+      function laneDist(k) { return slots[k].dist; }
       function lane(k) { return lanes[k] || (lanes[k] = { items: [] }); }
       (obstacles || []).forEach(function (o) {
-        for (var k = 0; k < maxLanes && k < 40 && laneDist(k) <= o.distMax; k++) lane(k).items.push({ a0: o.a0, a1: o.a1, owner: null, kind: 'obstacle' });
+        for (var k = 0; k < maxLanes && laneDist(k) <= o.distMax; k++) lane(k).items.push({ a0: o.a0, a1: o.a1, owner: null, kind: 'obstacle', d: laneDist(k) });
       });
       function itemOverlaps(item, seg) { return item.a0 < seg[1] && seg[0] < item.a1; }
       // does a diagonal from (a0,d0) to (a1,d1) run through a lane's own flat
@@ -694,18 +737,14 @@
       // of the axis). Returns a scored candidate, or null if the lane can't
       // take it.
       function settle(e, k, dir, allowCross) {
-        var ld = laneDist(k);
-        // dy (the diagonal's axis reach) depends only on the lane index, not
-        // on which track this event's ring sits on — otherwise two tracks'
-        // simultaneous events, on different tracks, land on the same lane at
-        // DIFFERENT axis positions (their branches travel different cross-
-        // distances to reach the same nominal lane, so a same-45°-angle
-        // elbow ends up at a different X), which reads as staggered even
-        // though the times are identical. This event's own row distance
-        // (rowDist) is then its OWN track's distance plus that same reach,
-        // so simultaneous events sharing a lane index align in X while each
-        // still gets a genuinely-45° diagonal and its own row.
-        var dy = Math.max(LANE_BASE + k * step, MIN_DIAG);
+        if (slots[k].owner && slots[k].owner !== e._laneOwner) return null; // another track's band
+        // dy (the diagonal's axis reach) is the real distance from this
+        // event's own ring out to the rung, so the branch is drawn exactly
+        // on the lane the collision grid checked it against. With rungs no
+        // longer evenly spaced — each track's band is sized to its own
+        // needs — an index-derived reach would draw the line somewhere the
+        // grid never tested.
+        var dy = Math.max(laneDist(k) - e._trackDist, MIN_DIAG);
         var rowDist = e._trackDist + dy;
         var elbow = e._nodeA + dir * dy;
         var L = lane(k), len = e._textLen;
@@ -830,48 +869,193 @@
         lane(best.k).items.push({ a0: e._textStart, a1: e._textStart + e._textLen, owner: e.owner, kind: 'text', dir: best.dir, d: best.ld });
       });
       var used = 0;
-      evs.forEach(function (e) { if (!e._dropped) used = Math.max(used, e._lane + 1); });
+      lastPlaceCrossings = 0;
+      evs.forEach(function (e) {
+        if (e._dropped) return;
+        used = Math.max(used, e._lane + 1);
+        if (e._crossing) lastPlaceCrossings++;
+      });
       return used;
     }
 
-    function need(sideKey, used, step) {
-      var lanes = bundleHalf(sideKey) + (used ? LANE_BASE + used * step - LANE_GAP : 0);
-      var fanNeed = fan && sides[sideKey].length ? gutterHalf + fan.step * sides[sideKey].length + fan.nameH / 2 : 0;
-      return Math.max(lanes, fanNeed) + EDGE + (sideKey === 'A' ? alertBand : 0);
+    // ---- band layout ------------------------------------------------
+    // Every track gets its own stretch of the cross-axis: its baseline, the
+    // room its line needs to kink out for a station, then its OWN lanes.
+    // Two things fall out of that. A branch never reaches across a
+    // neighbouring track to find room, so it cannot cross one. And the
+    // bands can be spread over whatever the canvas really has, instead of
+    // every line huddling into one bundle in the middle with a shared pool
+    // of lanes stacked beyond it.
+
+    // How far past a track's baseline its own first lane sits. Inside a band
+    // a lane only has to clear its OWN line and rings — LANE_BASE was sized
+    // back when every lane had to clear the whole bundle, and spending that
+    // per track is what pushes a four-line day off the canvas.
+    function laneBase(p) {
+      return NODE_R + Math.max(LINE_GAP, MIN_DIAG) + (p._stations.length ? STATION_RAISE + STATION_GAP : 0);
     }
-    // pass 1: unlimited lanes → how much room does each side want?
+    // a station caption sits ON the baseline, so a track carrying one needs
+    // room on the inward side too for the half that reaches back toward the
+    // spine
+    function capIn(p) { return p._stations.length ? stationCapH / 2 + STATION_GAP : 0; }
+
+    // Lay one side out for a given per-track lane count, lane pitch and
+    // extra track separation. Returns the lane ladder (innermost first,
+    // each rung owned by one track) and how far the side reaches.
+    function buildSide(sideKey, lanesFor, stepPx, sepPx) {
+      var acc = gutterHalf, out = [];
+      sides[sideKey].forEach(function (p) {
+        acc += TRACK_STEP + sepPx + capIn(p);
+        p._dist = acc;
+        p._c = p._sign * acc;
+        var n = lanesFor(p), start = acc + laneBase(p);
+        for (var j = 0; j < n; j++) out.push({ dist: start + j * stepPx, owner: p.key });
+        acc = n ? start + (n - 1) * stepPx + LINE_GAP + maxLabelThick
+               : acc + Math.max(laneBase(p), fan ? fan.nameH / 2 : 0);
+      });
+      return { slots: out, extent: acc };
+    }
+    // The fallback when bands cannot fit: the original packed bundle — every
+    // track at a fixed pitch, with ONE ladder of lanes shared by the side
+    // (owner null means any track may take the rung). Bands need a band's
+    // worth of room per track, which the small 800x480 panel simply does not
+    // have once a couple of tracks carry an all-day kink; packing still
+    // reads correctly there, just with the crossings bands would prevent.
+    function buildPacked(sideKey, nLanes, stepPx) {
+      var acc = gutterHalf, out = [];
+      sides[sideKey].forEach(function (p) {
+        acc += TRACK_STEP;
+        p._dist = acc;
+        p._c = p._sign * acc;
+      });
+      var kink = sides[sideKey].some(function (p) { return p._stations.length; }) ? STATION_RAISE + STATION_GAP : 0;
+      var start = acc + NODE_R + kink + LANE_BASE;
+      for (var j = 0; j < nLanes; j++) out.push({ dist: start + j * stepPx, owner: null });
+      return { slots: out, extent: nLanes ? start + (nLanes - 1) * stepPx + LINE_GAP + maxLabelThick : acc + NODE_R + kink };
+    }
+    function needOf(sideKey, extent) {
+      // names now sit at their own line's height, so the bands already
+      // account for them bar the last one's half-height
+      var fanNeed = fan && sides[sideKey].length ? extent + fan.nameH / 2 : 0;
+      // the legend sits in the far corner of its own side; with bands
+      // reaching for the canvas edge, one would otherwise be laid over it
+      var legendNeed = sideKey === legendSide ? (horizontal ? legendM.h : legendM.w) + legendPad : 0;
+      return Math.max(extent, fanNeed) + EDGE + legendNeed + (sideKey === 'A' ? alertBand : 0);
+    }
+
+    // pass 1: what does each track want on its own, with room to spare?
     step = laneStep;
-    usedA = placeSide('A', 40, step, obstacles.A); usedB = placeSide('B', 40, step, obstacles.B);
-    needA = need('A', usedA, step); needB = need('B', usedB, step);
-    var minA = bundleHalf('A') + EDGE + alertBand, minB = bundleHalf('B') + EDGE;
-    if (needA + needB <= crossPx) {
-      // room to spare: spread the lanes a little so a quiet day still uses
-      // the canvas, then centre the leftover
-      var spread = Math.min(laneStep * 2.2, laneStep + (crossPx - needA - needB) / Math.max(1, usedA + usedB));
-      if (spread > step + 1) {
-        step = spread;
-        usedA = placeSide('A', 40, step, obstacles.A); usedB = placeSide('B', 40, step, obstacles.B);
-        needA = need('A', usedA, step); needB = need('B', usedB, step);
+    demand = {};
+    LEGEND.forEach(function (p) {
+      var probe = [], start = p._dist + laneBase(p);
+      for (var j = 0; j < 24; j++) probe.push({ dist: start + j * step, owner: p.key });
+      var mine = visible.some(function (e) { return e._laneOwner === p.key; });
+      // a track with events always keeps at least one lane even if the
+      // probe placed none (an obstacle can block every rung it tried),
+      // otherwise it would get no band and drop everything it has
+      var want = placeSide(p._sideKey, probe, obstacles[p._sideKey], p.key);
+      // A track that could only fit its own events by letting one of its
+      // branches cross another of its own labels wants one more lane, not
+      // the crossing: two meetings starting within a lane-reach of each
+      // other have nowhere to go otherwise.
+      if (lastPlaceCrossings) want++;
+      demand[p.key] = Math.max(want, mine ? 1 : 0);
+    });
+
+    // pass 2: fit. Trim the GREEDIEST track first rather than capping every
+    // track alike — squeezing a two-lane track down to one to make room for
+    // a neighbour that only ever needed one is how a busy line ends up with
+    // six meetings stacked in a single row.
+    alloc = {};
+    LEGEND.forEach(function (p) { alloc[p.key] = demand[p.key]; });
+    function solve(stepPx, sepPx) {
+      function lanesFor(p) { return alloc[p.key]; }
+      var A = buildSide('A', lanesFor, stepPx, sepPx), B = buildSide('B', lanesFor, stepPx, sepPx);
+      return { A: A, B: B, needA: needOf('A', A.extent), needB: needOf('B', B.extent) };
+    }
+    function fits(sol) { return sol.needA + sol.needB <= crossPx; }
+    sep = 0;
+    var sol = solve(step, sep);
+    // Tighten the lane pitch before taking anyone's lane away: the slack
+    // between lanes is worth less than a lane, and losing a lane means
+    // losing events off the board entirely.
+    var MIN_STEP = maxLabelThick + LINE_GAP + LANE_GAP * 0.25;
+    for (var sh = 0; sh < 24 && !fits(sol) && step > MIN_STEP + 0.5; sh++) {
+      step = Math.max(MIN_STEP, step - laneStep * 0.08);
+      sol = solve(step, sep);
+    }
+    for (var trim = 0; trim < 60 && !fits(sol); trim++) {
+      var worst = null;
+      LEGEND.forEach(function (p) { if (alloc[p.key] > 1 && (!worst || alloc[p.key] > alloc[worst])) worst = p.key; });
+      if (!worst) break;
+      alloc[worst]--;
+      sol = solve(step, sep);
+    }
+
+    // pass 3: spend what is left over. Lane pitch first, so a label has air
+    // around it, then separation between the tracks themselves. Both are
+    // capped: with a band per track the lane count is the SUM over tracks,
+    // so unbounded growth leaves the lines adrift in whitespace with
+    // interchange capsules stretched between them. Whatever is spare after
+    // that gets centred instead.
+    if (fits(sol)) {
+      var STEP_CAP = laneStep * 1.35, SEP_CAP = TRACK_STEP * 2;
+      for (var gi = 0; gi < 24; gi++) {
+        var tryStep = Math.min(STEP_CAP, step + laneStep * 0.1);
+        if (tryStep <= step + 0.5) break;
+        var s2 = solve(tryStep, sep);
+        if (!fits(s2)) break;
+        step = tryStep; sol = s2;
       }
-      spineC = needA + (crossPx - needA - needB) / 2;
-    } else {
-      // pass 2: one lane per side that has events, then hand out extra
-      // lanes to whichever side still wants more, only while they fit
-      var lanesA = usedA ? 1 : 0, lanesB = usedB ? 1 : 0;
-      function fitsLanes(la, lb) { return need('A', la, step) + need('B', lb, step) <= crossPx; }
-      for (var guard = 0; guard < 80; guard++) {
-        var wantA = usedA - lanesA, wantB = usedB - lanesB;
-        if (wantA <= 0 && wantB <= 0) break;
-        var aFirst = wantA >= wantB;
-        if (aFirst && wantA > 0 && fitsLanes(lanesA + 1, lanesB)) { lanesA++; continue; }
-        if (wantB > 0 && fitsLanes(lanesA, lanesB + 1)) { lanesB++; continue; }
-        if (!aFirst && wantA > 0 && fitsLanes(lanesA + 1, lanesB)) { lanesA++; continue; }
+      for (var gj = 0; gj < 24 && sep < SEP_CAP; gj++) {
+        var trySep = Math.min(SEP_CAP, sep + TRACK_STEP * 0.2);
+        var s3 = solve(step, trySep);
+        if (!fits(s3)) break;
+        sep = trySep; sol = s3;
+      }
+    }
+    // If bands still do not fit at their tightest, fall back to the packed
+    // bundle and hand out lanes to whichever side wants them more, the way
+    // this layout worked before bands existed. Better a correct packed map
+    // than a beautiful one with a track hanging off the bottom edge.
+    if (!fits(sol)) {
+      step = laneStep;
+      var wantA = 0, wantB = 0;
+      LEGEND.forEach(function (p) {
+        if (p._sideKey === 'A') wantA = Math.max(wantA, demand[p.key]);
+        else wantB = Math.max(wantB, demand[p.key]);
+      });
+      // a side's shared ladder has to hold every track's lanes at once
+      var sumA = 0, sumB = 0;
+      LEGEND.forEach(function (p) { if (p._sideKey === 'A') sumA += demand[p.key]; else sumB += demand[p.key]; });
+      function packedSol(la, lb) {
+        var A = buildPacked('A', la, step), B = buildPacked('B', lb, step);
+        return { A: A, B: B, needA: needOf('A', A.extent), needB: needOf('B', B.extent), packed: true };
+      }
+      var la = sumA ? 1 : 0, lb = sumB ? 1 : 0;
+      sol = packedSol(la, lb);
+      for (var pg = 0; pg < 80; pg++) {
+        var moreA = la < sumA, moreB = lb < sumB;
+        if (!moreA && !moreB) break;
+        var takeA = moreA && (!moreB || (sumA - la) >= (sumB - lb));
+        if (takeA && fits(packedSol(la + 1, lb))) { la++; sol = packedSol(la, lb); continue; }
+        if (moreB && fits(packedSol(la, lb + 1))) { lb++; sol = packedSol(la, lb); continue; }
+        if (!takeA && moreA && fits(packedSol(la + 1, lb))) { la++; sol = packedSol(la, lb); continue; }
         break;
       }
-      usedA = placeSide('A', lanesA, step, obstacles.A); usedB = placeSide('B', lanesB, step, obstacles.B);
-      needA = need('A', usedA, step); needB = need('B', usedB, step);
-      spineC = clamp(needA + (crossPx - needA - needB) / 2, minA, crossPx - minB);
     }
+    // buildSide/buildPacked write the track distances as they go, so the
+    // last solve tried — possibly a rejected one — is what the tracks are
+    // holding. Re-solve the winner to put them back, then place for real.
+    sol = sol.packed ? (function () {
+      var A = buildPacked('A', sol.A.slots.length, step), B = buildPacked('B', sol.B.slots.length, step);
+      return { A: A, B: B, needA: needOf('A', A.extent), needB: needOf('B', B.extent), packed: true };
+    })() : solve(step, sep);
+    recomputeTrackDists();
+    usedA = placeSide('A', sol.A.slots, obstacles.A);
+    usedB = placeSide('B', sol.B.slots, obstacles.B);
+    needA = sol.needA; needB = sol.needB;
+    spineC = clamp(needA + (crossPx - needA - needB) / 2, Math.min(needA, crossPx / 2), Math.max(crossPx - needB, crossPx / 2));
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0;
     visible.forEach(function (e) {
@@ -900,6 +1084,7 @@
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal, win: [winStart, winEnd], spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
+      bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
       events: visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist)]; })
     }));
@@ -943,8 +1128,7 @@
     LEGEND.forEach(function (p) {
       var c = spineC + p._c;
       if (fan) {
-        var i = sides[p._sideKey].indexOf(p);
-        var spreadC = spineC + p._sign * (gutterHalf + fan.step * (i + 1));
+        var spreadC = spreadCFor(p);
         var d = fan.dir, edge = d > 0 ? 0 : axisPx;
         var nameEnd = edge + d * (2 * S + p._nameW + 4 * S);
         var fanStart = edge + d * fan.len;
@@ -992,7 +1176,15 @@
           // also land past the end of a fanned line, floating in space.)
           if (a <= axisStart + 1 || a >= axisEnd - 1) return;
           var xy = toXY(a, lineCAt(p, a));
-          var sring = svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R * 0.7, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8 });
+          // a hollow diamond, not a ring: a station junction is where the
+          // line changes state rather than where something happens on it,
+          // and the different shape says so at a glance
+          var dr = NODE_R * 0.95;
+          var sring = svgEl('path', {
+            d: 'M ' + (xy[0] - dr) + ' ' + xy[1] + ' L ' + xy[0] + ' ' + (xy[1] - dr)
+              + ' L ' + (xy[0] + dr) + ' ' + xy[1] + ' L ' + xy[0] + ' ' + (xy[1] + dr) + ' Z',
+            fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE * 0.8, 'stroke-linejoin': 'round',
+          });
           sring.setAttribute('data-metro-role', 'station-ring'); sring.setAttribute('data-metro-owner', p.key);
           svg.appendChild(sring);
         });
@@ -1124,14 +1316,22 @@
         // level" here, and the capsule has to reach the line where it really
         // is, not where it'd be on an ordinary day
         var cs = e._involved.map(function (q) { return lineCAt(q, e._nodeA); });
-        var lo = Math.min.apply(null, cs) - NODE_R, hi = Math.max.apply(null, cs) + NODE_R;
-        var a0 = e._nodeA - NODE_R;
-        var r = svgEl('rect', horizontal
-          ? { x: a0, y: lo, width: 2 * NODE_R, height: hi - lo, rx: NODE_R, ry: NODE_R }
-          : { x: lo, y: a0, width: hi - lo, height: 2 * NODE_R, rx: NODE_R, ry: NODE_R });
-        r.setAttribute('fill', '#fff'); r.setAttribute('stroke', '#000'); r.setAttribute('stroke-width', NODE_STROKE);
-        r.setAttribute('data-metro-role', 'capsule'); r.setAttribute('data-metro-owner', e.owner);
-        svg.appendChild(r);
+        var lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
+        // A thin tie between the lines with a ring on each, rather than one
+        // solid capsule spanning them: now that each track has its own band
+        // the lines can be a long way apart, and a filled bar stretched
+        // across that gap dominates everything around it. This is the way a
+        // transit map links stations that aren't adjacent anyway.
+        var t0 = toXY(e._nodeA, lo), t1 = toXY(e._nodeA, hi);
+        var tie = svgEl('line', { x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1], stroke: '#000', 'stroke-width': NODE_STROKE * 0.8, 'stroke-linecap': 'round' });
+        tie.setAttribute('data-metro-role', 'capsule'); tie.setAttribute('data-metro-owner', e.owner);
+        svg.appendChild(tie);
+        cs.forEach(function (c) {
+          var xy = toXY(e._nodeA, c);
+          var node = svgEl('circle', { cx: xy[0], cy: xy[1], r: NODE_R, fill: '#fff', stroke: '#000', 'stroke-width': NODE_STROKE });
+          node.setAttribute('data-metro-role', 'ring'); node.setAttribute('data-metro-owner', e.owner);
+          svg.appendChild(node);
+        });
       } else {
         var cxy = toXY(e._nodeA, lineCAt(p, e._nodeA));
         var ring = svgEl('circle', { cx: cxy[0], cy: cxy[1], r: NODE_R, fill: '#fff', stroke: colorFor(p.hue), 'stroke-width': NODE_STROKE });

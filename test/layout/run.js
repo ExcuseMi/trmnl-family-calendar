@@ -135,8 +135,17 @@ const REPORTER = `
         pts: ctmPts(el, pts)
       });
     });
+    // markers drawn as a shape rather than a circle (the station junction
+    // diamond) still have to sit on their line, so report them as markers
+    // too — by their bounding box, whose centre is the shape's centre
+    var shapeMarkers = [];
+    svg.querySelectorAll('path[data-metro-role="station-ring"]').forEach(function (el) {
+      shapeMarkers.push(Object.assign(rel(el.getBoundingClientRect()), {
+        role: 'station-ring', owner: el.getAttribute('data-metro-owner') || null
+      }));
+    });
     var rects = [];
-    svg.querySelectorAll('rect').forEach(function (el) {
+    svg.querySelectorAll('rect, line[data-metro-role]').forEach(function (el) {
       var r = el.getBoundingClientRect();
       rects.push(Object.assign(rel(r), {
         role: el.getAttribute('data-metro-role') || 'other',
@@ -158,7 +167,8 @@ const REPORTER = `
     out.id = 'metro-report';
     out.textContent = JSON.stringify({
       canvas: { w: cr.width, h: cr.height },
-      debug: dbg, labels: labels, paths: paths, rects: rects, circles: circles
+      debug: dbg, labels: labels, paths: paths, rects: rects,
+      circles: circles.concat(shapeMarkers)
     });
     document.body.appendChild(out);
   }

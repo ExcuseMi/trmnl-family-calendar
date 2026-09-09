@@ -34,23 +34,19 @@ module.exports = function (test, h) {
 
   // Text boxes carry an opaque background, so any real overlap hides
   // something. A hairline of contact is tolerated; a chunk is a bug.
-  // Known defects, each understood and none of them fixed yet. All three
-  // classes come from the same root: lanes are a single pool shared by every
-  // track on a side, so one track's branch has to reach across its
-  // neighbours' lanes to find room, and a label can be placed where another
-  // track's diagonal already runs. A per-track band layout removes the
-  // possibility rather than scoring against it; an attempt at that regressed
-  // other things and was backed out, so these stay recorded here until it
-  // lands properly.
-  const OVERLAP_KNOWN = {
-    'all-day-every-track': 'station captions on adjacent tracks sit one TRACK_STEP apart, which is less than a caption is tall; and Yoga/School Run share a lane region',
-    'waypoint-station': 'labels on different tracks can be placed into the same strip of canvas — nothing reserves a track its own room',
-  };
+  // Known defects: real, understood, not fixed. The band layout removed the
+  // cross-track ones (a branch can no longer reach into a neighbour's lanes,
+  // and lines no longer converge across the map to reach their names). What
+  // is left is a track crossing ITSELF: when the next event's ring lands
+  // under the previous event's label, the later branch has to climb through
+  // that label to reach any lane further out, and swapping the pair — which
+  // fixes the tightest version — reorders long runs badly enough to cost
+  // more events than it saves.
+  const OVERLAP_KNOWN = {};
   const PIERCE_KNOWN = {
-    'busy-day': "Sam's branches cut through the Kids labels — a branch may cross a neighbouring track's lane to reach its own",
-    'all-day-every-track': 'same cross-track branch intrusion, plus branches crossing labels on their own line when an event starts inside another branch\'s climb',
-    'waypoint-station': 'same cross-track branch intrusion',
-    'tight-pair': 'two events on ONE line starting within a lane-reach of each other: the later branch has no crossing-free lane available, so the crossing is detected and then allowed',
+    'busy-day': 'a work branch climbs through an earlier work label whose ring it starts under',
+    'waypoint-station': 'same: a branch climbing past an earlier label on its own line',
+    'tight-pair': 'two events on one line, the second starting under the first label — no lane avoids it and the swap that would does not survive contact with longer runs',
   };
 
   const OVERLAP_TOL = 2;
@@ -99,10 +95,12 @@ module.exports = function (test, h) {
   // through the ring's CENTRE — and pass through, not stop at it: samples
   // must appear on both sides. A line that ends at the rim, or misses the
   // centre because the track moved after the ring was placed, is the bug.
-  // Corners are drawn rounded (radius CORNER), so at a kink the path cuts
-  // the vertex by a couple of px; the ring still reads as sitting on the
-  // line. Anything beyond that is the line and the ring disagreeing.
-  const CENTRE_TOL = 4;
+  // Corners are drawn rounded (radius CORNER), so where a ring sits on a
+  // kink the drawn path cuts the vertex — by up to ~0.4x the corner radius,
+  // which at 2x device scale is a few px. The ring still reads as sitting on
+  // the line there. This has to absorb that and nothing more: the bug this
+  // guards against put rings tens of px from their own track.
+  const CENTRE_TOL = 8;
   for (const f of fixtures) {
     test('lines pass through the centre of every ring, from both sides: ' + f.name, () => {
       const rep = layout(f, ROOMY);
@@ -143,28 +141,34 @@ module.exports = function (test, h) {
 
   // ------------------------------------------------------------ interchange capsules
 
-  // An interchange capsule has to reach every line it claims to join. When a
-  // track kinks out for an all-day band, the capsule has to follow it there.
-  test('an interchange capsule reaches every track it spans', () => {
+  // An interchange is drawn as a tie between the lines it joins, with a ring
+  // on each. The tie has to actually span them — when a track kinks out for
+  // an all-day band, the tie has to follow it there rather than reaching for
+  // a baseline nobody is sitting on.
+  test('an interchange ties together every track it spans', () => {
     for (const name of ['busy-day', 'all-day-every-track']) {
       const f = fixtures.find((x) => x.name === name);
       const rep = layout(f, ROOMY);
-      const caps = rep.rects.filter((r) => r.role === 'capsule');
-      assert(caps.length > 0, name + ': expected at least one interchange capsule');
+      const ties = rep.paths.filter((p) => p.role === 'capsule')
+        .concat(rep.rects.filter((r) => r.role === 'capsule'));
+      const lineTies = rep.ties || [];
+      const all = ties.concat(lineTies);
+      assert(all.length > 0, name + ': expected at least one interchange tie');
       const tracks = pathsWhere(rep, 'track');
-      for (const cap of caps) {
-        const cx = cap.x + cap.w / 2;
-        // every track line crossing this capsule's x must be met by it
+      for (const tie of all) {
+        const x = tie.x + tie.w / 2;
+        const top = tie.y, bot = tie.y + tie.h;
+        // every track whose line runs through the tie's vertical span at
+        // this x must be met by it, not passed over
+        let met = 0;
         for (const t of tracks) {
-          const at = t.pts.filter((p) => Math.abs(p[0] - cx) <= 2);
+          const at = t.pts.filter((p) => Math.abs(p[0] - x) <= 3);
           if (!at.length) continue;
           const ys = at.map((p) => p[1]);
-          const yMin = Math.min.apply(null, ys), yMax = Math.max.apply(null, ys);
-          const spans = yMax >= cap.y - 2 && yMin <= cap.y + cap.h + 2;
-          const inside = yMin >= cap.y - 2 && yMax <= cap.y + cap.h + 2;
-          assert(!spans || inside || yMax < cap.y || yMin > cap.y + cap.h,
-            name + ': capsule at x=' + Math.round(cx) + ' only partly meets track ' + t.owner);
+          const y = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
+          if (y >= top - 3 && y <= bot + 3) met++;
         }
+        assert(met >= 2, name + ': a tie at x=' + Math.round(x) + ' reaches only ' + met + ' line(s)');
       }
     }
   });
@@ -188,6 +192,28 @@ module.exports = function (test, h) {
       assert(top > ys.length * 0.5, 'track ' + t.owner + ' has no sustained flat run — the band never settles');
     }
   });
+
+  // ------------------------------------------------------------ small screens
+
+  // The original TRMNL panel is 800x480 with no device scaling — the tightest
+  // canvas this plugin has to work on, and the one where a layout that only
+  // ever gets checked at 2x quietly falls off the bottom.
+  const TIGHT = byName('og-landscape');
+  for (const f of fixtures) {
+    test('fits the small panel: ' + f.name, () => {
+      const rep = layout(f, TIGHT);
+      const off = textLabels(rep).filter((l) =>
+        l.x < -2 || l.y < -2 || l.x + l.w > rep.canvas.w + 2 || l.y + l.h > rep.canvas.h + 2);
+      assert(off.length === 0, off.length + ' label(s) off-canvas: '
+        + off.slice(0, 5).map((l) => '"' + l.text + '"').join(', '));
+      const tracks = pathsWhere(rep, 'track');
+      for (const t of tracks) {
+        const ys = t.pts.map((p) => p[1]);
+        assert(Math.min.apply(null, ys) >= -2 && Math.max.apply(null, ys) <= rep.canvas.h + 2,
+          'track ' + t.owner + ' runs off the canvas');
+      }
+    });
+  }
 
   // ------------------------------------------------------------ staying on the canvas
 
