@@ -1776,6 +1776,36 @@
       if (minPitch < thick + NODE_R + 4 * S) namesAbove = false;
     })();
 
+    var capGroups = {};
+    LEGEND.forEach(function (p) {
+      p._stations.forEach(function (s) {
+        if (!s.group) return;
+        (capGroups[s.group] = capGroups[s.group] || []).push(p);
+      });
+    });
+    // A station shared by two lines is a CORRIDOR: they close on each other
+    // for the length of it, and the bend is the whole point. A station only
+    // one person is at is not — bending a line down for nine hours of "Desk
+    // booking" displaces that person's entire day off its own baseline for
+    // a fact about where they are sitting.
+    function sharedStation(s) { return !!(s.group && capGroups[s.group] && capGroups[s.group].length > 1); }
+    // So a solo station is drawn as a SIDING instead: the main line carries
+    // straight on at its own height and the station is the loop that leaves
+    // it and comes back. That is the express/local pair a transit map draws,
+    // it keeps the baseline hierarchy — one line, one height, all day — and
+    // it costs nothing in truth, since the kink already runs exactly the
+    // station's span.
+    function expressThrough(p, baseC) {
+      p._stations.forEach(function (s) {
+        if (sharedStation(s)) return;
+        if (s.a1 - s.a0 < CORNER * 2) return;   // too short to read as a loop
+        var q0 = toXY(s.a0, baseC), q1 = toXY(s.a1, baseC);
+        var ex = svgEl('path', { d: 'M ' + q0[0] + ' ' + q0[1] + ' L ' + q1[0] + ' ' + q1[1] });
+        ex.setAttribute('data-metro-role', 'track'); ex.setAttribute('data-metro-owner', p.key);
+        paintLine(ex, p, S, svg, 0);
+      });
+    }
+
     // ---- tracks (full bleed), each starting at its named terminus when fanned
     LEGEND.forEach(function (p) {
       var c = spineC + p._c;
@@ -1846,6 +1876,7 @@
         path.setAttribute('data-metro-role', 'track'); path.setAttribute('data-metro-owner', p.key);
         paintLine(path, p, S, svg, 0);
         p._trunkEl = path;
+        expressThrough(p, spreadC);
         // a terminal bar at each end, the transit-map mark for where a line
         // starts and stops rather than simply running out of canvas
         [[nameEnd, spreadC], [far, lineCAt(p, far)]].forEach(function (at) {
@@ -1861,6 +1892,7 @@
         ln.setAttribute('data-metro-role', 'track'); ln.setAttribute('data-metro-owner', p.key);
         paintLine(ln, p, S, svg, 0);
         p._trunkEl = ln;
+        expressThrough(p, c);
       }
     });
     // ---- station markers: a hollow ring at each end, sitting exactly where
@@ -1884,13 +1916,6 @@
     // ends of the board. The caption is drawn once for the group and set
     // midway between the lines it belongs to, so it reads as theirs jointly
     // rather than as one child's with a stray copy.
-    var capGroups = {};
-    LEGEND.forEach(function (p) {
-      p._stations.forEach(function (s) {
-        if (!s.group) return;
-        (capGroups[s.group] = capGroups[s.group] || []).push(p);
-      });
-    });
     LEGEND.forEach(function (p) {
       var baseC = spineC + p._c;
       p._stations.forEach(function (s) {
@@ -1922,7 +1947,7 @@
         // grey text on a grey rail besides. The title alone still says what
         // the station is.
         if (s.location && !packedFallback) {
-          var loc = labelRow(STATION_TAG_CLASS + ' ' + quietText('text--gray-45'));
+          var loc = labelRow('metro-loc ' + STATION_TAG_CLASS + ' ' + quietText('text--gray-45'));
           loc.textContent = s.location;
           loc.style.maxWidth = (availW * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
           box.appendChild(loc);
@@ -1989,6 +2014,23 @@
             bar.setAttribute('data-metro-owner', p.key);
             svg.appendChild(bar);
           });
+        }
+        if (horizontal && !sharedStation(s)) {
+          // The main line runs straight through a solo station, so the
+          // baseline is no longer free: the caption goes INSIDE the loop,
+          // between the express line and the siding — the space the siding
+          // itself opened. A two-line caption does not fit a loop one
+          // raise deep, and pushed outside the siding it lands in the
+          // lanes; the location line goes instead, exactly as it does on a
+          // board too small for bands. The title alone still says what the
+          // station is.
+          if (bm.h + 2 * STATION_GAP > raise) {
+            var lc0 = box.querySelector('.metro-loc');
+            if (lc0) { lc0.remove(); bm = measure(box); }
+          }
+          midC = bm.h + 2 * STATION_GAP <= raise
+            ? baseC + p._sign * raise / 2
+            : baseC + p._sign * (raise + STATION_GAP + bm.h / 2);
         }
         if (horizontal) {
           // Slide along the station's own span until the caption is clear of
