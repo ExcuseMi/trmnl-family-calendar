@@ -1767,12 +1767,13 @@
       if (!horizontal || LEGEND.length < 2) return;
       var thick = 0, minPitch = Infinity;
       LEGEND.forEach(function (p) { thick = Math.max(thick, p._nameH); });
-      ['A', 'B'].forEach(function (k) {
-        var row = sides[k];
-        for (var i = 1; i < row.length; i++) {
-          minPitch = Math.min(minPitch, Math.abs(row[i]._c - row[i - 1]._c));
-        }
-      });
+      // Across the WHOLE bundle, not one side at a time. Measured per side,
+      // the closest pair on the board went unseen: the innermost track of
+      // each side sits half a pitch off the spine, so those two are
+      // neighbours with nothing between them, and "Marge" was set right
+      // under Homer's rail while every within-side gap looked roomy.
+      var cs = LEGEND.map(function (q) { return q._c; }).sort(function (a, b) { return a - b; });
+      for (var i = 1; i < cs.length; i++) minPitch = Math.min(minPitch, cs[i] - cs[i - 1]);
       if (minPitch < thick + NODE_R + 4 * S) namesAbove = false;
     })();
 
@@ -1853,6 +1854,31 @@
         // nothing else uses at the head of the map.
         var nameOff = -(nameThick + NODE_R + 2 * S);
         if (namesAbove && nameC + nameOff < bandLo) nameOff = NODE_R + 2 * S;
+        // And never onto the NEIGHBOUR'S rail. A name set above its line
+        // needs the gap above that line to hold it, and one gap on the
+        // board is not a band's worth: each side's innermost track sits
+        // half a pitch off the spine, so those two are neighbours with
+        // nothing between them, and "Marge" was set hard against the
+        // bottom of Homer's rail and read as underlining it. That one name
+        // goes under its own line instead, where its own lanes are empty
+        // this early in the day — the rest of the board is untouched.
+        if (namesAbove) {
+          var railAt = function (dir) {
+            var edge = dir < 0 ? -Infinity : Infinity;
+            LEGEND.forEach(function (q) {
+              if (q === p) return;
+              var qc = lineCAt(q, nameA + nameLen / 2);
+              var qh = q.line_width * S * weightScale / 2 + 7 * S;
+              if (dir < 0 && qc < nameC && qc + qh > edge) edge = qc + qh;
+              if (dir > 0 && qc > nameC && qc - qh < edge) edge = qc - qh;
+            });
+            return edge;
+          };
+          if (nameC + nameOff < railAt(-1)) {
+            var below = NODE_R + 2 * S;
+            nameOff = (nameC + below + nameThick < railAt(1)) ? below : -nameThick / 2;
+          }
+        }
         // centred ON the line when there is no room above it
         var nameXY = toXY(nameA, namesAbove ? nameC + nameOff : nameC - nameThick / 2);
         p._nameEl.style.left = nameXY[0] + 'px';
@@ -2058,6 +2084,22 @@
             at = clash._textStart + clash._textLen + 8 * S;
           }
           if (at > limit) at = capA;
+          // and clear of the rule that marks now. It is the one line on the
+          // board that crosses everything, drawn at a minute rather than
+          // belonging to anybody, so nothing routes around it — and a
+          // caption sitting on it broke both: the rule came out dashed
+          // through the words and the words came out with a stroke through
+          // them. The station is long; the caption only needs somewhere
+          // along it, so it steps past the rule, or back before it when
+          // there is no room after.
+          if (nowA != null) {
+            var nowClear = 5 * S;
+            if (at < nowA + nowClear && nowA - nowClear < at + capW) {
+              var after = nowA + nowClear, before = nowA - nowClear - capW;
+              if (after <= limit) at = after;
+              else if (before >= capA - 1) at = before;
+            }
+          }
           box.style.left = at + 'px';
           box.style.top = (midC - bm.h / 2) + 'px';
         } else {

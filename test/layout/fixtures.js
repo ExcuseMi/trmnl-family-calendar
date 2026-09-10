@@ -137,6 +137,46 @@ const sharedStation = base({
   ],
 });
 
+// Five lines, two on one side and three on the other — the shape the demo
+// board actually has, and the one the four-line fixtures never produced:
+// each side's innermost track sits half a pitch off the spine, so those two
+// are neighbours with nothing between them. That pair is the tightest gap
+// on the board and it is where a line's NAME, set above its own rail, ran
+// into the rail belonging to the line above it.
+const FIVE = [
+  track('mag', 'Maggie', 'left', 'black', -20, 3, 'solid'),
+  track('hom', 'Homer', 'left', 'black', -10, 6, 'solid'),
+  track('mar', 'Marge', 'right', 'black', 10, 5, 'dashed'),
+  track('bar', 'Bart', 'right', 'black', 20, 4, 'dotted'),
+  track('lis', 'Lisa', 'right', 'black', 30, 3, 'solid'),
+];
+const fiveLines = Object.assign(base({
+  now_min: 519,
+  stations: [
+    station('bar', 'School Day', 510, 900, { location: 'Springfield Elementary', group: 'g1' }),
+    station('lis', 'School Day', 510, 900, { location: 'Springfield Elementary', group: 'g1' }),
+    station('hom', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
+  ],
+  items: [
+    ev('School Run', 'mar', 480, 510, { co_owners: ['bar', 'lis'], side: 'right', hue: 'black', track_offset: 10 }),
+    ev('Shift Handover', 'hom', 480, 495, { side: 'left', hue: 'black', track_width: 6, track_offset: -10 }),
+    ev('Book Club', 'mar', 540, 600, { side: 'right', hue: 'black', track_style: 'dashed', track_offset: 10 }),
+    ev('Assembly', 'lis', 540, 570, { side: 'right', hue: 'black', track_offset: 30 }),
+    ev('Donut Break', 'hom', 600, 620, { side: 'left', hue: 'black', track_width: 6, track_offset: -10 }),
+    ev('Playgroup', 'mag', 630, 690, { side: 'left', hue: 'black', track_offset: -20 }),
+    ev('Grocery Run', 'mar', 720, 780, { location: 'Kwik-E-Mart', side: 'right', hue: 'black', track_style: 'dashed', track_offset: 10 }),
+    ev('Nap', 'mag', 780, 870, { side: 'left', hue: 'black', track_offset: -20 }),
+    ev('Reactor Core Check', 'hom', 840, 900, { side: 'left', hue: 'black', track_width: 6, track_offset: -10 }),
+    ev('Detention', 'bar', 930, 990, { location: 'Room 12', side: 'right', hue: 'black', track_style: 'dotted', track_offset: 20 }),
+    ev('PTA Meeting', 'mar', 960, 1020, { side: 'right', hue: 'black', track_style: 'dashed', track_offset: 10 }),
+    ev('Saxophone Lesson', 'lis', 960, 1020, { side: 'right', hue: 'black', track_offset: 30 }),
+    ev("Moe's Tavern", 'hom', 1050, 1110, { location: "Moe's", side: 'left', hue: 'black', track_width: 6, track_offset: -10 }),
+    ev('Skate Park', 'bar', 1020, 1080, { side: 'right', hue: 'black', track_style: 'dotted', track_offset: 20 }),
+    ev('Mensa Meeting', 'lis', 1110, 1170, { side: 'right', hue: 'black', track_offset: 30 }),
+    ev('Family Dinner', 'mar', 1140, 1200, { co_owners: ['mag', 'hom', 'bar', 'lis'], side: 'right', hue: 'black', track_offset: 10 }),
+  ],
+}), { legend: FIVE });
+
 module.exports = [
   { name: 'busy-day', metro: busyDay },
   { name: 'all-day-every-track', metro: allDayEveryTrack },
@@ -145,4 +185,5 @@ module.exports = [
   { name: 'tight-pair', metro: tightPair },
   { name: 'full-day', metro: fullDay },
   { name: 'shared-station', metro: sharedStation },
+  { name: 'five-lines', metro: fiveLines },
 ];

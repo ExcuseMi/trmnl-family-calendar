@@ -55,6 +55,7 @@ module.exports = function (test, h) {
     'busy-day/og-landscape': 'a 480px-deep board packs four lines and three lanes a side: Work\'s rail runs under Alex\'s name, and one kids branch grazes another kids label by 8px.',
     'all-day-every-track/og-landscape': 'same packing, with every line kinked out for an all-day band on top of it: four branches graze a neighbouring label by 6-8px.',
     'waypoint-station/og-landscape': 'same packing again, plus a waypoint caption: five 6-8px grazes.',
+    'five-lines/og-landscape': 'five lines on a 480px-deep board leaves each of them about a line-height of band: three branches graze a neighbouring label by 7-8px.',
   };
   const PIERCE_KNOWN = {
     'tight-pair': 'two 15-minute meetings 20 minutes apart on one line: the second has to reach a deeper lane, and its branch now drops at its own minute rather than easing in from before, so it passes through the first label — which is 20x wider than the gap between them at any text size. The alternatives are a label 500px from the rail it belongs to, or a branch that lies about when the meeting starts.',

@@ -80,4 +80,39 @@ module.exports = function (test, h) {
       }
     }
   });
+
+  // A name sits ABOVE its line when the lines are far enough apart to hold
+  // it, and ON its line — masked by its own paper outline — when they are
+  // not. The room it needs is not just its own height: it sits between two
+  // rails, so it has to clear the one above as well. Measured a side at a
+  // time that neighbour was invisible, because each side's innermost track
+  // sits half a pitch off the spine and those two are neighbours with
+  // nothing between them: "Marge" was set hard against the bottom of
+  // Homer's rail and read as underlining it.
+  // Only lying down: stood up the names run ALONG their lines in a column
+  // at the head of the map, where this cannot happen.
+  const FLAT = [
+    { view: 'full', name: 'x-landscape', w: 1872, h: 1404, classes: 'screen--v2 screen--lg screen--4bit screen--density-2x' },
+    { view: 'full', name: 'og-landscape', w: 800, h: 480, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
+    VIEWS.find((v) => v.name === 'og-half-horizontal'),
+  ];
+  const five = fixtures.find((f) => f.name === 'five-lines');
+  test('a line name never lands on somebody else\'s rail', () => {
+    for (const f of [busy, five]) for (const v of FLAT) {
+      const rep = render(f.metro, v);
+      const owns = {};
+      for (const t of f.metro.legend) owns[t.name] = t.key;
+      const names = rep.labels.filter((l) => (' ' + l.cls + ' ').indexOf(' metro-terminus ') >= 0);
+      const bad = [];
+      for (const n of names) {
+        for (const p of pathsWhere(rep, 'track')) {
+          if (owns[n.text] === p.owner) continue;   // its own line, by design
+          const d = deepestIntrusion(p.pts, n);
+          if (d > 2) bad.push('"' + n.text + '" on ' + p.owner + "'s rail by " + Math.round(d) + 'px');
+        }
+      }
+      assert(bad.length === 0, f.name + '/' + v.name + ': ' + bad.length + ' name(s) on the wrong rail: '
+        + [...new Set(bad)].slice(0, 4).join('; '));
+    }
+  });
 };

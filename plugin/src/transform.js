@@ -568,7 +568,7 @@ function demoWeather(strings) {
 // resolution rather than a hand-built shortcut — and doubles as a worked
 // example of the config format. It needs the network, so the hardcoded
 // Springfield data above stays as the offline fallback.
-var DEMO_ICS_BASE = 'https://raw.githubusercontent.com/ExcuseMi/trmnl-family-calendar/main/demo/';
+var DEMO_ICS_BASE = 'https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/';
 function demoCalendar(name, file, rules) {
   return { name: name, url: DEMO_ICS_BASE + file, rules: rules };
 }
