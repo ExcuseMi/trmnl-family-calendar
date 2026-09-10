@@ -146,6 +146,21 @@ module.exports = function (test, h) {
     }
   });
 
+  test('a track in a corridor keeps its rungs on one side', () => {
+    // A corridor is planned after the lanes are handed out and its caption
+    // is placed outside the lane grid, so it is the one thing a lane
+    // cannot be checked against, and it sits in exactly the gap an inward
+    // rung wants. On the demo board that put "Assembly", on an inward
+    // rung, straight through "School Run", the caption of a bundle in the
+    // same gap.
+    const b = both(ROOMY());
+    b.sides.A[1].shared = 2;         // b is in two shared events
+    const out = solve(b);
+    if (out.packed) return;
+    assertEqual(inwardOf(out, 'b').length, 0, 'b is in a corridor and still hung rungs inward');
+    assert(inwardOf(out, 'c').length > 0, 'c is in none and should still use both sides');
+  });
+
   // ---- A17: a corridor's gap ------------------------------------------
 
   function withGap(b, a, bb, px) {

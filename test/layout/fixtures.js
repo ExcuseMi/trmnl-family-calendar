@@ -153,6 +153,41 @@ const tightPair = base({
   ],
 });
 
+// A line whose meetings OVERLAP each other, and nothing shared with
+// anybody. That combination is what A15 is for and it is the one the other
+// fixtures never make: a track only wants a second lane when two of its
+// own events run at once, and the one board here that did (the demo's
+// third track, three deep) is in a corridor, where an inward rung would
+// collide with the corridor's caption.
+//
+// Work has four meetings across one morning, three of them overlapping, so
+// it needs three lanes. Alex and Sam have one each and keep the board
+// balanced. No event has more than one track, so no bundle is planned and
+// the gap between the lines is free for the inner one's labels.
+const overlappingDay = base({
+  // TWO busy lines on one side. The sides are balanced busiest-first, so
+  // the busiest line is always the INNERMOST one, and the innermost line
+  // has no line to share a gap with: its inward neighbour is the spine and
+  // the hour strip. So the one that can use both sides is the second busy
+  // line on a side, and a board has to have one before any of this is
+  // reachable at all.
+  legend: [
+    track('work', 'Work', 'left', 'black', -10, 4, 'solid'),
+    track('kids', 'Kids', 'left', 'gray-30', -20, 3, 'dotted'),
+    track('alex', 'Alex', 'right', 'orange-40', 10, 3, 'solid'),
+  ],
+  items: [
+    ev('Sprint Planning', 'work', 540, 660, { track_width: 4 }),
+    ev('Design Review', 'work', 570, 675, { track_width: 4 }),
+    ev('1:1 with Priya', 'work', 600, 690, { track_width: 4 }),
+    ev('Retro', 'work', 780, 840, { track_width: 4 }),
+    ev('Assembly', 'kids', 545, 650, { track_offset: -20, hue: 'gray-30', track_style: 'dotted' }),
+    ev('Choir', 'kids', 575, 665, { track_offset: -20, hue: 'gray-30', track_style: 'dotted' }),
+    ev('Detention', 'kids', 610, 680, { track_offset: -20, hue: 'gray-30', track_style: 'dotted' }),
+    ev('Dentist', 'alex', 810, 870, { side: 'right', hue: 'orange-40', track_offset: 10 }),
+  ],
+});
+
 // A full 24-hour day whose events all sit in the middle of it: the quiet
 // early morning and late evening are what the express sections compress.
 const fullDay = base({
@@ -352,6 +387,7 @@ module.exports = [
   { name: 'siding-day', metro: sidingDay },
   { name: 'quiet-day', metro: quietDay },
   { name: 'tight-pair', metro: tightPair },
+  { name: 'overlapping-day', metro: overlappingDay },
   { name: 'full-day', metro: fullDay },
   { name: 'shared-siding', metro: sharedSiding },
   { name: 'five-lines', metro: fiveLines },

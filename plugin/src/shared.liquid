@@ -1454,6 +1454,7 @@
       }
       var lanes = [];
       function laneDist(k) { return slots[k].dist; }
+      function laneSide(k) { return slots[k].side === -1 ? -1 : 1; }
       function lane(k) { return lanes[k] || (lanes[k] = { items: [] }); }
       // An obstacle may name a RANGE of lane distances rather than only a
       // ceiling. A corridor occupies a band in the middle of a side: the
@@ -1494,7 +1495,9 @@
             // distance per track (each branch's reach is measured from its
             // own ring), so checking the nominal one tested empty space and
             // waved through diagonals that visibly cut across a label.
-            var t0 = it.d != null ? it.d : laneDist(j), t1 = t0 + LINE_GAP + maxLabelThick;
+            var t0 = it.d != null ? it.d : laneDist(j);
+            var t1 = t0 + (it.side === -1 ? -1 : 1) * (LINE_GAP + maxLabelThick);
+            if (t1 < t0) { var sw = t0; t0 = t1; t1 = sw; }
             if (lo > t1 || hi < t0) continue; // this diagonal never reaches that band
             var seg = [Math.min(f(t0), f(t1)), Math.max(f(t0), f(t1))];
             if (itemOverlaps(it, seg)) return true;
@@ -1514,8 +1517,15 @@
         // longer evenly spaced — each track's band is sized to its own
         // needs — an index-derived reach would draw the line somewhere the
         // grid never tested.
-        var dy = Math.max(laneDist(k) - e._trackDist, MIN_DIAG);
-        var rowDist = e._trackDist + dy;
+        // Signed: a rung may sit INWARD of its own line (A15), and then
+        // the branch turns toward the spine. Read through Math.max every
+        // inward rung collapsed onto trackDist + MIN_DIAG, so two lanes
+        // became one distance and their labels were drawn on top of each
+        // other, which is the opposite of what the second side is for.
+        var rowDist = laneDist(k);
+        var dy = rowDist - e._trackDist;
+        if (Math.abs(dy) < MIN_DIAG) { dy = (dy < 0 ? -1 : 1) * MIN_DIAG; rowDist = e._trackDist + dy; }
+        var inward = laneSide(k) < 0;
         // THE BRANCH LEAVES AT THE EVENT'S OWN MINUTE. Nothing about a
         // branch may be drawn before the thing it names has started.
         //
@@ -1693,7 +1703,7 @@
         var pastStart = dir > 0 ? Math.max(0, elbow - e._nodeA) : Math.max(0, e._nodeA - elbow);
         var shift = Math.abs(ts - (dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len)) + elbowShift;
         if (shift > (dir > 0 ? MAX_SHIFT : MAX_SHIFT * 0.5)) return null;
-        return { k: k, dir: dir, elbow: elbow, diagFrom: diagFrom, shift: shift, ld: rowDist, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift,
+        return { k: k, dir: dir, elbow: elbow, diagFrom: diagFrom, shift: shift, ld: rowDist, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift, inward: inward,
                  // Depth is charged at what it actually costs the reader:
                  // the dive. A lane one further out is not "one lane
                  // worse", it is a diagonal that much longer raking across
@@ -1718,7 +1728,7 @@
                  // for it drove events off placements that were fine.
                  // Bounded under the cost of a crossing, since a line
                  // through a caption costs the reader the word.
-                 + dy * 0.5 + (dir < 0 ? 260 * S : 0) + (crossing ? 220 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
+                 + Math.abs(dy) * 0.5 + (dir < 0 ? 260 * S : 0) + (crossing ? 220 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
       }
       evs.forEach(function (e, idx) {
         e._dropped = false;
@@ -1741,8 +1751,9 @@
         if (!best) { e._dropped = true; return; }
         e._lane = best.k; e._elbow = best.elbow; e._diagFrom = best.diagFrom; e._laneDist = best.ld; e._dir = best.dir; e._joined = best.joined;
         e._crossing = best.crossing; e._elbowShift = best.elbowShift;
+        e._labelSign = best.inward ? -e._sign : e._sign;
         e._textStart = best.textStart;
-        lane(best.k).items.push({ a0: Math.min(best.diagFrom, best.elbow), a1: Math.max(best.diagFrom, best.elbow), owner: null, kind: 'diag', dir: best.dir, d: best.ld });
+        lane(best.k).items.push({ a0: Math.min(best.diagFrom, best.elbow), a1: Math.max(best.diagFrom, best.elbow), owner: null, kind: 'diag', dir: best.dir, d: best.ld, side: best.inward ? -1 : 1 });
         if (best.trunc && best.trunc < e._textLen) {
           // shorten: first lose the time tag, then ellipsise the title
           var tm = e._box.querySelector('.metro-time-tag');
@@ -1824,7 +1835,7 @@
         e._lineFrom = lineA; e._lineTo = lineB;
         // a merged loop is closed: nobody else may ride it (owner null)
         lane(best.k).items.push({ a0: lineA, a1: (e._merge ? e._mergeAt + CORNER : lineB), owner: e._merge ? null : e.owner, kind: 'line', dir: best.dir, d: best.ld });
-        lane(best.k).items.push({ a0: e._textStart, a1: e._textStart + e._textLen, owner: e.owner, kind: 'text', dir: best.dir, d: best.ld });
+        lane(best.k).items.push({ a0: e._textStart, a1: e._textStart + e._textLen, owner: e.owner, kind: 'text', dir: best.dir, d: best.ld, side: best.inward ? -1 : 1 });
       });
       var used = 0;
       lastPlaceCrossings = 0;
@@ -1933,7 +1944,7 @@
           // 43 = 192px with one rung inward. The wider gap costs 45px and
           // buys back a 61px lane step.
           var inN = 0;
-          if (opts.bothSides && i > 0 && want > 1) {
+          if (opts.bothSides && i > 0 && want > 1 && !t.shared) {
             var bestCost = gap + rungRoom(k, t, want, stepPx), bestN = 0;
             for (var c = 1; c <= want - 1; c++) {
               var cost = Math.max(gap, rungRoom(k, t, c, stepPx))
@@ -2266,7 +2277,24 @@
       return n;
     }
     function crossTracks(sideKey) {
-      return sides[sideKey].map(function (p) { return { key: p.key, sidings: ownSidings(p) }; });
+      return sides[sideKey].map(function (p) {
+        return { key: p.key, sidings: ownSidings(p), shared: sharedCount(p) };
+      });
+    }
+    // How many shared events this track is part of. A corridor is planned
+    // AFTER the lanes are handed out and its caption is placed outside the
+    // lane grid entirely, so it is the one thing a lane cannot be checked
+    // against. That is exactly the band an inward rung wants (see A15), and
+    // the two collided: "Assembly" on an inward rung at 251 was written
+    // through "School Run", the caption of a bundle sitting in the same
+    // gap. Until a bundle's caption is something the grid can see, a track
+    // in one keeps all its rungs on the outward side.
+    function sharedCount(p) {
+      var n = 0;
+      visible.forEach(function (e) {
+        if (e._involved && e._involved.length > 1 && e._involved.indexOf(p) >= 0) n++;
+      });
+      return n;
     }
     // the same shape CrossSolver reads, so the two cannot drift
     function laneBase(p) { return CrossSolver.laneBase(crossConsts(), { sidings: ownSidings(p) }); }
@@ -2300,6 +2328,7 @@
       k: crossConsts(),
       sides: { A: crossTracks('A'), B: crossTracks('B') },
       demand: demand,
+      bothSides: true,
     });
     step = cross.step; sep = cross.sep; packedFallback = cross.packed;
     alloc = cross.alloc;
@@ -4314,8 +4343,9 @@
       function band(e) {
         var lineC = e._bundleOut != null ? e._bundleOut : spineC + e._sign * e._laneDist;
         var thick = horizontal ? e._h : colW;
-        return e._sign < 0 ? [lineC - LINE_GAP - thick, lineC - LINE_GAP]
-                           : [lineC + LINE_GAP, lineC + LINE_GAP + thick];
+        var ls = (e._bundleOut != null || e._labelSign == null) ? e._sign : e._labelSign;
+        return ls < 0 ? [lineC - LINE_GAP - thick, lineC - LINE_GAP]
+                      : [lineC + LINE_GAP, lineC + LINE_GAP + thick];
       }
       function freeAt(e, at, bd) {
         if (at < axisStart - EDGE || at + e._textLen > axisEnd + EDGE) return false;
@@ -4415,6 +4445,7 @@
       // given, the label sat on the rails that landed beyond it: the lane
       // is where the bundle STARTS, not where it ends.
       var lineC = e._bundleOut != null ? e._bundleOut : spineC + sign * e._laneDist;
+      var ls = (e._bundleOut != null || e._labelSign == null) ? sign : e._labelSign;
       var duck = 0;
       if (e === carRider && horizontal
           && carA + CAR_CLEAR > e._textStart && carA - CAR_CLEAR < e._textStart + e._textLen) {
@@ -4422,11 +4453,11 @@
       }
       if (horizontal) {
         b.style.left = e._textStart + 'px';
-        if (sign < 0) b.style.top = (lineC - LINE_GAP - duck - e._h) + 'px';
+        if (ls < 0) b.style.top = (lineC - LINE_GAP - duck - e._h) + 'px';
         else b.style.top = (lineC + LINE_GAP + duck) + 'px';
       } else {
         b.style.top = e._textStart + 'px';
-        if (sign < 0) b.style.left = (lineC - LINE_GAP - colW) + 'px';
+        if (ls < 0) b.style.left = (lineC - LINE_GAP - colW) + 'px';
         else b.style.left = (lineC + LINE_GAP) + 'px';
       }
     });
