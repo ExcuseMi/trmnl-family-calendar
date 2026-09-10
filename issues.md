@@ -25,8 +25,22 @@ is open.
   onto the line and it collides with the terminus cap ("|Leela"). Re-check
   after A1; the existing test only covers 5 lines, so it needs a 7-line
   fixture.
-- [ ] **A3. Station captions collide.** "Lab Rotation" wraps to two lines
+- [x] **A3. Station captions collide.** "Lab Rotation" wraps to two lines
   and lands on "Delivery Run" and on two rails.
+  Three faults in one picture. Captions were placed one line at a time and
+  knew nothing about each other, so two that wanted the same strip of
+  canvas simply both took it; they are placed in a second pass now,
+  least-freedom-first, so the caption pinned to a two-hour station keeps
+  its spot and the one with seven hours of corridor to slide along is the
+  one that yields. A caption pushed out of its own loop kept wrapping to
+  two lines, in a lane where every other box is a one-line title, and its
+  second line landed on the event label below; out there it is clamped to
+  one line and ellipsised. And a solo station NESTED inside another of its
+  own line's stations gets no siding at all (`stationRaiseAt` hands the
+  whole overlap to the outer one), so "inside the loop" was a space that
+  was never vacated, half a raise off a baseline the line had left: with no
+  kink of its own the caption now sits off the line where that line really
+  runs. `cases/sidings.js` covers it on every fixture at both views.
 - [ ] **A4. Simultaneous branches on different lines overlap.** "Coffee
   (100 cups)" (Fry, 07:30) and "Bend Some Girders" (Bender, 07:30) drop
   their stubs at the same axis position, a few px apart.
@@ -41,10 +55,33 @@ is open.
   Nibbler" (17:30 to 18:15) puts its end tick in the wrong place.
 - [ ] **A7. Quadrant on TRMNL X: a backwards branch is mangled.** "Family
   Dinner" on the Simpsons board. Its stub runs the wrong way and detaches.
+  A large part of this is fixed: a backward group's flat rail was drawn as
+  `bridge(elbow + RAMP_LEAD, g.to)`, which is right for a forward group and
+  nonsense for a backward one (the ramp's tail stops at `elbow -
+  RAMP_LEAD`, so the bridge began a whole lead the other side of the elbow
+  and ran to an end it had already passed, drawing nothing). The rail
+  stopped two corner radii past its own elbow with its terminus bar left
+  further down the lane on its own. `cases/loose-ends.js` catches it.
+  Left open until it has been looked at on the board it was reported from:
+  `five-lines` on an X quadrant now draws "Family Dinner" correctly, but
+  that report predates the harness fix in A11, so it was written about a
+  picture that was not a quadrant.
 - [ ] **A8. A long wrapped track name overlaps the first event label.**
   Known, carried over: "Demo - Planet / Express Crew" touches "07:30 - 08:15
   Bender: Bend Some Girders". The name is not an obstacle to label placement.
 
+- [x] **A13. A stretch of rail floating in the middle of the board.**
+  Reported off a screenshot. It was the express half of a siding whose
+  siding was never drawn: a solo station nested inside a corridor its own
+  line was already in never kinks the line, so there was no loop, and
+  `expressThrough` drew the straight half anyway, on the baseline the line
+  had left. Nothing in the suite noticed, because the segment was the right
+  colour, the right weight, on the canvas, clear of everybody's text and
+  claimed by no marker. It was simply a line that went nowhere.
+  `cases/loose-ends.js` is the answer: every rail end must meet another
+  rail, sit under a mark that caps it, or be the edge of the board. It
+  found the detached backward stub in A7 on its first run, and it needed
+  `terminus()` to start setting `data-metro-role`, which it never had.
 - [x] **A9. The trunk was interrupted where a siding began.** The kink's
   corners are rounded, so the trunk leaves its baseline a corner radius
   before the station's own start; the siding began at the bare vertex, and
@@ -53,6 +90,26 @@ is open.
   each other.** With the car no longer a solid block the junction reads, but
   the branch still leaves tangent to the corner rather than out of it, and a
   spike of the flat rail pokes out from under the kink.
+- [ ] **A12. A junction redraws a stretch of the main line it does not
+  need to, and the copy does not register with the original.** Reported off
+  a zoomed junction: the trunk is visibly drawn twice for the length of the
+  lead-in, so the casing's paper stripe steps sideways where the copy takes
+  over and the elbow gets a notch out of it.
+  The lead-in is `trunkSlice(p, aFrom - dir * RAMP_LEAD, aFrom)` in
+  `rampOut`: two corner radii of the trunk, copied into the branch's own
+  path so that the departure becomes an INTERIOR vertex and `roundedPath`
+  fillets it. That is its only job. Everything else about it is an attempt
+  to make the copy invisible: it is drawn in the trunk's stroke, at the
+  trunk's real breakpoints (so it lies on a station kink rather than flat
+  across it) and with its dash phase offset by `trunkLenAt` so the rungs
+  fall on the trunk's own. Three things that have to agree exactly, on a
+  stretch that carries no information, to hide something the reader was
+  never meant to see. When any of them is off by a pixel the line reads as
+  doubled.
+  A fillet does not actually need a vertex to be interior: the corner can
+  be built as its own arc from a point ON the trunk, and then the branch
+  starts where it leaves and nothing is redrawn. Worth doing before A10,
+  which is the same elbow seen from the other side.
 - [x] **A11. Every "small view" in the layout suite was rendering full
   size.** Fixed in the harness (a half or a quadrant is a slot inside the
   screen, not a smaller screen). Left here as a note: any conclusion drawn
@@ -158,6 +215,17 @@ is open.
 ---
 
 ## Notes
+
+- **"Station" is two different things and the name is going.** The transit
+  grammar sense (a point on a line: tick, ring, diamond, hub) and the
+  config's `station: true` sense (a SPAN the line kinks out for) share one
+  word, and AGENTS.md already has to warn "not to be confused with the
+  ring-station above". The proposal is **siding**, which is what the second
+  one actually draws and what `test/layout/cases/sidings.js` already calls
+  it. Renaming touches the config key, `metro.stations`, the `STATION_*`
+  constants, `data-metro-role="station-ring"`, CONFIG.md, the AI prompt and
+  the editor; `parseConfig` keeps reading `station` so existing configs do
+  not break.
 
 - **The layout suite can render the Liquid side now.** The banner is drawn
   by Liquid from the build's own `metro:`, so no fixture could ever reach

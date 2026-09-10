@@ -2044,10 +2044,30 @@
     // began. It also blends correctly inside the fan, which a constant
     // cannot do.
     function flatCAt(p, a) { return lineCAt(p, a) - p._sign * stationRaiseAt(p, a); }
+    // Which station has the line at `a`. stationRaiseAt takes the FIRST
+    // segment whose span contains the position and returns, so where two
+    // stations on one line overlap only one of them moves the line at all.
+    // Read the same way here so the two cannot disagree about which.
+    function governingStation(p, a) {
+      var segs = p._stations;
+      for (var i = 0; i < segs.length; i++) {
+        if (a >= segs[i].a0 && a <= segs[i].a1) return segs[i];
+      }
+      return null;
+    }
     function expressThrough(p) {
       p._stations.forEach(function (s) {
         if (sharedStation(s)) return;
         if (s.a1 - s.a0 < CORNER * 2) return;   // too short to read as a loop
+        // Only where this station is the one that actually kinked the line.
+        // A solo station nested inside another of its own line's stations
+        // (Amy's "Lab Rotation" sitting inside the crew's "Delivery Run"
+        // corridor) never gets a siding: the corridor already has the line
+        // and stationRaiseAt hands it the whole overlap. The express was
+        // drawn for it anyway, at the baseline the line had left, so it
+        // came out as a stretch of rail floating in the middle of the board
+        // with nothing at either end. No siding, no loop, nothing to close.
+        if (governingStation(p, (s.a0 + s.a1) / 2) !== s) return;
         // Run it a corner PAST each end of the station. The kink's corners
         // are drawn rounded, so the trunk leaves its baseline a corner
         // radius before the station's own start and comes back a radius
@@ -2235,6 +2255,7 @@
     // ends of the board. The caption is drawn once for the group and set
     // midway between the lines it belongs to, so it reads as theirs jointly
     // rather than as one child's with a stray copy.
+    var capQueue = [];
     LEGEND.forEach(function (p) {
       var baseC = spineC + p._c;
       p._stations.forEach(function (s) {
@@ -2248,7 +2269,11 @@
         // a time. The kink itself already shows the span, and the caption
         // says which station it is.
         if (!ownsCaption) return;   // the rings above are per line; the caption is not
-        var box = el('div', 'metro-gen metro-label absolute text--black');
+        // metro-caption as well as metro-label: it is cleaned up with the
+        // labels and painted like one, but it is placed by different rules
+        // in a different pass, and a test about captions has to be able to
+        // pick them out of the text on the board.
+        var box = el('div', 'metro-gen metro-label metro-caption absolute text--black');
         // Lying down a caption may run as long as its station; standing up
         // it has only the column between two lines, so cap it there or two
         // neighbouring stations write straight over each other.
@@ -2362,54 +2387,44 @@
             var lc0 = box.querySelector('.metro-loc');
             if (lc0) { lc0.remove(); bm = measure(box); }
           }
-          midC = bm.h + 2 * STATION_GAP <= raise
-            ? baseC + p._sign * raise / 2
-            : baseC + p._sign * (raise + STATION_GAP + bm.h / 2);
+          // Still too tall for the loop, so it is going out into the lanes,
+          // where every other box is a one-line title. Two lines gained it
+          // nothing there and cost it twice the chance of landing on
+          // something: "Lab Rotation" wrapped inside a 70px allowance and
+          // then dropped its second line onto "Bend Some Girders" in the
+          // lane below, with no room along its own two-hour station to
+          // slide out of the way. Wrapping is what the narrow allowance is
+          // for, and the allowance is about fitting the LOOP.
+          if (bm.h + 2 * STATION_GAP > raise) {
+            t.style.maxWidth = 'none';
+            t.style.overflow = 'hidden'; t.style.textOverflow = 'ellipsis';
+            clampLines(t, 1);
+            bm = measure(box);
+          }
+          // Inside the loop only if there IS a loop. A solo station nested
+          // inside another of its own line's stations never gets a siding
+          // (stationRaiseAt hands the whole overlap to the outer one), so
+          // the space "inside the loop" was never vacated: Amy's "Lab
+          // Rotation", sitting inside the crew's "Delivery Run" corridor,
+          // was set half a raise off a baseline her line had left, which
+          // put it across the rail one line up. With no kink of its own it
+          // is an ordinary caption beside an ordinary line, so it sits off
+          // the line WHERE THAT LINE ACTUALLY RUNS.
+          var ownsKink = governingStation(p, capMid) === s;
+          midC = !ownsKink
+            ? lineCAt(p, capMid) + p._sign * (STATION_GAP + bm.h / 2)
+            : (bm.h + 2 * STATION_GAP <= raise
+              ? baseC + p._sign * raise / 2
+              : baseC + p._sign * (raise + STATION_GAP + bm.h / 2));
         }
         if (horizontal) {
-          // Slide along the station's own span until the caption is clear of
-          // the event labels already placed. A station caption is not part
-          // of the lane bookkeeping — it sits in the space the kink vacated —
-          // so nothing else knows to keep out of its way, and on a line with
-          // a meeting inside its own station's span the two wrote over each
-          // other. The station is long; the caption only needs somewhere
-          // along it.
-          var capW = bm.w, capH = bm.h;
-          var limit = s.a1 - raise - capW;
-          var at = capA;
-          for (var tries = 0; tries < 24 && at < limit; tries++) {
-            var clash = null;
-            for (var vi = 0; vi < visible.length; vi++) {
-              var ov = visible[vi];
-              if (ov._dropped || ov._textStart == null) continue;
-              var oc = spineC + ov._sign * ov._laneDist;
-              var oTop = ov._sign < 0 ? oc - LINE_GAP - ov._h : oc + LINE_GAP;
-              if (oTop > midC + capH / 2 || oTop + ov._h < midC - capH / 2) continue;
-              if (ov._textStart > at + capW + 4 * S || ov._textStart + ov._textLen < at - 4 * S) continue;
-              clash = ov; break;
-            }
-            if (!clash) break;
-            at = clash._textStart + clash._textLen + 8 * S;
-          }
-          if (at > limit) at = capA;
-          // and clear of the rule that marks now. It is the one line on the
-          // board that crosses everything, drawn at a minute rather than
-          // belonging to anybody, so nothing routes around it — and a
-          // caption sitting on it broke both: the rule came out dashed
-          // through the words and the words came out with a stroke through
-          // them. The station is long; the caption only needs somewhere
-          // along it, so it steps past the rule, or back before it when
-          // there is no room after.
-          if (nowA != null) {
-            var nowClear = 5 * S;
-            if (at < nowA + nowClear && nowA - nowClear < at + capW) {
-              var after = nowA + nowClear, before = nowA - nowClear - capW;
-              if (after <= limit) at = after;
-              else if (before >= capA - 1) at = before;
-            }
-          }
-          box.style.left = at + 'px';
-          box.style.top = (midC - bm.h / 2) + 'px';
+          // Lying down, a caption is placed in a second pass (capQueue,
+          // below) rather than here: it has to keep clear of the OTHER
+          // captions as well as of the event labels, and which of two
+          // captions should move is not knowable while they are being
+          // built one line at a time.
+          capQueue.push({ box: box, bm: bm, midC: midC, capA: capA,
+            limit: s.a1 - raise - bm.w });
         } else {
           // Standing up, the space the kink vacates is only a kink wide,
           // while the caption is a column wide — centring it on the line
@@ -2423,6 +2438,77 @@
           box.style.left = (p._sign > 0 ? capHi + STATION_GAP : capLo - bm.w - STATION_GAP) + 'px';
         }
       });
+    });
+
+    // ---- where the captions actually go ---------------------------------
+    //
+    // Lying down, a caption slides along its OWN station's span until it is
+    // clear of what is already there. A station caption is not part of the
+    // lane bookkeeping (it sits in the space the kink vacated) so nothing
+    // else knows to keep out of its way, and on a line with a meeting
+    // inside its own station's span the two wrote over each other.
+    //
+    // The captions also have to clear EACH OTHER, and that is why this is a
+    // second pass rather than part of the loop above. Two stations on
+    // different lines can want the same strip of canvas: a solo caption too
+    // tall for its own loop sits just outside it, and a corridor caption
+    // sits just outside the outermost line it joins, which on a packed
+    // board is the same place. Drawn one line at a time, whichever came
+    // second landed on the first ("Lab Rotation" across "Delivery Run").
+    //
+    // Which one should move is decided by how much room it has to move IN,
+    // not by the order the lines happen to be in: a caption is placed
+    // least-freedom-first, so the one pinned to a two-hour station takes
+    // the spot it needs and the one with seven hours of corridor to slide
+    // along is the one that yields. Sorting the other way round moves the
+    // caption that cannot go anywhere, which is how it ends up back on top
+    // of something.
+    capQueue.sort(function (a, b) { return (a.limit - a.capA) - (b.limit - b.capA); });
+    var capPlaced = [];
+    capQueue.forEach(function (q) {
+      var capW = q.bm.w, capH = q.bm.h, midC = q.midC;
+      var at = q.capA, limit = q.limit;
+      for (var tries = 0; tries < 24 && at < limit; tries++) {
+        var clashAt = null;
+        for (var vi = 0; vi < visible.length; vi++) {
+          var ov = visible[vi];
+          if (ov._dropped || ov._textStart == null) continue;
+          var oc = spineC + ov._sign * ov._laneDist;
+          var oTop = ov._sign < 0 ? oc - LINE_GAP - ov._h : oc + LINE_GAP;
+          if (oTop > midC + capH / 2 || oTop + ov._h < midC - capH / 2) continue;
+          if (ov._textStart > at + capW + 4 * S || ov._textStart + ov._textLen < at - 4 * S) continue;
+          clashAt = ov._textStart + ov._textLen; break;
+        }
+        if (clashAt == null) {
+          for (var ci = 0; ci < capPlaced.length; ci++) {
+            var cp = capPlaced[ci];
+            if (Math.abs(midC - cp.midC) >= (capH + cp.h) / 2) continue;
+            if (cp.at > at + capW + 4 * S || cp.at + cp.w < at - 4 * S) continue;
+            clashAt = cp.at + cp.w; break;
+          }
+        }
+        if (clashAt == null) break;
+        at = clashAt + 8 * S;
+      }
+      if (at > limit) at = q.capA;
+      // and clear of the rule that marks now. It is the one line on the
+      // board that crosses everything, drawn at a minute rather than
+      // belonging to anybody, so nothing routes around it, and a caption
+      // sitting on it broke both: the rule came out dashed through the
+      // words and the words came out with a stroke through them. The
+      // station is long; the caption only needs somewhere along it, so it
+      // steps past the rule, or back before it when there is no room after.
+      if (nowA != null) {
+        var nowClear = 5 * S;
+        if (at < nowA + nowClear && nowA - nowClear < at + capW) {
+          var after = nowA + nowClear, before = nowA - nowClear - capW;
+          if (after <= limit) at = after;
+          else if (before >= q.capA - 1) at = before;
+        }
+      }
+      q.box.style.left = at + 'px';
+      q.box.style.top = (midC - capH / 2) + 'px';
+      capPlaced.push({ at: at, w: capW, midC: midC, h: capH });
     });
 
     // ---- the ramp builder ------------------------------------------------
@@ -2566,6 +2652,12 @@
       var b1 = horizontal ? [xy[0], xy[1] + 4 * S] : [xy[0] + 4 * S, xy[1]];
       var tb = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1], 'stroke-width': p.line_width * S, 'stroke-linecap': 'round' });
       tb.style.stroke = colorFor(p.hue);
+      // The bar that caps a rail is the only thing at that end of it, so a
+      // test asking whether a rail stops at something has to be able to see
+      // it. Without the role it was drawn, correct, and invisible to the
+      // suite, which then read every properly capped rail as a loose end.
+      tb.setAttribute('data-metro-role', 'terminal');
+      tb.setAttribute('data-metro-owner', p.key);
       svg.appendChild(tb);
     }
     Object.keys(chains).forEach(function (key) {
@@ -2623,8 +2715,12 @@
         // every elbow on both sides — exactly the stretch each member's own
         // path already covers — and only member's own path touches that zone.
         var lanePhase = null;   // set once the head's ramp is drawn
+        // a0 is where the rail already is and a1 is where it is going, in
+        // that order and not in axis order: a backward group runs right to
+        // left, and drawn the other way round its dash phase restarts in
+        // the middle of the rail.
         function bridge(a0, a1) {
-          if (a1 - a0 < 1) return;
+          if (Math.abs(a1 - a0) < 1) return;
           var seg = svgEl('path', { d: roundedPath([toXY(a0, laneC), toXY(a1, laneC)], 0) });
           seg.setAttribute('data-metro-role', 'branch'); seg.setAttribute('data-metro-owner', p.key);
           paintLine(seg, p, S, svg, lanePhase);
@@ -2660,7 +2756,22 @@
         var headLen = head._rampEl.getTotalLength ? head._rampEl.getTotalLength() : null;
         var headStart = trunkLenAt(p, headPhaseA);
         lanePhase = (headLen != null && headStart != null) ? phaseAfter(p, headStart + headLen) : null;
-        bridge(head._elbow + RAMP_LEAD, g.to);
+        // On to the far end of the group, in the direction the rail is
+        // travelling. Written as `elbow + RAMP_LEAD` to `g.to` it was right
+        // for a forward group and nonsense for a backward one: the ramp's
+        // tail stops at `elbow - RAMP_LEAD` there and the bridge started a
+        // whole lead the OTHER side of the elbow, running to an end it had
+        // already passed, so it drew nothing at all. The rail then stopped
+        // two corner radii past its own elbow with its terminus bar left
+        // sitting on its own further down the lane, which is what "the stub
+        // runs the wrong way and detaches" was.
+        var tailA = head._elbow + head._dir * RAMP_LEAD;
+        var farA = head._dir > 0 ? g.to : g.from;
+        // Only if there is any rail left to draw AHEAD of the ramp's tail.
+        // Where the group is shorter than the lead the ramp already covers
+        // all of it, and a bridge drawn anyway runs back the way the rail
+        // came and sticks out past the group's own end.
+        if ((farA - tailA) * head._dir >= 1) bridge(tailA, farA);
         // ONE mark per rail end, always the same one. The group's far end
         // and the last member's own end are the same point, so both a
         // terminus bar and a stop tick were being drawn there — and where

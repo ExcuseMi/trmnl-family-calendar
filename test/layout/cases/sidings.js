@@ -12,7 +12,7 @@
 // lines alongside each other for the length of what they are both at.
 
 module.exports = function (test, h) {
-  const { layout, VIEWPORTS, fixtures, pathsWhere, textLabels, deepestIntrusion, assert } = h;
+  const { layout, VIEWPORTS, fixtures, pathsWhere, textLabels, deepestIntrusion, overlap, hasClass, assert } = h;
 
   const byName = (n) => VIEWPORTS.find((v) => v.name === n);
   const ROOMY = byName('x-landscape');
@@ -150,4 +150,42 @@ module.exports = function (test, h) {
       }
     }
   });
+
+  // ---------------------------------------------------------- captions
+
+  // A station caption is not part of the lane bookkeeping: it sits in the
+  // space its own kink vacated, so nothing else on the board knows to keep
+  // out of its way, and it does not know about the other captions either.
+  //
+  // On a packed board two of them want the same strip of canvas. A solo
+  // caption too tall for its own loop sits just outside it; a corridor
+  // caption sits just outside the outermost line it joins; where the solo
+  // station's line IS that outermost line, those are the same place. Drawn
+  // one line at a time, "Lab Rotation" was written across "Delivery Run".
+  //
+  // 2px, the same tolerance the general label test uses: text carries a
+  // paper outline, so a hairline of contact is invisible and a chunk hides
+  // a word.
+  const CAP_TOL = 2;
+  for (const f of fixtures) {
+    for (const vname of ['x-landscape', 'og-landscape']) {
+      test('a station caption lands on nothing else: ' + f.name + '/' + vname, () => {
+        const rep = layout(f, byName(vname));
+        const caps = textLabels(rep).filter((l) => hasClass(l, 'metro-caption'));
+        const others = textLabels(rep);
+        const bad = [];
+        for (const c of caps) {
+          for (const o of others) {
+            if (o === c) continue;
+            const ov = overlap(c, o);
+            if (ov && ov.w > CAP_TOL && ov.h > CAP_TOL) {
+              bad.push('"' + c.text + '" x "' + o.text + '" (' + Math.round(ov.w)
+                + 'x' + Math.round(ov.h) + 'px)');
+            }
+          }
+        }
+        assert(bad.length === 0, bad.length + ' caption collision(s): ' + bad.slice(0, 6).join('; '));
+      });
+    }
+  }
 };
