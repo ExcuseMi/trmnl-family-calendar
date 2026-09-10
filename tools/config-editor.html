@@ -106,6 +106,7 @@
     <a href="#station-tracks">Tracks</a>
     <a href="#station-calendars">Calendars</a>
     <a href="#station-preview">Preview</a>
+    <a href="#station-agent">AI</a>
     <a href="#station-output">JSON</a>
     <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin">GitHub</a>
   </nav>
@@ -180,6 +181,20 @@
     </div>
   </section>
 
+  <section class="station" id="station-agent">
+    <h2>Let an AI do it <small>optional, and it reads your calendars</small></h2>
+    <p class="lede">Generates a prompt describing this plugin, its configuration format and what makes a board read well, together with your ICS links and whatever the tool has already read from them. Paste it into an AI assistant and it returns a configuration you can paste back into <em>Start</em> above.</p>
+    <div class="card plain">
+      <div class="toolbar">
+        <button id="makePrompt" class="primary">Generate prompt</button>
+        <button id="copyPrompt">Copy prompt</button>
+        <span id="promptStatus" class="status"></span>
+      </div>
+      <textarea id="promptOut" rows="14" readonly placeholder="Add your calendars above, then generate."></textarea>
+      <p class="hint">Draw the map first if you can: the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. Otherwise it is told to fetch the links itself, which not every assistant can do.</p>
+    </div>
+  </section>
+
   <section class="station terminus" id="station-output">
     <h2>Your configuration <small>paste this into TRMNL</small></h2>
     <div class="card plain">
@@ -202,7 +217,7 @@
       <summary>Every option, if you would rather write it by hand</summary>
       <div class="adv-body">
         <p class="hint">The same shape this page produces. <code>tracks</code> and <code>rules</code> are both optional: a bare list of <code>calendars</code> already draws one line per calendar.</p>
-<pre class="hint" style="overflow-x:auto"><code>{
+<pre class="hint" style="overflow-x:auto"><code id="schemaRef">{
   "timeZone": "Europe/Brussels",     // optional; the account's zone otherwise
   "locale": "en-GB", "timeFormat": "12h" | "24h" | "auto",
   "tracks": [
@@ -685,6 +700,153 @@
       setStatus("importStatus", "Demo loaded. Scroll down and draw the map.", "ok");
     }).catch(function (e) { setStatus("importStatus", "Couldn't load demo-config.json: " + e.message, "err"); });
   });
+  // ------------------------------------------------------------ the AI prompt
+  //
+  // A prompt the user pastes into an assistant, which hands back a
+  // configuration. It has to carry everything the assistant cannot see: what
+  // this plugin draws, what the format is, what makes a board read well on a
+  // small e-ink panel, and what is actually in the calendars. The last one
+  // is the part that matters and the part an assistant usually cannot fetch
+  // for itself, so whatever this page has already read is digested into it.
+
+  // What one feed contains, small enough to paste: each distinct title with
+  // the times it runs at and the days it runs on. That is what a pattern
+  // looks like ("L6 ..." every weekday morning) without shipping a whole ICS.
+  function digestIcs(text) {
+    var lines = String(text || "").replace(/\r\n[ \t]/g, "").split(/\r?\n/);
+    var byTitle = {}, order = [], calName = null, cur = null;
+    lines.forEach(function (line) {
+      if (line.indexOf("X-WR-CALNAME:") === 0) { calName = line.slice(13).trim(); return; }
+      if (line === "BEGIN:VEVENT") { cur = {}; return; }
+      if (line === "END:VEVENT") {
+        if (cur && cur.title) {
+          var k = cur.title;
+          if (!byTitle[k]) { byTitle[k] = { times: {}, days: {}, n: 0 }; order.push(k); }
+          var e = byTitle[k];
+          e.n++;
+          if (cur.at) e.times[cur.at] = true;
+          if (cur.days) cur.days.split(",").forEach(function (d) { e.days[d] = true; });
+          if (cur.allDay) e.allDay = true;
+          if (cur.loc) e.loc = cur.loc;
+        }
+        cur = null; return;
+      }
+      if (!cur) return;
+      var i = line.indexOf(":");
+      if (i < 0) return;
+      var key = line.slice(0, i).split(";")[0], val = line.slice(i + 1);
+      if (key === "SUMMARY") cur.title = val.replace(/\\,/g, ",").replace(/\\n/g, " ").trim();
+      else if (key === "LOCATION") cur.loc = val.replace(/\\,/g, ",").trim();
+      else if (key === "DTSTART") {
+        if (line.indexOf("VALUE=DATE") >= 0) cur.allDay = true;
+        var t = /T(\d{2})(\d{2})/.exec(val);
+        cur.at = t ? t[1] + ":" + t[2] : null;
+      } else if (key === "DTEND") {
+        var t2 = /T(\d{2})(\d{2})/.exec(val);
+        if (t2 && cur.at) cur.at += "-" + t2[1] + ":" + t2[2];
+      } else if (key === "RRULE") {
+        var d = /BYDAY=([A-Z,]+)/.exec(val);
+        cur.days = d ? d[1] : "weekly";
+      }
+    });
+    var rows = order.slice(0, 60).map(function (t) {
+      var e = byTitle[t];
+      var when = Object.keys(e.times).slice(0, 3).join(" / ") || (e.allDay ? "all day" : "");
+      var days = Object.keys(e.days).join(",");
+      return "    - " + t
+        + (when ? "  [" + when + "]" : "")
+        + (days ? "  (" + days + ")" : "")
+        + (e.n > 1 ? "  x" + e.n : "")
+        + (e.loc ? "  @ " + e.loc : "");
+    });
+    if (order.length > 60) rows.push("    - ...and " + (order.length - 60) + " more distinct titles");
+    return { name: calName, rows: rows };
+  }
+
+  // One copy of the schema, the one the page itself shows. The prompt reads
+  // it out of the DOM so the two cannot drift apart.
+  function schemaText() {
+    var n = document.getElementById("schemaRef");
+    return n ? n.textContent.trim() : "";
+  }
+
+  function buildAgentPrompt() {
+    var cfg = buildConfig();
+    var urls = state.calendars.map(function (c) { return c.url.trim(); }).filter(Boolean);
+    var out = [];
+    out.push("You are configuring a TRMNL e-ink plugin called Metro Calendar. It draws ONE day as a transit map: one line per person, their events branching off it as stations, and the things several people are at drawn as interchanges. Your job is to read the calendars below and produce the best configuration JSON for it.");
+    out.push("");
+    out.push("## What to do");
+    out.push("1. Read every calendar listed under \"Calendars\" below. Where the events are given, use them; where only a URL is given, fetch it if you can, and say so if you cannot.");
+    out.push("2. Work out who the people are. A line per person is the point of this board. Look for name prefixes (\"Fry: ...\"), class or group codes (\"L6\", \"K3\"), separate feeds per person, or a shared feed everybody is in.");
+    out.push("3. Write rules that route each event to the right line, then strip whatever routed it out of the title, so the board reads \"Coffee\" and not \"Fry: Coffee\".");
+    out.push("4. Optimise for a small screen. Fewer, clearer lines beat completeness.");
+    out.push("5. Reply with ONE JSON object and nothing else. No explanation, no code fence.");
+    out.push("");
+    out.push("## What makes this board read well");
+    out.push("- 2 to 6 lines. More than that and the panel runs out of depth and starts dropping lines.");
+    out.push("- A long block spent in ONE place (a school day, a work shift, a desk booking, a delivery) should be `\"station\": true`. The line then runs through it as a siding instead of spending a whole label lane on it, and the meetings inside it still branch off normally.");
+    out.push("- Something several people are at should list all of them: `\"track\": [\"Bart\", \"Lisa\"]`. It is then drawn once, as an interchange joining their lines, instead of once per person.");
+    out.push("- Titles are read at arm's length on a small panel. Use `rewrite` to drop codes, room numbers, \"[Teams]\" and the like. Use `hide` for things nobody reads off a wall board: birthdays, \"Free\", \"Out of office\", declined invitations.");
+    out.push("- Prefer `word` or `contains` matchers over `regex`. Use `regex` only when the pattern really needs it.");
+    out.push("- Do not set `side` or `color` unless there is a reason: both are chosen automatically, and the automatic choice follows the day and the device's theme.");
+    out.push("");
+    out.push("## Format");
+    out.push("```json");
+    out.push(schemaText());
+    out.push("```");
+    out.push("- Matchers: `any`, `all`, `exact`, `word`, `contains`, `regex`, `status`, `weekday`, and `and` / `or` / `not` taking `matchers`.");
+    out.push("- Rules run in order; the last match wins for each effect. A calendar's own rules beat the top-level ones.");
+    out.push("- An event no rule routes goes to the calendar's `name`, else to the first entry in `tracks`, else to the feed's own name.");
+    out.push("- `rename` defaults to true for a rule that names a track, which rewrites the matched text into that track's name. Set `\"rename\": false` when you only want to route, not retitle.");
+    out.push("- Only events that recur with `RRULE:FREQ=WEEKLY` (with or without BYDAY/UNTIL), or that fall on today, are drawn.");
+    out.push("- `\"hideIfEmpty\": false` on a track or a calendar keeps its line on the board on a day it has nothing.");
+    out.push("");
+    out.push("## Calendars");
+    if (!urls.length) out.push("(none added yet)");
+    urls.forEach(function (u) {
+      var c = state.calendars.filter(function (x) { return x.url.trim() === u; })[0] || {};
+      var text = icsOverrides[u];
+      var dig = text ? digestIcs(text) : null;
+      out.push("");
+      out.push("- URL: " + u);
+      if (c.name && c.name.trim()) out.push("  Called: " + c.name.trim());
+      else if (dig && dig.name) out.push("  Feed name: " + dig.name);
+      if (dig) {
+        out.push("  Events (title [times] (days) xcount @ location):");
+        out.push.apply(out, dig.rows.length ? dig.rows : ["    - (no events in this feed)"]);
+      } else {
+        out.push("  Not read by the tool. Fetch this URL yourself.");
+      }
+    });
+    if (cfg.calendars && cfg.calendars.length && (cfg.tracks.length || (cfg.rules || []).length
+        || cfg.calendars.some(function (c) { return c.rules; }))) {
+      out.push("");
+      out.push("## The configuration so far");
+      out.push("Improve on this rather than starting over, unless it is clearly wrong.");
+      out.push("```json");
+      out.push(JSON.stringify(cfg, null, 2));
+      out.push("```");
+    }
+    return out.join("\n");
+  }
+
+  document.getElementById("makePrompt").addEventListener("click", function () {
+    var ta = document.getElementById("promptOut");
+    ta.value = buildAgentPrompt();
+    var read = Object.keys(icsOverrides).length;
+    setStatus("promptStatus", read
+      ? "Ready, with the events from " + read + " calendar(s) in it."
+      : "Ready. Draw the map first and it will carry your real events too.", "ok");
+  });
+  document.getElementById("copyPrompt").addEventListener("click", function () {
+    var ta = document.getElementById("promptOut");
+    if (!ta.value) ta.value = buildAgentPrompt();
+    ta.select();
+    (navigator.clipboard ? navigator.clipboard.writeText(ta.value) : Promise.reject()).then(function () { setStatus("promptStatus", "Copied.", "ok"); })
+      .catch(function () { setStatus("promptStatus", "Select the text and copy it manually.", "err"); });
+  });
+
   document.getElementById("copyJson").addEventListener("click", function () {
     var ta = document.getElementById("jsonOut");
     ta.select();
