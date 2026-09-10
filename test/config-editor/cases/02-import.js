@@ -62,4 +62,25 @@ module.exports = function (test, h) {
     const rule = document.querySelector('#calendars .card .rule');
     assert(rule.querySelectorAll('input[type=checkbox]')[3].checked, 'the station checkbox should reflect the imported rule');
   });
+
+  test('importing hideIfEmpty:false round-trips and ticks the keep-empty box', () => {
+    // the switch that keeps a quiet person's line on the board: it has to
+    // survive a trip through the editor, or anyone who opens their config
+    // there loses it without being told
+    const { document } = loadEditor();
+    document.getElementById('importIn').value = JSON.stringify({
+      calendars: [
+        { name: 'Quiet', url: 'https://a.example/q.ics', hideIfEmpty: false },
+        { name: 'Busy', url: 'https://a.example/b.ics' },
+      ],
+    });
+    click(document.getElementById('loadImport'));
+    const out = jsonOut(document).calendars;
+    assertEqual(out[0].hideIfEmpty, false);
+    assert(!('hideIfEmpty' in out[1]), 'the default should not be written out: ' + JSON.stringify(out[1]));
+    const cards = document.querySelectorAll('#calendars .card');
+    const boxOf = (card) => [...card.querySelectorAll('.adv-body label.check input[type=checkbox]')].pop();
+    assert(boxOf(cards[0]).checked, 'the keep-empty box should be ticked for the imported calendar');
+    assert(!boxOf(cards[1]).checked, 'the other calendar should be left alone');
+  });
 };

@@ -34,7 +34,7 @@ custom_fields:
 - keyname: author_info
   name: About This Plugin
   field_type: author_bio
-  description: A metro-map style single-day calendar. One line per track runs along a central spine with the hour axis down its middle; events branch off as stations (work on one side, family on the other), long events loop out and rejoin, and labels are placed dynamically in lanes so nothing overlaps. Auto-picks a horizontal or vertical timeline to fit the screen and narrows the visible hours on small views. Runs on TRMNL <strong>Serverless</strong>.<br /><br />Turn off "Use Demo Data" and paste a calendar config to show your own ICS calendars &mdash; build one with the <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">Configuration Editor</a>.
+  description: A metro-map style single-day calendar. One line per track runs along a central spine with the hour axis down its middle; events branch off as stations, a long block in one place becomes a siding beside the line, several people in one place become an interchange, and labels are placed in lanes so nothing overlaps. Auto-picks a horizontal or vertical timeline to fit the screen and narrows the visible hours on small views. Runs on TRMNL <strong>Serverless</strong>.<br /><br />Turn off "Use Demo Data" and paste your own ICS links to show your own calendars. For anything beyond a plain list, build a config with the <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">Configuration Editor</a>.
   github_url: https://github.com/ExcuseMi/trmnl-metro-calendar-plugin
   category: calendar
   help_text: TRMNL X Ready · English, français, español, Deutsch, Nederlands
@@ -47,7 +47,6 @@ custom_fields:
   conditional_validation:
   - when: 'true'
     hidden:
-    - calendar_urls
     - config_json
   - when: 'false'
     hidden:
@@ -55,23 +54,18 @@ custom_fields:
 - keyname: demo_set
   field_type: select
   name: Demo Board
-  description: 'Which example day to show. Each one is a real config in this project''s <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/ folder</a>, driven by real ICS files &mdash; copy the one closest to your situation and change the links.'
+  description: Which example day to show. Each one is a real config in this project's <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/ folder</a>, driven by real ICS files. Copy the one closest to your situation and change the links.
   options:
-  - Springfield &mdash; a family of five (shared school day, family dinner): simpsons
-  - Planet Express &mdash; a work crew (one team calendar split by rules, a delivery three of them are on all day): futurama
-  - Apartment 20 &mdash; two flatmates (a day at a desk, an evening they are both at): friends
+  - Springfield, a family of five (shared school day, family dinner): simpsons
+  - Planet Express, a work crew (one team calendar, a delivery three of them are on all day): futurama
+  - Apartment 20, two flatmates (a day at a desk, an evening they are both at): friends
   default: simpsons
   optional: true
-- keyname: calendar_urls
-  field_type: text
-  name: Calendar Links
-  description: 'One ICS link per line &mdash; that is the whole setup. Each calendar becomes its own line on the map, named after the calendar. Use the Calendar Config below instead when you want to route events to people, share events between them, or rename things.'
-  placeholder: "https://cloud.example.com/alex.ics\nhttps://cloud.example.com/school.ics"
-  optional: true
 - keyname: config_json
-  field_type: code
-  name: Calendar Config (JSON)
-  description: 'Optional, and only used when Use Demo Data is off &mdash; it replaces Calendar Links above. Build it with <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">the Configuration Editor</a> and paste the result here. Same shape as this project''s calendar-config.json/demo-config.json (or just paste one ICS URL per line): <br /><code>{"timeZone":"...","rules":[...],"tracks":[{"name":"Sam","color":"blue"}],"calendars":[{"name":"Work","url":"https://.../calendar.ics","headers":{"Authorization":"..."},"includeDescription":false,"rules":[{"match":{"type":"any"},"track":"Sam"}]}]}</code><br />Which side each track renders on is balanced automatically by event count once every calendar loads (busiest first, evenly split) &mdash; set <code>"side": "left"</code> or <code>"right"</code> on a track to pin them instead. The first entry in <code>tracks</code> claims any event no rule assigns. Rule <code>match.type</code>: <code>any</code>/<code>all</code>, <code>exact</code>, <code>word</code>, <code>contains</code>, <code>regex</code>, <code>status</code>, <code>weekday</code>, <code>and</code>/<code>or</code> (with <code>matchers</code>). Actions: <code>track</code> (a name or a list — a list becomes a shared interchange), <code>rename</code>, <code>rewrite</code> (+<code>rewriteFull</code>), <code>hide</code>, <code>allDay</code>. Top-level <code>rules</code> apply to every calendar; a calendar''s own rules win. Set <code>includeDescription: true</code> on a calendar to let its rules also match the event description. Recurring events only show if they use <code>RRULE:FREQ=WEEKLY</code> (optionally with BYDAY/UNTIL) or their start date is today; all-day events are not shown yet. (Legacy configs may use <code>people</code>/<code>person</code> in place of <code>tracks</code>/<code>track</code> &mdash; still accepted.)'
+  field_type: text
+  name: Calendars
+  placeholder: "https://cloud.example.com/alex.ics"
+  description: 'One ICS link per line is the whole setup: each calendar becomes its own line on the map, named after the calendar. Paste a JSON config here instead when you want more, and it is read as JSON automatically. Build one with <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">the Configuration Editor</a>, or copy one of the demo boards. Same shape as this project''s calendar-config.json/demo-config.json: <br /><code>{"timeZone":"...","rules":[...],"tracks":[{"name":"Sam","color":"blue"}],"calendars":[{"name":"Work","url":"https://.../calendar.ics","headers":{"Authorization":"..."},"includeDescription":false,"rules":[{"match":{"type":"any"},"track":"Sam"}]}]}</code><br />Which side each track renders on is balanced automatically by event count once every calendar loads (busiest first, evenly split). Set <code>"side": "left"</code> or <code>"right"</code> on a track to pin them instead. The first entry in <code>tracks</code> claims any event no rule assigns. Rule <code>match.type</code>: <code>any</code>/<code>all</code>, <code>exact</code>, <code>word</code>, <code>contains</code>, <code>regex</code>, <code>status</code>, <code>weekday</code>, <code>and</code>/<code>or</code> (with <code>matchers</code>). Actions: <code>track</code> (a name, or a list to share the event between them), <code>rename</code>, <code>rewrite</code> (+<code>rewriteFull</code>), <code>hide</code>, <code>allDay</code>. Top-level <code>rules</code> apply to every calendar; a calendar''s own rules win. Set <code>includeDescription: true</code> on a calendar to let its rules also match the event description. Recurring events only show if they use <code>RRULE:FREQ=WEEKLY</code> (optionally with BYDAY/UNTIL) or their start date is today; all-day events are not shown yet. Set <code>"hideIfEmpty": false</code> on a track or a calendar to keep its line on the board on a day it has nothing, instead of dropping it. (Legacy configs may use <code>people</code>/<code>person</code> in place of <code>tracks</code>/<code>track</code>; still accepted.)'
   optional: true
 - keyname: time_format
   field_type: select
@@ -89,5 +83,6 @@ custom_fields:
   description: Drives the header weather, sunrise/sunset and the rain start/stop markers on the map. Leave blank to keep the placeholder weather.
   optional: true
 name: Metro Calendar
-description:
+# Max 35 characters: the hosted service's limit, and what trmnlp lint checks.
+description: Everyone's day as a metro map
 refresh_interval: 15

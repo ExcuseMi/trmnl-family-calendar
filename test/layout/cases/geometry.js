@@ -70,6 +70,7 @@ module.exports = function (test, h) {
     'all-day-every-track/og-landscape': 'packed: every line carries an all-day band, so the bands cannot fit and the side shares one lane ladder. Three branches cross a neighbouring caption, and a 32px station kink on a 10px pitch puts three all-day captions on the next line\'s rail.',
     'waypoint-station/og-landscape': 'packed, same as above with one waypoint instead of four all-day bands: three branch crossings and one caption on a neighbouring rail.',
     'five-lines/og-landscape': 'packed: five lines on a 480px-deep board leave no room for bands, so three branches cross a neighbouring caption on the shared ladder.',
+    'crew-day/og-landscape': 'packed, and one line short of fitting at all (the Professor is dropped): three branches cross a neighbouring caption on the shared ladder.',
   };
   const PIERCE_KNOWN = {};
 

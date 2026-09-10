@@ -1,4 +1,4 @@
-# Metro Timeline — Design
+# Metro Timeline: Design
 
 A single day drawn as a transit diagram: one line per track, running the full
 length of the canvas in one bundle, with the hour axis down the middle of the
@@ -21,8 +21,8 @@ orientations share one algorithm.
 Side A runs above the bundle in horizontal mode, left of it in vertical
 mode; side B is the other side. An explicit `track.side` in config puts
 that track on the side they asked for; everyone else is assigned once
-every calendar has been fetched and every event tallied — heaviest event
-count first, each track going to whichever side is currently lighter — so
+every calendar has been fetched and every event tallied: heaviest event
+count first, each track going to whichever side is currently lighter, so
 the split reflects the actual day's data rather than any fixed convention.
 
 ## Spine
@@ -114,8 +114,8 @@ whichever side still wants more, only while they fit.
   largest tier with the best score wins, and leftover cross space spreads the
   lanes up to 2.2×.
 - Time window: the axis first fits itself to where the day's actual content
-  is — the earliest event start to the latest event end, padded 75 minutes
-  on each side and including "now" — rather than always spanning the fixed
+  is (the earliest event start to the latest event end, padded 75 minutes
+  on each side and including "now") rather than always spanning the fixed
   07:00–21:00 day, so a quiet day's events fill the canvas instead of being
   crammed into one corner of an otherwise-empty one. It never fits tighter
   than a 6-hour span. If that content-fit range still can't give every hour

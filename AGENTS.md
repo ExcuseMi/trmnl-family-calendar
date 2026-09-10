@@ -1,7 +1,9 @@
-# Metro Calendar — agent notes
+# Metro Calendar: agent notes
 
 - The plugin lives in `plugin/` (TRMNL Serverless: `src/transform.js` + `src/*.liquid`); its own guidelines are in `plugin/AGENTS.md`, the layout design in `DESIGN.md`, the config schema in `CONFIG.md`.
 - Use TRMNL framework classes (https://trmnl.com/framework/docs/3.3) over inline styles wherever a class exists.
+- NEVER run `trmnlp pull`. It overwrites every local plugin file with the server's copy, and the server's `shared.liquid` is the comment-stripped build `push.sh` uploads: one pull deleted 1,200 lines of comments and reverted uncommitted work. To see what the server holds, read it somewhere else (`trmnlp clone` into /tmp).
+- The server owns some settings the push does NOT overwrite: `no_screen_padding` has been `'no'` in the repo for a long time while the server still had `'yes'`. Toggle those in the TRMNL UI; changing settings.yml alone does nothing.
 - Deploy with `plugin/push.sh`, not `trmnlp push`. `shared.liquid` outgrew the server's 100KB per-template limit; the script pushes a copy with whole-line `//` comments stripped (64KB), verifies it still builds, and restores the source. The comments are worth more in the repo than the bytes are on the server.
 - Three suites: `./test.sh` at the root (transform.js + config editor, plain Node) and `cd test/layout && npm test` (the rendered geometry, headless Chromium, a few minutes). Run all three plus `trmnlp lint` before pushing.
 - Layout changes need a screenshot at a real device size, zoomed on what changed, **as well as** a green suite. Read `plugin/AGENTS.md` "Testing the layout" first: it covers what the harness measures, the difference between a well-formed drawing and a truthful one, and the two ways a green run has lied here before.

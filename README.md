@@ -31,14 +31,15 @@ No server of your own.
 1. In TRMNL: **Plugins → Private Plugins → New**, name it, save. Then from
    this repo's `plugin/` folder run `trmnlp push` (it uploads settings,
    templates and `transform.js`).
-2. The plugin starts on a demo board. **Demo Board** picks which one — see
+2. The plugin starts on a demo board. **Demo Board** picks which one; see
    [the demo folder](demo/) for what each shows.
 3. To show your own calendars, turn **Use Demo Data** off and paste your ICS
-   links into **Calendar Links**, one per line. That is the whole setup:
-   each calendar becomes its own line on the map, named after the calendar.
-4. Only if you want more — routing events to people, sharing an event
-   between them, renaming or hiding things — fill in **Calendar Config
-   (JSON)** instead. Build it with the
+   links into **Calendars**, one per line. That is the whole setup: each
+   calendar becomes its own line on the map, named after the calendar.
+4. Only if you want more, such as routing events to people, sharing an
+   event between them, or renaming and hiding things, paste a JSON config
+   into that same box instead. It is read as JSON automatically. Build it
+   with the
    [Configuration editor](https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html),
    which also previews the map at every device size, or write it by hand
    (see [CONFIG.md](CONFIG.md)). Each demo board is a worked example:

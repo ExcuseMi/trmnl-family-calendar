@@ -177,6 +177,40 @@ const fiveLines = Object.assign(base({
   ],
 }), { legend: FIVE });
 
+// A work crew rather than a family, and the shape the Futurama demo board
+// has: a whole-crew interchange first thing, three of them on one station
+// for most of the day, and two short events just before the interchange
+// whose captions the interchange bar cuts across. Those two are what caught
+// a caption being thrown 71px off its own rail to dodge that bar.
+const CREW = [
+  track('prof', 'Professor', 'left', 'black', -20, 6, 'solid'),
+  track('amy', 'Amy', 'left', 'black', -10, 3, 'solid'),
+  track('fry', 'Fry', 'right', 'black', 10, 4, 'dotted'),
+  track('leela', 'Leela', 'right', 'black', 20, 3, 'solid'),
+  track('bender', 'Bender', 'right', 'black', 30, 3.5, 'dashed'),
+];
+const crewDay = Object.assign(base({
+  day_start_min: 360, day_end_min: 1380, window_label: '6am 11pm', now_min: 611,
+  stations: [
+    station('fry', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
+    station('leela', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
+    station('bender', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
+  ],
+  items: [
+    ev('Coffee (100 cups)', 'fry', 450, 480, { side: 'right', hue: 'black', track_style: 'dotted', track_offset: 10 }),
+    ev('Bend Some Girders', 'bender', 450, 495, { side: 'right', hue: 'black', track_style: 'dashed', track_offset: 30 }),
+    ev('Pre-flight Check', 'leela', 480, 510, { location: 'Docking Bay', side: 'right', hue: 'black', track_offset: 20 }),
+    ev('Good News Everyone', 'prof', 525, 540, { co_owners: ['amy', 'fry', 'leela', 'bender'], side: 'left', hue: 'black', track_width: 6, track_offset: -20 }),
+    ev('Lab Rotation', 'amy', 570, 690, { location: 'Mars University', side: 'left', hue: 'black', track_offset: -10 }),
+    ev('Nap', 'prof', 840, 960, { side: 'left', hue: 'black', track_width: 6, track_offset: -20 }),
+    ev('Scooter Service', 'amy', 960, 1020, { side: 'left', hue: 'black', track_offset: -10 }),
+    ev('Crew Debrief', 'fry', 990, 1050, { co_owners: ['leela', 'bender'], side: 'right', hue: 'black', track_style: 'dotted', track_offset: 10 }),
+    ev('Walk Nibbler', 'leela', 1050, 1095, { side: 'right', hue: 'black', track_offset: 20 }),
+    ev('All My Circuits', 'fry', 1110, 1140, { side: 'right', hue: 'black', track_style: 'dotted', track_offset: 10 }),
+    ev('Hedonism Lounge', 'bender', 1170, 1260, { side: 'right', hue: 'black', track_style: 'dashed', track_offset: 30 }),
+  ],
+}), { legend: CREW });
+
 module.exports = [
   { name: 'busy-day', metro: busyDay },
   { name: 'all-day-every-track', metro: allDayEveryTrack },
@@ -186,4 +220,5 @@ module.exports = [
   { name: 'full-day', metro: fullDay },
   { name: 'shared-station', metro: sharedStation },
   { name: 'five-lines', metro: fiveLines },
+  { name: 'crew-day', metro: crewDay },
 ];

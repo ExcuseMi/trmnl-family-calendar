@@ -14,7 +14,7 @@ silently, so check spelling.
 }
 ```
 
-(Legacy configs may use `"people"` in place of `"tracks"` — still accepted,
+(Legacy configs may use `"people"` in place of `"tracks"`; still accepted,
 for anyone who set this up before tracks were called tracks.)
 
 ## Track
@@ -35,7 +35,13 @@ for anyone who set this up before tracks were called tracks.)
   `"right"` (the other side) pins that track there. Without it, sides are
   balanced automatically once every calendar is fetched: whoever has the
   most events today goes first, each track landing on whichever side is
-  currently lighter — so the split follows the actual day, not a fixed rule.
+  currently lighter, so the split follows the actual day, not a fixed rule.
+
+- `hideIfEmpty`: `false` keeps this track's line on the board on a day it
+  has nothing on it. By default a track with no events, stations or all-day
+  entries today gets no line, so a day when most of the family is idle does
+  not spend the board's depth on empty rails. Turn it off for anyone whose
+  line should always be there, so the board reads the same shape every day.
 
 Tracks that appear in rules but not in `tracks` are added automatically.
 
@@ -47,13 +53,22 @@ Tracks that appear in rules but not in `tracks` are added automatically.
   "name"?: "Work",
   "rules"?: Rule[],
   "headers"?: { "Authorization": "…" },  // sent with the feed request
-  "includeDescription"?: boolean         // let rules also match DESCRIPTION (off by default)
+  "includeDescription"?: boolean,        // let rules also match DESCRIPTION (off by default)
+  "hideIfEmpty"?: boolean                // false keeps this calendar's line on a day it has nothing (default true)
 }
 ```
 
 A bare string in `calendars` is shorthand for `{ "url": … }`. Events from a
 calendar with no matching rule go to the first track; a calendar with no
 track at all becomes its own line, named after the calendar.
+
+`hideIfEmpty: false` is the same switch as the one on a track, put where the
+line is actually declared for the common setup of one calendar per person.
+A calendar kept this way also keeps its line when the feed is *unreachable*,
+not only when it is empty, so an hour of downtime does not quietly remove
+somebody from the board. That needs a `name`: an unnamed calendar's line is
+named after the feed, and there is nothing to name it until the feed
+answers.
 
 ## Rule
 
@@ -69,11 +84,11 @@ track at all becomes its own line, named after the calendar.
 }
 ```
 
-(Legacy rules may use `"person"` in place of `"track"` — still accepted.)
+(Legacy rules may use `"person"` in place of `"track"`; still accepted.)
 
 A `station` event needs both a start and end time (it only applies to a
 timed event, never an all-day one). Use it for a status/location block that
-spans real meetings without being one itself — a synced-in "Desk booking",
+spans real meetings without being one itself: a synced-in "Desk booking",
 an "In the office" block, anything you don't want competing for lane space
 with the actual meetings inside it:
 
@@ -86,7 +101,7 @@ with the actual meetings inside it:
 
 The event's own track draws a shallow 45° kink out to a raised "station
 level" for exactly that event's [start, end] span, with a small ring at
-each end and a caption riding the line — no lane, no label run, no branch.
+each end and a caption riding the line: no lane, no label run, no branch.
 Real meetings during that span still fork off the line normally, they just
 aren't crowded out by a long status block hogging the innermost lane.
 
@@ -108,7 +123,7 @@ rule wins, so a calendar's own rule overrides a global one.
 ```
 
 Combine `and`/`or`/`not` to express "one of these, but not that one" without
-ever touching a regex — e.g. hide every class code except two of your own:
+ever touching a regex. For example, hide every class code except two of your own:
 
 ```json
 {
@@ -126,7 +141,7 @@ ever touching a regex — e.g. hide every class code except two of your own:
 ```
 
 A regex negative lookahead can express the same thing more compactly, but
-needs every backslash doubled in JSON (`\\b`) — an easy way to end up with a
+needs every backslash doubled in JSON (`\\b`), an easy way to end up with a
 rule that silently matches nothing if something along the way (a paste, a
 rich-text field) re-escapes it again. Prefer `not` unless you need a real
 regex feature `and`/`or`/`not` can't express.

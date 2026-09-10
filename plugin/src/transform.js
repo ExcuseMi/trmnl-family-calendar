@@ -392,6 +392,7 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     (ev.interchange_with || []).forEach(function (key) { if (trackByKey[key]) activeKeys[key] = true; });
   });
   (allDayEvents || []).forEach(function (ev) { if (trackByKey[ev.track]) activeKeys[ev.track] = true; });
+  tracks.forEach(function (t) { if (t.keep_empty) activeKeys[t.key] = true; });
   (stationEvents || []).forEach(function (ev) {
     if (trackByKey[ev.track]) activeKeys[ev.track] = true;
     // a station shared across lines keeps EVERY line it is on: two children
@@ -400,6 +401,7 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     (ev.interchange_with || []).forEach(function (key) { if (trackByKey[key]) activeKeys[key] = true; });
   });
   tracks = tracks.filter(function (t) { return activeKeys[t.key]; });
+  tracks.forEach(function (t) { delete t.keep_empty; }); // bookkeeping, not payload
   var sideIdx = { left: 0, right: 0 };
   tracks.forEach(function (t) { t.track_offset = TRACK_STEP * (++sideIdx[t.side]) * (t.side === 'left' ? -1 : 1); });
   trackByKey = {};
@@ -578,12 +580,13 @@ function demoOwnTrack(name, file) {
 var SIMPSONS_CONFIG = {
   // Springfield is American, so the demo reads American: US date order and a
   // 12-hour clock, both set here rather than inherited from the account, so
-  // the demo looks the same on every device. The zone is deliberately NOT
-  // American — it stays European so that the "config overrides the account"
-  // path is exercised by the demo every device runs on first boot, instead
-  // of only by a test.
+  // the demo looks the same on every device.
+  //
+  // NOT the zone. A demo board still has to be honest about what time it is
+  // where it is hanging: pinned to one, the "now" marker and every car sat
+  // hours off the viewer's own clock, which reads as a broken plugin rather
+  // than as a demo. The zone comes from the account.
   locale: 'en-US',
-  timeZone: 'Europe/Brussels',
   timeFormat: '12h',
   // No pinned colours. A track's hue and dash pattern are assigned
   // automatically from the framework's own hue cycle, which is what a THEME
@@ -628,7 +631,6 @@ var SIMPSONS_CONFIG = {
 // shape two children at one school get, with a third line in the corridor.
 var FUTURAMA_CONFIG = {
   locale: 'en-US',
-  timeZone: 'America/New_York',
   timeFormat: '12h',
   tracks: [
     { name: 'Professor', side: 'left' },
@@ -661,7 +663,6 @@ var FUTURAMA_CONFIG = {
 // solo station (a day at a desk) and one evening they are both at.
 var FRIENDS_CONFIG = {
   locale: 'en-US',
-  timeZone: 'America/New_York',
   timeFormat: '12h',
   tracks: [
     { name: 'Monica', side: 'left' },
@@ -1153,7 +1154,12 @@ function parseConfig(raw) {
     var sideRaw = typeof item.side === 'string' ? item.side.trim().toLowerCase() : '';
     var side = (sideRaw === 'left' || sideRaw === 'work') ? 'left' : (sideRaw === 'right' || sideRaw === 'family') ? 'right' : null;
     if (everyoneTrack === null) everyoneTrack = name;
-    tracks[name.toLowerCase()] = { name: name, color: color, badge: badge, side: side };
+    // A track with nothing on today's board gets no line, which is what
+    // stops every day carrying every ever-configured person's empty rail.
+    // `hideIfEmpty: false` opts out: the line is drawn whatever happens, so
+    // the board reads the same shape every day and a quiet person still has
+    // a place on it. Only `false` counts; anything else keeps the default.
+    tracks[name.toLowerCase()] = { name: name, color: color, badge: badge, side: side, keepEmpty: item.hideIfEmpty === false };
   });
 
   var globalRules = compileRuleList(data.rules);
@@ -1171,7 +1177,11 @@ function parseConfig(raw) {
       });
     }
     var includeDescription = item.includeDescription === true;
-    calendars.push({ name: name, url: item.url.trim(), rules: rules, headers: headers, includeDescription: includeDescription });
+    // The same switch on the calendar rather than the track: for the common
+    // setup where one calendar IS one line, this is where the line is
+    // declared, and there may be no tracks[] entry to hang it off at all.
+    calendars.push({ name: name, url: item.url.trim(), rules: rules, headers: headers,
+      includeDescription: includeDescription, keepEmpty: item.hideIfEmpty === false });
   });
 
   return { calendars: calendars, tracks: tracks, timeZone: timeZone, locale: locale, timeFormat: timeFormat, globalRules: globalRules, everyoneTrack: everyoneTrack };
@@ -1274,6 +1284,15 @@ function makeTrackRegistry(parsed) {
     }
     counts[name] += (weight == null ? 1 : weight);
     return byName[name];
+  }
+
+  // Registered, weightless, and kept even with nothing on it today. Used by
+  // `hideIfEmpty: false` on a track or a calendar.
+  function keep(name) {
+    if (!name) return null;
+    var t = add(name, 0);
+    t.keep_empty = true;
+    return t;
   }
 
   function explicitSide(name) {
@@ -1414,6 +1433,7 @@ function makeTrackRegistry(parsed) {
 
   return {
     add: add,
+    keep: keep,
     link: link,
     byName: byName,
     finalize: finalize,
@@ -1446,13 +1466,22 @@ async function buildFromConfig(input, parsed, weather, extra) {
   // Every explicitly-configured track is registered up front, even with
   // zero events today, so they still get a line and (if they set an
   // explicit side) it's honored regardless of load.
-  Object.keys(parsed.tracks).forEach(function (key) { registry.add(parsed.tracks[key].name, 0); });
+  Object.keys(parsed.tracks).forEach(function (key) {
+    var t = parsed.tracks[key];
+    if (t.keepEmpty) registry.keep(t.name); else registry.add(t.name, 0);
+  });
 
   var DEADLINE_MS = 4200;
   var deadline = Date.now() + DEADLINE_MS;
   var events = [];
   var allDayEvents = [];
   var stationEvents = [];
+
+  // A named calendar that is kept when empty is kept when it is UNREACHABLE
+  // too: a feed being down for an hour should not silently remove somebody
+  // from the board. An unnamed one cannot be, since its line is named after
+  // the feed and there is nothing to name it until the feed answers.
+  (parsed.calendars || []).forEach(function (cal) { if (cal.keepEmpty && cal.name) registry.keep(cal.name); });
 
   await Promise.all((parsed.calendars || []).map(async function (cal) {
     var url = cal.url;
@@ -1470,6 +1499,11 @@ async function buildFromConfig(input, parsed, weather, extra) {
       // setup there is, a list of ICS links and nothing else. Before this
       // that setup drew an empty board.
       var calLabel = parsedIcs.calName || urlLabel(cal.url);
+      // `hideIfEmpty: false` on the CALENDAR keeps the line this calendar
+      // owns on the board on a day it has nothing. Which line that is can
+      // only be known once the feed has been read, since an unnamed
+      // calendar borrows the feed's own name.
+      if (cal.keepEmpty) registry.keep(cal.name || parsed.everyoneTrack || calLabel);
       parsedIcs.timed.forEach(function (ev) {
         var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
         if (resolved.hide) return;
@@ -1593,11 +1627,11 @@ async function run(input) {
   var useDemoRaw = cf(input, 'use_demo_data').trim().toLowerCase();
   var useDemo = useDemoRaw !== 'false'; // default true (demo) unless explicitly turned off
   var configRaw = cf(input, 'config_json').trim();
-  // The simple way in: a plain list of ICS links, one per line, with no
-  // JSON and no editor. parseConfig already reads that shape (it is the
-  // fallback for text that is not JSON), so this only has to hand it over.
-  // The JSON box wins where both are filled — anyone who has written one
-  // has said more than a list can.
+  // ONE field for both shapes. parseConfig reads whatever is in it: JSON if
+  // it parses as JSON, otherwise one ICS link per line, which is the whole
+  // setup for anyone who just wants a line per calendar. calendar_urls was
+  // briefly a second field; it is still read so nobody who filled it in
+  // loses their calendars.
   var urlsRaw = cf(input, 'calendar_urls').trim();
   if (!configRaw && urlsRaw) configRaw = urlsRaw;
   // Which demo board to show. Unknown or unset falls back to Springfield.

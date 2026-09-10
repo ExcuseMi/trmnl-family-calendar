@@ -293,7 +293,11 @@
     // and an SVG presentation attribute does not accept var()
     node.style.stroke = colorFor(p.hue);
     node.setAttribute('stroke-width', p.line_width * S * weightScale);
-    node.setAttribute('stroke-linecap', 'round');
+    // A round cap sticks out half a stroke width PAST where the path stops.
+    // On an ordinary rail that is invisible; on the heavy shared one it put
+    // a blob out beyond the end tick, so the rail looked like it had run on
+    // past its own stop. Such a line asks to end flush instead.
+    node.setAttribute('stroke-linecap', p.line_cap || 'round');
     node.setAttribute('stroke-linejoin', 'round');
     node.setAttribute('fill', 'none');
   }
@@ -435,6 +439,15 @@
     // and the end tick came to look like two different systems depending on
     // whose line they were on. Measured from the rail's own edge instead.
     function markOut(p, base) { return (p.line_width * S) / 2 + base * 0.85; }
+    // The weight of the ONE bold rail an interchange sends out. Every other
+    // line comes down with the track pitch so a packed board does not turn
+    // into stripes, but there is only one of these per interchange and it
+    // has to read against the capsule it leaves. Defined once: the rail, its
+    // end tick and the capsule all measure themselves against it, and they
+    // came apart when they each worked it out for themselves.
+    function sharedRailWidth(p) {
+      return Math.max(p.line_width, 4) * 1.5 / Math.max(weightScale, 0.6);
+    }
     var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 13 * S;
     var MIN_DIAG = Math.max(10 * S, 6 * 2.4 * S + 2 * S);
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
@@ -2371,7 +2384,8 @@
           // and it has to read against the capsule it leaves: crushed by
           // weightScale it came out barely heavier than an ordinary track,
           // a thread hanging off a fat pill.
-          bold.line_width = Math.max(p.line_width, 4) * 1.5 / Math.max(weightScale, 0.6);
+          bold.line_width = sharedRailWidth(p);
+          bold.line_cap = 'butt';   // the end tick is the end, not a cap past it
           p = bold;
         }
         var sign = g.members[0]._sign, laneC = spineC + sign * g.members[0]._laneDist;
@@ -2490,7 +2504,7 @@
           // and the same end mark every other rail gets. A shared event's
           // rail was ending in a plain round cap while every other rail on
           // the board ended in a tick — the one place the vocabulary broke.
-          var sh = markOut({ line_width: Math.max(p.line_width, 4) * 1.5 }, NODE_R * 1.15);
+          var sh = sharedRailWidth(p) * S * weightScale / 2 + NODE_R * 1.15 * 0.85;
           var q0 = toXY(e._endA, laneC0 - sh), q1 = toXY(e._endA, laneC0 + sh);
           var etick = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
             'stroke-width': NODE_STROKE * 1.15, 'stroke-linecap': 'round' });
@@ -2508,7 +2522,7 @@
         //
         // Paper-filled and ink-outlined, so it masks the rails it crosses:
         // inside an interchange the individual lines are not the point.
-        var capR = NODE_R * 1.15;
+        var capR = Math.max(NODE_R * 1.15, sharedRailWidth(p) * S * weightScale * 0.9);
         var k0 = toXY(e._nodeA - capR, lo - capR), k1 = toXY(e._nodeA + capR, hi + capR);
         var cap = svgEl('rect', {
           x: Math.min(k0[0], k1[0]), y: Math.min(k0[1], k1[1]),
@@ -2762,15 +2776,22 @@
           if (e._textStart < c.a1 && c.a0 < e._textStart + e._textLen) { hit = c; break; }
         }
         if (!hit) return;
-        // and not so far that the caption stops pointing at its own branch:
-        // slid past the next spur it reads as that one's name instead, and
-        // a bar behind a word is a smaller lie than a word on the wrong
-        // rail. Same limit the lane solver scores as "adrift".
-        var want = e._dir > 0 ? e._elbow + TEXT_PAD : e._elbow - TEXT_PAD - e._textLen;
-        var limit = e._textLen * 0.6;
+        // Only a NUDGE. This is worth doing when the bar clips the first or
+        // last few characters of a caption; it is not worth doing when the
+        // bar crosses the middle of one, because clearing it then costs
+        // half the caption's width and the caption ends up pointing at
+        // nothing. "Coffee (100 cups)" moved 71px off its own rail and
+        // landed on a station caption two lanes away, which is worse than
+        // the bar passing behind the words, where the paper outline every
+        // caption carries already deals with it.
+        //
+        // So the budget is the obstacle's own width plus the gap a caption
+        // normally keeps from its rail: enough to step off an edge, never
+        // enough to jump a bar.
+        var budget = (hit.a1 - hit.a0) + TEXT_PAD * 2;
         var after = hit.a1 + 2 * S, before = hit.a0 - 2 * S - e._textLen;
         var opts = (Math.abs(after - e._textStart) <= Math.abs(before - e._textStart)
-          ? [after, before] : [before, after]).filter(function (at) { return Math.abs(at - want) <= limit; });
+          ? [after, before] : [before, after]).filter(function (at) { return Math.abs(at - e._textStart) <= budget; });
         for (var k = 0; k < opts.length; k++) {
           if (freeAt(e, opts[k], bd)) { e._textStart = opts[k]; return; }
         }
@@ -2833,17 +2854,22 @@
     }
     if (earlier) axisNote(tr('earlier', earlier), axisStart + EDGE, 'start', 'metro-axis-note label label--small font--bold text--black');
     if (later + dropped) axisNote(tr('more', later + dropped), axisEnd - EDGE, 'end', 'metro-axis-note label label--small font--bold text--black');
-    var capsules = visible.filter(function (e) { return !e._dropped && e._involved.length > 1; }).map(function (e) { return [e._nodeA - NODE_R - 2 * S, e._nodeA + NODE_R + 2 * S]; });
+    // Interchange capsules used to blank the hour under them, from when the
+    // scale ran down the middle of the board and a capsule sat on top of
+    // it. The scale is a strip along the edge now and nothing on the map
+    // reaches it, so an interchange was taking an hour off the clock for no
+    // reason: 9am and 4pm both went missing on a board with a morning
+    // briefing and an afternoon debrief.
     for (var h = Math.ceil(winStart / 60); h * 60 <= winEnd; h++) {
       if (h % hourStep !== 0) continue;
       var a = aFor(h * 60);
       var start = clamp(a - hourW / 2, 0, axisPx - hourW);
       var ext = [start, start + hourW];
-      var blocked = reserved.concat(capsules).some(function (r) { return overlaps(ext, r); });
-      if (blocked) continue;
-      // no opaque background: the hour labels sit ON the river, the way a
-      // river's name is lettered along it. Nothing else crosses the gutter
-      // by design, so there is nothing for a background to mask.
+      // still not over the clock badge or the "+n more" notes, which share
+      // the strip with it
+      if (reserved.some(function (r) { return overlaps(ext, r); })) continue;
+      // no opaque background: the hour labels sit ON the strip, the way a
+      // scale's numbers sit on its rule.
       var lab = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute');
       lab.textContent = hourLabel(h % 24);
       var lxy = toXY(start, bandC - (horizontal ? hourH : hourW) / 2);

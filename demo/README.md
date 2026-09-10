@@ -10,7 +10,7 @@ They are deliberately different shapes, because the map is:
 | Board | Who | What it shows |
 | --- | --- | --- |
 | [`simpsons/`](simpsons/) | A family of five | One calendar per person, plus a school feed split by class code and a shared family calendar. Bart and Lisa share a School Day corridor; the whole family meets at dinner. |
-| [`futurama/`](futurama/) | A work crew of five | **One** team calendar with everything in it, split onto lines by a `Name:` prefix. Fry, Leela and Bender spend the day on the same delivery — one station, three lines in one corridor. |
+| [`futurama/`](futurama/) | A work crew of five | **One** team calendar with everything in it, split onto lines by a `Name:` prefix. Fry, Leela and Bender spend the day on the same delivery: one station, three lines in one corridor. |
 | [`friends/`](friends/) | Two flatmates | The smallest board worth drawing. Each has a long block in one place, drawn as a siding beside their own line, and one evening they are both at. |
 
 The ICS files are plain `RRULE:FREQ=WEEKLY` entries so the same day renders

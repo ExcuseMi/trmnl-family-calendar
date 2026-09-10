@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Metro Calendar — Configuration</title>
-<link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
 <!-- The real TRMNL framework CSS: the live preview below is the plugin's own template and
      layout code running against it, so what you see is what the device draws. -->
 <link rel="stylesheet" href="https://trmnl.com/css/3.3.1/plugins.css">
@@ -97,7 +97,7 @@
 <body>
 
 <header class="mc-top">
-  <img src="../icons/icon.svg" alt="">
+  <img src="../assets/icon.svg" alt="">
   <div>
     <h1>Metro Calendar</h1>
     <div class="sub">Configuration — build the JSON for the plugin's <strong>Calendar Config</strong> field and see the map before you paste it.</div>
@@ -260,7 +260,7 @@
   // ------------------------------------------------------------ model
   var state = { tracks: [], calendars: [], rules: [], timeZone: "", locale: "" };
   function newTrack() { return { _id: uid(), name: "", color: "", side: "" }; }
-  function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false }; }
+  function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false, keepEmpty: false }; }
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
   function newCondition() { return { _id: uid(), type: "word", value: "", status: "confirmed", weekdays: [], negate: false }; }
   function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], tracks: [], rename: true, rewrite: "", rewriteFull: false, hide: false, station: false }; }
@@ -344,6 +344,7 @@
       c.headers.forEach(function (h) { if (h.key.trim()) { headers[h.key.trim()] = h.value; has = true; } });
       if (has) o.headers = headers;
       if (c.includeDescription) o.includeDescription = true;
+      if (c.keepEmpty) o.hideIfEmpty = false;
       return o;
     });
     return cfg;
@@ -417,6 +418,7 @@
         o.assign.forEach(ensureTrack);
         if (c.headers && typeof c.headers === "object") Object.keys(c.headers).forEach(function (k) { if (typeof c.headers[k] === "string") { var h = newHeader(); h.key = k; h.value = c.headers[k]; o.headers.push(h); } });
         o.includeDescription = c.includeDescription === true;
+        o.keepEmpty = c.hideIfEmpty === false;
         return o;
       });
     state.rules = (Array.isArray(data.rules) ? data.rules : []).filter(function (r) { return r && r.match; }).map(ruleFrom);
@@ -593,8 +595,10 @@
       addHeader.addEventListener("click", function () { c.headers.push(newHeader()); renderHeaders(); });
       var desc = el("input", { type: "checkbox" }); desc.checked = c.includeDescription;
       desc.addEventListener("change", function () { c.includeDescription = desc.checked; renderJson(); });
+      var keep = el("input", { type: "checkbox" }); keep.checked = c.keepEmpty;
+      keep.addEventListener("change", function () { c.keepEmpty = keep.checked; renderJson(); });
       var adv = el("details", { class: "adv" }, [
-        el("summary", { text: "Rules, headers & description matching" }),
+        el("summary", { text: "Rules, headers & advanced options" }),
         el("div", { class: "adv-body" }, [
           el("div", { class: "rule-step", text: "Rules for this calendar" }),
           el("p", { class: "hint", text: "Checked in order; the last matching rule wins for each effect. Use these when one calendar holds several tracks' events, or to rename class codes and hide noise. Comma-separate a value to match any of several (\"L1, L3, L4\"); click \"not\" to invert a condition — combine both for \"one of these, except that one\", with no regex needed." }),
@@ -602,6 +606,7 @@
           el("div", { class: "rule-step", style: "margin-top:14px", text: "HTTP headers for this feed" }),
           headersWrap, addHeader,
           el("div", { style: "margin-top:12px" }, [el("label", { class: "check" }, [desc, "also let rules match the event description (slower; off by default)"])]),
+          el("div", { style: "margin-top:6px" }, [el("label", { class: "check" }, [keep, "keep this line on the board on a day it has nothing (and while the feed is down)"])]),
         ]),
       ]);
       wrap.appendChild(el("div", { class: "card calendar" }, [
