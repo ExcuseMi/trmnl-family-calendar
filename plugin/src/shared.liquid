@@ -1153,9 +1153,30 @@
     // fan gathered every line into a tight stack near the spine, which with
     // bands meant each one raking across every band between it and the
     // middle — the last structural way a track could cross another.
+    // Where a track is, and which band it is in, at one point on the axis.
+    // Without a weave these are the constants they always were.
+    function posAt(p, a) {
+      if (!p._weave) return null;
+      return a >= p._weave.mid ? p._weave.to : p._weave.from;
+    }
+    function sideKeyAt(p, a) { var q = posAt(p, a); return q ? q.sideKey : p._sideKey; }
+    function signAt(p, a) { var q = posAt(p, a); return q ? q.sign : p._sign; }
+    function distAt(p, a) { var q = posAt(p, a); return q ? q.dist : p._dist; }
+    function bandKeyAt(p, a) { var q = posAt(p, a); return q ? q.bandKey : p.key; }
+    // How far this line has moved from where it started, at this point on
+    // the axis. Eased, so the exchange is a curve rather than a corner:
+    // sidingPath samples anywhere the height is changing, so adding it here
+    // is all it takes for the trunk to be drawn as one.
+    function weaveDelta(p, a) {
+      var w = p._weave;
+      if (!w) return 0;
+      if (a <= w.a0) return 0;
+      if (a >= w.a1) return w.toC - w.fromC;
+      return (w.toC - w.fromC) * rampEase((a - w.a0) / (w.a1 - w.a0));
+    }
     function spreadCFor(p) { return spineC + p._c; }
     function lineCAt(p, a) {
-      var flat = spineC + p._c + p._sign * sidingRaiseAt(p, a);
+      var flat = spineC + p._c + weaveDelta(p, a) + p._sign * sidingRaiseAt(p, a);
       if (!fan) return flat;
       var spreadC = spreadCFor(p);
       var delta = Math.abs(spreadC - (spineC + p._c));
@@ -1335,10 +1356,15 @@
       // screen. Cleared before anything reads them.
       e._bundleOut = null; e._drawnLaneC = null;
       e._capMinA = null; e._capMaxA = null;
-      e._sideKey = p._sideKey;
-      e._sign = p._sign;
       e._nodeA = aFor(e.start_min);
       e._endA = aFor(Math.max(e.end_min, e.start_min + 5));
+      // WHERE its line is, at the minute this event happens. Without a
+      // weave these are the track's constants; with one, the two tracks
+      // that exchanged places are on different sides of the board before
+      // and after, and an event has to attach to the line where the line
+      // actually is.
+      e._sideKey = sideKeyAt(p, e._nodeA);
+      e._sign = signAt(p, e._nodeA);
       // interchange: capsule spans every involved track; the branch leaves from
       // the capsule's outer edge on the owner's side
       var involved = [p];
@@ -1349,11 +1375,18 @@
       // so the lane it can reach belongs to that track, not to whoever
       // nominally owns the event. Ordering within a side is fixed, so this
       // holds however the bands are later sized.
-      var order = sides[p._sideKey], outermost = p;
+      var outermost = p;
       involved.forEach(function (q) {
-        if (q._sideKey === p._sideKey && order.indexOf(q) > order.indexOf(outermost)) outermost = q;
+        if (sideKeyAt(q, e._nodeA) === e._sideKey
+            && distAt(q, e._nodeA) > distAt(outermost, e._nodeA)) outermost = q;
       });
-      e._laneOwner = outermost.key;
+      // Two keys, because a weave separates them. `_lead` is the TRACK the
+      // branch leaves from, and `_laneOwner` is the BAND it may hang labels
+      // in, which is a place rather than a track: two tracks that exchange
+      // positions exchange bands. Without a weave they are the same key,
+      // which is why one used to do for both.
+      e._lead = outermost.key;
+      e._laneOwner = bandKeyAt(outermost, e._nodeA);
     });
     // Where a branch leaves its owner's line and where it merges back. Both
     // are read off the track distances, which the band layout re-solves on
@@ -1368,13 +1401,13 @@
         // climb back was scaled for a distance several bands too big — it
         // came back as a shallow ramp dragging on for hours instead of a
         // corner just after the event.
-        var p = e._p, lo = trackByKey[e._laneOwner] || p;
+        var p = e._p, lo = trackByKey[e._lead] || p;
         // if this event's start (or end) falls inside one of that track's own
         // sidings, its ring sits on the raised siding level segment of
         // the line, not the flat baseline — so the branch has to originate
         // (or merge back) from that raised height too
-        e._trackDist = lo._dist + sidingRaiseAt(lo, e._nodeA) + NODE_R;      // branch origin (edge of the ring/capsule)
-        e._trackDistEnd = lo._dist + sidingRaiseAt(lo, e._endA) + NODE_R;    // merge target (same line, after the event)
+        e._trackDist = distAt(lo, e._nodeA) + sidingRaiseAt(lo, e._nodeA) + NODE_R;   // branch origin (edge of the ring/capsule)
+        e._trackDistEnd = distAt(lo, e._endA) + sidingRaiseAt(lo, e._endA) + NODE_R;  // merge target (same line, after the event)
       });
     }
     recomputeTrackDists();
@@ -1653,7 +1686,7 @@
         // 9am, branching off the middle of School Day's kink, was drawn that
         // way. Where the trunk is not level across the lead, drop vertically
         // at the event's own minute instead — the shape that needs no run.
-        var leadTrack = trackByKey[e._laneOwner] || e._p;
+        var leadTrack = trackByKey[e._lead] || e._p;
         if (diagFrom !== elbow
             && Math.abs(sidingRaiseAt(leadTrack, diagFrom) - sidingRaiseAt(leadTrack, elbow)) > 0.5) {
           diagFrom = elbow;
@@ -2239,7 +2272,105 @@
       // at a FIXED pitch. Through solve() the freed depth is immediately
       // spent on lane pitch and separation, which grows the other side, so
       // the invariant is invisible there.
-      return { solve: solve, laneBase: laneBase, capIn: capIn, buildSide: buildSide };
+      // ---- A18: the weave ------------------------------------------
+      //
+      // A crossing is an ORDERING fault, not a drawing one: a shared event
+      // crosses a line when that line sits between two of its participants
+      // and is not one of them. The order is chosen once for the whole day,
+      // and there are days no single order can draw. Two parents who swap
+      // which child they have after school make one: the pairings form a
+      // cycle, and a cycle cannot be laid along a line without breaking one
+      // of its links.
+      //
+      // So let one pair of neighbours exchange places, once, partway
+      // through the day. ONE swap rather than a free reordering, because
+      // what a transit map is for is tracing a line with a finger: a line
+      // that wanders is worse than a crossing, and the second swap is
+      // almost never worth what it costs to follow.
+      //
+      // Moving is itself a crossing, so it is charged for. The answer is
+      // only taken when it is strictly cheaper than standing still, which
+      // means a swap that saves one crossing and costs one is refused.
+
+      // Where each track sits along ONE axis. Distances are measured from
+      // the spine outward on each side, so the two sides are mirror images
+      // and a raw distance is not a position: side A is negated, and the
+      // result reads left to right across the board.
+      function axisOrder(sides, dist) {
+        var out = [];
+        for (var i = sides.A.length - 1; i >= 0; i--) out.push({ key: sides.A[i].key, at: -dist[sides.A[i].key] });
+        for (var j = 0; j < sides.B.length; j++) out.push({ key: sides.B[j].key, at: dist[sides.B[j].key] });
+        return out;
+      }
+
+      // How many lines this event has to cross, given where everybody is.
+      function crossingsOf(pos, members) {
+        var lo = null, hi = null, mine = {};
+        for (var i = 0; i < members.length; i++) {
+          if (pos[members[i]] == null) continue;
+          mine[members[i]] = true;
+          var v = pos[members[i]];
+          if (lo == null || v < lo) lo = v;
+          if (hi == null || v > hi) hi = v;
+        }
+        if (lo == null || lo === hi) return 0;
+        var n = 0;
+        Object.keys(pos).forEach(function (k) {
+          if (!mine[k] && pos[k] > lo && pos[k] < hi) n++;
+        });
+        return n;
+      }
+
+      function totalCrossings(pos, events) {
+        var n = 0;
+        for (var i = 0; i < events.length; i++) n += crossingsOf(pos, events[i].members);
+        return n;
+      }
+
+      // input: { sides, dist, events: [{atMin, members:[key]}], swapCost }
+      // output: { a, b, atMin, before, after } or null when standing still
+      // is as good, which is most days.
+      function weave(input) {
+        var events = (input.events || []).filter(function (e) { return e && e.members && e.members.length > 1; });
+        if (events.length < 2) return null;
+        var order = axisOrder(input.sides, input.dist);
+        if (order.length < 2) return null;
+        var pos = {};
+        order.forEach(function (t) { pos[t.key] = t.at; });
+        var stay = totalCrossings(pos, events);
+        if (!stay) return null;                      // nothing to fix
+        // A swap is itself a crossing: the two lines have to pass through
+        // each other. One by default, so a swap that saves one is refused.
+        var swapCost = input.swapCost == null ? 1 : input.swapCost;
+        // Candidate moments: between two consecutive events, so the swap
+        // never happens inside one. The moment is the midpoint, which is
+        // also the widest stretch of clear axis it can turn in.
+        var times = events.map(function (e) { return e.atMin; }).sort(function (a, b) { return a - b; });
+        var best = null;
+        for (var i = 0; i + 1 < order.length; i++) {
+          var a = order[i].key, b = order[i + 1].key;
+          var swapped = {};
+          Object.keys(pos).forEach(function (k) { swapped[k] = pos[k]; });
+          swapped[a] = pos[b]; swapped[b] = pos[a];
+          for (var t = 0; t + 1 < times.length; t++) {
+            if (times[t + 1] === times[t]) continue;
+            var when = (times[t] + times[t + 1]) / 2;
+            var cost = swapCost, before = 0, after = 0;
+            for (var e2 = 0; e2 < events.length; e2++) {
+              var ev = events[e2];
+              var c = ev.atMin < when ? crossingsOf(pos, ev.members) : crossingsOf(swapped, ev.members);
+              if (ev.atMin < when) before += c; else after += c;
+            }
+            cost += before + after;
+            if (cost < stay - 0.001 && (!best || cost < best.cost)) {
+              best = { a: a, b: b, atMin: when, cost: cost, before: before, after: after, stay: stay };
+            }
+          }
+        }
+        return best;
+      }
+
+      return { solve: solve, laneBase: laneBase, capIn: capIn, buildSide: buildSide, weave: weave };
     })();
     // ==== CROSS_SOLVER_END ====
 
@@ -2346,6 +2477,54 @@
     weightScale = cross.weightScale;
     spineC = cross.spineC;
     needA = cross.needA; needB = cross.needB;
+
+    // ---- A18: the weave --------------------------------------------
+    //
+    // One pair of neighbours exchange places partway through the day, when
+    // that is strictly cheaper than standing still. The solver decides
+    // WHICH pair and WHEN (see CrossSolver.weave); what happens here is the
+    // consequence: the two tracks swap POSITIONS, and a position is a side,
+    // a distance and the band of lanes that goes with it.
+    //
+    // The bands do not move. Two tracks exchanging places exchange which
+    // band they are in, so nothing has to be re-solved and the depth is
+    // unchanged: at any minute every band still belongs to exactly one
+    // track. What changes is which one, and everything that asks where a
+    // line is has to ask WHEN as well.
+    (function planWeave() {
+      LEGEND.forEach(function (p) { p._weave = null; });
+      // Packing has no bands to exchange: one shared ladder per side, so
+      // there is nothing a swap could buy.
+      if (packedFallback || LEGEND.length < 3) return;
+      var shared = [];
+      visible.forEach(function (e) {
+        var mem = [e.owner].concat(e.co_owners || []).filter(function (k) { return trackByKey[k]; });
+        if (mem.length > 1) shared.push({ atMin: e.start_min, members: mem });
+      });
+      var w = CrossSolver.weave({
+        sides: { A: crossTracks('A'), B: crossTracks('B') },
+        dist: cross.dist, events: shared,
+      });
+      if (!w) return;
+      var pa = trackByKey[w.a], pb = trackByKey[w.b];
+      if (!pa || !pb) return;
+      var atA = aFor(w.atMin);
+      function posOf(p) { return { sideKey: p._sideKey, sign: p._sign, dist: p._dist, c: p._c, bandKey: p.key }; }
+      var from = { a: posOf(pa), b: posOf(pb) };
+      // How long the exchange takes along the axis. Proportional to how far
+      // the lines have to travel, so a swap of close neighbours is a quick
+      // lean and a swap across the board is a long shallow curve: the same
+      // rule a siding's ramp follows, and for the same reason. Never longer
+      // than the clear stretch it was given, so it cannot run into the
+      // events on either side of it.
+      var travel = Math.abs(from.a.c - from.b.c);
+      var run = Math.min(Math.max(travel * 1.6, 24 * S), axisPx * 0.22);
+      [[pa, from.a, from.b], [pb, from.b, from.a]].forEach(function (t) {
+        t[0]._weave = { a0: atA - run / 2, a1: atA + run / 2, mid: atA,
+                        fromC: t[1].c, toC: t[2].c, from: t[1], to: t[2] };
+      });
+    })();
+
     recomputeTrackDists();
     // A corridor was planned before any of this, and it sweeps a band of
     // the cross axis for the hours it lasts. That band is closed to lanes,
@@ -2502,6 +2681,11 @@
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
+      // A18: which lines exchanged places, and where on the axis. Empty on
+      // a day one order can draw, which is most of them.
+      weave: LEGEND.filter(function (p) { return p._weave; }).map(function (p) {
+        return { key: p.key, atA: Math.round(p._weave.mid), from: Math.round(p._weave.fromC), to: Math.round(p._weave.toC) };
+      }),
       colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
       events: eventsDump()
     }));
@@ -2686,6 +2870,10 @@
       // fan's own diagonal — a double bend ("squiggle") instead of one.
       var lo = Math.min(fromA, toA), hi = Math.max(fromA, toA);
       var marks = [lo, hi];
+      // the two ends of an exchange are breakpoints like a siding's ramp,
+      // and everything between them is sampled, which is what draws it as a
+      // curve rather than a straight line between the two heights
+      if (p._weave) [p._weave.a0, p._weave.a1].forEach(function (a) { if (a > lo && a < hi) marks.push(a); });
       p._sidings.forEach(function (s) {
         var gg = sidingGeom(p, s), ra = gg.rampA, b0 = s.a0 + gg.shift, b1 = s.a1 - gg.shift;
         [b0, b0 + ra, b1 - ra, b1].forEach(function (a) { if (a > lo && a < hi) marks.push(a); });
@@ -2706,13 +2894,14 @@
         if (i && a - marks[i - 1] < 0.01) continue;   // a boundary two sidings share
         if (i) {
           var prev = marks[i - 1];
-          if (Math.abs(sidingRaiseAt(p, a) - sidingRaiseAt(p, prev)) > 0.01) {
+          if (Math.abs(sidingRaiseAt(p, a) - sidingRaiseAt(p, prev)) > 0.01
+              || Math.abs(weaveDelta(p, a) - weaveDelta(p, prev)) > 0.01) {
             for (var t = prev + step; t < a - 0.01; t += step) {
-              out.push([t, baseC + sign * sidingRaiseAt(p, t)]);
+              out.push([t, baseC + weaveDelta(p, t) + sign * sidingRaiseAt(p, t)]);
             }
           }
         }
-        out.push([a, baseC + sign * sidingRaiseAt(p, a)]);
+        out.push([a, baseC + weaveDelta(p, a) + sign * sidingRaiseAt(p, a)]);
       }
       return out;
     }
@@ -3275,7 +3464,7 @@
     visible.forEach(function (e) {
       if (e._dropped || e._laneDist == null || e._diagFrom == null) return;
       var w6 = Math.max(2, (e._p ? e._p.line_width : 3)) * S * weightScale / 2 + 2 * S;
-      var cA = lineCAt(trackByKey[e._laneOwner] || e._p, e._diagFrom);
+      var cA = lineCAt(trackByKey[e._lead] || e._p, e._diagFrom);
       var cB = e._drawnLaneC != null ? e._drawnLaneC : spineC + e._sign * e._laneDist;
       rampBlocks.push({ owner: e._laneOwner || e.owner,
         a0: Math.min(e._diagFrom, e._elbow) - w6, a1: Math.max(e._diagFrom, e._elbow) + w6,
@@ -3650,7 +3839,7 @@
     });
     placed.forEach(function (e) {
       if (!e._merge) return;
-      var p = trackByKey[e._laneOwner] || e._p, sign = e._sign, laneC = spineC + sign * e._laneDist;
+      var p = trackByKey[e._lead] || e._p, sign = e._sign, laneC = spineC + sign * e._laneDist;
       // A rejoin is two ramps back to back with the rail between them: out
       // at the start, flat for the event, back in after it. Drawn as ONE
       // path so the dashes run continuously round the loop, with the phase

@@ -90,13 +90,15 @@ module.exports = function (test, h) {
     // Not A15's doing, and A15 is what took this board from five failing
     // cases to this one: everything else here now passes, on both panels.
     // The regroups board is built to be undrawable in one order (see
-    // cases/crossings.js): four evening events each cross the parent they
-    // are not with, and a rail that crosses a line usually crosses that
-    // line's words too. These are the cost of deciding the order once for
-    // the whole day, so they are A18's to clear, and when it lands the
-    // suite will say these markers can come off.
-    'regroups/x-landscape': 'the four crossings a fixed order forces on this board (A18). Alex and Sam swap partners after school, so every evening event reaches past one of them.',
-    'regroups/og-landscape': 'same board on the small panel, same four crossings.',
+    // cases/crossings.js), and A18 draws it: Alex and Sam exchange places
+    // at teatime, and not one shared event crosses a line any more.
+    // What is left is not the ordering, it is the crowd. Four shared
+    // events land in the two hours after school, each with a rail and a
+    // caption of its own, so a rail passes another's words. That is the
+    // gap-reservation problem (A17) and the crowding one (D5), on a board
+    // deliberately built to be busy at one end of the day.
+    'regroups/x-landscape': 'four shared events in two hours: Football and Swimming each have a rail through the other\'s caption, and Ivy\'s own line clips "Homework" by 7px. The crossings this board was built to show are gone (see cases/crossings.js).',
+    'regroups/og-landscape': 'same crowd on the small panel.',
     'double-booked/x-landscape': 'a line with three meetings at once drops its last branch through its own middle caption ("Design Review", pierced 57px by fork work). Five cases failed here before both sides were used; this is the one left.',
   };
   const PIERCE_KNOWN = {};
