@@ -206,6 +206,47 @@ is open.
   the gap between it and its neighbour, which is the same space this needs,
   so the two are competing for one piece of board and only the solver can
   referee. Landing them apart means the second one re-opens the first.
+- [ ] **A18. A line's cross position is decided once for the whole day, so
+  the order that suits the morning has to do for the evening too.** The
+  orchestrator should be able to MOVE a track between events when that
+  buys fewer crossings than leaving it where it is.
+  Where it stands: `affinityChain` picks one order for the board, from
+  affinities summed over the whole day, and the cross solver gives each
+  track a single `_dist`. Two people who share the school run at 08:00 and
+  nothing else are adjacent at 18:00 as well, and everybody who meets
+  anybody later reaches them by crossing whoever sits in between.
+  The drawing is ALREADY capable of this and nothing else is. `lineCAt(p,
+  a)` is a function of the axis position, not a constant, and is documented
+  as the single source of truth for where a line is: sidings move a line to
+  a different cross position for a span and back, and every ring, tick and
+  caption follows because they all ask it. A permanent change of level is
+  the same move without the return. What does not exist is a solver that
+  CHOOSES to make one.
+  The shape of the answer is a known one. Take each event time as a layer,
+  order the lines within each layer, and minimise the crossings between
+  consecutive layers: the median/barycentre sweep of layered graph drawing,
+  refined by adjacent swaps. It is arithmetic, so it belongs in a pure
+  model beside `CrossSolver` with `test/cross` counting crossings on the
+  demo boards before any of it is drawn. Measure first: if the count does
+  not fall on real boards, the idea is wrong and costs nothing.
+  Three constraints, or it makes the map worse than it is:
+  1. **Moving is itself a crossing.** A line cannot pass another without
+     crossing it, so the objective is not zero crossings but the fewest
+     weighted ones: one now to avoid three later is a win, one now to avoid
+     one later is churn.
+  2. **A line has to stay followable.** What a transit map is FOR is
+     tracing one line with a finger. Allow a change only where the line is
+     already leaving its baseline for an event, never mid-run, and cap the
+     changes per line per day at one or two. A line that wanders is worse
+     than a crossing.
+  3. **The name is at the terminus.** A line that ends the day at a
+     different level is named at a level it is no longer on, so this needs
+     the name at both ends, or a bullet where it settles.
+  After A15 and A17: those two decide how the cross-axis budget is spent,
+  and this changes what "adjacent" means over the day, so doing it first
+  means solving the same argument twice. It also subsumes the ordering half
+  of A16, which weights the one-shot chain by how close in time a shared
+  event is; that is this problem with a single layer.
 
 - [~] **A14. The cross-axis solver gives up too early and then wastes what
   it saved.** Two of the three parts are done. The solver is a pure
