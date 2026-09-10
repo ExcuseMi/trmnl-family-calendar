@@ -2143,6 +2143,15 @@
       // somebody else's main line running away from the station. The ring
       // sits exactly on the departure and covers the unfilleted corner.
       if (fromRing) {
+        // Unless the elbow had to slide off the interchange minute to find
+        // room. Then the rail runs along its own trunk from the capsule to
+        // where it departs, and only then out: that stretch is INSIDE the
+        // shared event, so drawing it bold is true — and without it the
+        // spur began a quarter of an hour down the board from the capsule,
+        // with nothing joining the two.
+        if (Math.abs(aElbow - aFrom) > 1) {
+          return trunkSlice(p, aFrom, aElbow).concat([[aElbow, laneC], [tail, laneC]]);
+        }
         return [[aFrom, lineCAt(p, aFrom)], [aElbow, laneC], [tail, laneC]];
       }
       return trunkSlice(p, aFrom - dir * RAMP_LEAD, aFrom)
@@ -2197,7 +2206,13 @@
           var bold = {};
           for (var bk in p) bold[bk] = p[bk];
           bold.hue = 'black'; bold.line_style = 'solid';
-          bold.line_width = Math.max(p.line_width, 4) * 1.5;
+          // and it keeps that weight on a packed board. Every other line
+          // comes down with the pitch so the map does not turn into
+          // stripes, but there is only ever one of these per interchange
+          // and it has to read against the capsule it leaves: crushed by
+          // weightScale it came out barely heavier than an ordinary track,
+          // a thread hanging off a fat pill.
+          bold.line_width = Math.max(p.line_width, 4) * 1.5 / Math.max(weightScale, 0.6);
           p = bold;
         }
         var sign = g.members[0]._sign, laneC = spineC + sign * g.members[0]._laneDist;
@@ -2246,7 +2261,7 @@
         var headPhaseA = head._diagFrom - head._dir * RAMP_LEAD;
         // the end the tail runs TOWARD: forward branches stop at the group's
         // far end, backward ones at its near end
-        head._rampEl = drawRamp(p, rampOut(p, head._diagFrom, head._elbow, laneC, head._dir, groupShared,
+        head._rampEl = drawRamp(p, rampOut(p, groupShared ? head._nodeA : head._diagFrom, head._elbow, laneC, head._dir, groupShared,
                                            head._dir > 0 ? g.to : g.from),
                  groupShared ? null : headPhaseA, 'fork', head._laneOwner);
         // the spine picks the rungs up where the ramp's tail left them
@@ -2687,7 +2702,10 @@
         if (left < bandCursor) left = bandCursor; // never overlap the previous marker's text
         if (left + w._w > W) { n.remove(); return; }
         bandCursor = left + w._w + 6 * S;
-        n.style.left = left + 'px'; n.style.top = (EDGE / 2) + 'px';
+        // just UNDER the hour strip, not on it: the scale moved to the top
+        // edge and these markers were still being set at the very top, so
+        // sunset's "9:12pm" was written straight over the "9pm" tick.
+        n.style.left = left + 'px'; n.style.top = (bandLo + 1 * S) + 'px';
       } else {
         var sign = alertSide === 'A' ? -1 : 1;
         var inner = spineC + sign * (bundleHalf(alertSide) + 2 * S);
