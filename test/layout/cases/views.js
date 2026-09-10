@@ -119,4 +119,48 @@ module.exports = function (test, h) {
         + [...new Set(bad)].slice(0, 4).join('; '));
     }
   });
+
+  // The bar at the head of a line is the mark that says the line starts
+  // here, and the name says whose line it is. Two statements about the same
+  // point: they may sit beside each other, never on top of each other.
+  //
+  // Measured as clear air between the boxes, not as overlap. Overlap never
+  // happened and never would: a label carries its own padding, so the bar
+  // landed in the padding rather than on the glyph and a non-overlap
+  // assertion passed on the broken drawing as happily as on the fixed one.
+  // What was actually wrong was the SIZE of the gap. The terminal bar is
+  // drawn with a round cap, so it reaches half a stroke past the radius it
+  // nominally spans; measured as if it stopped there, every name on every
+  // board sat exactly 3.6px from its bar and the first letter read as
+  // struck through ("Crew" as "|Crew"). With the cap accounted for the same
+  // boards draw 7.2 to 9.9px. The threshold sits between the two, near
+  // enough to the old value to catch the regression and far enough from the
+  // new one not to be brittle.
+  test('a line name keeps clear of its own terminal bar', () => {
+    for (const f of [busy, five, fixtures.find((x) => x.name === 'seven-lines')]) {
+      for (const v of FLAT.concat([VIEWS[0]])) {
+        const rep = render(f.metro, v);
+        const names = rep.labels.filter((l) => (' ' + l.cls + ' ').indexOf(' metro-terminus ') >= 0);
+        const bars = (rep.rects || []).filter((r) => r.role === 'terminal');
+        assert(bars.length > 0, v.name + ': no terminal bars drawn at all');
+        // debug reports layout px; the drawn report is screen px, which the
+        // framework zooms by Z on a high-density panel
+        const need = 3 * (rep.debug.S || 1) * (rep.debug.Z || 1);
+        const bad = [];
+        for (const n of names) {
+          let nearest = Infinity;
+          for (const b of bars) {
+            const dx = Math.max(b.x - (n.x + n.w), n.x - (b.x + b.w));
+            const dy = Math.max(b.y - (n.y + n.h), n.y - (b.y + b.h));
+            nearest = Math.min(nearest, Math.max(dx, dy));
+          }
+          if (nearest < need) {
+            bad.push('"' + n.text + '" is ' + nearest.toFixed(1) + 'px from a terminal bar, under '
+              + need.toFixed(1));
+          }
+        }
+        assert(bad.length === 0, f.name + '/' + v.name + ': ' + bad.join('; '));
+      }
+    }
+  });
 };

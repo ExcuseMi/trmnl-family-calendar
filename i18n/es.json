@@ -15,5 +15,10 @@
   "sunrise": "Amanecer",
   "sunset": "Atardecer",
   "feed_down": "{n} no disponible",
-  "weather_stale": "La previsión puede estar desactualizada"
+  "weather_stale": "La previsión puede estar desactualizada",
+  "alert_label": "AVISO DE SERVICIO",
+  "alert_rain": "Lluvia Intensa Previsto a las {t} ({p}%)",
+  "alert_snow": "Nieve Intensa Prevista a las {t} ({p}%)",
+  "alert_cold": "Frío Extremo Previsto ({v}°)",
+  "alert_heat": "Calor Extremo Previsto ({v}°)"
 }

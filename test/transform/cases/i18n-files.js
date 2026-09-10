@@ -148,9 +148,16 @@ module.exports = function (test, h) {
         + ' / extra ' + keys.filter((k) => enKeys.indexOf(k) < 0).join(', '));
       for (const k of keys) {
         assert(typeof table[k] === 'string' && table[k].trim(), f + ': ' + k + ' is not a non-empty string');
-        // a placeholder dropped in translation renders a count as nothing
-        assert(I18N.en[k].indexOf('{n}') < 0 || table[k].indexOf('{n}') >= 0,
-          f + ': ' + k + ' lost its {n} placeholder');
+        // A placeholder dropped in translation renders its value as
+        // nothing: "+ more", or a service alert with no time in it. The
+        // check used to name {n}, which was every placeholder there was;
+        // the alert lines carry {t}, {p} and {v}, and a translator who
+        // drops one of those loses the only number on the banner.
+        const want = (I18N.en[k].match(/\{\w+\}/g) || []).sort();
+        const have = (table[k].match(/\{\w+\}/g) || []).sort();
+        assert(want.every((ph) => have.indexOf(ph) >= 0),
+          f + ': ' + k + ' lost ' + want.filter((ph) => have.indexOf(ph) < 0).join(', ')
+          + ' (English has ' + want.join(' ') + ', this has ' + (have.join(' ') || 'none') + ')');
       }
     }
   });

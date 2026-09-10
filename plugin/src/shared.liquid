@@ -2061,8 +2061,15 @@
         // that a name shifted clear of its own line runs into its
         // neighbour's, so there it keeps the head-of-the-line column and
         // stays centred. Lying down there is room above.
+        // The terminal bar is drawn with a ROUND cap, so it reaches half a
+        // stroke past the NODE_R it nominally spans, in both directions.
+        // Measured as if it stopped at NODE_R, the name was set hard against
+        // it and the bar cut into the first letter: "Crew" read as "|Crew"
+        // and "Leela" as "[Leela" on a board where five of seven names were
+        // clipped that way.
+        var capHalf = (p.line_width + 1) * S / 2;
         var nameA = namesAbove
-          ? (d > 0 ? nameEnd - 2 * S : axisPx - nameEnd + 2 * S - nameLen)
+          ? (d > 0 ? nameEnd + capHalf + 2 * S : axisPx - nameEnd - capHalf - 2 * S - nameLen)
           : (d > 0 ? 2 * S : axisPx - 2 * S - nameLen);
         // Off the line where it REALLY is under the name, not off its flat
         // baseline: a track that begins inside one of its own all-day
@@ -2087,7 +2094,7 @@
         // line, under it, or centred on it behind its own paper outline.
         // Above is right when the room is there; the other two exist
         // because at the head of the map the room often is not.
-        var nameOff = -(nameThick + NODE_R + 2 * S);
+        var nameOff = -(nameThick + NODE_R + capHalf + 2 * S);
         if (namesAbove) {
           // Never onto the NEIGHBOUR'S rail. A name set above its line
           // needs the gap above that line to hold it, and one gap on the
@@ -2124,7 +2131,7 @@
               return nameA < q.a1 && nameA + nameLen > q.a0 && c0 < q.c1 && c1 > q.c0;
             });
           };
-          var tries = [nameOff, NODE_R + 2 * S, -nameThick / 2];
+          var tries = [nameOff, NODE_R + capHalf + 2 * S, -nameThick / 2];
           var pick = null;
           for (var ti = 0; ti < tries.length; ti++) {
             if (offClear(tries[ti]) && offFree(tries[ti])) { pick = tries[ti]; break; }

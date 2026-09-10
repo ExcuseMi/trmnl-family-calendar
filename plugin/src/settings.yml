@@ -34,33 +34,10 @@ custom_fields:
 - keyname: author_info
   name: About This Plugin
   field_type: author_bio
-  description: A metro-map style single-day calendar. One line per track runs along a central spine with the hour axis down its middle; events branch off as stations, a long block in one place becomes a siding beside the line, several people in one place become an interchange, and labels are placed in lanes so nothing overlaps. Auto-picks a horizontal or vertical timeline to fit the screen and narrows the visible hours on small views. Runs on TRMNL <strong>Serverless</strong>.<br /><br />Turn off "Use Demo Data" and paste your own ICS links to show your own calendars. For anything beyond a plain list, build a config with the <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">Configuration Editor</a>.
+  description: A metro-map style single-day calendar. One line per track runs along a central spine with the hour axis down its middle; events branch off as stations, a long block in one place becomes a siding beside the line, several people in one place become an interchange, and labels are placed in lanes so nothing overlaps. Auto-picks a horizontal or vertical timeline to fit the screen and narrows the visible hours on small views. Runs on TRMNL <strong>Serverless</strong>.<br /><br />Turn off "Use Demo Data" (under Developer) and paste your own ICS links into Calendars to show your own. For anything beyond a plain list, build a config with the <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">Configuration Editor</a>.
   github_url: https://github.com/ExcuseMi/trmnl-metro-calendar-plugin
   category: calendar
   help_text: TRMNL X Ready · English, français, español, Deutsch, Nederlands
-- keyname: use_demo_data
-  field_type: boolean
-  name: Use Demo Data
-  description: Show a built-in example board instead of your own calendars. Turn this off once you have added your own calendars below.
-  default: true
-  optional: true
-  conditional_validation:
-  - when: 'true'
-    hidden:
-    - config_json
-  - when: 'false'
-    hidden:
-    - demo_set
-- keyname: demo_set
-  field_type: select
-  name: Demo Board
-  description: Which example day to show. Each one is a real config in this project's <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/ folder</a>, driven by real ICS files. Copy the one closest to your situation and change the links.
-  options:
-  - Springfield, a family of five (shared school day, family dinner): simpsons
-  - Planet Express, a work crew (one team calendar, a delivery three of them are on all day): futurama
-  - Apartment 20, two flatmates (a day at a desk, an evening they are both at): friends
-  default: simpsons
-  optional: true
 - keyname: config_json
   field_type: text
   name: Calendars
@@ -91,6 +68,71 @@ custom_fields:
   field_type: lat_lon
   name: Location (for weather)
   description: Drives the header weather, sunrise/sunset and the rain start/stop markers on the map. Leave blank to keep the placeholder weather.
+  optional: true
+- keyname: alert_enabled
+  field_type: boolean
+  name: Weather Alert Banner
+  group: Weather Alert
+  description: Draw a full-width banner along the bottom edge when the forecast breaches one of the thresholds below. Needs a location above. Off by default, and it takes no space at all on a day that breaches nothing.
+  default: false
+  optional: true
+  conditional_validation:
+  - when: 'false'
+    hidden:
+    - alert_rain_threshold
+    - alert_snow
+    - alert_temp_low
+    - alert_temp_high
+- keyname: alert_rain_threshold
+  field_type: number
+  name: Rain Chance At Or Above (%)
+  group: Weather Alert
+  description: The wettest hour of the day is called out once its chance of rain reaches this. Leave blank for no rain alert.
+  default: 70
+  optional: true
+- keyname: alert_snow
+  field_type: boolean
+  name: Alert On Snow
+  group: Weather Alert
+  description: Call out a day whose forecast is snow, whatever the rain chance says.
+  default: true
+  optional: true
+- keyname: alert_temp_low
+  field_type: number
+  name: Cold At Or Below
+  group: Weather Alert
+  description: In whichever unit the board is showing (see Temperature Unit). Leave blank for no cold alert.
+  optional: true
+- keyname: alert_temp_high
+  field_type: number
+  name: Heat At Or Above
+  group: Weather Alert
+  description: In whichever unit the board is showing (see Temperature Unit). Leave blank for no heat alert.
+  optional: true
+- keyname: use_demo_data
+  field_type: boolean
+  name: Use Demo Data
+  group: Developer
+  description: Show a built-in example board instead of your own calendars. Turn this off once you have filled in Calendars above.
+  default: true
+  optional: true
+  conditional_validation:
+  - when: 'true'
+    hidden:
+    - config_json
+  - when: 'false'
+    hidden:
+    - demo_set
+- keyname: demo_set
+  field_type: select
+  name: Demo Board
+  group: Developer
+  description: Which example day to show. Each one is a real config in this project's <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/ folder</a>, driven by real ICS files. Copy the one closest to your situation and change the links.
+  options:
+  - Springfield, a family of five (shared school day, family dinner): simpsons
+  - Planet Express, a work crew (one team calendar, a delivery three of them are on all day): futurama
+  - Apartment 20, two flatmates (a day at a desk, an evening they are both at): friends
+  default: simpsons
   optional: true
 name: Metro Calendar
 description: Everyone's day as a metro map

@@ -15,5 +15,10 @@
   "sunrise": "Zonsopgang",
   "sunset": "Zonsondergang",
   "feed_down": "{n} niet beschikbaar",
-  "weather_stale": "Voorspelling mogelijk verouderd"
+  "weather_stale": "Voorspelling mogelijk verouderd",
+  "alert_label": "DIENSTMEDEDELING",
+  "alert_rain": "Zware Regen Verwacht om {t} ({p}%)",
+  "alert_snow": "Zware Sneeuwval Verwacht om {t} ({p}%)",
+  "alert_cold": "Extreme Kou Verwacht ({v}°)",
+  "alert_heat": "Extreme Hitte Verwacht ({v}°)"
 }

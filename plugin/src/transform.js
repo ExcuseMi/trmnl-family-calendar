@@ -102,7 +102,18 @@ var I18N = {
   en: { today: 'Today', more: '+{n} more', earlier: '+{n} earlier', rain_pct: '{n}% rain',
         clear: 'Clear', partly_cloudy: 'Partly cloudy', cloudy: 'Cloudy', foggy: 'Foggy', rain: 'Rain', snow: 'Snow', storms: 'Storms',
         rain_starts: 'Rain starts', rain_stops: 'Rain stops', sunrise: 'Sunrise', sunset: 'Sunset',
-        feed_down: '{n} unavailable', weather_stale: 'Forecast may be out of date' },
+        feed_down: '{n} unavailable', weather_stale: 'Forecast may be out of date',
+        // The service alert banner. One key per kind rather than a
+        // condition plus a shared "at {t}" frame, because the preposition
+        // is not shared: it is "um" in German, "a las" in Spanish, "à" in
+        // French, and in a language that puts the time first there is no
+        // frame to put it in. The label and the separator are, so those
+        // are assembled in serviceAlert().
+        alert_label: 'SERVICE ALERT',
+        alert_rain: 'Heavy Rain Expected at {t} ({p}%)',
+        alert_snow: 'Heavy Snow Expected at {t} ({p}%)',
+        alert_cold: 'Extreme Cold Expected ({v}°)',
+        alert_heat: 'Extreme Heat Expected ({v}°)' },
 };
 
 // Where the translated tables live, and how long a fetched one is trusted
@@ -184,6 +195,18 @@ async function loadStrings(locale, state, deadline) {
 function tr(strings, key, n) {
   var v = strings[key] || I18N.en[key] || key;
   return n == null ? v : v.replace('{n}', String(n));
+}
+
+// tr() substitutes the single count every other string carries. An alert
+// line carries a time, a percentage or a temperature, and each language
+// puts them in its own order, so those are named and the translated
+// string decides where they land. An unknown placeholder is left standing
+// rather than blanked: "at {t}" on the board says a translation is wrong,
+// where "at " says nothing at all.
+function fmt(str, vars) {
+  return String(str).replace(/\{(\w+)\}/g, function (m, k) {
+    return (vars && Object.prototype.hasOwnProperty.call(vars, k)) ? String(vars[k]) : m;
+  });
 }
 
 // ---------------------------------------------------------------------
@@ -638,6 +661,14 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     // today's, and it is old enough to say so. A board that quietly shows
     // yesterday's weather as today's is worse than one that admits it.
     weather_stale: !!(extra && extra.weatherStale),
+    // The banner along the bottom edge: { text, kind } or null. The text is
+    // already composed and already translated (see serviceAlert): the
+    // template prints it and picks a treatment from `kind`
+    // (rain|snow|cold|heat), and nothing about it is assembled on the
+    // client. NULL, not an empty string, when nothing is breached: the
+    // banner has to disappear completely and give its space back to the
+    // map, and "" would still be a thing the template had to decide about.
+    service_alert: (extra && extra.serviceAlert) || null,
     // Feeds that have been failing for hours, by name (see
     // CALENDAR_DOWN_AFTER_S). A calendar that stops answering takes its
     // events off the board with it, and a board that is missing half a
@@ -712,6 +743,11 @@ var DEMO_SUN = [{ kind: 'sunrise', atMin: 7 * 60 + 8 }, { kind: 'sunset', atMin:
 // (storms/fog/snow) so every icon in MILESTONE_ICON is exercised by the
 // demo somewhere.
 //
+// Each carries the wettest hour of its day too (`peak`), so the service
+// alert can be seen on a demo board without waiting for real weather to
+// breach a threshold somewhere: Springfield trips a rain alert and the
+// flatmates' freezing day trips snow.
+//
 // These are SNAPSHOTS in the same shape fetchWeather returns, in Celsius,
 // so they go through the same materializeWeather (and the same unit
 // conversion) the real forecast does rather than a second rendering path
@@ -720,6 +756,7 @@ var DEMO_SUN = [{ kind: 'sunrise', atMin: 7 * 60 + 8 }, { kind: 'sunset', atMin:
 var DEMO_WEATHER = {
   simpsons: {
     hi: 21, lo: 13, condition: 'rain', icon: 'wi-day-rain.svg', rain_chance: 60, unit: 'C',
+    peak: { atMin: 14 * 60, pct: 60 },
     milestones: [
       { atMin: 13 * 60, kind: 'rain_starts' },
       { atMin: 16 * 60, kind: 'rain_stops' },
@@ -729,6 +766,7 @@ var DEMO_WEATHER = {
   },
   futurama: {
     hi: 24, lo: 15, condition: 'foggy', icon: 'wi-day-fog.svg', rain_chance: 35, unit: 'C',
+    peak: { atMin: 13 * 60, pct: 35 },
     milestones: [
       { atMin: 8 * 60, kind: 'foggy' },
       { atMin: 12 * 60, kind: 'rain_starts' },
@@ -738,6 +776,7 @@ var DEMO_WEATHER = {
   },
   friends: {
     hi: 1, lo: -4, condition: 'snow', icon: 'wi-day-snow.svg', rain_chance: 80, unit: 'C',
+    peak: { atMin: 17 * 60, pct: 80 },
     milestones: [
       { atMin: 9 * 60, kind: 'snow' },
       { atMin: 15 * 60, kind: 'rain_starts' },
@@ -1056,6 +1095,23 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
       wasAbove = above;
     }
 
+    // The wettest hour of the visible day, out of the SAME hourly array the
+    // milestones came from. The service alert has to name an hour and a
+    // probability, and this is the only place both are known; deriving it
+    // later would mean a second call to the forecast API for numbers this
+    // response already carried. It goes in the snapshot, so a board running
+    // on the last good forecast out of saved state still has an alert.
+    var peak = null;
+    for (var j = 0; j < times.length; j++) {
+      var pm = /T(\d{2}):/.exec(times[j]);
+      if (!pm) continue;
+      var pMin = (+pm[1]) * 60;
+      if (pMin < DAY_START_MIN || pMin > DAY_END_MIN) continue;
+      var p = probs[j];
+      if (typeof p !== 'number' || !isFinite(p)) continue;
+      if (!peak || p > peak.pct) peak = { atMin: pMin, pct: p };
+    }
+
     var rain = Math.round((daily.precipitation_probability_max || [])[0]);
     var hi = Math.round((daily.temperature_2m_max || [])[0]);
     var lo = Math.round((daily.temperature_2m_min || [])[0]);
@@ -1068,6 +1124,7 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
       // as a forecast of a dry day rather than as a missing number
       rain_chance: isFinite(rain) ? rain : null,
       unit: unit === 'F' ? 'F' : 'C',
+      peak: peak,
       milestones: milestones,
       sun: sun,
     };
@@ -1082,20 +1139,99 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
 // weather. Before this a single failed call blanked the header and every
 // sky marker until the next refresh, which is the one thing an outage
 // should not do to a board that had the answer fifteen minutes ago.
+//
+// The raw SNAPSHOT travels back out alongside the materialized weather:
+// the service alert needs the unrendered facts (which hour is wettest, the
+// condition key, the temperatures in the unit they were fetched in), and
+// materializeWeather has already turned those into header strings by the
+// time the caller sees them. Reading it back off the header would mean
+// parsing "60" out of a localized string.
 async function resolveWeather(latLonRaw, tz, deadline, state, unit, strings) {
-  if (!latLonRaw) return { weather: null, stale: false };
+  if (!latLonRaw) return { weather: null, stale: false, snapshot: null };
   var snap = await fetchWeather(latLonRaw, typeof tz === 'string' ? tz : 'GMT', deadline, unit);
   var nowS = Math.floor(Date.now() / 1000);
   if (snap) {
     if (state) { state.weather = snap; state.weatherFetchedAt = nowS; }
-    return { weather: materializeWeather(snap, strings, unit), stale: false };
+    return { weather: materializeWeather(snap, strings, unit), stale: false, snapshot: snap };
   }
   var saved = state && state.weather;
-  if (!saved) return { weather: null, stale: false };
+  if (!saved) return { weather: null, stale: false, snapshot: null };
   return {
     weather: materializeWeather(saved, strings, unit),
     stale: (nowS - ((state && state.weatherFetchedAt) || 0)) > WEATHER_STALE_AFTER_S,
+    snapshot: saved,
   };
+}
+
+// ---------------------------------------------------------------------
+// Service alert.
+//
+// One line along the bottom edge when the forecast breaches something the
+// reader asked to be told about: "SERVICE ALERT · Heavy Rain Expected at
+// 17:00 (80%)". It is composed and translated HERE, in full, because the
+// template can print a string but cannot pick a preposition or an
+// adjective ending, and every part after the label moves around between
+// languages.
+//
+// It reads the snapshot resolveWeather already resolved, so it costs the
+// render nothing: no second forecast call, no slice of the shared
+// deadline, and a device running on the last good snapshot out of saved
+// state still gets its alert. A snapshot written by an older build has no
+// `peak`, so its rain and snow alerts wait for the next successful fetch
+// rather than inventing an hour.
+// ---------------------------------------------------------------------
+
+// A blank number field is OFF, not zero. Read as zero, an unset "cold at or
+// below" would fire on every frost in Celsius and never once in Fahrenheit,
+// which is the same setting behaving differently depending on a field the
+// reader did not touch either.
+function numSetting(input, key) {
+  var raw = cf(input, key).trim();
+  if (!raw) return null;
+  var n = Number(raw);
+  return isFinite(n) ? n : null;
+}
+
+function alertSettings(input, unit, strings, hour12) {
+  return {
+    enabled: cf(input, 'alert_enabled').trim().toLowerCase() === 'true', // default OFF: an alert nobody asked for is an alert nobody trusts
+    rainThreshold: numSetting(input, 'alert_rain_threshold'),
+    snow: cf(input, 'alert_snow').trim().toLowerCase() !== 'false',
+    tempLow: numSetting(input, 'alert_temp_low'),
+    tempHigh: numSetting(input, 'alert_temp_high'),
+    unit: unit, strings: strings, hour12: hour12,
+  };
+}
+
+function serviceAlert(snap, opts) {
+  if (!opts || !opts.enabled || !snap || typeof snap !== 'object') return null;
+  var strings = opts.strings || I18N.en;
+  function banner(kind, vars) {
+    return { kind: kind, text: tr(strings, 'alert_label') + ' · ' + fmt(tr(strings, 'alert_' + kind), vars) };
+  }
+
+  var peak = (snap.peak && typeof snap.peak.atMin === 'number' && isFinite(snap.peak.atMin)
+    && typeof snap.peak.pct === 'number' && isFinite(snap.peak.pct)) ? snap.peak : null;
+  var when = peak ? { t: timeLabel12(peak.atMin, { hour12: opts.hour12 }), p: Math.round(peak.pct) } : null;
+
+  // One banner, so the kinds are ranked by how much of the day has to
+  // change because of them: snow stops travel outright, a temperature
+  // extreme is an all-day fact you dress for, rain is an hour you move
+  // something out of. Rain last also keeps the commonest breach from
+  // burying the two rarer ones on a day that trips several.
+  //
+  // Snow is the forecast's own condition bucket (weatherCodeInfo), not a
+  // temperature guess: sleet and freezing rain are 'rain' there and this is
+  // not the place to re-derive that mapping.
+  if (opts.snow && snap.condition === 'snow' && when) return banner('snow', when);
+
+  var lo = convertTemp(snap.lo, snap.unit, opts.unit);
+  var hi = convertTemp(snap.hi, snap.unit, opts.unit);
+  if (opts.tempLow != null && lo != null && lo <= opts.tempLow) return banner('cold', { v: Math.round(lo) });
+  if (opts.tempHigh != null && hi != null && hi >= opts.tempHigh) return banner('heat', { v: Math.round(hi) });
+
+  if (opts.rainThreshold != null && when && when.p >= opts.rainThreshold) return banner('rain', when);
+  return null;
 }
 
 async function fetchWithTimeout(url, ms, extraHeaders) {
@@ -2071,6 +2207,10 @@ async function run(input) {
   var hour12 = resolveHour12(
     (effectiveCfg.timeFormat || cf(input, 'time_format').trim()).toLowerCase(), locale);
   var tempUnit = resolveTempUnit(effectiveCfg.temperatureUnit, cf(input, 'temperature_unit').trim(), locale);
+  // Read once, applied to whichever forecast each path below ends up with.
+  // The thresholds are read in the board's own unit, so "cold at or below
+  // 0" means 0 of whatever the header is showing.
+  var alertOpts = alertSettings(input, tempUnit, strings, hour12);
   var extra = { orientation: orientation, locale: locale, strings: strings, hour12: hour12,
     tempUnit: tempUnit, deadline: deadline };
 
@@ -2103,8 +2243,12 @@ async function run(input) {
     // point of the map, was invisible to anyone who had not already
     // configured a real one. The built-in board gets built-in weather;
     // it needs no network and it applies to the demo ONLY.
-    if (!demoWx.weather) demoWx = { weather: materializeWeather(demoWeatherSnapshot(demoSet), strings, tempUnit), stale: false };
-    var demoExtra = Object.assign({ dateLabel: demoDate }, extra, { weatherStale: demoWx.stale });
+    if (!demoWx.weather) {
+      var demoSnap = demoWeatherSnapshot(demoSet);
+      demoWx = { weather: materializeWeather(demoSnap, strings, tempUnit), stale: false, snapshot: demoSnap };
+    }
+    var demoExtra = Object.assign({ dateLabel: demoDate }, extra,
+      { weatherStale: demoWx.stale, serviceAlert: serviceAlert(demoWx.snapshot, alertOpts) });
     // Prefer driving the demo through the real pipeline against this repo's
     // own ICS files, so what it shows is what a working config produces.
     // Any failure — offline device, GitHub unreachable, a bad fetch — falls
@@ -2147,7 +2291,8 @@ async function run(input) {
   try {
     var configTz = resolveTz(parsed.timeZone, input);
     var wx = await resolveWeather(latLonRaw, configTz, deadline, state, tempUnit, strings);
-    var cfgExtra = Object.assign({}, extra, { weatherStale: wx.stale });
+    var cfgExtra = Object.assign({}, extra,
+      { weatherStale: wx.stale, serviceAlert: serviceAlert(wx.snapshot, alertOpts) });
     return done(await buildFromConfig(input, parsed, wx.weather, cfgExtra, state));
   } catch (e) {
     return done(buildFromDemo(null, null, extra));
