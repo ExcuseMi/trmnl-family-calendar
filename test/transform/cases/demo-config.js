@@ -87,7 +87,11 @@ module.exports = function (test, h) {
     const lisaKey = r.metro.legend.filter((t) => t.name === 'Lisa').map((t) => t.key)[0];
     // the class code routes the entry and is then stripped from the title —
     // "L6 School Day" belongs to Bart and reads as "School Day"
-    const schoolDays = (r.metro.sidings || []).filter((s) => s.title === 'School Day').map((s) => s.owner).sort();
+    // day 0 only: the payload carries the whole run the board may draw, and
+    // a weekly school day recurs on every one of them
+    const schoolDays = (r.metro.sidings || [])
+      .filter((s) => s.title === 'School Day' && s.start_min < 1440)
+      .map((s) => s.owner).sort();
     assert(schoolDays.length === 2, 'expected a School Day siding for each child, got ' + schoolDays.length);
     assert(schoolDays.indexOf(bartKey) >= 0, 'no School Day on Bart');
     assert(schoolDays.indexOf(lisaKey) >= 0, 'no School Day on Lisa');
@@ -157,7 +161,7 @@ module.exports = function (test, h) {
     // corridor: one caption, three kinks, and the three of them adjacent
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(baseInput(NOW, { use_demo_data: 'true', demo_set: 'futurama' }));
-    const run3 = (r.metro.sidings || []).filter((s) => s.title === 'Delivery Run');
+    const run3 = (r.metro.sidings || []).filter((s) => s.title === 'Delivery Run' && s.start_min < 1440);
     assert(run3.length === 3, 'expected the delivery on three lines, got ' + run3.length);
     const groups = [...new Set(run3.map((s) => s.group))];
     assert(groups.length === 1 && groups[0], 'the three kinks should share one group id, got ' + JSON.stringify(groups));

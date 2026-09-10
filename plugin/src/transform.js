@@ -537,9 +537,15 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     if (e.endMin != null) dayHi = Math.max(dayHi, e.endMin);
   });
   if (nowMin != null) { dayLo = Math.min(dayLo, nowMin); dayHi = Math.max(dayHi, nowMin); }
+  // Clamped to the run of days the board covers, not to one midnight. On a
+  // single-day board that is the same number it always was; on a run of
+  // three it lets the window reach into day two and day three, which is
+  // the whole point of sending them.
+  var days = (extra && extra.days) || [];
+  var runEnd = Math.max(24 * 60, days.length * 24 * 60);
   var DAY_LO = Math.max(0, Math.floor((dayLo - 60) / 60) * 60);
-  var DAY_HI = Math.min(24 * 60, Math.ceil((dayHi + 90) / 60) * 60);
-  if (DAY_HI - DAY_LO < 8 * 60) DAY_HI = Math.min(24 * 60, DAY_LO + 8 * 60);
+  var DAY_HI = Math.min(runEnd, Math.ceil((dayHi + 90) / 60) * 60);
+  if (DAY_HI - DAY_LO < 8 * 60) DAY_HI = Math.min(runEnd, DAY_LO + 8 * 60);
 
   // A configured track with nothing on today's board gets no line and no
   // legend entry — otherwise every day carries every ever-configured
@@ -647,6 +653,22 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
   return {
     day_start_min: DAY_LO,
     day_end_min: DAY_HI,
+    // The run of days, in the same absolute minutes everything else uses:
+    // day 0 is [0, 1440), day 1 is [1440, 2880), and so on. The client
+    // draws as many of them as the canvas can give a day's worth of axis
+    // to, so this is what it has to choose FROM, not what it will show.
+    // Each carries its own date and its own forecast, because a two-day
+    // board that says one temperature is lying about one of the days.
+    days: (days || []).map(function (d, i) {
+      return {
+        index: i,
+        start_min: i * 24 * 60,
+        end_min: (i + 1) * 24 * 60,
+        date_label: d.label || null,
+        weekday_label: d.weekday || null,
+        weather: d.weather || null,
+      };
+    }),
     secondary_threshold_min: SECONDARY_THRESHOLD_MIN, // sub-spur grouping window — client decides sub-spurs, but this constant is config, not geometry
     // the day the board actually shows, computed here rather than by the
     // caller, which cannot know it until the events are in
@@ -934,7 +956,11 @@ function buildFromDemo(weather, nowMin, extra) {
     nowMin != null ? nowMin : DEMO_NOW_MIN,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     DEMO_ALLDAY,
-    Object.assign({}, extra || {}, { sun: (w.sun && w.sun.length) ? w.sun : DEMO_SUN }),
+    // The offline fallback is one day, and says so: a run of one is still
+    // a run, so the client takes the same path for it as for three.
+    Object.assign({}, extra || {}, {
+      days: (extra && extra.days) || [{ label: (extra && extra.dateLabel) || null, weekday: null, weather: null }],
+      sun: (w.sun && w.sun.length) ? w.sun : DEMO_SUN }),
     DEMO_STATIONS.map(function (st) {
       return { track: st.track, title: st.title, location: st.location || null, startMin: st.startMin, endMin: st.endMin };
     })
@@ -1024,6 +1050,21 @@ function materializeWeather(snap, strings, unit) {
       }),
     sun: (Array.isArray(snap.sun) ? snap.sun : [])
       .filter(function (m) { return m && typeof m.atMin === 'number' && isFinite(m.atMin) && (m.kind === 'sunrise' || m.kind === 'sunset'); }),
+    // One forecast per day of the run, converted the same way the header
+    // is: saved state outlives the temperature setting, so a snapshot
+    // taken in Celsius has to come back out in whatever the board is
+    // showing now, per day as well as in the header.
+    perDay: (Array.isArray(snap.perDay) ? snap.perDay : []).map(function (d) {
+      var di = typeof d.icon === 'string' && d.icon ? d.icon : icon;
+      return {
+        hi: convertTemp(d.hi, snap.unit, unit),
+        lo: convertTemp(d.lo, snap.unit, unit),
+        condition: tr(strings, d.condition || 'clear'),
+        rain_chance: typeof d.rain_chance === 'number' && isFinite(d.rain_chance) ? d.rain_chance : null,
+        icon: di.indexOf('http') === 0 ? di : WEATHER_ICON_BASE + di,
+        unit: unit,
+      };
+    }),
   };
 }
 
@@ -1059,7 +1100,7 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
       daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode,sunrise,sunset',
       hourly: 'precipitation_probability',
       temperature_unit: unit === 'F' ? 'fahrenheit' : 'celsius',
-      timezone: tz, forecast_days: '1',
+      timezone: tz, forecast_days: String(DAY_SPAN),
     });
     var budget = msUntil(deadline);
     if (budget <= 0) return null;
@@ -1115,6 +1156,21 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
     var rain = Math.round((daily.precipitation_probability_max || [])[0]);
     var hi = Math.round((daily.temperature_2m_max || [])[0]);
     var lo = Math.round((daily.temperature_2m_min || [])[0]);
+    // One entry per day the board may draw. The header of a two-day board
+    // that shows a single high and low is telling the truth about one of
+    // the days and inventing it for the other.
+    var perDay = [];
+    for (var pd = 0; pd < DAY_SPAN; pd++) {
+      var pdHi = (daily.temperature_2m_max || [])[pd];
+      if (pdHi == null) break;
+      var pdInfo = weatherCodeInfo((daily.weathercode || [])[pd]);
+      perDay.push({
+        hi: Math.round(pdHi),
+        lo: Math.round((daily.temperature_2m_min || [])[pd]),
+        rain_chance: Math.round((daily.precipitation_probability_max || [])[pd]),
+        condition: pdInfo.label, icon: pdInfo.icon,
+      });
+    }
     return {
       hi: isFinite(hi) ? hi : null,
       lo: isFinite(lo) ? lo : null,
@@ -1125,6 +1181,7 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
       rain_chance: isFinite(rain) ? rain : null,
       unit: unit === 'F' ? 'F' : 'C',
       peak: peak,
+      perDay: perDay,
       milestones: milestones,
       sun: sun,
     };
@@ -1284,6 +1341,20 @@ function parseIcsDateTime(paramsStr, value, fallbackTz) {
   return c;
 }
 
+// How many days of data transform sends. The client draws one, two or
+// three of them depending on what the canvas can give each one; it can
+// never draw more than it was sent, and sending a fourth would cost a
+// fetch nobody can use.
+var DAY_SPAN = 3;
+
+// Civil date arithmetic, deliberately not epoch arithmetic: "the day after
+// the 30th" is a calendar question, and answering it by adding 86400
+// seconds gets it wrong on the two days a year a zone changes offset.
+function addCivilDays(d, n) {
+  var t = new Date(Date.UTC(d.y, d.mo - 1, d.d + n));
+  return { y: t.getUTCFullYear(), mo: t.getUTCMonth() + 1, d: t.getUTCDate() };
+}
+
 // Bounded RRULE subset: FREQ=WEEKLY only (the pattern real calendar
 // exports use constantly for standing meetings/family routines), with
 // optional BYDAY and UNTIL. Anything else (DAILY/MONTHLY/YEARLY, COUNT,
@@ -1324,7 +1395,14 @@ function weeklyRruleMatchesToday(rruleValue, dtstartCivil, todayY, todayMo, toda
 // Returns { timed, allDay } — allDay entries carry no time-of-day (they're
 // {title, desc, status} only): only whole-day coverage decides whether one
 // applies today, matched to the day's own civil date, not a UTC one.
-function parseIcs(text, tz, today, includeDescription) {
+// `days` is the run of civil dates the board covers, day 0 first. Every
+// minute this returns is ABSOLUTE on that run: 09:00 on day 1 is 1980, not
+// 540. One number line for the whole board is what lets a night be a
+// stretch of axis like any other, an event that crosses midnight be one
+// event, and every downstream comparison stay a plain comparison. A single
+// day is the same code with a list of one.
+function parseIcs(text, tz, days, includeDescription) {
+  var today = days[0];
   var lines = unfoldIcs(text);
   var raw = [];
   var cur = null;
@@ -1356,10 +1434,15 @@ function parseIcs(text, tz, today, includeDescription) {
     else if (key === 'RECURRENCE-ID') cur.recurrenceId = parseIcsDateTime(params, value, tz);
   });
 
-  var todayWeekday = (new Date(Date.UTC(today.y, today.mo - 1, today.d)).getUTCDay() + 6) % 7;
-  var todayKey = today.y + '-' + today.mo + '-' + today.d;
-  var todayOrdinal = Date.UTC(today.y, today.mo - 1, today.d);
   var DAY_MS = 24 * 60 * 60 * 1000;
+  var dayInfo = days.map(function (d) {
+    return {
+      d: d,
+      weekday: (new Date(Date.UTC(d.y, d.mo - 1, d.d)).getUTCDay() + 6) % 7,
+      key: d.y + '-' + d.mo + '-' + d.d,
+      ordinal: Date.UTC(d.y, d.mo - 1, d.d),
+    };
+  });
 
   // A RECURRENCE-ID override (same UID, own DTSTART/SUMMARY) REPLACES the
   // master's occurrence on that specific date — without this, an edited
@@ -1387,12 +1470,14 @@ function parseIcs(text, tz, today, includeDescription) {
       // no recurrence support here, same "bounded subset" limit as timed.
       var startOrd = Date.UTC(ev.dtstart.y, ev.dtstart.mo - 1, ev.dtstart.d);
       var endOrd = (ev.dtend && ev.dtend.isAllDay) ? Date.UTC(ev.dtend.y, ev.dtend.mo - 1, ev.dtend.d) : startOrd + DAY_MS;
-      var isDirectSpan = todayOrdinal >= startOrd && todayOrdinal < endOrd;
-      var isWeeklySpan = !isDirectSpan && ev.rrule && (endOrd - startOrd) <= DAY_MS
-        && weeklyRruleMatchesToday(ev.rrule, ev.dtstart, today.y, today.mo, today.d, todayWeekday, tz);
-      if (!isDirectSpan && !isWeeklySpan) return;
-      if (!ev.recurrenceId && ev.uid && overriddenDates[ev.uid + '|' + todayKey]) return;
-      allDay.push({ title: ev.title, desc: ev.desc || '', status: ev.status || '' });
+      dayInfo.forEach(function (di, dayIx) {
+        var isDirectSpan = di.ordinal >= startOrd && di.ordinal < endOrd;
+        var isWeeklySpan = !isDirectSpan && ev.rrule && (endOrd - startOrd) <= DAY_MS
+          && weeklyRruleMatchesToday(ev.rrule, ev.dtstart, di.d.y, di.d.mo, di.d.d, di.weekday, tz);
+        if (!isDirectSpan && !isWeeklySpan) return;
+        if (!ev.recurrenceId && ev.uid && overriddenDates[ev.uid + '|' + di.key]) return;
+        allDay.push({ title: ev.title, desc: ev.desc || '', status: ev.status || '', day: dayIx });
+      });
       return;
     }
 
@@ -1402,20 +1487,25 @@ function parseIcs(text, tz, today, includeDescription) {
       if (durationMin < 0) durationMin += 24 * 60; // crossed midnight in local time — approximate
     }
 
-    var isDirectHit = ev.dtstart.y === today.y && ev.dtstart.mo === today.mo && ev.dtstart.d === today.d;
-    var isWeeklyHit = !isDirectHit && ev.rrule && weeklyRruleMatchesToday(ev.rrule, ev.dtstart, today.y, today.mo, today.d, todayWeekday, tz);
-    if (!isDirectHit && !isWeeklyHit) return;
-
-    if (!ev.recurrenceId && ev.uid && overriddenDates[ev.uid + '|' + todayKey]) return; // superseded by today's override
-
-    var startMin = ev.dtstart.h * 60 + ev.dtstart.mi; // same time-of-day, whichever day it landed on
-    out.push({
-      title: ev.title,
-      desc: ev.desc || '',
-      status: ev.status || '',
-      location: ev.location,
-      startMin: startMin,
-      endMin: durationMin != null ? startMin + durationMin : null,
+    dayInfo.forEach(function (di, dayIx) {
+      var isDirectHit = ev.dtstart.y === di.d.y && ev.dtstart.mo === di.d.mo && ev.dtstart.d === di.d.d;
+      var isWeeklyHit = !isDirectHit && ev.rrule
+        && weeklyRruleMatchesToday(ev.rrule, ev.dtstart, di.d.y, di.d.mo, di.d.d, di.weekday, tz);
+      if (!isDirectHit && !isWeeklyHit) return;
+      // superseded by an override on THAT day
+      if (!ev.recurrenceId && ev.uid && overriddenDates[ev.uid + '|' + di.key]) return;
+      // absolute on the run of days: the time of day it lands at, plus the
+      // whole days before it
+      var startMin = dayIx * 1440 + ev.dtstart.h * 60 + ev.dtstart.mi;
+      out.push({
+        title: ev.title,
+        desc: ev.desc || '',
+        status: ev.status || '',
+        location: ev.location,
+        day: dayIx,
+        startMin: startMin,
+        endMin: durationMin != null ? startMin + durationMin : null,
+      });
     });
   });
   return { timed: out, allDay: allDay, calName: calName };
@@ -1966,6 +2056,13 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   var today = fromEpoch(nowTs * 1000, tz);
   var nowMin = today.h * 60 + today.mi;
   var todayWeekday = (new Date(Date.UTC(today.y, today.mo - 1, today.d)).getUTCDay() + 6) % 7;
+  // The run of days the board may draw. Three is the ceiling: past that a
+  // day gets less axis than its own events need and the board stops being
+  // a timeline. How many of them are actually DRAWN is the client's call,
+  // made against the real canvas; this only has to make sure the data is
+  // there for it to choose from.
+  var days = [];
+  for (var di = 0; di < DAY_SPAN; di++) days.push(addCivilDays(today, di));
 
   var registry = makeTrackRegistry(parsed);
   // Every explicitly-configured track is registered up front, even with
@@ -2029,7 +2126,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
       var resp = await fetchWithTimeout(url, Math.min(budget, 4000), cal.headers);
       if (!resp.ok) { failed(); return; }
       var text = await resp.text();
-      var parsedIcs = parseIcs(text, tz, today, cal.includeDescription);
+      var parsedIcs = parseIcs(text, tz, days, cal.includeDescription);
       if (state) {
         delete state.calendarDown[cal.url];
         if (parsedIcs.calName) state.calendarNames[cal.url] = parsedIcs.calName;
@@ -2159,7 +2256,19 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     nowMin,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     allDayEvents,
-    Object.assign({}, extra, { dateLabel: dateLabel(today, extra.locale), sun: (weather && weather.sun) || [], calendarsDown: downNames }),
+    Object.assign({}, extra, {
+      dateLabel: dateLabel(today, extra.locale),
+      // one entry per day the board MAY draw, each with its own date and
+      // its own forecast: a two-day board showing one temperature is
+      // wrong about one of the days
+      days: days.map(function (d, i) {
+        return {
+          label: dateLabel(d, extra.locale),
+          weekday: localeDatePart(extra.locale || 'en', 'long', 'weekday', d.y, d.mo, d.d),
+          weather: (weather && weather.perDay && weather.perDay[i]) || null,
+        };
+      }),
+      sun: (weather && weather.sun) || [], calendarsDown: downNames }),
     sidingEvents
   );
 }
