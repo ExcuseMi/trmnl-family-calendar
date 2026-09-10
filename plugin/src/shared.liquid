@@ -124,7 +124,35 @@
     <svg class="metro-svg absolute"></svg>
   </div>
 
+  {%- comment -%}
+    The service banner. A sibling of the canvas rather than a band reserved
+    inside it: the canvas is the flex child that grows, so a footer here
+    takes its height off the canvas and the script, which measures the
+    canvas's own box, adapts with no arithmetic of its own and no second
+    place for the two to disagree. When nothing is breached transform.js
+    sends null, this renders nothing at all, and the map has the height
+    back.
+    Solid ink, paper text: this is the one thing on the board that is not
+    part of the map, and it has to read as an interruption rather than as
+    another label. Wrapping is allowed because the translations are not the
+    same length and a German banner that would not fit on one line should
+    take two rather than be cut.
+  {%- endcomment -%}
+  {% if metro.service_alert %}
+    <div class="metro-banner flex-none w--full px--3 py--1 label label--small font--bold"
+         data-metro-alert="{{ metro.service_alert.kind }}">{{ metro.service_alert.text }}</div>
+  {% endif %}
+
 <style>
+  /* Ink and paper only. Spacing and centring come from the framework's own
+     utility classes on the element instead, because the inline-style lint
+     counts a handful of property names by scanning the raw markup for them,
+     comments included, against a budget of six for the whole template.
+     Naming one here costs the same as using it. */
+  .metro-banner {
+    background: var(--framework-semantic-text-primary-text-color, #000);
+    color: var(--framework-semantic-canvas-bg-color, #fff);
+  }
   .metro-canvas { overflow: hidden; }
   /* the drawing surface fills its container; kept here rather than inline so
      the markup carries no style attribute of its own */

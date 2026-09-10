@@ -30,10 +30,13 @@ is open.
 - [ ] **A4. Simultaneous branches on different lines overlap.** "Coffee
   (100 cups)" (Fry, 07:30) and "Bend Some Girders" (Bender, 07:30) drop
   their stubs at the same axis position, a few px apart.
-- [ ] **A5. A station shared by five lines draws five separate pills.**
-  "Delivery Run" and "Ship Inspection" are `station: true` across the whole
-  crew and come out as a stack of unrelated blobs. A shared station is one
-  corridor, the way a shared event is one interchange.
+- [x] **A5. WITHDRAWN, this was a misreading.** "A station shared by five
+  lines draws five separate pills" was written off a screenshot. Those pills
+  are the five CARS, one per line, all at the same minute. The shared-station
+  corridor is correct: on `seven-lines`, "Delivery Run" bends all five crew
+  lines together and captions them once. The misreading is itself the
+  argument for E1b below: a column of cars at one minute reads as a stack of
+  blobs, and it fooled the person who drew it.
 - [x] **A6. Terminator tick misplaced on a backwards branch.** "Walk
   Nibbler" (17:30 to 18:15) puts its end tick in the wrong place.
 - [ ] **A7. Quadrant on TRMNL X: a backwards branch is mangled.** "Family
@@ -155,6 +158,19 @@ is open.
 ---
 
 ## Notes
+
+- **E6 is half open.** `transform.js` sends
+  `metro.service_alert = { text, kind } | null`, fully composed and
+  translated, and `shared.liquid` draws it as a full-width ink band along the
+  bottom, a sibling of the canvas so the canvas shrinks by itself and there
+  is no second place for the two to disagree. What is NOT done: no test
+  covers it, and it has only been seen by injecting the markup into a built
+  page by hand, because the banner is Liquid and the screenshot harness only
+  swaps the runtime payload. It also needs a look on a board where the
+  translated text wraps to two lines.
+- The layout suite's small views became real this session. `A7` (the mangled
+  backwards branch on a quadrant) should be cheaper to chase now than it
+  looked when it was written down.
 
 - The header carries the feed-down and stale-forecast lines, so they are not
   shown on the views that have no header (quadrant, half-horizontal on an OG
