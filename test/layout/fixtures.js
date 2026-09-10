@@ -211,6 +211,44 @@ const crewDay = Object.assign(base({
   ],
 }), { legend: CREW });
 
+// The board a chat assistant actually produced for the Futurama demo: five
+// people plus two lines that are not people at all, because it gave each
+// calendar a `name` and an unnamed event falls back to it. Seven lines and
+// nothing to be done about it from the layout's side — which is the point.
+// This is the board that was drawn at a 20px pitch in a 780px-deep canvas
+// with every line's name lying across its own rail, and the whole crew's
+// station drawn as a stack of unrelated pills.
+const SEVEN = [
+  track('deliv', 'Deliveries', 'left', 'black', -20, 5.5, 'dashed'),
+  track('crew', 'Crew', 'left', 'black', -10, 5, 'dotted'),
+  track('fry', 'Fry', 'right', 'black', 10, 6, 'solid'),
+  track('leela', 'Leela', 'right', 'black', 20, 3, 'dashdot'),
+  track('bender', 'Bender', 'right', 'black', 30, 3, 'dotted'),
+  track('amy', 'Amy', 'right', 'black', 40, 3.5, 'dashed'),
+  track('prof', 'Professor', 'right', 'black', 50, 4.5, 'dashdot'),
+];
+const CREW_KEYS = ['fry', 'leela', 'bender', 'amy', 'prof'];
+const sevenLines = Object.assign(base({
+  day_start_min: 360, day_end_min: 1380, window_label: '6am 11pm', now_min: 683,
+  stations: [
+    station('amy', 'Lab Rotation', 570, 690, { location: 'Mars University' }),
+  ].concat(CREW_KEYS.map(function (k) {
+    return station(k, 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 's1' });
+  })),
+  items: [
+    ev('Coffee (100 cups)', 'fry', 450, 480, { side: 'right', hue: 'black', track_offset: 10 }),
+    ev('Bend Some Girders', 'bender', 450, 495, { side: 'right', hue: 'black', track_style: 'dotted', track_offset: 30 }),
+    ev('Pre-flight Check', 'leela', 480, 510, { location: 'Docking Bay', side: 'right', hue: 'black', track_style: 'dashdot', track_offset: 20 }),
+    ev('Good News Everyone', 'fry', 525, 540, { co_owners: ['leela', 'bender', 'amy', 'prof'], location: 'Conference Table', side: 'right', hue: 'black', track_width: 6, track_offset: 10 }),
+    ev('Nap', 'prof', 840, 960, { side: 'right', hue: 'black', track_style: 'dashdot', track_offset: 50 }),
+    ev('Scooter Service', 'amy', 960, 1020, { side: 'right', hue: 'black', track_style: 'dashed', track_offset: 40 }),
+    ev('Crew Debrief', 'fry', 990, 1050, { co_owners: ['leela', 'bender', 'amy', 'prof'], side: 'right', hue: 'black', track_width: 6, track_offset: 10 }),
+    ev('Walk Nibbler', 'leela', 1050, 1095, { side: 'right', hue: 'black', track_style: 'dashdot', track_offset: 20 }),
+    ev('All My Circuits', 'fry', 1110, 1140, { side: 'right', hue: 'black', track_width: 6, track_offset: 10 }),
+    ev('Hedonism Lounge', 'bender', 1170, 1260, { location: "O'Zorgnax's Pub", side: 'right', hue: 'black', track_style: 'dotted', track_offset: 30 }),
+  ],
+}), { legend: SEVEN });
+
 module.exports = [
   { name: 'busy-day', metro: busyDay },
   { name: 'all-day-every-track', metro: allDayEveryTrack },
@@ -221,4 +259,5 @@ module.exports = [
   { name: 'shared-station', metro: sharedStation },
   { name: 'five-lines', metro: fiveLines },
   { name: 'crew-day', metro: crewDay },
+  { name: 'seven-lines', metro: sevenLines },
 ];

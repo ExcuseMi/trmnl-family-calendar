@@ -120,4 +120,71 @@ module.exports = function (test, h) {
     assert(p.indexOf('(none added yet)') >= 0, 'an empty tool should say it has no calendars');
     assert(p.indexOf('## The configuration so far') < 0, 'there is no configuration to offer yet');
   });
+  // The bug that made this section worth rewriting: an assistant gave every calendar a
+  // friendly name, one event in two of them matched no rule, and the board came back with
+  // seven lines for five people. The schema alone cannot teach that, so the prompt has to
+  // say it in words.
+  test('the prompt warns that a calendar name becomes a line', () => {
+    const document = withOneCalendar();
+    click(document.getElementById('makePrompt'));
+    const p = document.getElementById('promptOut').value;
+    assert(/is NOT a caption/.test(p), 'the prompt does not warn what a calendar `name` really is');
+    assert(/LINE on the map/.test(p), 'it never says the name is drawn as a line');
+    assert(/leave `name` off entirely/.test(p), 'it does not offer the fix of leaving the name off');
+    assert(/Count the lines your configuration produces/.test(p), 'it never asks for the count to be checked');
+  });
+
+  // A schema tells you what is allowed. It does not tell you what a good answer looks like,
+  // and every assistant that only got the schema wrote rules that parse and route nothing.
+  test('the prompt carries a complete worked example', () => {
+    const document = withOneCalendar();
+    click(document.getElementById('makePrompt'));
+    const p = document.getElementById('promptOut').value;
+    assert(p.indexOf('## A worked example') >= 0, 'there is no worked example');
+
+    // it has to be JSON that actually parses: a broken example teaches broken output
+    const block = p.slice(p.indexOf('## A worked example'));
+    const fence = /```json\n([\s\S]*?)\n```/.exec(block);
+    assert(fence, 'the worked example is not in a json fence');
+    const ex = JSON.parse(fence[1]);
+
+    assert(ex.tracks.length >= 3, 'the example has no tracks to speak of');
+    const rules = ex.calendars.reduce((all, c) => all.concat(c.rules || []), []);
+    assert(rules.some((r) => r.rewrite === '' && r.match.type === 'regex' && /\^\[A-Za-z\]\+:/.test(r.match.value)),
+      'no rule that strips a name prefix off the title');
+    assert(rules.some((r) => Array.isArray(r.track) && r.track.length > 1), 'no shared event with a track list');
+    assert(rules.some((r) => r.station === true), 'no station: true block');
+    assert(rules.some((r) => r.hide === true), 'no hide rule');
+    assert(ex.calendars.some((c) => !c.name), 'every calendar in the example is named, which is the mistake it is meant to teach');
+
+    // and it is checked against the same parser the device runs
+    const parsed = document.defaultView.parseConfig(JSON.stringify(ex));
+    assert(parsed.calendars.length === ex.calendars.length, 'the worked example does not survive parseConfig');
+    assert(Object.keys(parsed.tracks).length === ex.tracks.length, 'the example\'s tracks do not survive parseConfig');
+  });
+
+  // timeZone and locale are account settings. An assistant has no way to know either, and a
+  // guessed zone silently redraws the whole day at the wrong hour, so the prompt must not
+  // put them in front of it at all.
+  test('the prompt never offers timeZone or locale', () => {
+    const document = withOneCalendar();
+    click(document.getElementById('makePrompt'));
+    const p = document.getElementById('promptOut').value;
+    const schema = p.slice(p.indexOf('## Format'), p.indexOf('## A worked example'));
+    assert(schema.indexOf('timeZone') < 0, 'the schema still offers timeZone');
+    assert(schema.indexOf('"locale"') < 0, 'the schema still offers locale');
+    assert(p.indexOf('Europe/Brussels') < 0, 'the prompt still shows a time zone to copy');
+  });
+
+  // Both are chosen by the plugin now, against data the assistant cannot see (the day's
+  // real event counts, the panel's theme). Anything it picks can only be worse.
+  test('the prompt does not offer side or color, and says not to set them', () => {
+    const document = withOneCalendar();
+    click(document.getElementById('makePrompt'));
+    const p = document.getElementById('promptOut').value;
+    const schema = p.slice(p.indexOf('## Format'), p.indexOf('## A worked example'));
+    assert(schema.indexOf('"side"') < 0, 'the schema still lists side');
+    assert(schema.indexOf('"color"') < 0, 'the schema still lists color');
+    assert(/Never set `side` or `color`/.test(p), 'the prompt does not rule them out');
+  });
 };

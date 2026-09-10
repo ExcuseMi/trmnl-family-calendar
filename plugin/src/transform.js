@@ -81,30 +81,31 @@ function timeLabel(min) {
 }
 
 // ---------------------------------------------------------------------
-// i18n — every user-facing string the plugin renders, keyed by the first
-// two letters of the TRMNL account locale (en, fr, es, de, nl; anything
-// else falls back to English). Embedded here rather than in separate
-// files because Serverless only ships this one file. Weekday and month
-// names come from Intl with the full locale instead, so they cover any
-// language Intl knows.
+// i18n — every user-facing string the plugin renders. ENGLISH IS INLINE
+// and is the only table shipped in this file: it is the fallback for a
+// device that cannot reach GitHub, and it is the key set every other
+// language is checked against. Every other language lives in this repo's
+// i18n/<code>.json and is fetched at render time (loadStrings below), so
+// a new language is a pull request against a JSON file rather than an
+// edit to the serverless entry point nobody outside this repo can make.
+// Weekday and month names still come from Intl with the full locale, so
+// they cover any language Intl knows whether or not it has a file here.
 // ---------------------------------------------------------------------
 var I18N = {
   en: { today: 'Today', more: '+{n} more', earlier: '+{n} earlier', rain_pct: '{n}% rain',
         clear: 'Clear', partly_cloudy: 'Partly cloudy', cloudy: 'Cloudy', foggy: 'Foggy', rain: 'Rain', snow: 'Snow', storms: 'Storms',
-        rain_starts: 'Rain starts', rain_stops: 'Rain stops', sunrise: 'Sunrise', sunset: 'Sunset' },
-  fr: { today: "Aujourd'hui", more: '+{n} de plus', earlier: '+{n} plus tôt', rain_pct: '{n} % de pluie',
-        clear: 'Dégagé', partly_cloudy: 'Partiellement nuageux', cloudy: 'Nuageux', foggy: 'Brouillard', rain: 'Pluie', snow: 'Neige', storms: 'Orages',
-        rain_starts: 'Début de la pluie', rain_stops: 'Fin de la pluie', sunrise: 'Lever du soleil', sunset: 'Coucher du soleil' },
-  es: { today: 'Hoy', more: '+{n} más', earlier: '+{n} antes', rain_pct: '{n}% lluvia',
-        clear: 'Despejado', partly_cloudy: 'Parcialmente nublado', cloudy: 'Nublado', foggy: 'Niebla', rain: 'Lluvia', snow: 'Nieve', storms: 'Tormentas',
-        rain_starts: 'Empieza la lluvia', rain_stops: 'Para la lluvia', sunrise: 'Amanecer', sunset: 'Atardecer' },
-  de: { today: 'Heute', more: '+{n} weitere', earlier: '+{n} früher', rain_pct: '{n} % Regen',
-        clear: 'Klar', partly_cloudy: 'Teils bewölkt', cloudy: 'Bewölkt', foggy: 'Neblig', rain: 'Regen', snow: 'Schnee', storms: 'Gewitter',
-        rain_starts: 'Regen beginnt', rain_stops: 'Regen endet', sunrise: 'Sonnenaufgang', sunset: 'Sonnenuntergang' },
-  nl: { today: 'Vandaag', more: '+{n} meer', earlier: '+{n} eerder', rain_pct: '{n}% regen',
-        clear: 'Helder', partly_cloudy: 'Half bewolkt', cloudy: 'Bewolkt', foggy: 'Mistig', rain: 'Regen', snow: 'Sneeuw', storms: 'Onweer',
-        rain_starts: 'Regen begint', rain_stops: 'Regen stopt', sunrise: 'Zonsopgang', sunset: 'Zonsondergang' },
+        rain_starts: 'Rain starts', rain_stops: 'Rain stops', sunrise: 'Sunrise', sunset: 'Sunset',
+        feed_down: '{n} unavailable' },
 };
+
+// Where the translated tables live, and how long a fetched one is trusted
+// before it is asked for again. Re-fetching every render would spend a
+// slice of the same deadline the calendars need on a file that changes a
+// few times a year; a cached table is reused until it is this old, and a
+// failed fetch falls back to the cache whatever its age.
+var I18N_BASE = 'https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/i18n/';
+var I18N_TTL_S = 6 * 3600;
+var I18N_FETCH_MS = 1500;
 
 // The account locale ("nl", "fr-BE", "en-US", ...): the full tag drives
 // Intl (dates, 12h/24h default); the two-letter language picks the string
@@ -118,14 +119,147 @@ function userLocale(input) {
   }
 }
 
-function stringsFor(locale) {
-  var lang = String(locale || 'en').slice(0, 2).toLowerCase();
-  return I18N[lang] || I18N.en;
+function langOf(locale) {
+  return String(locale || 'en').slice(0, 2).toLowerCase();
+}
+
+// A downloaded table is data from the open internet, not code: only the
+// keys English already has are taken, only strings, and only short ones.
+// Anything else would be carried into trmnl_state and replayed on every
+// later render, including whatever a malformed pull request put there.
+function sanitizeStrings(raw) {
+  var out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  Object.keys(I18N.en).forEach(function (k) {
+    var v = raw[k];
+    if (typeof v === 'string' && v.trim() && v.length <= 120) out[k] = v.trim();
+  });
+  return out;
+}
+
+// A partially translated file is still worth having: the keys it does
+// carry are used and the rest read in English, rather than the whole
+// language falling back because someone added a string last week.
+function mergeStrings(fetched) {
+  return Object.assign({}, I18N.en, sanitizeStrings(fetched));
+}
+
+// Fetching a language must never delay or break a render: it is budgeted
+// against the same deadline the calendars are, a failure falls back to
+// the last table this device saw (kept in trmnl_state) and then to
+// English, and nothing about it is surfaced to the reader — a board in
+// English is a board.
+async function loadStrings(locale, state, deadline) {
+  var lang = langOf(locale);
+  if (lang === 'en') return I18N.en;
+  var cached = (state && state.i18n && state.i18n.lang === lang && state.i18n.strings) ? state.i18n : null;
+  var nowS = Math.floor(Date.now() / 1000);
+  if (cached && (nowS - (cached.fetchedAt || 0)) < I18N_TTL_S) return mergeStrings(cached.strings);
+  var budget = Math.min(msUntil(deadline), I18N_FETCH_MS);
+  if (budget > 0) {
+    try {
+      var resp = await fetchWithTimeout(I18N_BASE + lang + '.json', budget);
+      if (resp && resp.ok) {
+        var body = await resp.json();
+        var clean = sanitizeStrings(body);
+        if (Object.keys(clean).length) {
+          if (state) state.i18n = { lang: lang, strings: clean, fetchedAt: nowS };
+          return mergeStrings(clean);
+        }
+      }
+    } catch (e) {
+      // offline, GitHub down, or a language nobody has translated yet
+    }
+  }
+  return cached ? mergeStrings(cached.strings) : I18N.en;
 }
 
 function tr(strings, key, n) {
   var v = strings[key] || I18N.en[key] || key;
   return n == null ? v : v.replace('{n}', String(n));
+}
+
+// ---------------------------------------------------------------------
+// Deadline and saved state.
+//
+// The serverless runtime kills a render that runs long, so every fetch in
+// this file is given what is LEFT of one shared deadline rather than a
+// timeout of its own: three feeds each allowed four seconds is twelve
+// seconds of rope on a budget that never had it. msUntil is that "what is
+// left", and it is allowed to go negative so a caller can see there is no
+// time and skip the call entirely.
+//
+// Saved state (https://help.trmnl.com/en/articles/16777795): whatever
+// run() returns as `trmnl_state` comes back as `input.trmnl.state` on the
+// next render. It is used here for the three things a single render
+// cannot know on its own — what the weather was last time the API
+// answered, how long a feed has been failing, and what a feed that is
+// failing right now is called — plus the fetched i18n table. It is
+// UNTRUSTED input: it may be absent, a string, a stale shape from an
+// older build, or truncated, so every field is validated on the way in
+// and a bad one is simply dropped.
+// ---------------------------------------------------------------------
+
+function msUntil(deadline) {
+  return deadline - Date.now();
+}
+
+// The whole render's network budget. Everything that fetches gets a slice
+// of what is left of it, never a fresh one of its own.
+var RENDER_BUDGET_MS = 4200;
+
+var WEATHER_STALE_AFTER_S = 6 * 3600;  // older than this and the board says so rather than presenting it as today's forecast
+var CALENDAR_DOWN_AFTER_S = 2 * 3600;  // a feed that has been failing this long is named on the board instead of quietly missing
+var STATE_MAX_URLS = 40;               // state travels with every render; a config that once had 200 feeds must not grow it forever
+
+function readState(input) {
+  var raw = null;
+  try { raw = input.trmnl.state; } catch (e) { raw = null; }
+  // Some runtimes hand the state back as the JSON string that was stored
+  // rather than as an object.
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch (e) { raw = null; }
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) raw = {};
+
+  var out = { weather: null, weatherFetchedAt: 0, calendarDown: {}, calendarNames: {}, i18n: null };
+
+  if (raw.weather && typeof raw.weather === 'object' && !Array.isArray(raw.weather)) {
+    out.weather = raw.weather;
+    out.weatherFetchedAt = typeof raw.weatherFetchedAt === 'number' && isFinite(raw.weatherFetchedAt) ? raw.weatherFetchedAt : 0;
+  }
+  if (raw.calendarDown && typeof raw.calendarDown === 'object') {
+    Object.keys(raw.calendarDown).slice(0, STATE_MAX_URLS).forEach(function (url) {
+      var t = raw.calendarDown[url];
+      if (typeof t === 'number' && isFinite(t) && t > 0) out.calendarDown[url] = t;
+    });
+  }
+  if (raw.calendarNames && typeof raw.calendarNames === 'object') {
+    Object.keys(raw.calendarNames).slice(0, STATE_MAX_URLS).forEach(function (url) {
+      var n = raw.calendarNames[url];
+      if (typeof n === 'string' && n.trim()) out.calendarNames[url] = n.trim().slice(0, 80);
+    });
+  }
+  if (raw.i18n && typeof raw.i18n === 'object' && typeof raw.i18n.lang === 'string') {
+    var clean = sanitizeStrings(raw.i18n.strings);
+    if (Object.keys(clean).length) {
+      out.i18n = { lang: raw.i18n.lang.slice(0, 8), strings: clean,
+        fetchedAt: typeof raw.i18n.fetchedAt === 'number' && isFinite(raw.i18n.fetchedAt) ? raw.i18n.fetchedAt : 0 };
+    }
+  }
+  return out;
+}
+
+// Feeds come and go from a config. Anything the config no longer names is
+// dropped, so a URL that was removed a year ago is not still being carried
+// (and counted as "down") on every render.
+function pruneState(state, urls) {
+  if (!state) return;
+  var keep = {};
+  (urls || []).forEach(function (u) { keep[u] = true; });
+  [state.calendarDown, state.calendarNames].forEach(function (map) {
+    Object.keys(map).forEach(function (u) { if (!keep[u]) delete map[u]; });
+  });
 }
 
 // Weekday and month names come from Intl, one part at a time and cached.
@@ -491,8 +625,17 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     now_min: nowMin != null ? nowMin : null, // minutes since local midnight; the client decides whether/where to draw it
     orientation: (extra && extra.orientation) || 'auto', // auto | horizontal | vertical — client picks for auto from the canvas aspect
     hour12: !!(extra && extra.hour12),
-    i18n: (function (st) { return { today: tr(st, 'today'), more: tr(st, 'more'), earlier: tr(st, 'earlier'), rain_pct: tr(st, 'rain_pct') }; })((extra && extra.strings) || I18N.en),
+    i18n: (function (st) { return { today: tr(st, 'today'), more: tr(st, 'more'), earlier: tr(st, 'earlier'), rain_pct: tr(st, 'rain_pct'), feed_down: tr(st, 'feed_down') }; })((extra && extra.strings) || I18N.en),
     header_weather: headerWeather,
+    // The forecast is the last one the API answered with rather than
+    // today's, and it is old enough to say so. A board that quietly shows
+    // yesterday's weather as today's is worse than one that admits it.
+    weather_stale: !!(extra && extra.weatherStale),
+    // Feeds that have been failing for hours, by name (see
+    // CALENDAR_DOWN_AFTER_S). A calendar that stops answering takes its
+    // events off the board with it, and a board that is missing half a
+    // family without saying so reads as a quiet day.
+    calendars_down: (extra && extra.calendarsDown) || [],
     legend: tracks,
     all_day: [], // all-day events now render as stations (see stationsOut) instead of a header strip; the key stays for shape compatibility
     stations: stationsOut,
@@ -549,19 +692,60 @@ var DEMO_ALLDAY = [
   { track: 'maggie', title: 'With Grampa' },
 ];
 
-var DEMO_WEATHER_MILESTONES = [
-  { atMin: 15 * 60, icon: 'https://trmnl.com/images/plugins/weather/wi-rain.svg', label: 'Rain Starts 15:00' },
-];
-
 var DEMO_NOW_MIN = 11 * 60;
 var DEMO_SUN = [{ kind: 'sunrise', atMin: 7 * 60 + 8 }, { kind: 'sunset', atMin: 19 * 60 + 58 }];
 
-function demoWeather(strings) {
-  return {
-    header: { hi: 21, lo: 13, condition: tr(strings, 'rain'), rain_chance: 60, icon: WEATHER_ICON_BASE + 'wi-day-rain.svg' },
-    milestones: [{ atMin: 15 * 60, icon: WEATHER_ICON_BASE + 'wi-rain.svg', label: tr(strings, 'rain_starts') + ' ' + timeLabel(15 * 60) }],
+// Demo weather, one snapshot per board. The demo has no location and must
+// not make a network call, so without this nothing on a demo board ever
+// draws a sky marker and nobody can see what the band looks like until
+// they have set a real lat/lon and waited for the right hour of the right
+// day. Every board carries a sunrise, a sunset, a rain start, a rain stop
+// and one heavier condition, so all five marker shapes are on the screen
+// at once; the three boards use a different heavy condition each
+// (storms/fog/snow) so every icon in MILESTONE_ICON is exercised by the
+// demo somewhere.
+//
+// These are SNAPSHOTS in the same shape fetchWeather returns, in Celsius,
+// so they go through the same materializeWeather (and the same unit
+// conversion) the real forecast does rather than a second rendering path
+// that could drift from it. Demo only: a real config with no lat_lon
+// still shows an empty header rather than an invented forecast.
+var DEMO_WEATHER = {
+  simpsons: {
+    hi: 21, lo: 13, condition: 'rain', icon: 'wi-day-rain.svg', rain_chance: 60, unit: 'C',
+    milestones: [
+      { atMin: 13 * 60, kind: 'rain_starts' },
+      { atMin: 16 * 60, kind: 'rain_stops' },
+      { atMin: 20 * 60, kind: 'storms' },
+    ],
     sun: DEMO_SUN,
-  };
+  },
+  futurama: {
+    hi: 24, lo: 15, condition: 'foggy', icon: 'wi-day-fog.svg', rain_chance: 35, unit: 'C',
+    milestones: [
+      { atMin: 8 * 60, kind: 'foggy' },
+      { atMin: 12 * 60, kind: 'rain_starts' },
+      { atMin: 14 * 60 + 30, kind: 'rain_stops' },
+    ],
+    sun: DEMO_SUN,
+  },
+  friends: {
+    hi: 1, lo: -4, condition: 'snow', icon: 'wi-day-snow.svg', rain_chance: 80, unit: 'C',
+    milestones: [
+      { atMin: 9 * 60, kind: 'snow' },
+      { atMin: 15 * 60, kind: 'rain_starts' },
+      { atMin: 17 * 60, kind: 'rain_stops' },
+    ],
+    sun: DEMO_SUN,
+  },
+};
+
+function demoWeatherSnapshot(name) {
+  return DEMO_WEATHER[String(name || '').trim().toLowerCase()] || DEMO_WEATHER.simpsons;
+}
+
+function demoWeather(strings, unit) {
+  return materializeWeather(demoWeatherSnapshot(null), strings, unit);
 }
 
 // The demo can also be driven the way a real setup is: this exact config,
@@ -695,7 +879,7 @@ function demoConfigFor(name) {
 
 function buildFromDemo(weather, nowMin, extra) {
   var strings = (extra && extra.strings) || I18N.en;
-  var demo = demoWeather(strings);
+  var demo = demoWeather(strings, (extra && extra.tempUnit) || 'C');
   var w = weather || demo;
   return buildMetro(
     DEMO_TRACKS, DEMO_EVENTS,
@@ -749,18 +933,89 @@ function isoToMinutes(iso) {
 
 var RAIN_THRESHOLD = 50; // %, precipitation_probability crossing this is what draws a "Rain Starts/Stops" milestone
 
-async function fetchWeather(latLonRaw, tz, deadline, strings) {
+// A weather SNAPSHOT is language-free and unit-tagged: the condition and
+// every milestone are i18n KEYS, the icon is a filename, and the
+// temperatures carry the unit they were fetched in. It has to be, because
+// this is what goes into trmnl_state and is replayed on a later render —
+// which may be in a different language, or after the temperature unit
+// setting changed, and a cached "Rain starts 15:00" in French on a board
+// that is now English is worse than no weather at all.
+var MILESTONE_ICON = {
+  rain_starts: 'wi-rain.svg',
+  rain_stops: 'wi-day-sunny.svg',
+  snow: 'wi-day-snow.svg',
+  storms: 'wi-day-thunderstorm.svg',
+  foggy: 'wi-day-fog.svg',
+};
+
+function convertTemp(v, from, to) {
+  if (v == null || typeof v !== 'number' || !isFinite(v)) return null;
+  if (!from || !to || from === to) return v;
+  return Math.round(from === 'C' ? v * 9 / 5 + 32 : (v - 32) * 5 / 9);
+}
+
+// snapshot -> the { header, milestones, sun } shape buildMetro takes.
+function materializeWeather(snap, strings, unit) {
+  if (!snap || typeof snap !== 'object') return null;
+  strings = strings || I18N.en;
+  unit = unit || 'C';
+  var icon = typeof snap.icon === 'string' && snap.icon ? snap.icon : 'wi-day-sunny.svg';
+  return {
+    header: {
+      hi: convertTemp(snap.hi, snap.unit, unit),
+      lo: convertTemp(snap.lo, snap.unit, unit),
+      condition: tr(strings, snap.condition || 'clear'),
+      rain_chance: typeof snap.rain_chance === 'number' && isFinite(snap.rain_chance) ? snap.rain_chance : null,
+      icon: icon.indexOf('http') === 0 ? icon : WEATHER_ICON_BASE + icon,
+      // The board draws a bare degree sign, but which unit produced the
+      // number is a fact about the payload, so it travels with it.
+      unit: unit,
+    },
+    milestones: (Array.isArray(snap.milestones) ? snap.milestones : [])
+      .filter(function (m) { return m && typeof m.atMin === 'number' && isFinite(m.atMin) && MILESTONE_ICON[m.kind]; })
+      .map(function (m) {
+        return { atMin: m.atMin, icon: WEATHER_ICON_BASE + MILESTONE_ICON[m.kind], label: tr(strings, m.kind) + ' ' + timeLabel(m.atMin) };
+      }),
+    sun: (Array.isArray(snap.sun) ? snap.sun : [])
+      .filter(function (m) { return m && typeof m.atMin === 'number' && isFinite(m.atMin) && (m.kind === 'sunrise' || m.kind === 'sunset'); }),
+  };
+}
+
+// Which unit the temperatures are in. The config wins over the account
+// setting, exactly as timeFormat and locale do: the board is configured
+// by whoever wrote the config, not by whose account it hangs on. Auto
+// reads the LOCALE's region rather than a country list, so en-US is
+// Fahrenheit and everywhere else, including the rest of the
+// English-speaking world, is Celsius.
+function resolveTempUnit(configUnit, settingRaw, locale) {
+  var v = String(configUnit || settingRaw || 'auto').trim().toLowerCase();
+  if (v === 'c' || v === 'celsius') return 'C';
+  if (v === 'f' || v === 'fahrenheit') return 'F';
+  return localeRegion(locale) === 'US' ? 'F' : 'C';
+}
+
+function localeRegion(locale) {
+  var parts = String(locale || '').replace('_', '-').split('-');
+  for (var i = 1; i < parts.length; i++) {
+    if (/^[A-Za-z]{2}$/.test(parts[i])) return parts[i].toUpperCase();
+  }
+  return null;
+}
+
+// Returns a SNAPSHOT (see above), not rendered strings, so the caller can
+// put it straight into trmnl_state.
+async function fetchWeather(latLonRaw, tz, deadline, unit) {
   var latlon = parseLatLon(latLonRaw);
   if (!latlon) return null;
-  strings = strings || I18N.en;
   try {
     var params = new URLSearchParams({
       latitude: String(latlon[0]), longitude: String(latlon[1]),
       daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode,sunrise,sunset',
       hourly: 'precipitation_probability',
+      temperature_unit: unit === 'F' ? 'fahrenheit' : 'celsius',
       timezone: tz, forecast_days: '1',
     });
-    var budget = deadline - Date.now();
+    var budget = msUntil(deadline);
     if (budget <= 0) return null;
     var resp = await fetchWithTimeout('https://api.open-meteo.com/v1/forecast?' + params.toString(), Math.min(budget, 3000));
     if (!resp.ok) return null;
@@ -768,13 +1023,6 @@ async function fetchWeather(latLonRaw, tz, deadline, strings) {
     var daily = body.daily || {};
     var info = weatherCodeInfo((daily.weathercode || [])[0]);
 
-    var header = {
-      hi: Math.round((daily.temperature_2m_max || [])[0]),
-      lo: Math.round((daily.temperature_2m_min || [])[0]),
-      condition: tr(strings, info.key),
-      rain_chance: Math.round((daily.precipitation_probability_max || [])[0]),
-      icon: WEATHER_ICON_BASE + info.icon,
-    };
     var sun = [];
     var sr = isoToMinutes((daily.sunrise || [])[0]), ss = isoToMinutes((daily.sunset || [])[0]);
     if (sr != null) sun.push({ kind: 'sunrise', atMin: sr });
@@ -796,18 +1044,51 @@ async function fetchWeather(latLonRaw, tz, deadline, strings) {
       var atMin = hour * 60;
       if (atMin < DAY_START_MIN || atMin > DAY_END_MIN) continue;
       var above = (probs[i] || 0) >= RAIN_THRESHOLD;
-      if (above && !wasAbove) {
-        milestones.push({ atMin: atMin, icon: WEATHER_ICON_BASE + 'wi-rain.svg', label: tr(strings, 'rain_starts') + ' ' + pad2(hour) + ':00' });
-      } else if (!above && wasAbove) {
-        milestones.push({ atMin: atMin, icon: WEATHER_ICON_BASE + 'wi-day-sunny.svg', label: tr(strings, 'rain_stops') + ' ' + pad2(hour) + ':00' });
-      }
+      if (above && !wasAbove) milestones.push({ atMin: atMin, kind: 'rain_starts' });
+      else if (!above && wasAbove) milestones.push({ atMin: atMin, kind: 'rain_stops' });
       wasAbove = above;
     }
 
-    return { header: header, milestones: milestones, sun: sun };
+    var rain = Math.round((daily.precipitation_probability_max || [])[0]);
+    var hi = Math.round((daily.temperature_2m_max || [])[0]);
+    var lo = Math.round((daily.temperature_2m_min || [])[0]);
+    return {
+      hi: isFinite(hi) ? hi : null,
+      lo: isFinite(lo) ? lo : null,
+      condition: info.key,
+      icon: info.icon,
+      // an absent probability stays absent: rendered as "0% rain" it reads
+      // as a forecast of a dry day rather than as a missing number
+      rain_chance: isFinite(rain) ? rain : null,
+      unit: unit === 'F' ? 'F' : 'C',
+      milestones: milestones,
+      sun: sun,
+    };
   } catch (e) {
     return null;
   }
+}
+
+// One place decides what weather the board shows: today's forecast if the
+// API answers, otherwise the last snapshot that DID answer, out of saved
+// state, flagged stale once it is old enough to be a different day's
+// weather. Before this a single failed call blanked the header and every
+// sky marker until the next refresh, which is the one thing an outage
+// should not do to a board that had the answer fifteen minutes ago.
+async function resolveWeather(latLonRaw, tz, deadline, state, unit, strings) {
+  if (!latLonRaw) return { weather: null, stale: false };
+  var snap = await fetchWeather(latLonRaw, typeof tz === 'string' ? tz : 'GMT', deadline, unit);
+  var nowS = Math.floor(Date.now() / 1000);
+  if (snap) {
+    if (state) { state.weather = snap; state.weatherFetchedAt = nowS; }
+    return { weather: materializeWeather(snap, strings, unit), stale: false };
+  }
+  var saved = state && state.weather;
+  if (!saved) return { weather: null, stale: false };
+  return {
+    weather: materializeWeather(saved, strings, unit),
+    stale: (nowS - ((state && state.weatherFetchedAt) || 0)) > WEATHER_STALE_AFTER_S,
+  };
 }
 
 async function fetchWithTimeout(url, ms, extraHeaders) {
@@ -1192,6 +1473,19 @@ function parseConfig(raw) {
     v = v.toLowerCase();
     return v === '12h' || v === '24h' || v === 'auto' ? v : null;
   })();
+  // Same reasoning as timeFormat, and the same shape: a value the config
+  // sets beats the account setting, anything unrecognised is ignored
+  // rather than guessed at. Deliberately not surfaced in the editor or the
+  // AI prompt — it is for a board whose reader does not use the unit their
+  // account language implies.
+  var temperatureUnit = (function () {
+    var v = str(data.temperatureUnit);
+    if (!v) return null;
+    v = v.toLowerCase();
+    if (v === 'c' || v === 'celsius') return 'c';
+    if (v === 'f' || v === 'fahrenheit') return 'f';
+    return v === 'auto' ? 'auto' : null;
+  })();
 
   var tracks = {};
   var everyoneTrack = null;
@@ -1238,7 +1532,7 @@ function parseConfig(raw) {
       includeDescription: includeDescription, keepEmpty: item.hideIfEmpty === false });
   });
 
-  return { calendars: calendars, tracks: tracks, timeZone: timeZone, locale: locale, timeFormat: timeFormat, globalRules: globalRules, everyoneTrack: everyoneTrack };
+  return { calendars: calendars, tracks: tracks, timeZone: timeZone, locale: locale, timeFormat: timeFormat, temperatureUnit: temperatureUnit, globalRules: globalRules, everyoneTrack: everyoneTrack };
 }
 
 // A replace that never double-matches an empty-string-capable pattern
@@ -1428,7 +1722,18 @@ function makeTrackRegistry(parsed) {
                && rightNames.every(function (n) { return explicitSide(n) !== 'left'; });
       var lw = leftNames.reduce(function (a, n) { return a + counts[n]; }, 0);
       var edge = (k < 0 || k >= chain.length - 1);
-      var cost = Math.abs(lw - (total - lw))
+      // What an unbalanced cut actually costs is DEPTH: the deeper side
+      // decides how squashed the whole map is, and a line costs a band
+      // whether or not it carries any events. Scoring the balance on event
+      // counts alone missed that, so a crew who share everything (every
+      // interior cut charged for breaking a strong link, every edge cut
+      // free) piled all seven lines onto one side and drew them at the
+      // minimum pitch in half the canvas. LINE_DEPTH is what one more line
+      // on a side is worth in label lanes; affinity stays a tie-breaker
+      // between cuts of comparable depth.
+      var LINE_DEPTH = 3;
+      var cost = Math.max(leftNames.length * LINE_DEPTH + lw,
+                          rightNames.length * LINE_DEPTH + (total - lw))
                + (edge ? 0 : affinityOf(chain[k], chain[k + 1]) * 3);
       if (!bestCut || (pinOk && !bestCut.pinOk) || (pinOk === bestCut.pinOk && cost < bestCut.cost)) {
         bestCut = { k: k, cost: cost, pinOk: pinOk };
@@ -1509,7 +1814,7 @@ function urlLabel(url) {
   }).join(' ');
 }
 
-async function buildFromConfig(input, parsed, weather, extra) {
+async function buildFromConfig(input, parsed, weather, extra, state) {
   var tz = resolveTz(parsed.timeZone, input); // config.timeZone > account time_zone_iana > account utc_offset > UTC
   var nowTs = (input.trmnl && input.trmnl.system && input.trmnl.system.timestamp_utc) || Math.floor(Date.now() / 1000);
   var today = fromEpoch(nowTs * 1000, tz);
@@ -1525,8 +1830,13 @@ async function buildFromConfig(input, parsed, weather, extra) {
     if (t.keepEmpty) registry.keep(t.name); else registry.add(t.name, 0);
   });
 
-  var DEADLINE_MS = 4200;
-  var deadline = Date.now() + DEADLINE_MS;
+  // ONE deadline for the whole render, handed down from run() rather than
+  // started here. Started here it began AFTER the weather call had already
+  // spent up to three seconds, so a slow forecast plus slow feeds added up
+  // to more than seven seconds against a budget that never had it. The
+  // fallback is for a direct caller (the config editor's preview) that has
+  // no deadline of its own.
+  var deadline = (extra && extra.deadline) || (Date.now() + RENDER_BUDGET_MS);
   var events = [];
   var allDayEvents = [];
   var stationEvents = [];
@@ -1537,16 +1847,47 @@ async function buildFromConfig(input, parsed, weather, extra) {
   // the feed and there is nothing to name it until the feed answers.
   (parsed.calendars || []).forEach(function (cal) { if (cal.keepEmpty && cal.name) registry.keep(cal.name); });
 
+  // A feed that fails must not vanish silently. Every failure is recorded
+  // in saved state with the time it FIRST happened, so a blip (one 500, a
+  // slow morning) changes nothing, and a feed still failing hours later is
+  // named on the board. The fetches stay parallel and each keeps its own
+  // catch: a 404 on one feed still renders every other line.
+  var downNames = [];
+  var nowS = Math.floor(Date.now() / 1000);
+
   await Promise.all((parsed.calendars || []).map(async function (cal) {
     var url = cal.url;
     if (url.indexOf('webcal://') === 0) url = 'https://' + url.slice('webcal://'.length);
+    // What this feed is called when it cannot tell us: the config's own
+    // name, else the name it gave the last time it answered. Without the
+    // remembered one an unnamed feed that goes down loses its identity and
+    // comes back as a URL fragment, which is the "Calendar 2" problem.
+    var knownName = cal.name || (state && state.calendarNames[cal.url]) || null;
+    function failed() {
+      if (!state) return;
+      if (!state.calendarDown[cal.url]) state.calendarDown[cal.url] = nowS;
+      if (nowS - state.calendarDown[cal.url] >= CALENDAR_DOWN_AFTER_S) {
+        var label = knownName || urlLabel(cal.url);
+        if (downNames.indexOf(label) < 0) downNames.push(label);
+      }
+      // A kept line keeps its remembered name too, so the rail that is
+      // missing its events is still labelled with whose it is.
+      if (cal.keepEmpty && knownName) registry.keep(knownName);
+    }
     try {
-      var budget = deadline - Date.now();
-      if (budget <= 0) return;
+      // No time left is the same outcome as a dead feed from the board's
+      // side — the events are missing — so it starts the same clock, and
+      // clears again on the next render that does reach it.
+      var budget = msUntil(deadline);
+      if (budget <= 0) { failed(); return; }
       var resp = await fetchWithTimeout(url, Math.min(budget, 4000), cal.headers);
-      if (!resp.ok) return;
+      if (!resp.ok) { failed(); return; }
       var text = await resp.text();
       var parsedIcs = parseIcs(text, tz, today, cal.includeDescription);
+      if (state) {
+        delete state.calendarDown[cal.url];
+        if (parsedIcs.calName) state.calendarNames[cal.url] = parsedIcs.calName;
+      }
       // Last resort for whose line this is: the feed's own X-WR-CALNAME,
       // then the last thing in the URL. Only reached when the config named
       // neither the calendar nor a single track — which is the simplest
@@ -1614,9 +1955,13 @@ async function buildFromConfig(input, parsed, weather, extra) {
         allDayEvents.push({ track: registry.add(trackNames[0], 0.25).key, title: resolved.title });
       });
     } catch (e) {
-      // one calendar failing shouldn't blank the whole render — skip it
+      // one calendar failing shouldn't blank the whole render — skip it,
+      // but remember that it failed
+      failed();
     }
   }));
+
+  pruneState(state, (parsed.calendars || []).map(function (c) { return c.url; }));
 
   // ---- one event, drawn once -------------------------------------------
   //
@@ -1668,7 +2013,7 @@ async function buildFromConfig(input, parsed, weather, extra) {
     nowMin,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     allDayEvents,
-    Object.assign({}, extra, { dateLabel: dateLabel(today, extra.locale), sun: (weather && weather.sun) || [] }),
+    Object.assign({}, extra, { dateLabel: dateLabel(today, extra.locale), sun: (weather && weather.sun) || [], calendarsDown: downNames }),
     stationEvents
   );
 }
@@ -1689,7 +2034,8 @@ async function run(input) {
   var urlsRaw = cf(input, 'calendar_urls').trim();
   if (!configRaw && urlsRaw) configRaw = urlsRaw;
   // Which demo board to show. Unknown or unset falls back to Springfield.
-  var demoCfg = demoConfigFor(cf(input, 'demo_set'));
+  var demoSet = cf(input, 'demo_set');
+  var demoCfg = demoConfigFor(demoSet);
   var latLonRaw = cf(input, 'lat_lon').trim();
   // The timeline runs along whichever side of the canvas is longer. That is
   // the only answer that is ever right — a vertical timeline on a landscape
@@ -1697,19 +2043,38 @@ async function run(input) {
   // wrong. The field still travels in the payload, always 'auto', because
   // the template reads it and a device on an older build still sends one.
   var orientation = 'auto';
-  // Parse once, up front: locale, zone and clock all come from the config
-  // when it sets them, and the demo is driven by a config too, so both paths
-  // read the same three settings from the same place. (Demo mode may still
-  // fall back to the built-in day further down; that fallback keeps whatever
-  // locale and clock were resolved here.)
+  // Parse once, up front: locale, zone, clock and temperature unit all come
+  // from the config when it sets them, and the demo is driven by a config
+  // too, so both paths read the same settings from the same place. (Demo
+  // mode may still fall back to the built-in day further down; that fallback
+  // keeps whatever locale and clock were resolved here.)
   var effectiveCfg = (useDemo || !configRaw) ? parseConfig(JSON.stringify(demoCfg)) : parseConfig(configRaw);
   var locale = effectiveCfg.locale || userLocale(input);
-  var strings = stringsFor(locale);
+
+  // Read before anything else needs it, and written back on every exit
+  // below: what the weather was last time the API answered, which feeds
+  // have been failing and since when, what those feeds are called, and the
+  // last translated string table this device managed to download.
+  var state = readState(input);
+  // One deadline for the render, shared by the language file, the weather
+  // and every calendar.
+  var deadline = Date.now() + RENDER_BUDGET_MS;
+
+  var strings = await loadStrings(locale, state, deadline);
   var hour12 = resolveHour12(
     (effectiveCfg.timeFormat || cf(input, 'time_format').trim()).toLowerCase(), locale);
-  var extra = { orientation: orientation, locale: locale, strings: strings, hour12: hour12 };
+  var tempUnit = resolveTempUnit(effectiveCfg.temperatureUnit, cf(input, 'temperature_unit').trim(), locale);
+  var extra = { orientation: orientation, locale: locale, strings: strings, hour12: hour12,
+    tempUnit: tempUnit, deadline: deadline };
 
-  var deadline = Date.now() + 4200;
+  // Every exit returns through here. The runtime stores what comes back as
+  // `trmnl_state` and hands it to the next render as `input.trmnl.state`, so
+  // a render that fell back to the demo must still return it — dropping it
+  // on the failing paths would throw away the remembered weather and the
+  // "down since" clocks exactly when they matter.
+  function done(metro) {
+    return { metro: metro, trmnl_state: state };
+  }
 
   if (useDemo || !configRaw) {
     // Demo mode has no config.timeZone of its own — resolve straight to
@@ -1725,15 +2090,25 @@ async function run(input) {
       demoNowMin = demoToday.h * 60 + demoToday.mi;
       demoDate = dateLabel(demoToday, locale);
     } catch (e) { /* keep the illustrative fixed DEMO_NOW_MIN on failure */ }
-    var liveWeather = latLonRaw ? await fetchWeather(latLonRaw, typeof demoTz === 'string' ? demoTz : 'GMT', deadline, strings) : null;
-    var demoExtra = Object.assign({ dateLabel: demoDate }, extra);
+    var demoWx = await resolveWeather(latLonRaw, demoTz, deadline, state, tempUnit, strings);
+    // A demo board has no location, so it would draw no sunrise, no rain
+    // and no header weather at all — the sky band, which is half the
+    // point of the map, was invisible to anyone who had not already
+    // configured a real one. The built-in board gets built-in weather;
+    // it needs no network and it applies to the demo ONLY.
+    if (!demoWx.weather) demoWx = { weather: materializeWeather(demoWeatherSnapshot(demoSet), strings, tempUnit), stale: false };
+    var demoExtra = Object.assign({ dateLabel: demoDate }, extra, { weatherStale: demoWx.stale });
     // Prefer driving the demo through the real pipeline against this repo's
     // own ICS files, so what it shows is what a working config produces.
     // Any failure — offline device, GitHub unreachable, a bad fetch — falls
     // straight back to the built-in Springfield data rather than an empty
     // board, so the demo is never blank.
     try {
-      var demoMetro = await buildFromConfig(input, effectiveCfg, liveWeather, demoExtra);
+      // No state on the demo path: these are this repo's own demo files,
+      // not the user's calendars, and a CDN hiccup on one of them must not
+      // put "demo/simpsons/bart.ics" on the board as a feed that is down,
+      // nor leave its URL in saved state after the device is configured.
+      var demoMetro = await buildFromConfig(input, effectiveCfg, demoWx.weather, demoExtra, null);
       // Every demo member has something on every day, so all of them must
       // come back. Anything less means some calendars failed while others
       // answered — a stale CDN copy, a 404 on a newly added file — and a
@@ -1752,22 +2127,23 @@ async function run(input) {
       var got = (demoMetro && demoMetro.legend ? demoMetro.legend : []).map(function (t) { return t.name; });
       var complete = want.length === got.length
         && want.every(function (n) { return got.indexOf(n) >= 0; });
-      if (complete) return { metro: demoMetro };
+      if (complete) return done(demoMetro);
     } catch (e) { /* fall through to the offline demo below */ }
-    return { metro: buildFromDemo(liveWeather, demoNowMin, demoExtra) };
+    return done(buildFromDemo(demoWx.weather, demoNowMin, demoExtra));
   }
 
   var parsed = effectiveCfg; // never throws — falls back to a bare URL list on invalid JSON
   if (!parsed.calendars.length) {
-    return { metro: buildFromDemo(null, null, extra) }; // nothing usable in the config — degrade to demo rather than error the render
+    return done(buildFromDemo(null, null, extra)); // nothing usable in the config — degrade to demo rather than error the render
   }
 
   try {
     var configTz = resolveTz(parsed.timeZone, input);
-    var weather = latLonRaw ? await fetchWeather(latLonRaw, typeof configTz === 'string' ? configTz : 'GMT', deadline, strings) : null;
-    return { metro: await buildFromConfig(input, parsed, weather, extra) };
+    var wx = await resolveWeather(latLonRaw, configTz, deadline, state, tempUnit, strings);
+    var cfgExtra = Object.assign({}, extra, { weatherStale: wx.stale });
+    return done(await buildFromConfig(input, parsed, wx.weather, cfgExtra, state));
   } catch (e) {
-    return { metro: buildFromDemo(null, null, extra) };
+    return done(buildFromDemo(null, null, extra));
   }
 }
 

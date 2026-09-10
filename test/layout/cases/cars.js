@@ -50,14 +50,32 @@ module.exports = function (test, h) {
     // token it was assigned: a colour can be a CSS variable now (black and
     // white resolve through the theme), so the token is not a colour and
     // only the rendered value can be checked against the rendered value.
+    // The car is paper-filled with a heavy outline, like every other mark
+    // on this map, so it is the OUTLINE that has to match: a solid block
+    // read as a hole in the line rather than as something standing on it.
     const rep = layout(busy, ROOMY);
     const strokeOf = {};
     for (const t of pathsWhere(rep, 'track')) strokeOf[t.owner] = t.stroke;
     for (const car of cars(rep)) {
-      assert(car.fill, 'car for ' + car.owner + ' has no fill');
+      assert(car.stroke, 'car for ' + car.owner + ' has no outline');
       assert(strokeOf[car.owner], 'car for a line with no track drawn: ' + car.owner);
-      assert(car.fill === strokeOf[car.owner],
-        'car for ' + car.owner + ' is ' + car.fill + ', its line is ' + strokeOf[car.owner]);
+      assert(car.stroke === strokeOf[car.owner],
+        'car for ' + car.owner + ' is outlined ' + car.stroke + ', its line is ' + strokeOf[car.owner]);
+      assert(car.fill && car.fill !== car.stroke,
+        'car for ' + car.owner + ' is filled with its own outline colour, so it is a solid block again');
+    }
+  });
+
+  // Five trains stacked in a column all mark the same minute, so position
+  // cannot tell them apart. The letter can.
+  test('a car carries its own line\'s initial', () => {
+    const rep = layout(busy, ROOMY);
+    const nameOf = {};
+    for (const t of busy.metro.legend) nameOf[t.key] = t.name;
+    for (const car of cars(rep)) {
+      const want = (nameOf[car.owner] || '?')[0].toUpperCase();
+      assert(car.text === want, 'the car on ' + nameOf[car.owner] + ' says "' + car.text
+        + '", not "' + want + '"');
     }
   });
 

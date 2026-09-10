@@ -1,0 +1,18 @@
+{
+  "today": "Vandaag",
+  "more": "+{n} meer",
+  "earlier": "+{n} eerder",
+  "rain_pct": "{n}% regen",
+  "clear": "Helder",
+  "partly_cloudy": "Half bewolkt",
+  "cloudy": "Bewolkt",
+  "foggy": "Mistig",
+  "rain": "Regen",
+  "snow": "Sneeuw",
+  "storms": "Onweer",
+  "rain_starts": "Regen begint",
+  "rain_stops": "Regen stopt",
+  "sunrise": "Zonsopgang",
+  "sunset": "Zonsondergang",
+  "feed_down": "{n} niet beschikbaar"
+}

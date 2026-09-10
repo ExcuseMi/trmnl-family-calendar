@@ -16,8 +16,9 @@ No server of your own.
 
 - Today, 07:00–21:00 (narrowed around now on small views), with "+N earlier"
   and "+N more" counts at the ends of the line.
-- Work on one side of the spine, family on the other. Each track's line has
-  its own dash pattern (and shade on grayscale panels), is named where it
+- Each track gets a side of the spine, a dash pattern and (on grayscale and
+  colour panels) a shade, all picked for you: sides are balanced against the
+  day's actual event counts, busiest track first. A line is named where it
   enters the map, and appears in the legend.
 - Events as rings at their true start time; shared events as capsules across
   the lines involved. Title, time and location on the branch.
@@ -60,9 +61,9 @@ No server of your own.
 ```json
 {
   "tracks": [
-    { "name": "Sam", "side": "work" },
+    { "name": "Sam" },
     { "name": "Alex" },
-    { "name": "Kids", "color": "gray-40" }
+    { "name": "Kids" }
   ],
   "calendars": [
     { "name": "Work", "url": "https://…/work.ics", "rules": [{ "match": { "type": "any" }, "track": "Sam" }] },
@@ -72,6 +73,17 @@ No server of your own.
   ]
 }
 ```
+
+A track is just a name: which side of the map it runs on, what colour it is
+and which dash pattern it gets are all worked out from the day itself, so
+there is nothing to choose. (`side` and `color` on a track are still read,
+so an older configuration that sets them keeps working.)
+
+A calendar's `name` is worth a second's thought: any event in it that no rule
+routes falls back to that name, and the fallback name is drawn as a *line*.
+Name a calendar after the person whose line it is, or leave it unnamed when
+its rules route everything, or you get an extra line named after the
+calendar.
 
 Rules match on the title (`word`, `contains`, `exact`, `regex`, `status`,
 `weekday`, `any`, or `and`/`or` of those) and can assign one or more tracks,

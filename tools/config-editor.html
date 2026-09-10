@@ -58,6 +58,9 @@
   .status { font-size: 12.5px; }
   .status.ok { color: #1a7a1a; }
   .status.err { color: #b3261e; }
+  /* the calendar-name-becomes-a-line warning: nothing at all when there is nothing wrong */
+  .cal-name-warn:not(:empty) { margin: -2px 0 10px; padding-left: 22px; position: relative; }
+  .cal-name-warn:not(:empty)::before { content: "!"; position: absolute; left: 0; top: 0; width: 15px; height: 15px; border-radius: 50%; background: #b3261e; color: #fff; font-weight: 800; font-size: 11px; line-height: 15px; text-align: center; }
 
   /* ---- buttons: solid = go, outlined = secondary, ghost = remove */
   button { cursor: pointer; border: 2px solid var(--ink); background: var(--paper); border-radius: 999px; padding: 7px 14px; font-weight: 600; }
@@ -103,10 +106,10 @@
     <div class="sub">Configuration: build the JSON for the plugin's <strong>Calendars</strong> field and see the map before you paste it.</div>
   </div>
   <nav>
+    <a href="#station-agent">AI</a>
     <a href="#station-tracks">Tracks</a>
     <a href="#station-calendars">Calendars</a>
     <a href="#station-preview">Preview</a>
-    <a href="#station-agent">AI</a>
     <a href="#station-output">JSON</a>
     <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin">GitHub</a>
   </nav>
@@ -127,9 +130,23 @@
     </div>
   </section>
 
+  <section class="station" id="station-agent">
+    <h2>Let an AI do it <small>optional, and it reads your calendars</small></h2>
+    <p class="lede">Generates a prompt describing this plugin, its configuration format and what makes a board read well, together with your ICS links and whatever the tool has already read from them. Paste it into an AI assistant and it returns a configuration you can paste back into <em>Start</em> above. Start here if you have no configuration yet: there is no point filling in every track and rule by hand and only then being offered a machine to write them.</p>
+    <div class="card plain">
+      <div class="toolbar">
+        <button id="makePrompt" class="primary">Generate prompt</button>
+        <button id="copyPrompt">Copy prompt</button>
+        <span id="promptStatus" class="status"></span>
+      </div>
+      <textarea id="promptOut" rows="14" readonly placeholder="Paste your ICS links into Start above (or add calendars below), then generate."></textarea>
+      <p class="hint">Draw the map first if you can (<em>Preview</em>, further down): the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. Otherwise it is told to fetch the links itself, which not every assistant can do.</p>
+    </div>
+  </section>
+
   <section class="station" id="station-tracks">
     <h2>Tracks <small>one line on the map per track</small></h2>
-    <p class="lede">Every track is a line. Which side of the map each one runs on is balanced automatically once you draw the map, busiest track first and evenly split, unless you pin one below. The first track is also who gets any event no rule claims.</p>
+    <p class="lede">Every track is a line. Which side of the map it runs on, and what colour and dash pattern it gets, are all chosen for you: sides are balanced once the map is drawn, busiest track first and evenly split. The first track is also who gets any event no rule claims.</p>
     <div id="tracks"></div>
     <div class="toolbar"><button id="addTrack">+ Add a track</button></div>
   </section>
@@ -181,20 +198,6 @@
     </div>
   </section>
 
-  <section class="station" id="station-agent">
-    <h2>Let an AI do it <small>optional, and it reads your calendars</small></h2>
-    <p class="lede">Generates a prompt describing this plugin, its configuration format and what makes a board read well, together with your ICS links and whatever the tool has already read from them. Paste it into an AI assistant and it returns a configuration you can paste back into <em>Start</em> above.</p>
-    <div class="card plain">
-      <div class="toolbar">
-        <button id="makePrompt" class="primary">Generate prompt</button>
-        <button id="copyPrompt">Copy prompt</button>
-        <span id="promptStatus" class="status"></span>
-      </div>
-      <textarea id="promptOut" rows="14" readonly placeholder="Add your calendars above, then generate."></textarea>
-      <p class="hint">Draw the map first if you can: the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. Otherwise it is told to fetch the links itself, which not every assistant can do.</p>
-    </div>
-  </section>
-
   <section class="station terminus" id="station-output">
     <h2>Your configuration <small>paste this into TRMNL</small></h2>
     <div class="card plain">
@@ -218,18 +221,15 @@
       <div class="adv-body">
         <p class="hint">The same shape this page produces. <code>tracks</code> and <code>rules</code> are both optional: a bare list of <code>calendars</code> already draws one line per calendar.</p>
 <pre class="hint" style="overflow-x:auto"><code id="schemaRef">{
-  "timeZone": "Europe/Brussels",     // optional; the account's zone otherwise
-  "locale": "en-GB", "timeFormat": "12h" | "24h" | "auto",
+  "timeFormat": "12h" | "24h" | "auto",
   "tracks": [
     { "name": "Sam",
-      "color": "blue",               // hue name, "black", or "gray-10".."gray-75"
-      "side": "left" | "right",      // pin the side; balanced by event count otherwise
       "hideIfEmpty": false }         // keep the line on a day it has nothing
   ],
   "rules": [ ... ],                  // applied to every calendar
   "calendars": [
     { "url": "https://.../calendar.ics",   // or webcal://
-      "name": "Work",
+      "name": "Work",                // BECOMES A LINE if any event here goes unrouted
       "headers": { "Authorization": "..." },
       "includeDescription": false,   // let rules match DESCRIPTION too
       "hideIfEmpty": false,          // keep this calendar's line when empty or unreachable
@@ -247,8 +247,9 @@
         <ul class="hint">
           <li><strong>Match types:</strong> <code>any</code>, <code>all</code>, <code>exact</code>, <code>word</code>, <code>contains</code>, <code>regex</code>, <code>status</code>, <code>weekday</code>, and <code>and</code>/<code>or</code>/<code>not</code> (with <code>matchers</code>).</li>
           <li><strong>Order:</strong> rules are checked in order and the last match wins for each effect. A calendar's own rules beat the top-level ones.</li>
-          <li><strong>Who claims an unrouted event:</strong> the calendar's own name, then the first entry in <code>tracks</code>, then the feed's <code>X-WR-CALNAME</code>.</li>
-          <li><strong>Sides</strong> are balanced by event count once every calendar has loaded, busiest first, unless a track pins one.</li>
+          <li><strong>Who claims an unrouted event:</strong> the calendar's own name, then the first entry in <code>tracks</code>, then the feed's <code>X-WR-CALNAME</code>. Whichever wins becomes a <em>line</em>: name a calendar after the track whose line it is, or leave it unnamed when its rules route everything, or you get an extra line named after the calendar.</li>
+          <li><strong>Sides, colours and dash patterns</strong> are chosen for you: sides are balanced by event count once every calendar has loaded, busiest first, and each side's lines then take solid, dashed, dotted, dash-dot in order. <code>side</code> and <code>color</code> on a track are still read, so a configuration that already sets them keeps working, but there is no longer any reason to write one.</li>
+          <li><strong>Account settings, not config:</strong> <code>timeZone</code> and <code>locale</code> are also accepted at the top level and override your TRMNL account's zone and language. Set them only if the account's own values are wrong; the AI prompt above deliberately leaves them out, because an assistant guessing a zone puts the whole day on the board at the wrong hour.</li>
           <li><strong>Recurring events</strong> show if they use <code>RRULE:FREQ=WEEKLY</code> (optionally with BYDAY/UNTIL) or start today.</li>
           <li><strong>Legacy:</strong> <code>people</code>/<code>person</code> are still accepted in place of <code>tracks</code>/<code>track</code>.</li>
         </ul>
@@ -305,17 +306,6 @@
     svg.appendChild(ln);
     return svg;
   }
-  function colorSelect(value) {
-    var sel = el("select", {});
-    sel.appendChild(el("option", { value: "", text: "auto" }));
-    var g1 = el("optgroup", { label: "Black & grays (10 darkest … 75 lightest)" });
-    ["black"].concat(GRAYS.map(function (n) { return "gray-" + n; })).forEach(function (c) { g1.appendChild(el("option", { value: c, text: c })); });
-    var g2 = el("optgroup", { label: "Hues (colour panels; mid gray elsewhere)" });
-    HUES.forEach(function (c) { g2.appendChild(el("option", { value: c, text: c })); });
-    sel.appendChild(g1); sel.appendChild(g2);
-    sel.value = COLORS.indexOf(value) !== -1 ? value : "";
-    return sel;
-  }
 
   // ------------------------------------------------------------ model
   var state = { tracks: [], calendars: [], rules: [], timeZone: "", locale: "" };
@@ -333,6 +323,8 @@
   // (busiest side balanced against lightest), which this static list can't know yet, so
   // any track without an explicit side is shown as a rough guess (first track left, the rest
   // right); use "Draw the map" below to see the real, event-count-balanced result.
+  // t.side / t.color are only ever set by an imported config now: the pickers are gone, but
+  // a config that already carries them keeps them, and the swatch shows what it asked for.
   function lineLook() {
     var buckets = { left: [], right: [] };
     var out = {};
@@ -534,11 +526,6 @@
       var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "You (e.g. Sam)" : "Name", value: p.name });
       name.addEventListener("input", function () { p.name = name.value; renderJson(); renderCalendars(); renderGlobalRules(); });
       name.addEventListener("change", function () { renderTracks(); });
-      var side = el("select", {}, [el("option", { value: "", text: "auto, balanced by event count" }), el("option", { value: "left", text: "Left" }), el("option", { value: "right", text: "Right" })]);
-      side.value = p.side;
-      side.addEventListener("change", function () { p.side = side.value; renderJson(); renderTracks(); });
-      var color = colorSelect(p.color);
-      color.addEventListener("change", function () { p.color = color.value; renderJson(); renderTracks(); });
       var up = el("button", { class: "ghost small", title: "Move up", text: "↑" }); up.disabled = idx === 0;
       up.addEventListener("click", function () { state.tracks.splice(idx - 1, 0, state.tracks.splice(idx, 1)[0]); renderAll(); });
       var down = el("button", { class: "ghost small", title: "Move down", text: "↓" }); down.disabled = idx === state.tracks.length - 1;
@@ -547,10 +534,14 @@
       rm.addEventListener("click", function () { state.tracks.splice(idx, 1); renderAll(); });
       wrap.appendChild(el("div", { class: "card track" }, [
         el("div", { class: "card-head" }, [sw, name, up, down, rm]),
+        // Side and colour used to be pickers here. Both are decided by the plugin now
+        // (sides balanced by today's event count, colour and dash pattern by line order),
+        // and the pickers only ever produced worse boards than the automatic choice. An
+        // imported config that sets them still round-trips: buildConfig writes back
+        // whatever loadConfig read, and the swatch above shows it, there is just no
+        // control to set one from scratch.
         el("div", { class: "row" }, [
-          el("div", { class: "field" }, [el("label", { text: "Side of the map" }), side]),
-          el("div", { class: "field" }, [el("label", { text: "Line colour" }), color]),
-          el("div", { class: "hint", style: "align-self:center;" }, [idx === 0 ? "First track: also gets any event no rule assigns." : "Line pattern follows the order on this side: solid, dashed, dotted, dash-dot."]),
+          el("div", { class: "hint" }, [idx === 0 ? "First track: also gets any event no rule assigns. Side, colour and dash pattern are chosen automatically." : "Side, colour and dash pattern are chosen automatically; the pattern follows the order on whichever side this track lands."]),
         ]),
       ]));
     });
@@ -646,7 +637,19 @@
     wrap.innerHTML = "";
     state.calendars.forEach(function (c, idx) {
       var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "Work" : "Calendar " + (idx + 1), value: c.name });
-      name.addEventListener("input", function () { c.name = name.value; renderJson(); });
+      // A calendar's name is not a label: an event no rule routes falls back to it, and the
+      // fallback name becomes a LINE. Someone generated a config where every calendar had a
+      // descriptive name ("Planet Express", "Deliveries") and got seven lines for five
+      // people, with no way to tell from the JSON which two were the accident. So the moment
+      // a name is not also a track name, say what it will do.
+      var nameWarn = el("div", { class: "status err cal-name-warn" });
+      function checkName() {
+        var n = c.name.trim();
+        var known = trackNames().some(function (t) { return t.toLowerCase() === n.toLowerCase(); });
+        nameWarn.textContent = (!n || known) ? ""
+          : "\u201C" + n + "\u201D is not one of your tracks, so any event here that no rule routes falls back to it and draws \u201C" + n + "\u201D as its own line on the map. Name this calendar after the track whose line it is, add \u201C" + n + "\u201D as a track, or clear the name.";
+      }
+      name.addEventListener("input", function () { c.name = name.value; checkName(); renderJson(); });
       name.addEventListener("change", function () { renderTracks(); });
       var url = el("input", { type: "text", placeholder: "https://…/calendar.ics (or webcal://…)", value: c.url });
       url.addEventListener("input", function () { c.url = url.value; renderJson(); renderSources(); });
@@ -690,8 +693,10 @@
           el("div", { style: "margin-top:6px" }, [el("label", { class: "check" }, [keep, "keep this line on the board on a day it has nothing (and while the feed is down)"])]),
         ]),
       ]);
+      checkName();
       wrap.appendChild(el("div", { class: "card calendar" }, [
         el("div", { class: "card-head" }, [name, rm]),
+        nameWarn,
         el("div", { class: "row" }, [
           el("div", { class: "field grow" }, [el("label", { text: "ICS link" }), url]),
           el("div", { class: "field" }, [el("label", { text: "Whose line" }), assign]),
@@ -784,6 +789,70 @@
     return { name: calName, rows: rows };
   }
 
+  // The worked example the prompt carries. Written as an object and stringified rather
+  // than pasted in as text, so the example in the prompt cannot be invalid JSON: a broken
+  // example teaches broken output. It is deliberately free of `side`, `color`, `timeZone`
+  // and `locale`, and two of its three calendars have no `name`, because a name on a
+  // calendar whose rules already route everything is exactly what put two phantom lines on
+  // somebody's board.
+  var WORKED_EXAMPLE = {
+    timeFormat: "24h",
+    tracks: [{ name: "Marge" }, { name: "Homer" }, { name: "Bart" }, { name: "Lisa" }],
+    calendars: [
+      {
+        url: "https://example.com/homer.ics",
+        name: "Homer",
+        rules: [
+          { match: { type: "any" }, track: "Homer" },
+          { match: { type: "contains", value: "Plant Shift" }, station: true },
+          { match: { type: "contains", value: "Out of office" }, hide: true }
+        ]
+      },
+      {
+        url: "https://example.com/school.ics",
+        rules: [
+          { match: { type: "word", value: "L6" }, track: "Bart", rename: false },
+          { match: { type: "word", value: "K3" }, track: "Lisa", rename: false },
+          { match: { type: "regex", value: "^(?:L6|K3)\\s+" }, rewrite: "" },
+          { match: { type: "contains", value: "School Day" }, track: ["Bart", "Lisa"], station: true, rename: false },
+          { match: { type: "contains", value: "Staff Meeting" }, hide: true }
+        ]
+      },
+      {
+        url: "https://example.com/family.ics",
+        rules: [
+          { match: { type: "regex", value: "^Marge:" }, track: "Marge", rename: false },
+          { match: { type: "regex", value: "^Homer:" }, track: "Homer", rename: false },
+          { match: { type: "regex", value: "^Bart:" }, track: "Bart", rename: false },
+          { match: { type: "regex", value: "^Lisa:" }, track: "Lisa", rename: false },
+          { match: { type: "regex", value: "^[A-Za-z]+:\\s*" }, rewrite: "" },
+          { match: { type: "contains", value: "Family Dinner" }, track: ["Marge", "Homer", "Bart", "Lisa"], rename: false }
+        ]
+      }
+    ]
+  };
+
+  // JSON.stringify(x, null, 2) turns every matcher into four lines, which triples the
+  // length of the example and buries its shape. This keeps a leaf (an object whose values
+  // are all primitive, or an array of primitives) on one line and indents the rest, so a
+  // rule reads as one matcher and its effects. Output is still exactly JSON.
+  function prettyCompact(v, pad) {
+    pad = pad || "";
+    var inner = pad + "  ";
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) {
+      if (!v.length) return "[]";
+      var leafArr = v.every(function (x) { return x === null || typeof x !== "object"; });
+      var parts = v.map(function (x) { return prettyCompact(x, inner); });
+      return leafArr ? "[" + parts.join(", ") + "]" : "[\n" + inner + parts.join(",\n" + inner) + "\n" + pad + "]";
+    }
+    var keys = Object.keys(v);
+    if (!keys.length) return "{}";
+    var leafObj = keys.every(function (k) { return v[k] === null || typeof v[k] !== "object"; });
+    var pairs = keys.map(function (k) { return JSON.stringify(k) + ": " + prettyCompact(v[k], inner); });
+    return leafObj ? "{ " + pairs.join(", ") + " }" : "{\n" + inner + pairs.join(",\n" + inner) + "\n" + pad + "}";
+  }
+
   // One copy of the schema, the one the page itself shows. The prompt reads
   // it out of the DOM so the two cannot drift apart.
   function schemaText() {
@@ -819,7 +888,7 @@
     out.push("- Something several people are at should list all of them: `\"track\": [\"Bart\", \"Lisa\"]`. It is then drawn once, as an interchange joining their lines, instead of once per person.");
     out.push("- Titles are read at arm's length on a small panel. Use `rewrite` to drop codes, room numbers, \"[Teams]\" and the like. Use `hide` for things nobody reads off a wall board: birthdays, \"Free\", \"Out of office\", declined invitations.");
     out.push("- Prefer `word` or `contains` matchers over `regex`. Use `regex` only when the pattern really needs it.");
-    out.push("- Do not set `side` or `color` unless there is a reason: both are chosen automatically, and the automatic choice follows the day and the device's theme.");
+    out.push("- Never set `side` or `color`. Both are chosen by the plugin: sides are balanced against the day's real event counts and the colours follow the panel's own theme, so anything you pick can only be worse. They are not in the format below; do not add them.");
     out.push("");
     out.push("## Format");
     out.push("```json");
@@ -827,10 +896,18 @@
     out.push("```");
     out.push("- Matchers: `any`, `all`, `exact`, `word`, `contains`, `regex`, `status`, `weekday`, and `and` / `or` / `not` taking `matchers`.");
     out.push("- Rules run in order; the last match wins for each effect. A calendar's own rules beat the top-level ones.");
-    out.push("- An event no rule routes goes to the calendar's `name`, else to the first entry in `tracks`, else to the feed's own name.");
+    out.push("- A calendar's `name` is NOT a caption: an event that no rule routes falls back to it, and that fallback name is drawn as a LINE on the map. So name a calendar after the person whose line it is, or leave `name` off entirely when the calendar's rules route every event somewhere. A calendar called \"Deliveries\" or \"Planet Express\" with one unrouted event in it puts a \"Deliveries\" line on a board that was supposed to have one line per person.");
+    out.push("- The fallback order in full: the calendar's `name`, else the first entry in `tracks`, else the feed's own name. Count the lines your configuration produces before you send it: it is one per entry in `tracks`, PLUS one for every named calendar that can still leak an unrouted event. That total must match the number of people you found.");
     out.push("- `rename` defaults to true for a rule that names a track, which rewrites the matched text into that track's name. Set `\"rename\": false` when you only want to route, not retitle.");
     out.push("- Only events that recur with `RRULE:FREQ=WEEKLY` (with or without BYDAY/UNTIL), or that fall on today, are drawn.");
     out.push("- `\"hideIfEmpty\": false` on a track or a calendar keeps its line on the board on a day it has nothing.");
+    out.push("");
+    out.push("## A worked example");
+    out.push("A finished configuration for a household of four with three feeds: one feed that is one person, one school feed split by class code, and one shared feed where every title is prefixed with a name. Note what it does NOT do: no `side`, no `color`, no `timeZone`, no `locale`, and no `name` on the two calendars whose rules route everything, because a name there would have drawn a line called \"School\" and a line called \"Family\".");
+    out.push("```json");
+    out.push(prettyCompact(WORKED_EXAMPLE));
+    out.push("```");
+    out.push("Reading it back: `Homer` is named after its track, so the one thing in it no rule catches still lands on Homer's line rather than inventing one. The school feed routes on the class codes and then strips them, so the board reads \"Maths\" and not \"L6 Maths\". `\"School Day\"` is a station, so the seven-hour block runs through Bart's and Lisa\'s lines as a siding instead of eating a label lane each. `\"Family Dinner\"` lists all four tracks, so it is drawn once as an interchange. The staff meeting nobody in the house attends is hidden.");
     out.push("");
     out.push("## Calendars");
     if (!urls.length) out.push("(none added yet)");

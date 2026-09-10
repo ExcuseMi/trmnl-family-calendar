@@ -64,7 +64,13 @@
       </svg>
       <span class="metro-title title title--large font--bold">{{ metro.i18n.today | default: "Today" }}</span>
       {% if metro.date_label %}<span class="metro-date metro-pill label label--base font--bold">{{ metro.date_label }}</span>{% endif %}
-      <span class="metro-window metro-pill metro-pill--quiet label label--small font--bold">{{ metro.window_label }}</span>
+      {%- comment -%}
+        The window the board covers ("06:00 23:00") used to be stated as a
+        pill here. The hour scale directly below says the same thing and
+        says it in the right place, so the pill was a second answer to a
+        question nobody had asked. window_label still travels in the
+        payload: the smaller views have no scale to read it off.
+      {%- endcomment -%}
       <div class="grow"></div>
       {% if metro.header_weather.hi %}
         <span class="metro-weather flex flex--row flex--center-y gap--xsmall">
@@ -1244,12 +1250,26 @@
               // over and its end mark sat on the lead-in. This lane cannot
               // take it; try another.
               var slid = dir > 0 ? it.a1 + CORNER + LANE_GAP : it.a0 - CORNER - LANE_GAP;
-              // A SHARED event's elbow is pinned to the interchange bar, and
-              // may give at most as far as its own end: past that the rail
-              // does not go flat until after the event is over, and its end
-              // mark lands on the lead-in instead of on rail. On one board
-              // School Run's elbow slid a full 40 minutes past its own end.
-              if (shared0 && (dir > 0 ? slid > e._endA - CORNER : slid < e._endA + CORNER)) return null;
+              // An elbow may never pass its own event's END. Where the
+              // branch goes flat is where that event's rail begins, so an
+              // elbow past the end leaves no rail to draw the event on:
+              // "Walk Nibbler" came out as a ring hanging 37px clear of a
+              // 6px stub with its end tick jammed against it, and School
+              // Run's elbow once slid a full 40 minutes past its own end.
+              // Passing the START is survivable but ugly (the ring stops
+              // sitting on rail), so it is priced rather than banned: the
+              // alternative the scorer reaches for otherwise is a line
+              // drawn through a label, which costs the reader a word.
+              // How much rail the event would have left to be drawn on. A
+              // spur carries a ring at its start and a tick at its end;
+              // under about that much it stops being a rail with marks on
+              // it and becomes the marks alone, which is what "Walk
+              // Nibbler" drew: a ring hanging clear of a 6px stub with the
+              // tick jammed against it. Shared events are held one corner
+              // clear of their end for the same reason, and always were:
+              // School Run's elbow once slid a full 40 minutes past it.
+              var railMin = CORNER;
+              if (dir > 0 ? slid > e._endA - railMin : slid < e._endA + railMin) return null;
               elbow = slid;
               ts = dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len; moved = true;
             }
@@ -1337,6 +1357,8 @@
         }
         var crossing = diagonalCrosses(diagFrom, e._trackDist, elbow, rowDist, k);
         if (crossing && !allowCross) return null;
+        // How far the elbow ended up past the event's own start, if at all.
+        var pastStart = dir > 0 ? Math.max(0, elbow - e._nodeA) : Math.max(0, e._nodeA - elbow);
         var shift = Math.abs(ts - (dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len)) + elbowShift;
         if (shift > (dir > 0 ? MAX_SHIFT : MAX_SHIFT * 0.5)) return null;
         return { k: k, dir: dir, elbow: elbow, diagFrom: diagFrom, shift: shift, ld: rowDist, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift,
@@ -1357,7 +1379,14 @@
                  // is a different lane or a slid label. Both are cheaper
                  // than the crossing, and the score has to say so: at 50*S
                  // a pierce was cheaper than sliding a label its own width.
-                 score: shift + elbowShift * 1.5 + (elbowShift ? 30 * S : 0) + dy * 0.5 + (dir < 0 ? 260 * S : 0) + (crossing ? 220 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
+                 score: shift + elbowShift * 1.5 + (elbowShift ? 30 * S : 0)
+                 // An elbow past the start means the ring no longer sits
+                 // on the rail it marks. Charged by how far, not as a flat
+                 // fee: a few px of overshoot is invisible and a flat fee
+                 // for it drove events off placements that were fine.
+                 // Bounded under the cost of a crossing, since a line
+                 // through a caption costs the reader the word.
+                 + dy * 0.5 + (dir < 0 ? 260 * S : 0) + (crossing ? 220 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
       }
       evs.forEach(function (e, idx) {
         e._dropped = false;
@@ -1533,10 +1562,11 @@
     // worth of room per track, which the small 800x480 panel simply does not
     // have once a couple of tracks carry an all-day kink; packing still
     // reads correctly there, just with the crossings bands would prevent.
-    function buildPacked(sideKey, nLanes, stepPx) {
+    function buildPacked(sideKey, nLanes, stepPx, sepPx) {
       var acc = 0, out = [];
+      sepPx = sepPx || 0;
       sides[sideKey].forEach(function (p, i) {
-        acc += i ? TRACK_STEP : TRACK_STEP / 2;
+        acc += i ? TRACK_STEP + sepPx : (TRACK_STEP + sepPx) / 2;
         p._dist = acc;
         p._c = p._sign * acc;
       });
@@ -1613,13 +1643,14 @@
     // so unbounded growth leaves the lines adrift in whitespace with
     // interchange capsules stretched between them. Whatever is spare after
     // that gets centred instead.
+    // A tall name needs a tall gap above its line to sit in, so where the
+    // names wrap the separation is allowed to grow further than it
+    // otherwise would. Both caps only ever grow into room the board
+    // actually has: every loop below stops the moment the sides stop
+    // fitting.
+    var STEP_CAP = laneStep * 1.35;
+    var SEP_CAP = Math.max(TRACK_STEP * 2, horizontal ? nameH + NODE_R * 2 : 0);
     if (fits(sol)) {
-      // A tall name needs a tall gap above its line to sit in, so where the
-      // names wrap the separation is allowed to grow further than it
-      // otherwise would. It only ever grows into room the board actually
-      // has: the loop below stops the moment the sides stop fitting.
-      var STEP_CAP = laneStep * 1.35;
-      var SEP_CAP = Math.max(TRACK_STEP * 2, horizontal ? nameH + NODE_R * 2 : 0);
       for (var gi = 0; gi < 24; gi++) {
         var tryStep = Math.min(STEP_CAP, step + laneStep * 0.1);
         if (tryStep <= step + 0.5) break;
@@ -1649,27 +1680,41 @@
       // a side's shared ladder has to hold every track's lanes at once
       var sumA = 0, sumB = 0;
       LEGEND.forEach(function (p) { if (p._sideKey === 'A') sumA += demand[p.key]; else sumB += demand[p.key]; });
-      function packedSol(la, lb) {
-        var A = buildPacked('A', la, step), B = buildPacked('B', lb, step);
+      function packedSol(la, lb, sepPx) {
+        var A = buildPacked('A', la, step, sepPx), B = buildPacked('B', lb, step, sepPx);
         return { A: A, B: B, needA: needOf('A', A.extent), needB: needOf('B', B.extent), packed: true };
       }
       var la = sumA ? 1 : 0, lb = sumB ? 1 : 0;
-      sol = packedSol(la, lb);
+      sep = 0;
+      sol = packedSol(la, lb, sep);
       for (var pg = 0; pg < 80; pg++) {
         var moreA = la < sumA, moreB = lb < sumB;
         if (!moreA && !moreB) break;
         var takeA = moreA && (!moreB || (sumA - la) >= (sumB - lb));
-        if (takeA && fits(packedSol(la + 1, lb))) { la++; sol = packedSol(la, lb); continue; }
-        if (moreB && fits(packedSol(la, lb + 1))) { lb++; sol = packedSol(la, lb); continue; }
-        if (!takeA && moreA && fits(packedSol(la + 1, lb))) { la++; sol = packedSol(la, lb); continue; }
+        if (takeA && fits(packedSol(la + 1, lb, sep))) { la++; sol = packedSol(la, lb, sep); continue; }
+        if (moreB && fits(packedSol(la, lb + 1, sep))) { lb++; sol = packedSol(la, lb, sep); continue; }
+        if (!takeA && moreA && fits(packedSol(la + 1, lb, sep))) { la++; sol = packedSol(la, lb, sep); continue; }
         break;
+      }
+      // Everything the lanes did not want goes into separating the tracks.
+      // Packing used to draw every line at the minimum pitch however much
+      // room was going spare, which is how a seven-line board ended up
+      // squashed into a third of the canvas with each line's name lying on
+      // its own rail: there was nowhere else for a name to go. Lanes are
+      // handed out first because a lane is an event that would otherwise be
+      // dropped, and no amount of air is worth an event.
+      for (var pj = 0; pj < 24 && sep < SEP_CAP; pj++) {
+        var trySepP = Math.min(SEP_CAP, sep + TRACK_STEP * 0.2);
+        var s4 = packedSol(la, lb, trySepP);
+        if (!fits(s4)) break;
+        sep = trySepP; sol = s4;
       }
     }
     // buildSide/buildPacked write the track distances as they go, so the
     // last solve tried — possibly a rejected one — is what the tracks are
     // holding. Re-solve the winner to put them back, then place for real.
     sol = sol.packed ? (function () {
-      var A = buildPacked('A', sol.A.slots.length, step), B = buildPacked('B', sol.B.slots.length, step);
+      var A = buildPacked('A', sol.A.slots.length, step, sep), B = buildPacked('B', sol.B.slots.length, step, sep);
       return { A: A, B: B, needA: needOf('A', A.extent), needB: needOf('B', B.extent), packed: true };
     })() : solve(step, sep);
     recomputeTrackDists();
@@ -1934,6 +1979,8 @@
     }
 
     // ---- tracks (full bleed), each starting at its named terminus when fanned
+    // Every name already placed, so the next one can keep off it.
+    var placedNames = [];
     LEGEND.forEach(function (p) {
       var c = spineC + p._c;
       if (fan) {
@@ -1978,17 +2025,18 @@
         // hours. Where it would, the name goes UNDER its own line instead —
         // still touching the line it names, and the only other place
         // nothing else uses at the head of the map.
+        // Three places a name can go, in order of preference: above its
+        // line, under it, or centred on it behind its own paper outline.
+        // Above is right when the room is there; the other two exist
+        // because at the head of the map the room often is not.
         var nameOff = -(nameThick + NODE_R + 2 * S);
-        if (namesAbove && nameC + nameOff < bandLo) nameOff = NODE_R + 2 * S;
-        // And never onto the NEIGHBOUR'S rail. A name set above its line
-        // needs the gap above that line to hold it, and one gap on the
-        // board is not a band's worth: each side's innermost track sits
-        // half a pitch off the spine, so those two are neighbours with
-        // nothing between them, and "Marge" was set hard against the
-        // bottom of Homer's rail and read as underlining it. That one name
-        // goes under its own line instead, where its own lanes are empty
-        // this early in the day — the rest of the board is untouched.
         if (namesAbove) {
+          // Never onto the NEIGHBOUR'S rail. A name set above its line
+          // needs the gap above that line to hold it, and one gap on the
+          // board is not a band's worth: each side's innermost track sits
+          // half a pitch off the spine, so those two are neighbours with
+          // nothing between them, and "Marge" was set hard against the
+          // bottom of Homer's rail and read as underlining it.
           var railAt = function (dir) {
             var edge = dir < 0 ? -Infinity : Infinity;
             LEGEND.forEach(function (q) {
@@ -2000,10 +2048,35 @@
             });
             return edge;
           };
-          if (nameC + nameOff < railAt(-1)) {
-            var below = NODE_R + 2 * S;
-            nameOff = (nameC + below + nameThick < railAt(1)) ? below : -nameThick / 2;
+          // Never into the time strip either: the track nearest it sits
+          // close enough that its name landed among the hours.
+          var offClear = function (off) {
+            return nameC + off >= bandLo
+              && nameC + off >= railAt(-1)
+              && nameC + off + nameThick <= railAt(1);
+          };
+          // And never on another line's NAME. The outermost line's name is
+          // pushed under its own rail by the time strip while its
+          // neighbour's is set above its rail, and the two met in the gap
+          // between them: "Deliveries" written across "Crew". Each name
+          // only has to clear the ones already placed.
+          var offFree = function (off) {
+            var c0 = nameC + off, c1 = c0 + nameThick;
+            return !placedNames.some(function (q) {
+              return nameA < q.a1 && nameA + nameLen > q.a0 && c0 < q.c1 && c1 > q.c0;
+            });
+          };
+          var tries = [nameOff, NODE_R + 2 * S, -nameThick / 2];
+          var pick = null;
+          for (var ti = 0; ti < tries.length; ti++) {
+            if (offClear(tries[ti]) && offFree(tries[ti])) { pick = tries[ti]; break; }
           }
+          if (pick === null) {
+            for (var tj = 0; tj < tries.length; tj++) {
+              if (offClear(tries[tj])) { pick = tries[tj]; break; }
+            }
+          }
+          nameOff = pick === null ? -nameThick / 2 : pick;
         }
         // centred ON the line when there is no room above it
         var nameXY = toXY(nameA, namesAbove ? nameC + nameOff : nameC - nameThick / 2);
@@ -2015,6 +2088,7 @@
         p._nameA0 = nameA; p._nameA1 = nameA + nameLen;
         p._nameC0 = namesAbove ? nameC + nameOff : nameC - nameThick / 2;
         p._nameC1 = p._nameC0 + nameThick;
+        placedNames.push({ a0: nameA, a1: nameA + nameLen, c0: p._nameC0, c1: p._nameC1 });
         var far = d > 0 ? axisEnd : axisStart;
         var legPts = stationPath(c, p._sign, Math.min(merge, far), Math.max(merge, far), p);
         if (d < 0) legPts = legPts.slice().reverse();
@@ -2692,10 +2766,12 @@
     // vertical line does not have. The block carries the same weight and the
     // same "someone is here right now" without pretending to a direction.
     // It is centred ON the rail, so the line runs through it end to end.
-    var CAR_ALONG = NODE_R * 3.4;
+    // Big enough to hold a letter, which is what tells one train from
+    // another when five of them are stacked in a column at the same minute.
+    var CAR_ALONG = NODE_R * 4.2;
     function carAcross(p) {
       // wider than the rail it sits on, or it is just a thick bit of line
-      return Math.max(NODE_R * 1.9, p.line_width * S * weightScale + 5 * S);
+      return Math.max(NODE_R * 2.4, p.line_width * S * weightScale + 6 * S);
     }
     if (nowA != null) {
       LEGEND.forEach(function (p) {
@@ -2735,11 +2811,36 @@
         var cw = horizontal ? CAR_ALONG : across;
         var ch = horizontal ? across : CAR_ALONG;
         var g = svgEl('g', {});
-        g.appendChild(svgEl('rect', {
+        // Paper-filled with a heavy outline, like every other mark on this
+        // map: a solid block was a hole in the line rather than a thing
+        // standing on it, and where it happened to park on a junction it
+        // read as part of the junction. The one at 08:39 on Lisa's line sat
+        // across a station ramp and a branch leaving at the same minute,
+        // and the three of them came out as one black blob with a line
+        // grazing its corner.
+        var body = svgEl('rect', {
           x: xy[0] - cw / 2, y: xy[1] - ch / 2, width: cw, height: ch,
-          rx: NODE_R * 0.5, ry: NODE_R * 0.5,
-        }));
-        g.style.fill = colorFor(p.hue);
+          rx: NODE_R * 0.55, ry: NODE_R * 0.55,
+          'stroke-width': NODE_STROKE * 1.1,
+        });
+        body.style.fill = PAPER;
+        body.style.stroke = colorFor(p.hue);
+        g.appendChild(body);
+        // And the line's own initial inside it, so a column of five trains
+        // at the same minute says which line each one belongs to. Sized off
+        // the car rather than off the page: the car is sized off the rail,
+        // and a fixed size overflowed it on a light line.
+        var letter = (p.initial || Array.from(String(p.name || '?'))[0] || '?').toUpperCase();
+        var glyph = svgEl('text', {
+          x: xy[0], y: xy[1],
+          'text-anchor': 'middle', 'dominant-baseline': 'central',
+        });
+        glyph.style.fill = colorFor(p.hue);
+        glyph.style.fontSize = (Math.min(cw, ch) * 0.78) + 'px';
+        glyph.style.fontWeight = '700';
+        glyph.style.fontFamily = 'inherit';
+        glyph.textContent = letter;
+        g.appendChild(glyph);
         g.setAttribute('data-metro-role', 'car');
         g.setAttribute('data-metro-owner', p.key);
         svg.appendChild(g);

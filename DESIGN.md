@@ -19,11 +19,14 @@ and top-to-bottom otherwise. All geometry is written in axis coordinates
 orientations share one algorithm.
 
 Side A runs above the bundle in horizontal mode, left of it in vertical
-mode; side B is the other side. An explicit `track.side` in config puts
-that track on the side they asked for; everyone else is assigned once
-every calendar has been fetched and every event tallied: heaviest event
-count first, each track going to whichever side is currently lighter, so
-the split reflects the actual day's data rather than any fixed convention.
+mode; side B is the other side. Sides are assigned once every calendar has
+been fetched and every event tallied: heaviest event count first, each track
+going to whichever side is currently lighter, so the split reflects the
+actual day's data rather than any fixed convention. This is not offered as
+a setting: nothing written in a config file knows today's event counts.
+`parseConfig` does still read an explicit `track.side` (`"left"`/`"work"`,
+`"right"`/`"family"`) and pins that track where it asks, so a configuration
+written before the pickers were removed keeps drawing the same board.
 
 ## Spine
 
@@ -34,6 +37,10 @@ the split reflects the actual day's data rather than any fixed convention.
   in track order per side. On a 1-bit panel every line is black and the dash
   pattern is the only identifier; on 2/4-bit panels each track's `hue-40`
   token is resolved through `TRMNLPaint.stroke`, so themes and dark mode apply.
+  The hue comes from the track's position, not from config: `track.color` is
+  still read by `parseConfig` and still overrides it, but it is no longer
+  offered anywhere, because a value picked in a config file cannot follow the
+  panel's theme the way the automatic one does.
 - The bundle is not centred by default: after lane placement, whichever side
   needs more lanes gets more room, and any leftover space spreads the lanes
   out (up to 1.5×) so a quiet day still fills the canvas.

@@ -1,25 +1,19 @@
-<!-- Metro Calendar. The plugin draws one line per person, in solid / dashed
-     / dotted so they stay apart on a 1-bit panel, and rings them together
-     where the day converges — so that is what the icon is, rather than a
-     stock train.
-
-     The brand orange appears ONCE, on the root. Everything else is a mask:
-     white keeps the disc, black cuts a hole, white again puts the orange
-     back inside each ring. Change the fill below and the whole mark
-     follows; swap it for currentColor to inherit the surrounding text. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"
-     role="img" aria-label="Metro Calendar" fill="#e05b44">
-  <title>Metro Calendar</title>
-  <mask id="cut">
-    <rect width="512" height="512" fill="#fff"/>
-    <g stroke="#000" stroke-width="38" stroke-linecap="round" fill="none">
-      <path d="M96 160 H416"/>
-      <path d="M96 256 H416" stroke-dasharray="60 52"/>
-      <path d="M96 352 H416" stroke-dasharray="1 76"/>
-      <path d="M320 160 V352" stroke-width="26" stroke-dasharray="26 34"/>
-    </g>
-    <g fill="#000"><circle cx="320" cy="160" r="52"/><circle cx="320" cy="256" r="52"/><circle cx="320" cy="352" r="52"/></g>
-    <g fill="#fff"><circle cx="320" cy="160" r="22"/><circle cx="320" cy="256" r="22"/><circle cx="320" cy="352" r="22"/></g>
-  </mask>
-  <circle cx="256" cy="256" r="240" mask="url(#cut)"/>
+<!-- Master mark. The brand colour lives ONCE, on the root fill; the rest is a
+     mask (white keeps, black cuts), so every cut-out is transparent and takes
+     the colour it sits on. Keep the geometry in step with the inlined mark in
+     plugin/src/shared.liquid. Variants: -mono (currentColor), -inverse (white),
+     -bold (thickened, for <=28px and 1-bit panels). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Metro Calendar" fill="#e05b44">
+ <mask id="mc-cut">
+  <rect width="512" height="512" fill="#fff"/>
+  <g stroke="#000" stroke-width="38" stroke-linecap="round" fill="none">
+   <path d="M96 160H416"/>
+   <path d="M96 256H416" stroke-dasharray="60 52"/>
+   <path d="M96 352H416" stroke-dasharray="1 76"/>
+   <path d="M320 160V352" stroke-width="26" stroke-dasharray="26 34"/>
+  </g>
+  <g fill="#000"><circle cx="320" cy="160" r="52"/><circle cx="320" cy="256" r="52"/><circle cx="320" cy="352" r="52"/></g>
+  <g fill="#fff"><circle cx="320" cy="160" r="22"/><circle cx="320" cy="256" r="22"/><circle cx="320" cy="352" r="22"/></g>
+ </mask>
+ <circle cx="256" cy="256" r="240" mask="url(#mc-cut)"/>
 </svg>

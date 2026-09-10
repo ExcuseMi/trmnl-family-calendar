@@ -25,6 +25,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '../..');
@@ -157,8 +158,12 @@ const REPORTER = `
       shapeMarkers.push(Object.assign(rel(r), {
         role: 'car', owner: el.getAttribute('data-metro-owner') || null,
         // computed, not the attribute: a colour can be a CSS variable now,
-        // so it is set through style and there is no attribute to read
-        fill: getComputedStyle(el).fill || null
+        // so it is set through style and there is no attribute to read.
+        // The car is paper-filled with a coloured outline, so what says
+        // which line it belongs to is the STROKE and the letter inside it.
+        fill: getComputedStyle(el.querySelector('rect') || el).fill || null,
+        stroke: getComputedStyle(el.querySelector('rect') || el).stroke || null,
+        text: (el.textContent || '').trim()
       }));
     });
     svg.querySelectorAll('path[data-metro-role="station-ring"], line[data-metro-role="stop"]').forEach(function (el) {
@@ -258,7 +263,20 @@ function pageFor(metro, screenClasses) {
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'metro-layout-'));
 let renderSeq = 0;
 
+// Every render is a Chromium launch, and the cases render the same board at
+// the same size over and over — a case that mutates a fixture and hands it
+// to render() directly missed the (fixture, viewport) cache below entirely.
+// Keyed on the CONTENT instead, every one of those is a cache hit, which is
+// most of the suite's wall time.
+const contentCache = new Map();
 function render(metro, viewport) {
+  const key = viewport.name + '|' + viewport.w + 'x' + viewport.h + '|'
+    + crypto.createHash('sha1').update(JSON.stringify(metro)).digest('hex');
+  if (!contentCache.has(key)) contentCache.set(key, renderUncached(metro, viewport));
+  return contentCache.get(key);
+}
+
+function renderUncached(metro, viewport) {
   const file = path.join(tmpDir, 'page' + (renderSeq++) + '.html');
   fs.writeFileSync(file, pageFor(metro, viewport.classes));
   const dom = execFileSync(CHROME, [
@@ -275,12 +293,7 @@ function render(metro, viewport) {
 
 // results are reused across assertions in a case file, so render once per
 // (fixture, viewport) pair and memoise
-const renderCache = new Map();
-function layout(fixture, viewport) {
-  const key = fixture.name + '|' + viewport.name;
-  if (!renderCache.has(key)) renderCache.set(key, render(fixture.metro, viewport));
-  return renderCache.get(key);
-}
+function layout(fixture, viewport) { return render(fixture.metro, viewport); }
 
 // ---------------------------------------------------------------- geometry helpers
 

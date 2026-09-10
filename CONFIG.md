@@ -20,23 +20,20 @@ for anyone who set this up before tracks were called tracks.)
 ## Track
 
 ```
-{ "name": "Alex", "color"?: string, "side"?: "work" | "family" }
+{ "name": "Alex", "hideIfEmpty"?: boolean }
 ```
 
 - Each track is one line on the map. Order matters: the first track is the
   fallback for any event no rule assigns, and lines on the same side get
   their dash pattern in order (solid, dashed, dotted, dash-dot).
-- `color`: a hue name (`blue`, `green`, `orange`, `purple`, `red`, `cyan`,
-  `pink`, `lime`, `violet`, `yellow`), `black`, or `gray-10` … `gray-75`
-  (10 darkest). On 1-bit panels every line is black and only the pattern
-  differs; on grayscale panels a hue renders as a mid gray. Default: the
-  first line on its side is black, the others cycle hues.
-- `side`: `"left"` (top in horizontal layouts, left in vertical) or
-  `"right"` (the other side) pins that track there. Without it, sides are
-  balanced automatically once every calendar is fetched: whoever has the
-  most events today goes first, each track landing on whichever side is
-  currently lighter, so the split follows the actual day, not a fixed rule.
-
+- A track is otherwise just a name. Which side of the map it runs on, what
+  colour it is and which dash pattern it gets are all decided from the day
+  itself: sides are balanced once every calendar is fetched, whoever has the
+  most events today going first and each track landing on whichever side is
+  currently lighter, then each side's lines take solid, dashed, dotted,
+  dash-dot in order. On 1-bit panels every line is black and only the
+  pattern tells them apart; on 2/4-bit panels the shade follows the panel's
+  own theme.
 - `hideIfEmpty`: `false` keeps this track's line on the board on a day it
   has nothing on it. By default a track with no events, stations or all-day
   entries today gets no line, so a day when most of the family is idle does
@@ -44,6 +41,17 @@ for anyone who set this up before tracks were called tracks.)
   line should always be there, so the board reads the same shape every day.
 
 Tracks that appear in rules but not in `tracks` are added automatically.
+
+### `side` and `color`: read, not offered
+
+Older configurations set `"side": "left" | "right"` (also spelled `"work"` /
+`"family"`) and `"color"` (a hue name, `black`, or `gray-10` … `gray-75`) on
+a track. **Both are still read and still honoured**, so nothing you already
+have breaks, and the configuration editor writes back whatever it imported.
+They are no longer offered anywhere, though, and there is no reason to add
+one to a new configuration: the automatic choice is made against the day's
+real event counts and the device's own theme, which is more than a fixed
+value in a config file can know.
 
 ## Calendar
 
@@ -58,9 +66,20 @@ Tracks that appear in rules but not in `tracks` are added automatically.
 }
 ```
 
-A bare string in `calendars` is shorthand for `{ "url": … }`. Events from a
-calendar with no matching rule go to the first track; a calendar with no
-track at all becomes its own line, named after the calendar.
+A bare string in `calendars` is shorthand for `{ "url": … }`.
+
+**`name` is not a caption: it can become a line.** An event that no rule
+routes falls back to the calendar's `name`, then to the first entry in
+`tracks`, then to the feed's own `X-WR-CALNAME`. Whichever wins is drawn as
+a *line* on the map. So a calendar called `"Deliveries"` that leaks a single
+unrouted event puts a "Deliveries" line on a board that was meant to have
+one line per person, and nothing in the JSON says so.
+
+Name a calendar after the person whose line it is (`"name": "Alex"` beside a
+rule routing everything to Alex), or leave `name` off entirely when its
+rules route every event somewhere. Count the lines a configuration produces
+before saving it: one per entry in `tracks`, plus one for every named
+calendar that can still leak an unrouted event.
 
 `hideIfEmpty: false` is the same switch as the one on a track, put where the
 line is actually declared for the common setup of one calendar per person.

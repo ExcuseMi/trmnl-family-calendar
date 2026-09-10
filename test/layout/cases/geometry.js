@@ -71,6 +71,19 @@ module.exports = function (test, h) {
     'waypoint-station/og-landscape': 'packed, same as above with one waypoint instead of four all-day bands: three branch crossings and one caption on a neighbouring rail.',
     'five-lines/og-landscape': 'packed: five lines on a 480px-deep board leave no room for bands, so three branches cross a neighbouring caption on the shared ladder.',
     'crew-day/og-landscape': 'packed, and one line short of fitting at all (the Professor is dropped): three branches cross a neighbouring caption on the shared ladder.',
+    // These two are the price of holding an elbow inside its own event.
+    // A branch used to be allowed to slide its elbow past the end of the
+    // event it belongs to in order to clear a caption in a lane it passes
+    // through, which drew a ring hanging clear of a stub of rail with the
+    // end tick jammed against it ("Walk Nibbler", and "Assembly" here at
+    // 19px past its own end). Held inside the event, the branch has
+    // nowhere left to go: the caption above it ("School Run", a caption
+    // longer than the gap between the two events) is in the only lane it
+    // can cross. A thin line between two words is the better of the two
+    // pictures, and it is the one the reader can still read.
+    'five-lines/x-landscape': 'the elbow may not pass its own event, so Assembly\'s branch crosses "School Run" to reach its lane. The alternative is the ring off its own rail, which is what this used to draw.',
+    'seven-lines/x-landscape': 'same as five-lines: a branch crossing a caption in a lane it passes through, rather than an elbow slid past its own event.',
+    'seven-lines/og-landscape': 'seven lines on a 480px-deep board: three of them cannot be drawn at all, and the four that fit share one lane ladder, so branches cross their neighbours\' captions.',
   };
   const PIERCE_KNOWN = {};
 

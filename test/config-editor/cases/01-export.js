@@ -6,14 +6,29 @@ module.exports = function (test, h) {
     assertEqual(jsonOut(document), { tracks: [], calendars: [] });
   });
 
-  test('a track with a side and colour exports as { name, color, side }', () => {
+  // Side and colour used to be two <select>s on every track card. They are gone: the
+  // plugin balances sides against the day's real event counts and picks colours from the
+  // panel's theme, and neither could be guessed well from this page. What must NOT happen
+  // is that opening an old configuration here silently strips them, so the two halves are
+  // tested apart: no control to set one, but an imported one survives the round trip.
+  test('a track card offers no side or colour control', () => {
     const { document } = loadEditor();
     const card = document.querySelector('#tracks .card');
     fireInput(card.querySelector('.title-input'), 'Sam');
-    const selects = card.querySelectorAll('select');
-    fireChange(selects[0], 'left');
-    fireChange(document.querySelector('#tracks .card').querySelectorAll('select')[1], 'gray-20');
-    assertEqual(jsonOut(document).tracks, [{ name: 'Sam', color: 'gray-20', side: 'left' }]);
+    assertEqual(card.querySelectorAll('select').length, 0);
+    assertEqual(jsonOut(document).tracks, [{ name: 'Sam' }]);
+    const labels = [...document.querySelectorAll('#tracks label')].map((l) => l.textContent);
+    assert(!labels.some((t) => /side|colour|color/i.test(t)), 'a side/colour control is still offered: ' + JSON.stringify(labels));
+  });
+
+  test('a side and colour that came in with an imported config are still exported', () => {
+    const { document } = loadEditor();
+    document.getElementById('importIn').value = JSON.stringify({
+      tracks: [{ name: 'Sam', color: 'gray-20', side: 'left' }, { name: 'Alex' }],
+      calendars: [{ url: 'https://example.com/a.ics' }],
+    });
+    click(document.getElementById('loadImport'));
+    assertEqual(jsonOut(document).tracks, [{ name: 'Sam', color: 'gray-20', side: 'left' }, { name: 'Alex' }]);
   });
 
   test('a calendar assigned to a track exports a leading "any" rule', () => {

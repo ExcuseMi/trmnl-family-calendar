@@ -1,0 +1,18 @@
+{
+  "today": "Aujourd'hui",
+  "more": "+{n} de plus",
+  "earlier": "+{n} plus tôt",
+  "rain_pct": "{n} % de pluie",
+  "clear": "Dégagé",
+  "partly_cloudy": "Partiellement nuageux",
+  "cloudy": "Nuageux",
+  "foggy": "Brouillard",
+  "rain": "Pluie",
+  "snow": "Neige",
+  "storms": "Orages",
+  "rain_starts": "Début de la pluie",
+  "rain_stops": "Fin de la pluie",
+  "sunrise": "Lever du soleil",
+  "sunset": "Coucher du soleil",
+  "feed_down": "{n} indisponible"
+}

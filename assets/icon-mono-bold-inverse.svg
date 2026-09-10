@@ -1,0 +1,14 @@
+<!-- icon-mono-bold for a dark ground where CSS cannot reach the file. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Metro Calendar" fill="#fff">
+ <mask id="mc-cut-bold-inv">
+  <rect width="512" height="512" fill="#fff"/>
+  <g stroke="#000" stroke-width="50" stroke-linecap="round" fill="none">
+   <path d="M96 160H416"/>
+   <path d="M96 256H416" stroke-dasharray="50 74"/>
+   <path d="M96 352H416" stroke-dasharray="1 84"/>
+  </g>
+  <g fill="#000"><circle cx="320" cy="160" r="60"/><circle cx="320" cy="256" r="60"/><circle cx="320" cy="352" r="60"/></g>
+  <g fill="#fff"><circle cx="320" cy="160" r="24"/><circle cx="320" cy="256" r="24"/><circle cx="320" cy="352" r="24"/></g>
+ </mask>
+ <circle cx="256" cy="256" r="240" mask="url(#mc-cut-bold-inv)"/>
+</svg>

@@ -1,0 +1,17 @@
+<!-- Ink version of icon.svg: same geometry, fill inherited. Inline it and the
+     container's colour paints it (dark theme included); as an <img> it falls
+     back to black. Safe on 4-bit grey and on 1-bit at 28px and up. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Metro Calendar" fill="currentColor">
+ <mask id="mc-cut-mono">
+  <rect width="512" height="512" fill="#fff"/>
+  <g stroke="#000" stroke-width="38" stroke-linecap="round" fill="none">
+   <path d="M96 160H416"/>
+   <path d="M96 256H416" stroke-dasharray="60 52"/>
+   <path d="M96 352H416" stroke-dasharray="1 76"/>
+   <path d="M320 160V352" stroke-width="26" stroke-dasharray="26 34"/>
+  </g>
+  <g fill="#000"><circle cx="320" cy="160" r="52"/><circle cx="320" cy="256" r="52"/><circle cx="320" cy="352" r="52"/></g>
+  <g fill="#fff"><circle cx="320" cy="160" r="22"/><circle cx="320" cy="256" r="22"/><circle cx="320" cy="352" r="22"/></g>
+ </mask>
+ <circle cx="256" cy="256" r="240" mask="url(#mc-cut-mono)"/>
+</svg>

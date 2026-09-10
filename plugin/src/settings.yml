@@ -77,6 +77,16 @@ custom_fields:
   - 12-hour: 12h
   default: auto
   optional: true
+- keyname: temperature_unit
+  field_type: select
+  name: Temperature Unit
+  description: Auto follows your account language (Fahrenheit for US English, Celsius everywhere else).
+  options:
+  - Auto: auto
+  - Celsius: c
+  - Fahrenheit: f
+  default: auto
+  optional: true
 - keyname: lat_lon
   field_type: lat_lon
   name: Location (for weather)
