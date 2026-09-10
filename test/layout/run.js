@@ -31,6 +31,7 @@ const { execFileSync } = require('child_process');
 const ROOT = path.join(__dirname, '../..');
 const PLUGIN = path.join(ROOT, 'plugin');
 const BUILT = path.join(PLUGIN, '_build');
+const SRC = path.join(PLUGIN, 'src');
 const CACHE = path.join(__dirname, '.cache');
 
 const CHROME = process.env.METRO_CHROME
@@ -91,23 +92,56 @@ function patchDemoMetro(yml, extra) {
 // other. Everything else in this suite renders `full`, which is what a
 // mashup slot scales; a case about a view's own build asks for it by name.
 const builtHtml = new Map();
+
+// What `trmnlp build` reads. Hashed so a build can be cached on disk like a
+// render: with the renders cached, five builds at about a second each were
+// most of what a warm run still spent.
+function sourceStamp() {
+  const parts = [];
+  for (const f of fs.readdirSync(SRC).sort()) {
+    parts.push(f + ':' + crypto.createHash('sha1').update(fs.readFileSync(path.join(SRC, f))).digest('hex'));
+  }
+  return parts.join('|');
+}
+
 function baseHtml(liquidExtra, page) {
   const key = (liquidExtra ? JSON.stringify(liquidExtra) : '') + '|' + (page || 'full');
   if (builtHtml.has(key)) return builtHtml.get(key);
+  const stamp = crypto.createHash('sha1').update(sourceStamp() + '|' + key).digest('hex');
+  const cached = path.join(BUILD_CACHE, stamp + '.html');
+  if (!CACHE_OFF) {
+    try {
+      const hit = fs.readFileSync(cached, 'utf-8');
+      builtHtml.set(key, hit);
+      return hit;
+    } catch (e) { /* not built yet */ }
+  }
   // The yml is a tracked source file, so it is patched, built and put back
   // in a finally, because a failed build must not leave a test fixture
   // behind in the working tree.
   const orig = fs.readFileSync(YML, 'utf-8');
   try {
     if (liquidExtra) fs.writeFileSync(YML, patchDemoMetro(orig, liquidExtra));
+    const tb = Date.now();
     execFileSync('trmnlp', ['build'], { cwd: PLUGIN, stdio: 'pipe', timeout: 120000 });
+    spent.builds++;
+    spent.buildMs += Date.now() - tb;
   } catch (e) {
     throw new Error('`trmnlp build` failed (is trmnlp on PATH?): ' + (e.stderr || e.message));
   } finally {
     if (liquidExtra) fs.writeFileSync(YML, orig);
   }
-  builtHtml.set(key, fs.readFileSync(path.join(BUILT, (page || 'full') + '.html'), 'utf-8'));
-  return builtHtml.get(key);
+  const html = fs.readFileSync(path.join(BUILT, (page || 'full') + '.html'), 'utf-8');
+  if (!CACHE_OFF) {
+    try {
+      fs.mkdirSync(BUILD_CACHE, { recursive: true });
+      const part = cached + '.' + process.pid + '.part';
+      fs.writeFileSync(part, html);
+      fs.renameSync(part, cached);
+    } catch (e) { /* a cache that cannot be written is not an error */ }
+  }
+  builtHtml.set(key, html);
+  return html;
 }
 
 // Replace the baked `var METRO = {...};` literal with a fixture. The JSON is
@@ -356,6 +390,68 @@ function pageFor(metro, screenClasses, slot, liquidExtra, page) {
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'metro-layout-'));
 let renderSeq = 0;
 
+// What the run spent, printed as one line at the end. A suite this slow
+// gets optimised by guess unless it says where the time went.
+const spent = { renders: 0, renderMs: 0, hits: 0, disk: 0, builds: 0, buildMs: 0 };
+
+// Renders that survive the process, keyed on the EXACT bytes about to be
+// rendered plus the window they are rendered into. That key is the whole
+// point: the page embeds the built template, so a change to shared.liquid
+// changes every key and nothing stale can come back. Editing only a test
+// file changes no key at all, which is the loop this is for, and the one
+// that costs the most: rewriting expectations re-renders identical boards
+// every time.
+//
+// Under .cache, which is gitignored, beside the framework assets. Entries
+// older than a week are dropped on the way in so it cannot grow forever.
+// Two runs at once corrupt the working tree. A build variant PATCHES the
+// tracked .trmnlp.yml, builds, and puts it back in a finally; run twice
+// over, one run's restore writes back what the other had already patched,
+// and a test fixture is left in a source file for good. That happened: an
+// "ALERT · Rain" banner ended up committed-adjacent in .trmnlp.yml and the
+// next run reported six failures that were nothing but the leftover.
+// Both runs also fight over _build, so their numbers are fiction anyway.
+const LOCK = path.join(CACHE, 'run.lock');
+(function claimTheSuite() {
+  fs.mkdirSync(CACHE, { recursive: true });
+  try {
+    fs.writeFileSync(LOCK, String(process.pid), { flag: 'wx' });
+  } catch (e) {
+    let holder = '';
+    try { holder = fs.readFileSync(LOCK, 'utf-8').trim(); } catch (e2) { /* raced away */ }
+    // A crashed run leaves its lock behind, so a pid nobody is running is
+    // not a reason to refuse.
+    let alive = false;
+    try { process.kill(+holder, 0); alive = true; } catch (e2) { alive = false; }
+    if (alive) {
+      console.error('another layout run (pid ' + holder + ') is going. It patches plugin/.trmnlp.yml,'
+        + ' so two at once corrupt it. Wait for it, or kill it and delete ' + LOCK + '.');
+      process.exit(2);
+    }
+    fs.writeFileSync(LOCK, String(process.pid));
+  }
+  const drop = function () { try { fs.unlinkSync(LOCK); } catch (e) { /* already gone */ } };
+  process.on('exit', drop);
+  process.on('SIGINT', function () { drop(); process.exit(130); });
+  process.on('SIGTERM', function () { drop(); process.exit(143); });
+})();
+
+const REPORT_CACHE = path.join(CACHE, 'reports');
+const BUILD_CACHE = path.join(CACHE, 'builds');
+const CACHE_OFF = process.env.METRO_NO_CACHE === '1';
+(function pruneReports() {
+  if (CACHE_OFF) return;
+  try {
+    const week = Date.now() - 7 * 24 * 3600 * 1000;
+    for (const dir of [REPORT_CACHE, BUILD_CACHE]) {
+      for (const f of fs.readdirSync(dir)) {
+        const full = path.join(dir, f);
+        if (fs.statSync(full).mtimeMs < week) fs.unlinkSync(full);
+      }
+    }
+  } catch (e) { /* no cache yet, or nothing to prune */ }
+})();
+
 // Every render is a Chromium launch, and the cases render the same board at
 // the same size over and over — a case that mutates a fixture and hands it
 // to render() directly missed the (fixture, viewport) cache below entirely.
@@ -367,13 +463,28 @@ function render(metro, viewport, liquidExtra) {
     + '|' + (viewport.slot ? viewport.slot.w + 'x' + viewport.slot.h : 'full') + '|'
     + '|' + (viewport.page || 'full') + '|'
     + crypto.createHash('sha1').update(JSON.stringify(metro) + '|' + JSON.stringify(liquidExtra || null)).digest('hex');
-  if (!contentCache.has(key)) contentCache.set(key, renderUncached(metro, viewport, liquidExtra));
+  if (contentCache.has(key)) spent.hits++;
+  else contentCache.set(key, renderUncached(metro, viewport, liquidExtra));
   return contentCache.get(key);
 }
 
 function renderUncached(metro, viewport, liquidExtra) {
+  const html = pageFor(metro, viewport.classes, viewport.slot, liquidExtra, viewport.page);
+  // The bytes AND the window AND the browser: everything that can change
+  // what comes back. Hashing the finished page rather than its ingredients
+  // means no ingredient can be forgotten.
+  const disk = path.join(REPORT_CACHE, crypto.createHash('sha1')
+    .update(html + '|' + viewport.w + 'x' + viewport.h + '|' + CHROME).digest('hex') + '.json');
+  if (!CACHE_OFF) {
+    try {
+      const hit = JSON.parse(fs.readFileSync(disk, 'utf-8'));
+      spent.disk++;
+      return hit;
+    } catch (e) { /* not cached, or half-written: render it */ }
+  }
   const file = path.join(tmpDir, 'page' + (renderSeq++) + '.html');
-  fs.writeFileSync(file, pageFor(metro, viewport.classes, viewport.slot, liquidExtra, viewport.page));
+  fs.writeFileSync(file, html);
+  const t0 = Date.now();
   const dom = execFileSync(CHROME, [
     '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
     '--window-size=' + viewport.w + ',' + viewport.h,
@@ -383,6 +494,18 @@ function renderUncached(metro, viewport, liquidExtra) {
   if (!m) throw new Error('the page produced no layout report (did the metro script throw?)');
   const rep = JSON.parse(m[1]);
   if (!rep.debug) throw new Error('the layout never published data-metro-debug');
+  spent.renders++;
+  spent.renderMs += Date.now() - t0;
+  if (!CACHE_OFF) {
+    // Written through a temp name: a run killed mid-write must not leave a
+    // truncated report behind for the next one to read as a hit.
+    try {
+      fs.mkdirSync(REPORT_CACHE, { recursive: true });
+      const part = disk + '.' + process.pid + '.part';
+      fs.writeFileSync(part, JSON.stringify(rep));
+      fs.renameSync(part, disk);
+    } catch (e) { /* a cache that cannot be written is not an error */ }
+  }
   return rep;
 }
 
@@ -484,6 +607,10 @@ for (const file of fs.readdirSync(path.join(__dirname, 'cases')).sort()) {
     }
   }
   console.log('\n' + pass + '/' + (pass + known + fail) + ' passed, ' + known + ' known issue(s), ' + fail + ' failure(s)');
+  console.log(spent.renders + ' render(s) ' + (spent.renderMs / 1000).toFixed(1) + 's, '
+    + spent.disk + ' from cache, ' + spent.hits + ' repeated, '
+    + spent.builds + ' build(s) ' + (spent.buildMs / 1000).toFixed(1) + 's'
+    + (CACHE_OFF ? ' (cache off)' : ''));
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
   process.exit(fail ? 1 : 0);
 })();
