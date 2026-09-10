@@ -1084,6 +1084,14 @@
       // is for.
       var rampA = Math.min(SIDING_RAISE, span / 3);
       var rr = rampA;
+      // A synthetic siding (route mode, below) says how deep it goes: it is
+      // the line visiting one of its own lanes rather than stepping a fixed
+      // distance aside, so the depth is the lane's and the ramp is eased to
+      // match, the way a two-line corridor's is.
+      if (s.raise != null) {
+        rr = Math.abs(s.raise);
+        rampA = Math.min(span / 3, Math.max(rr * 1.1, CORNER));
+      }
       var tw = packedFallback ? 1 : s.toward;
       var shift = 0;
       if (s.mem && s.mem.length > 1 && !packedFallback) {
@@ -1165,23 +1173,119 @@
       }
       return { rampA: rampA, rr: rr, tw: tw, shift: shift };
     }
-    function sidingRaiseAt(p, a) {
-      var segs = p._sidings;
-      for (var i = 0; i < segs.length; i++) {
-        var s = segs[i];
-        if (a < s.a0 || a > s.a1) continue;
-        var g = sidingGeom(p, s);
-        // this line's own share of the span: a member of a bundle turns
-        // later than the one outside it, so its shared section is shorter
-        // at both ends and its vertical stands clear of theirs
-        var b0 = s.a0 + g.shift, b1 = s.a1 - g.shift;
-        if (a < b0 || a > b1 || b1 - b0 <= 0) continue;
-        // signed: +1 kinks away from the spine (the ordinary siding), -1
-        // toward it, which is how a shared siding brings its lines together
-        if (a < b0 + g.rampA) return g.rr * rampEase((a - b0) / g.rampA) * g.tw;
-        if (a > b1 - g.rampA) return g.rr * rampEase((b1 - a) / g.rampA) * g.tw;
-        return g.rr * g.tw;
+    // ROUTE MODE: one continuous path per line, instead of a kink per event.
+    //
+    // A siding per event drew a spike each time, out to the lane and
+    // straight back, and a day of them read as an ECG rather than a route.
+    // A line that goes where its events are should STAY there until the
+    // next one asks it to move: hold at each event's level for its span,
+    // travel between them, and only come home at the end of the day.
+    //
+    // The travel is eased over whatever the gap allows, so a busy hour
+    // leans and a quiet afternoon sweeps.
+    // How long a line takes to reach its first event and to come home from
+    // its last. Declared HERE, beside the only function that reads it: put
+    // with the other ramp constants further down it was still undefined
+    // when the trunks were drawn, so every trunk path came out full of NaN
+    // and the browser dropped it. A board with no lines on it at all is a
+    // strange way to find a hoisting bug.
+    // OCTILINEAR: NOTHING BUT 0, 45 AND 90 DEGREES.
+    //
+    // Eased over the whole gap between two events, a line was a long lazy S
+    // that never committed to a direction and never held one: between them
+    // the board had no straight track on it at all. Every metro map ever
+    // drawn works the other way round. A line RUNS STRAIGHT, and where it
+    // has to change lane it does it in one deliberate 45 degree move with
+    // the two knees rounded, then runs straight again.
+    //
+    // So a transition is three pieces and no free parameters: a quarter of
+    // an eighth-turn out, a 45 degree diagonal, the same turn back. Its
+    // length follows from how far it has to go, which is the whole point:
+    // a bigger move takes proportionally longer rather than smearing itself
+    // across whatever room happens to be there.
+    var OCT = Math.SQRT1_2;                    // sin 45 = cos 45
+    var KNEE = 1 - OCT;                        // across-extent of a rounded knee, per unit radius
+    function octRadius(d) {
+      // A knee cannot eat more than half the move, or the two of them meet
+      // and there is no diagonal between them to be at 45 degrees.
+      return Math.min(CORNER, Math.abs(d) / (2 * KNEE));
+    }
+    function octRun(d, r) { return Math.abs(d) + 2 * r * (OCT - KNEE); }
+    function octAt(t, d, r) {
+      // where the line is `t` along a transition that moves `d` across
+      var R = octRun(d, r);
+      if (t <= 0) return 0;
+      if (t >= R) return d;
+      var sgn = d < 0 ? -1 : 1, knee = r * OCT;
+      if (t < knee) return sgn * (r - Math.sqrt(Math.max(0, r * r - t * t)));
+      if (t > R - knee) {
+        var u = R - t;
+        return d - sgn * (r - Math.sqrt(Math.max(0, r * r - u * u)));
       }
+      return sgn * (r * KNEE + (t - knee));
+    }
+    // Where a transition of this size STARTS, given the room it has. There
+    // are three answers and they are all deliberate: coming into the day the
+    // line arrives exactly when it is needed, leaving an event it goes home
+    // at once, and between two events it sits in the middle so the straight
+    // runs either side of it come out equal.
+    function octSpan(from, to, d, where) {
+      var r = octRadius(d), R = octRun(d, r), room = to - from;
+      if (R > room) { r = 0; R = Math.abs(d); }        // no room to be lazy about it
+      if (R > room) return { a0: from, R: room, r: 0 };  // steeper than 45: the 90 case
+      if (where < 0) return { a0: to - R, R: R, r: r };
+      if (where > 0) return { a0: from, R: R, r: r };
+      return { a0: from + (room - R) / 2, R: R, r: r };
+    }
+    function routeSpan(p, i) {
+      // the transition that lands on hold i (i === hs.length means the run
+      // home after the last one), memoised per line since the sampler asks
+      // for it once per sample
+      var hs = p._route, key = '_octs';
+      if (!p[key]) p[key] = [];
+      if (p[key][i]) return p[key][i];
+      var prevEnd = i ? hs[i - 1].a1 : null;
+      var prevLvl = i ? hs[i - 1].lvl : 0;
+      var lvl = i < hs.length ? hs[i].lvl : 0;
+      var to = i < hs.length ? hs[i].a0 : axisEnd;
+      var from = prevEnd == null ? axisStart : prevEnd;
+      // ...and past the previous stop's own name, when that is the way we
+      // are going. A move the other way passes nothing and waits for nothing.
+      var prev = i ? hs[i - 1] : null;
+      if (prev && prev.capA1 != null && prev.capSide != null) {
+        var goingC = p._sign * (lvl - prevLvl);
+        if (goingC !== 0 && (goingC > 0) === (prev.capSide > 0)) from = Math.max(from, prev.capA1);
+      }
+      // AS SOON AS IT IS OVER. Centred in the gap, a line that had come up
+      // to share School Run stayed up there until noon and the map said
+      // the two of them spent the morning together. A line leaves the level
+      // it was at the moment the reason for it ends, and arrives at the
+      // next one exactly when it is needed: what is between them is
+      // straight track, which is the only thing straight track should mean.
+      var where = prevEnd == null ? -1 : 1;
+      // ...unless it cannot: leaving at once and arriving on time are the
+      // same demand when the two events nearly touch, and then the move
+      // simply fills what room there is.
+      var sp = octSpan(from, to, lvl - prevLvl, where);
+      sp.base = prevLvl; sp.d = lvl - prevLvl;
+      p[key][i] = sp;
+      return sp;
+    }
+    function routeRaiseAt(p, a) {
+      var hs = p._route;
+      for (var i = 0; i < hs.length; i++) {
+        var h = hs[i];
+        if (a < h.a0) {
+          var sp = routeSpan(p, i);
+          return sp.base + octAt(a - sp.a0, sp.d, sp.r);
+        }
+        if (a <= h.a1) return h.lvl;
+      }
+      var tail = routeSpan(p, hs.length);
+      return tail.base + octAt(a - tail.a0, tail.d, tail.r);
+    }
+    function sidingRaiseAt(p, a) {
+      if (p._route && p._route.length) return routeRaiseAt(p, a);
       return 0;
     }
     // Where a track's line ACTUALLY is at an axis position: its baseline
@@ -1409,6 +1513,9 @@
       // read a caption position from a picture that is no longer on the
       // screen. Cleared before anything reads them.
       e._bundleOut = null; e._drawnLaneC = null;
+      e._capOut = null; e._capRow = 0; e._routeLvl = null; e._capLead = false;
+      e._rampEl = null;
+      e._onRoute = false; e._routeShared = false; e._routeEdge = null;
       e._capMinA = null; e._capMaxA = null;
       e._nodeA = aFor(e.start_min);
       e._endA = aFor(Math.max(e.end_min, e.start_min + 5));
@@ -1936,7 +2043,15 @@
             if (o._nodeA > e._endA && o._nodeA < nextA) nextA = o._nodeA;
           });
           var fitsBeforeNext = best.dir < 0 || mergeAt + CORNER <= nextA - CORNER;
-          if (fitsBeforeNext && e._endA >= best.elbow + CORNER + 2 * S && mergeAt <= axisEnd - EDGE) {
+          // A FORK ENDS AS SOON AS IT CAN. In route mode a spur is only
+          // drawn where a line really divides, two things at once, and the
+          // moment the shorter of them is over there is nothing for the
+          // branch to be: it should come back to wherever its line has got
+          // to. The length test below asks the flat run to be long enough
+          // to hold the rejoin comfortably, which a fifteen-minute sync
+          // never is, so it ended on a stub and the fork stayed open.
+          var longEnough = e._endA >= best.elbow + 2 * S;
+          if (fitsBeforeNext && longEnough && mergeAt <= axisEnd - EDGE) {
             var clear = true, L2 = lane(best.k);
             for (var m = 0; m < L2.items.length && clear; m++) if (itemOverlaps(L2.items[m], [lineB, mergeAt + CORNER])) clear = false;
             if (clear && !diagonalCrosses(e._endA, best.ld, mergeAt, e._trackDistEnd, best.k)) {
@@ -2694,19 +2809,51 @@
     // so no label is dropped into the space the lines are about to move
     // through and no branch is routed across it. Only the band: the lanes
     // inside and beyond it are still free.
+    // WHEREVER A TRUNK IS NOT WHERE ITS TRUNK USUALLY IS.
+    //
+    // The lanes are measured out from a line, and the line does not stay
+    // put: it leans over to meet a convergence, runs alongside for the
+    // length of it, and comes back. Every lane it passes through on the way
+    // is occupied while it is there, and the placement had no idea — so it
+    // hung "Groceries" in a lane its own trunk was about to lean across,
+    // and the caption came out with a line drawn through the middle of it.
+    //
+    // This used to ask the sidings, which was the same statement about a
+    // third of the cases. Asking the ROUTE covers all of them, because the
+    // route is now the one description of where a line goes.
     function corridorBlocks(sideKey) {
       var out = [];
       if (packedFallback) return out;
       sides[sideKey].forEach(function (p) {
-        p._sidings.forEach(function (s) {
-          if (!s.mem || s.mem.length < 2) return;
-          var g = sidingGeom(p, s);
-          if (!(g.rr > 0)) return;
-          var here = p._dist, there = p._dist + g.tw * g.rr;
-          out.push({ a0: s.a0, a1: s.a1,
-            distMin: Math.min(here, there) - LINE_GAP,
-            distMax: Math.max(here, there) + LINE_GAP });
-        });
+        var hs = p._route;
+        if (!hs || !hs.length) return;
+        // A LANE IS SPOILED BY A TRUNK THE WIDTH OF A CAPTION AWAY, not
+        // only by one lying on top of it. A caption hangs off its lane by
+        // the gap plus its own height, so a trunk anywhere inside that
+        // reach is drawn across the words: blocked at the rail's own width,
+        // no lane was ever quite hit and "Groceries", "Swim Training" and
+        // "Book Club" all kept lanes their own line was about to lean
+        // through.
+        // The rail's own width and no more. Reserving a caption's height
+        // around every hold, or even three times the gap, took lanes off
+        // the board faster than it could spare them and fixtures started
+        // dropping events outright, which is worse than a line behind some
+        // words: a caption carries a paper outline and the rail passes
+        // behind it, but an event that is not on the board is not there.
+        var reach = LINE_GAP;
+        function block(a0, a1, l0, l1) {
+          if (!(a1 > a0)) return;
+          var d0 = p._dist + Math.min(l0, l1), d1 = p._dist + Math.max(l0, l1);
+          out.push({ a0: a0, a1: a1,
+            distMin: Math.min(d0, d1) - reach, distMax: Math.max(d0, d1) + reach });
+        }
+        for (var i = 0; i < hs.length; i++) block(hs[i].a0, hs[i].a1, hs[i].lvl, hs[i].lvl);
+        // and the ramps, which sweep every lane between the two levels
+        for (var j = 0; j <= hs.length; j++) {
+          var sp = routeSpan(p, j);
+          block(Math.min(sp.a0, sp.a0 + sp.R), Math.max(sp.a0, sp.a0 + sp.R),
+                sp.base, sp.base + sp.d);
+        }
       });
       return out;
     }
@@ -2826,6 +2973,160 @@
     // One layout, then a second one that knows where the first put the
     // bars. The better of the two wins, and the winner is drawn again so
     // the DOM matches the score that was chosen.
+    // THE TRUNK IS BUILT TWICE, ON PURPOSE.
+    //
+    // Where a line runs is decided here, and the lane machinery needs to
+    // know it: a caption is placed against a board of lines, and until
+    // this ran first that board was drawn level while the real one leans
+    // out to meet a convergence and comes back. Every pierce on the list
+    // was ink the placement had never been shown.
+    //
+    // But which events survive is decided by the placement, so the first
+    // call is a PREDICTION and the second is the answer. Building it once
+    // and leaving it is the stale-state trap this file has fallen into
+    // before: the second call is unconditional and rebuilds from nothing,
+    // so nothing from the first pass can survive into the drawing.
+    var shared = [];
+    function buildTrunks() {
+      shared = [];
+      // ONLY A SHARED EVENT MOVES THE TRUNK.
+      //
+      // A line moving on this board should mean something spatial. Two
+      // people being in the same place is spatial, so a jog in the trunk to
+      // meet somebody is honest and reads without being explained: the
+      // reader sees the line leave its lane and knows this is where the day
+      // joins up. "Work had a meeting at eleven" is not spatial at all, and
+      // a trunk that climbs for it says something the calendar never said,
+      // while costing the map the straight running that made it legible.
+      //
+      // So a person's OWN events keep the branch the lane machinery gives
+      // them, which is the shape they have always had and the pass that
+      // knows about depth, sides, packing and pierces. Nothing below
+      // touches them.
+      //
+      // Unpinning the trunk from them is also what fixed the approaches.
+      // Held at its own lane by every own event, Alex could not start down
+      // to Family Dinner until Groceries let go at 18:00 and the descent
+      // came out as a sheer drop; with only the convergences pinning it,
+      // the same descent has hours to happen in and is drawn at 45 degrees.
+
+      // A route is a decision, not a measurement, and the map lays itself
+      // out more than once: left standing, the second pass found every line
+      // already holding a corridor from the first, called that a clash, and
+      // quietly drew every shared event as a bundle again.
+      // A SIDING IS A HOLD LIKE ANY OTHER. It says the same thing a
+      // convergence says — this line is over here, from this minute to that
+      // one — so it belongs in the same list and gets the same octilinear
+      // approach. Kept in a second model of its own it was simply lost:
+      // `sidingRaiseAt` answered from the route and ignored the sidings
+      // completely, so on a board with both, a siding was drawn against a
+      // trunk that had never heard of it and ended 45px off its own line.
+      LEGEND.forEach(function (p) {
+        p._octs = null;
+        p._route = null;
+        (p._sidings || []).forEach(function (st) {
+          var g = sidingGeom(p, st);
+          // THE HOLD IS THE FLAT PART, and the turns either side of it stay
+          // INSIDE the siding's own span. A siding is a stretch of the day,
+          // not a change of address: the line has to be back on its
+          // baseline by the time the span ends, or a siding running the
+          // whole day leaves the trunk parked one lane off its own terminal
+          // bars at both ends of the board.
+          var lvl = g.rr * g.tw;
+          if (!isFinite(lvl)) return;
+          // ...and the inset is however long an octilinear turn of this
+          // depth actually takes, not the siding's own idea of a ramp.
+          // Short by a few pixels, the trunk was still ten off its baseline
+          // where the siding ended and no longer met the line it runs beside.
+          var inset = Math.max(g.rampA, octRun(lvl, octRadius(lvl)));
+          var b0 = st.a0 + g.shift + inset, b1 = st.a1 - g.shift - inset;
+          if (!(b1 > b0)) return;
+          p._route = (p._route || []).concat([{ a0: b0, a1: b1, lvl: lvl, siding: true }]);
+        });
+      });
+
+      visible.forEach(function (e) {
+        if (e._dropped || !e._involved || e._involved.length < 2) return;
+        if (!(e.end_min > e.start_min)) return;    // a moment keeps its tie
+        var mem = e._involved.slice().sort(function (a, b) { return a._c - b._c; });
+        var pitch = LINE_GAP * 0.65 + Math.max(2, e._p.line_width) * S * weightScale;
+        var centre = (mem[0]._c + mem[mem.length - 1]._c) / 2;
+        var ok = true;
+        var want = mem.map(function (q, i) {
+          var c = centre + (i - (mem.length - 1) / 2) * pitch;
+          var lvl = (c - q._c) * q._sign;          // as a raise in the track's own sign
+          if (!isFinite(lvl)) ok = false;
+          return { q: q, lvl: lvl };
+        });
+        if (!ok) return;
+        // only if every one of them is free at that minute: a line already
+        // converging somewhere else really does have to stay a bundle
+        var clash = want.some(function (w) {
+          return (w.q._route || []).some(function (h) { return e._nodeA <= h.a1 && h.a0 <= e._endA; });
+        });
+        if (clash) return;
+        want.forEach(function (w) {
+          w.q._route = (w.q._route || []).concat([{ a0: e._nodeA, a1: e._endA, lvl: w.lvl, shared: true }]);
+          w.q._route.sort(function (a, b) { return a.a0 - b.a0; });
+          w.q._octs = null;                       // the spans are memoised off it
+        });
+        e._onRoute = true;
+        e._routeShared = true;
+        // A MARK belongs on the owner's own rail inside the corridor, while
+        // the CAPTION goes beyond the outermost rail so it is clear of all
+        // of them. Given the corridor's centre, the end ticks floated
+        // between the rails.
+        var lo2 = spineC + want[0].q._c + want[0].q._sign * want[0].lvl;
+        var hi2 = spineC + want[want.length - 1].q._c + want[want.length - 1].q._sign * want[want.length - 1].lvl;
+        var own = null;
+        want.forEach(function (w) { if (w.q === e._p) own = w; });
+        if (own) e._drawnLaneC = spineC + own.q._c + own.q._sign * own.lvl;
+        e._routeEdge = e._sign > 0 ? Math.max(lo2, hi2) : Math.min(lo2, hi2);
+        // AND A LEADER TO ITS NAME. A convergence has no rail hanging off it
+        // to carry a caption the way a branch does, so its name simply sat
+        // near the corridor with three lines running through the same
+        // stretch of board and nothing saying which mark it belonged to.
+        // Set clear of the capsule and joined back to it by a thin tick,
+        // which is what a transit map does with any name it cannot write
+        // directly against its station.
+        e._capOut = LINE_GAP + Math.max(NODE_R * 1.6, sharedRailWidth(e._p) * S * weightScale);
+        e._capLead = true;
+        e._labelSign = e._sign;
+        e._textStart = e._nodeA + TEXT_PAD;
+        if (e._textStart + e._textLen > axisEnd - EDGE) e._textStart = e._endA - TEXT_PAD - e._textLen;
+        shared.push(e);
+      });
+
+      // A LINE GOES HOME BETWEEN CONVERGENCES. Two corridors and nothing in
+      // between is one long ramp from the first to the second, which says
+      // the two of them were one event: Alex would have left lunch and
+      // arrived at dinner without ever being at work. So a stretch at its
+      // own lane is booked in the gap wherever there is room for the two
+      // ramps and some straight track between them, and where there is not,
+      // the line goes from one to the other, which by then is the truth.
+      LEGEND.forEach(function (p) {
+        if (!p._route || !p._route.length) return;
+        var out = [], hs = p._route;
+        for (var i = 0; i <= hs.length; i++) {
+          var prev = i ? hs[i - 1] : null;
+          var next = i < hs.length ? hs[i] : null;
+          if (prev) out.push(prev);
+          var from = prev ? prev.a1 : axisStart;
+          var to = next ? next.a0 : axisEnd;
+          var runA = prev ? octRun(prev.lvl, octRadius(prev.lvl)) : 0;
+          var runB = next ? octRun(next.lvl, octRadius(next.lvl)) : 0;
+          if (to - from <= runA + runB + CORNER * 2) continue;
+          out.push({ a0: from + runA + CORNER, a1: to - runB - CORNER, lvl: 0, home: true });
+        }
+        p._route = out.filter(function (h) { return h.a1 > h.a0; })
+                      .sort(function (a, b) { return a.a0 - b.a0; });
+        p._octs = null;
+      });
+
+      recomputeTrackDists();
+    }
+    buildTrunks();
+
     function attempt(tier) {
       barBlocks = { A: [], B: [] };
       var q1 = layoutAttempt(tier);
@@ -2850,6 +3151,91 @@
     }
     if (bestTier !== ti) attempt(tiers[bestTier]);
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
+    buildTrunks();
+
+    {
+      // WHERE A CONVERGENCE'S NAME GOES, given everything else on the board.
+      //
+      // Hung off the corridor and nothing else, it was written across
+      // whatever happened to be passing: Kids came down its ramp straight
+      // through "School Run", and "Family Dinner" and "Book Club" were set
+      // on top of each other. A convergence is the one caption placed after
+      // the trunks are decided, so it is the one that can see them, and it
+      // is the one that should give way.
+      //
+      // The lines are SAMPLED rather than assumed level, because that
+      // assumption is the whole reason this had to be rewritten.
+      if (shared.length) {
+        var busy = [];
+        LEGEND.forEach(function (q) {
+          var half = Math.max(2, q.line_width) * S * weightScale / 2 + LINE_GAP * 0.5;
+          var stepA = Math.max(CORNER, (axisEnd - axisStart) / 140);
+          for (var a = axisStart; a < axisEnd; a += stepA) {
+            var b = Math.min(axisEnd, a + stepA);
+            var u0 = lineCAt(q, a), u1 = lineCAt(q, b);
+            busy.push({ a0: a, a1: b, c0: Math.min(u0, u1) - half, c1: Math.max(u0, u1) + half, soft: true });
+          }
+        });
+        // every branch rail and every caption the lane machinery already
+        // placed, which by now is all of them except these
+        visible.forEach(function (o) {
+          if (o._dropped || o._routeShared) return;
+          var oc = spineC + o._sign * o._laneDist;
+          if (isFinite(o._lineFrom) && isFinite(o._lineTo)) {
+            busy.push({ a0: Math.min(o._lineFrom, o._lineTo), a1: Math.max(o._lineFrom, o._lineTo),
+                        c0: oc - LINE_GAP * 0.5, c1: oc + LINE_GAP * 0.5, soft: true });
+          }
+          if (o._textStart == null) return;
+          var os = o._labelSign == null ? o._sign : o._labelSign;
+          var t0 = os > 0 ? oc + LINE_GAP : oc - LINE_GAP - o._h;
+          busy.push({ a0: o._textStart - TEXT_PAD, a1: o._textStart + o._textLen + TEXT_PAD,
+                      c0: t0, c1: t0 + o._h });
+        });
+        function costAt(b) {
+          var cost = 0;
+          for (var i = 0; i < busy.length; i++) {
+            var t = busy[i];
+            if (b.a0 >= t.a1 || t.a0 >= b.a1 || b.c0 >= t.c1 || t.c0 >= b.c1) continue;
+            var ov = (Math.min(b.a1, t.a1) - Math.max(b.a0, t.a0))
+                   * (Math.min(b.c1, t.c1) - Math.max(b.c0, t.c0));
+            // A caption over a caption is unreadable; a caption over a rail
+            // is untidy, and every caption carries a paper outline so the
+            // rail passes behind it. They are not worth the same.
+            cost += t.soft ? ov * 0.35 : ov;
+          }
+          return cost;
+        }
+        shared.sort(function (a, b) { return a._nodeA - b._nodeA; });
+        shared.forEach(function (e) {
+          var row = e._h + LINE_GAP * 0.6;
+          var outs = [e._capOut, e._capOut + row, e._capOut + row * 2, e._capOut + row * 3];
+          var slides = [0, e._textLen * 0.3, -e._textLen * 0.3,
+                        e._textLen * 0.55, -e._textLen * 0.55];
+          var base = e._nodeA + TEXT_PAD, best = null;
+          for (var oi = 0; oi < outs.length; oi++) {
+            for (var sg = 1; sg >= -1; sg -= 2) {
+              for (var si = 0; si < slides.length; si++) {
+                var at = base + slides[si];
+                if (at < axisStart + EDGE || at + e._textLen > axisEnd - EDGE) continue;
+                var away = sg * e._sign;
+                var c0 = away > 0 ? e._routeEdge + outs[oi] : e._routeEdge - outs[oi] - e._h;
+                var b = { a0: at - TEXT_PAD, a1: at + e._textLen + TEXT_PAD, c0: c0, c1: c0 + e._h };
+                if (c0 < bandLo || c0 + e._h > crossPx - EDGE) continue;
+                var cost = costAt(b) + oi * e._h * e._textLen * 0.03
+                         + Math.abs(slides[si]) * e._h * 0.02;
+                if (!best || cost < best.cost) best = { cost: cost, at: at, out: outs[oi], sign: away, box: b };
+                if (cost === 0) { oi = outs.length; sg = -3; break; }
+              }
+            }
+          }
+          if (!best) return;
+          e._textStart = best.at; e._capOut = best.out; e._labelSign = best.sign;
+          busy.push(best.box);
+        });
+      }
+
+      recomputeTrackDists();
+    }
     function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA)]; }); }
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal,
@@ -2861,6 +3247,9 @@
       packed: !!packedFallback,
       // A18: which lines exchanged places, and where on the axis. Empty on
       // a day one order can draw, which is most of them.
+      route: LEGEND.filter(function (p) { return p._route; }).map(function (p) {
+        return { key: p.key, holds: p._route.map(function (h) { return [Math.round(h.a0), Math.round(h.a1), Math.round(h.lvl)]; }) };
+      }),
       weave: LEGEND.filter(function (p) { return p._weave; }).map(function (p) {
         return { key: p.key, atA: Math.round(p._weave.mid), from: Math.round(p._weave.fromC), to: Math.round(p._weave.toC) };
       }),
@@ -3052,6 +3441,24 @@
       // and everything between them is sampled, which is what draws it as a
       // curve rather than a straight line between the two heights
       if (p._weave) [p._weave.a0, p._weave.a1].forEach(function (a) { if (a > lo && a < hi) marks.push(a); });
+      // route mode: every hold's two ends are breakpoints, and so is the
+      // start of the run in and out of the day. Without them this samples
+      // between two points that happen to be at the same height and draws
+      // a straight line through everything the line actually does.
+      if (p._route) {
+        p._route.forEach(function (h) {
+          [h.a0, h.a1].forEach(function (a) { if (a > lo && a < hi) marks.push(a); });
+        });
+        // and both ends of every transition, plus both knees, so the flat
+        // running either side of a move is drawn as ONE straight segment
+        // rather than sampled into a very slightly wobbly one
+        for (var qi = 0; qi <= p._route.length; qi++) {
+          var sp = routeSpan(p, qi), knee = sp.r * OCT;
+          [sp.a0, sp.a0 + knee, sp.a0 + sp.R - knee, sp.a0 + sp.R].forEach(function (a) {
+            if (a > lo && a < hi) marks.push(a);
+          });
+        }
+      }
       p._sidings.forEach(function (s) {
         var gg = sidingGeom(p, s), ra = gg.rampA, b0 = s.a0 + gg.shift, b1 = s.a1 - gg.shift;
         [b0, b0 + ra, b1 - ra, b1].forEach(function (a) { if (a > lo && a < hi) marks.push(a); });
@@ -3848,8 +4255,82 @@
         }
         return [[aFrom, lineCAt(p, aFrom)], [aElbow, laneC], [tail, laneC]];
       }
-      return trunkSlice(p, aFrom - dir * RAMP_LEAD, aFrom)
+      // A JUNCTION CANNOT DOUBLE BACK.
+      //
+      // The lane a branch runs in is chosen while the trunk is level, and
+      // the trunk does not stay level: by half past five Alex is well down
+      // its ramp to Family Dinner and Groceries' lane is above it. Leaving
+      // at the event's own minute, the rail followed the trunk DOWN and
+      // then turned back UP to its lane, and the fillet between the two
+      // came out as a little hook curled round the ring.
+      //
+      // A line that has to go up does not first go down. So the rail parts
+      // company where the trunk is nearest its lane's own height, which on
+      // a trunk crossing that height is exactly the crossing: from there it
+      // simply carries straight on while the trunk keeps falling, with no
+      // elbow at all, which is what a junction on a real map looks like.
+      // On a level trunk nothing moves, because nothing can be nearer.
+      var dep = departAt(p, aFrom, aElbow, laneC, dir);
+      // The lead-in exists to make the departure an interior vertex so it
+      // gets filleted like every other bend, and it is invisible because it
+      // lies on the trunk in the trunk's own stroke. That stops being true
+      // where the rail goes STRAIGHT ACROSS off a trunk that is itself
+      // running at 45: the two diverge from the moment they part, and a
+      // full lead opens a long thin wedge between them that reads as a hook
+      // curled round the ring. There it is cut to the length the fillet
+      // actually needs.
+      // WHERE THE LINE IS ALREADY AT THE LANE, the rail simply starts and
+      // runs. That is the whole point of forking off a moving trunk at the
+      // height it has reached: there is no ramp, so there is nothing to
+      // give a lead-in to, and a lead drawn anyway is a stub of rail lying
+      // in the lane before the event it belongs to.
+      if (Math.abs(laneC - lineCAt(p, aElbow)) < 1) return [[aElbow, laneC], [tail, laneC]];
+      // A STRAIGHT-DOWN DROP STARTS AT ITS CORNER AND NOTHING COMES BEFORE
+      // IT. The lead-in exists only so the departure is an interior vertex
+      // and gets filleted; a vertical drop wants no fillet there, the ring
+      // covers the corner, and drawn anyway the lead is a stub of line
+      // hanging off the trunk before the rail it belongs to.
+      if (Math.abs(dep - aElbow) < 0.5) {
+        return [[aElbow, lineCAt(p, aElbow)], [aElbow, laneC], [tail, laneC]];
+      }
+      return trunkSlice(p, dep - dir * RAMP_LEAD, dep)
         .concat([[aElbow, laneC], [tail, laneC]]);
+    }
+    // WHERE A RAIL MAY LEAVE ITS OWN LINE AND STILL ARRIVE AT 45 DEGREES.
+    //
+    // ONLY OCTILINEAR ANGLES: every stretch of every line on this map runs
+    // level, at 45 degrees, or straight across, and nothing else. The
+    // departure was the one place that broke the rule, because the point it
+    // left from was chosen while the trunk was level and the trunk does not
+    // stay level: leaving Alex halfway down its ramp to Family Dinner, the
+    // rail to Groceries came off at whatever angle happened to be left over
+    // and the fillet round it drew as a hook.
+    //
+    // The elbow is fixed — that is where the rail has to be — so the free
+    // end is the departure, and the 45 is what decides it: walk back along
+    // the trunk until the axis distance left to run equals the cross-axis
+    // distance still to climb. Scanned rather than solved, because the
+    // trunk is a sampled shape and not a formula.
+    //
+    // Where no such point exists — the trunk is running away at 45 itself,
+    // so the two never meet — the answer is the other legal angle. The rail
+    // goes straight across at the elbow, which is what a junction on a
+    // steep approach looks like anyway.
+    function departAt(p, aFrom, aElbow, laneC, dir) {
+      // A trunk already running at 45 in the same direction is PARALLEL to
+      // the rail leaving it, and two parallel lines never meet: the scan
+      // walks further and further back and the departure ends up so early
+      // that the rail runs alongside its own trunk for half an hour, which
+      // reads as two lines rather than one leaving another. Past a run half
+      // again as long as the climb itself, take the other legal angle.
+      var need = Math.abs(laneC - lineCAt(p, aElbow));
+      var budget = need * 1.5 + CORNER;
+      var steps = Math.max(12, Math.ceil(budget / Math.max(1, CORNER * 0.25)));
+      for (var i = 1; i <= steps; i++) {
+        var a = aElbow - dir * budget * (i / steps);
+        if (Math.abs(aElbow - a) >= Math.abs(laneC - lineCAt(p, a))) return a;
+      }
+      return aElbow;                 // no 45 available: go straight across
     }
 
     // ---- branches: every ring gets its 45° diagonal; same-owner spurs that
@@ -3884,6 +4365,21 @@
       tb.setAttribute('data-metro-owner', p.key);
       svg.appendChild(tb);
     }
+    // ---- ROUTE MODE (prototype, off unless the payload asks for it) ----
+    //
+    // Instead of a stub off the line for every event, the LINE ITSELF goes
+    // where its events are: it leans out to a lane, runs flat through the
+    // event, and carries on to wherever the next one is. A junction is then
+    // only drawn where one is meant, which is where a person has two things
+    // at once and their line really does fork.
+    //
+    // It costs almost nothing to try, because a siding is already exactly
+    // this move: out to a level for a span and back, eased, with everything
+    // downstream reading `lineCAt` rather than assuming a baseline. So a
+    // solo event becomes a siding at its own lane's depth, and its spur is
+    // not drawn.
+    var ROUTE_MODE = true;
+
     Object.keys(chains).forEach(function (key) {
       var list = chains[key].sort(function (a, b) { return a._lineFrom - b._lineFrom; });
       var groups = [], cur = null;
@@ -3892,6 +4388,23 @@
         else { cur = { from: e._lineFrom, to: e._lineTo, members: [e] }; groups.push(cur); }
       });
       groups.forEach(function (g) {
+        // In route mode a group of this line's OWN events, with nobody
+        // else's line in it, is not a spur at all: the line goes there.
+        if (ROUTE_MODE && g.members.every(function (m) { return m._onRoute; })) {
+          // the line is already there: mark where, so every tick and dot
+          // lands on it, and draw no spur
+          var laneC0 = spineC + g.members[0]._sign * g.members[0]._laneDist;
+          // ...but never over a convergence. A shared event is drawn in the
+          // corridor its lines met in, and that is already recorded; told
+          // the lane instead, the capsule grew a heavy bar all the way down
+          // to it and Family Dinner was drawn twice, once as the meeting it
+          // is and once as a dead-end stub below everybody.
+          g.members.forEach(function (m) {
+            if (!m._routeShared) m._drawnLaneC = laneC0;
+            m._onLine = true;
+          });
+          return;
+        }
         // A spur wears the stroke of the line it GROWS FROM, which for an
         // interchange is the outermost rail it joins rather than whoever
         // nominally owns the event. A solid stub sprouting out of a dotted
@@ -3924,11 +4437,36 @@
           p = bold;
         }
         var sign = g.members[0]._sign, laneC = spineC + sign * g.members[0]._laneDist;
+        // A FORK OFF A MOVING TRUNK IS TWO LINES GOING DIFFERENT WAYS, and
+        // nothing else. The lane was picked while the trunk was level, and
+        // holding the rail to it once the trunk is on the move bought a
+        // vertical drop and left a thin wedge between the two that read as
+        // a hook curled round the ring. The honest drawing is the simple
+        // one: the trunk carries on down at 45 and the rail goes straight
+        // on at the height the line is already at.
+        //
+        // Only where the trunk is passing close to that lane anyway, so
+        // this moves a rail by a few pixels to make a clean junction and
+        // never relocates it. On a level trunk nothing happens at all,
+        // which is every board that is not in route mode.
+        (function snapToMovingTrunk() {
+          var head0 = g.members.slice().sort(function (a, b) { return a._elbow - b._elbow; })[0];
+          if (!head0 || !isFinite(head0._elbow)) return;
+          var d = Math.max(1, CORNER * 0.4);
+          var m = (lineCAt(p, head0._elbow + d) - lineCAt(p, head0._elbow - d)) / (2 * d);
+          if (Math.abs(m) < 0.2) return;                 // the trunk is level here
+          var tc = lineCAt(p, head0._elbow);
+          if (Math.abs(tc - laneC) > Math.max(CORNER * 3, LINE_GAP * 3)) return;
+          laneC = tc;
+          g.members.forEach(function (mm) { mm._laneDist = (tc - spineC) * mm._sign; });
+        })();
         // The whole group is drawn at ONE lane height — the first member's —
         // but each member computed its own, and those differ when one of
         // them sits inside a siding and another does not. A marker placed
         // from the member's own reading floated off the rail it belongs to.
-        g.members.forEach(function (m) { m._drawnLaneC = laneC; });
+        // never over a route: a line that went to the event itself already
+        // knows where it is, and the group's lane is not where that is.
+        g.members.forEach(function (m) { if (!m._onRoute) m._drawnLaneC = laneC; });
         // The flat run is drawn as a straight spine PLUS each member's own
         // rounded diagonal into it — two separate paths. A straight spine
         // that reaches all the way up to (or past) a member's own elbow
@@ -4100,7 +4638,20 @@
     // to lie alongside each other for, so a comb of rails on one minute is
     // a smudge with nothing to say, and it keeps the interchange tie and
     // its ring instead. Standing up, nothing is bundled at all.
+    // One end of a tick standing square to the rail it marks. The rail's
+    // own slope is read off the same function that draws it, so the mark
+    // and the line can never disagree about which way the line is going.
+    function tickEnd(e, a, half, cAt) {
+      var d = Math.max(1, CORNER * 0.4);
+      var m = (cAt(a + d) - cAt(a - d)) / (2 * d);
+      var L = Math.sqrt(1 + m * m);
+      return toXY(a - half * m / L, cAt(a) + half / L);
+    }
     function bundled(e) {
+      // In route mode a shared event the routes themselves carry is not a
+      // bundle at all: the lines converge on their own and carry on, so
+      // there is no comb to plan and no stub to draw.
+      if (e._routeShared) return false;
       return horizontal && !e._dropped && e._involved.length > 1 && e.end_min > e.start_min;
     }
     // PLANNING the bundle is separate from drawing it, and happens before
@@ -4361,9 +4912,13 @@
             ? [toXY(r.dropA, sg[0]), toXY(r.dropA, r.rungC), toXY(end, r.rungC)]
             : [toXY(r.dropA, sg[0]), toXY(r.dropA, sg[1])];
           var radii = last ? [topBend, bend] : [topBend];
-          // only the piece that actually starts on the trunk gets the lead
-          if (si === 0) pts.unshift(toXY(r.dropA - lead, fromC));
-          else radii = last ? bend : 0;
+          // No lead-in. It was a short run ALONG the trunk at the trunk's
+          // height where the branch leaves, drawn so the departure would be
+          // an interior vertex and get filleted — but the trunk is on the
+          // move now, so that run is a horizontal stub lying beside a line
+          // that is no longer horizontal, and the capsule covers the corner
+          // it was rounding anyway.
+          if (si) radii = last ? bend : 0;
           var el = svgEl('path', { d: roundedPath(pts, radii) });
           el.setAttribute('data-metro-role', 'branch');
           el.setAttribute('data-metro-owner', r.q.key);
@@ -4438,7 +4993,13 @@
         // parallel rails it was a dense comb of near-identical strokes that
         // read as a smudge, not as five lines arriving somewhere.
         if (e._laneDist && e.end_min > e.start_min) {
-          var laneC0 = e._drawnLaneC != null ? e._drawnLaneC : spineC + e._sign * e._laneDist;
+          // ROUTE MODE: ask the line, do not remember the lane. `_drawnLaneC`
+          // is a cache, and the bundle drawing overwrites it with whatever
+          // lane its GROUP settled on: School Run and Family Dinner both
+          // ended up quoting the same stale lane, so both left a tick
+          // stranded below the Kids line with nothing under it.
+          var laneC0 = e._onRoute ? lineCAt(e._p, e._endA)
+                     : e._drawnLaneC != null ? e._drawnLaneC : spineC + e._sign * e._laneDist;
           // The capsule spans the LINES it joins and stops there. Stretched
           // on down to the rail it feeds it became a long pill reaching
           // through every label lane on that side, and the captions —
@@ -4456,7 +5017,8 @@
           // landing 58px clear of the rail it belonged to with nothing
           // under it.
           var sh = sharedRailWidth(p) * S * weightScale / 2 + NODE_R * 1.15 * 0.85;
-          var q0 = toXY(e._endA, laneC0 - sh), q1 = toXY(e._endA, laneC0 + sh);
+          var atC = function () { return laneC0; };
+          var q0 = tickEnd(e, e._endA, -sh, atC), q1 = tickEnd(e, e._endA, sh, atC);
           var etick = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
             'stroke-width': NODE_STROKE * 1.15, 'stroke-linecap': 'round' });
           etick.style.stroke = INK;
@@ -4486,6 +5048,37 @@
         cap.style.fill = PAPER; cap.style.stroke = INK;
         cap.setAttribute('data-metro-role', 'capsule'); cap.setAttribute('data-metro-owner', e.owner);
         svg.appendChild(cap);
+        // A LEADER FROM THE CAPSULE TO ITS NAME.
+        //
+        // A branch carries its caption on the rail it hangs off, so there
+        // is never a question which stop a name belongs to. A convergence
+        // has no such rail: it is a capsule with three lines running
+        // through the same stretch of board, and its name sat near it
+        // saying nothing about which of them it was for. This is the thin
+        // tick every transit map draws from a station to a label it could
+        // not set directly against it.
+        if (e._capLead && e._capOut != null) {
+          var away = e._labelSign != null ? e._labelSign : e._sign;
+          var lc0 = e._routeEdge != null ? e._routeEdge : lineCAt(p, e._nodeA);
+          // TO WHERE THE NAME ACTUALLY IS. The caption gives way to the
+          // lines and can end up a good way along the axis from its own
+          // capsule; drawn straight out at the event's own minute, the
+          // leader pointed at blank board while the name it belonged to
+          // sat somewhere else. It leans across to meet the nearest corner
+          // of the words, which is the whole job of a leader.
+          var g0 = toXY(e._nodeA, lc0);
+          var toA = e._textStart == null ? e._nodeA
+            : (e._textStart > e._nodeA ? e._textStart : Math.min(e._nodeA, e._textStart + e._textLen));
+          var g1 = toXY(toA, lc0 + away * (e._capOut - LINE_GAP * 0.25));
+          var lead = svgEl('line', {
+            x1: g0[0], y1: g0[1], x2: g1[0], y2: g1[1],
+            'stroke-width': Math.max(1, NODE_STROKE * 0.5), 'stroke-linecap': 'round',
+          });
+          lead.style.stroke = INK;
+          lead.setAttribute('data-metro-role', 'leader');
+          lead.setAttribute('data-metro-owner', e.owner);
+          svg.appendChild(lead);
+        }
       } else {
         // A local stop: a tick across the line, not a ring. On a transit map
         // the hollow ring means "you can change lines here" — spending it on
@@ -4508,6 +5101,20 @@
         // floats off the line it is supposed to mark. Follow the spur.
         var forkC = lineCAt(trackByKey[e._laneOwner] || p, e._diagFrom);
         function spurC(a) {
+          // ROUTE MODE: there is no spur to follow. The line went to the
+          // event itself, so the mark goes where the LINE is at that
+          // minute, which is the one description that cannot disagree with
+          // the drawing. Interpolated along a spur that no longer exists,
+          // the end ticks floated in clear air below their own caption.
+          if (e._onRoute) return lineCAt(p, a);
+          // NO RAMP MEANS NO RAMP TO BE PART OF THE WAY DOWN. An event
+          // chained onto a rail an earlier one brought down never drew a
+          // departure of its own, but it still carries the `_diagFrom` and
+          // `_elbow` the placement gave it, and interpolating between them
+          // put Client Workshop's ring in clear air above the rail it
+          // actually sits on. It is on flat rail: that is where the mark
+          // goes.
+          if (!e._rampEl) return laneC;
           var run = e._elbow - e._diagFrom;
           if (!run) return laneC;
           var u = (a - e._diagFrom) / run;
@@ -4574,7 +5181,13 @@
         if (e.end_min > e.start_min && e._endA >= lo - 1 && e._endA <= hi + 1) {
           var tc = spurC(e._endA);
           var half = markOut(p, NODE_R);
-          var t0 = toXY(e._endA, tc - half), t1 = toXY(e._endA, tc + half);
+          // ACROSS THE RAIL, not across the axis. A tick means "the line
+          // stops being here", and it says that by standing square to the
+          // line. Drawn square to the CLOCK instead it leant further the
+          // steeper the rail got, and on a line coming down a ramp into an
+          // interchange it read as a short piece of a second line laid over
+          // the first rather than as a mark on it.
+          var t0 = tickEnd(e, e._endA, -half, spurC), t1 = tickEnd(e, e._endA, half, spurC);
           var tick = svgEl('line', {
             x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
             'stroke-width': NODE_STROKE, 'stroke-linecap': 'round',
@@ -4638,7 +5251,12 @@
             carA = p._nameA1 + carHalf + 2 * S;
           }
         }
-        var c = riding ? spineC + riding._sign * riding._laneDist : lineCAt(p, carA);
+        // ROUTE MODE: a line that went to the event itself has no spur to
+        // ride, and its lane is not where it is. Asked for the lane, the W
+        // parked a caption's height above Work's rail and "Design Review"
+        // was written round it.
+        var c = (riding && !riding._onRoute)
+          ? spineC + riding._sign * riding._laneDist : lineCAt(p, carA);
         var xy = toXY(carA, c);
         var across = carAcross(p);
         var cw = horizontal ? CAR_ALONG : across;
@@ -4714,6 +5332,19 @@
       visible.forEach(function (e) {
         if (e._dropped) return;
         placed.push(e);
+        // AND THE RISER EVERY ORDINARY BRANCH LEAVES ON. A rail departing
+        // for a deep lane is a stroke straight across every lane between
+        // it and the trunk, exactly like a capsule's bar, and nothing knew:
+        // the climb to "1:1 with Priya" was drawn through the middle of
+        // "Client Workshop". Same obstacle, same answer, so it goes in the
+        // same list and the caption slides past it.
+        if (e._involved.length < 2 && isFinite(e._diagFrom) && isFinite(e._elbow)) {
+          var rc0 = lineCAt(e._p, e._diagFrom), rc1 = spineC + e._sign * e._laneDist;
+          var rw = Math.max(e._p.line_width, 2) * S * weightScale / 2 + 2 * S;
+          caps.push({ e: e, a0: Math.min(e._diagFrom, e._elbow) - rw,
+                      a1: Math.max(e._diagFrom, e._elbow) + rw,
+                      c0: Math.min(rc0, rc1), c1: Math.max(rc0, rc1) });
+        }
         if (e._involved.length < 2) return;
         var cs = e._involved.map(function (q) { return lineCAt(q, e._nodeA); });
         var lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
@@ -4728,6 +5359,27 @@
                       c0: Math.min(lo, lc), c1: Math.max(hi, lc) });
         }
       });
+      // AND EVERY STRETCH OF TRUNK THAT IS NOT WHERE ITS TRUNK USUALLY IS.
+      //
+      // The lane machinery places a caption against a board of level lines,
+      // and the lines are not level any more: they lean out to meet each
+      // other and come back. Those ramps are ink nothing in this pass had
+      // ever heard of, and they were drawn through "Groceries", "Swim
+      // Training" and "Family Dinner" alike. Only the parts away from the
+      // baseline go in — a line on its own baseline is what the lanes were
+      // measured from in the first place.
+      LEGEND.forEach(function (q) {
+        var base = spineC + q._c;
+        var half = Math.max(2, q.line_width) * S * weightScale / 2 + 2 * S;
+        var stepA = Math.max(CORNER * 0.5, (axisEnd - axisStart) / 200);
+        for (var a = axisStart; a < axisEnd; a += stepA) {
+          var b = Math.min(axisEnd, a + stepA);
+          var u0 = lineCAt(q, a), u1 = lineCAt(q, b);
+          if (Math.abs(u0 - base) < half && Math.abs(u1 - base) < half) continue;
+          caps.push({ e: null, a0: a - half, a1: b + half,
+                      c0: Math.min(u0, u1) - half, c1: Math.max(u0, u1) + half });
+        }
+      });
       if (!caps.length) return;
       // The cross-axis band a label occupies, on its own side of its rail.
       // A bundle's caption hangs off the outer rung of the bundle, which is
@@ -4735,7 +5387,8 @@
       // so measured from the lane this looked at empty canvas: "Family
       // Dinner" was written across "Swim Training" and neither pass knew.
       function band(e) {
-        var lineC = e._bundleOut != null ? e._bundleOut : spineC + e._sign * e._laneDist;
+        var lineC = e._routeEdge != null ? e._routeEdge
+          : e._bundleOut != null ? e._bundleOut : spineC + e._sign * e._laneDist;
         var thick = horizontal ? e._h : colW;
         var ls = (e._bundleOut != null || e._labelSign == null) ? e._sign : e._labelSign;
         return ls < 0 ? [lineC - LINE_GAP - thick, lineC - LINE_GAP]
@@ -4838,17 +5491,21 @@
       // off the outermost of them. Measured from the lane the event was
       // given, the label sat on the rails that landed beyond it: the lane
       // is where the bundle STARTS, not where it ends.
-      var lineC = e._bundleOut != null ? e._bundleOut : spineC + sign * e._laneDist;
+      var lineC = e._routeEdge != null ? e._routeEdge
+        : e._bundleOut != null ? e._bundleOut : spineC + sign * e._laneDist;
       var ls = (e._bundleOut != null || e._labelSign == null) ? sign : e._labelSign;
       var duck = 0;
       if (e === carRider && horizontal
           && carA + CAR_CLEAR > e._textStart && carA - CAR_CLEAR < e._textStart + e._textLen) {
         duck = Math.max(0, carAcross(e._p) / 2 + 2 * S - LINE_GAP);
       }
+      // A caption set out beyond the rail keeps its own distance: that
+      // distance is why it fits, and it is the thing the leader draws.
+      var gap = e._capOut != null ? e._capOut : LINE_GAP;
       if (horizontal) {
         b.style.left = e._textStart + 'px';
-        if (ls < 0) b.style.top = (lineC - LINE_GAP - duck - e._h) + 'px';
-        else b.style.top = (lineC + LINE_GAP + duck) + 'px';
+        if (ls < 0) b.style.top = (lineC - gap - duck - e._h) + 'px';
+        else b.style.top = (lineC + gap + duck) + 'px';
       } else {
         b.style.top = e._textStart + 'px';
         if (ls < 0) b.style.left = (lineC - LINE_GAP - colW) + 'px';

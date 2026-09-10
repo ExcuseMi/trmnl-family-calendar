@@ -532,6 +532,53 @@ is open.
   the compressed segment filled with a cross-hatch or chevrons. An event
   that spans the night runs through it as one continuous stroke with a
   station at each end.
+- [ ] **E7. Rivers and lakes as natural obstacles.** Mini Metro's water is
+  the thing that makes its maps look like maps: lines run where the ground
+  lets them, they bunch up to share the few crossings, and a bridge is
+  visibly expensive. We already draw the day as a river behind everything
+  (`the day as a river`, shared.liquid), but it is scenery: nothing routes
+  around it.
+
+  Make it geography instead. A body of water is a region of the board no
+  line may run through, and the only way across is a BRIDGE, which is
+  exactly what a shared event already is: several people in one place at one
+  time, their lines converging to cross together and parting on the far
+  side. That gives the convergence a reason a reader can see, rather than
+  asking them to notice that two rails happened to touch.
+
+  What it needs:
+  - a water model in the payload (spans of axis, or regions of the board)
+    and a rule for where water comes from. The honest source is the day
+    itself: the small hours nobody is awake for, the gap between the school
+    run and the school pickup, whatever stretch of the board carries no
+    events. Water is where nothing happens.
+  - the solver treating water as an obstacle, so a track's band and a
+    branch's lane are both chosen to keep out of it.
+  - shared events preferentially placed AT a crossing, so the corridor and
+    the bridge are the same drawing.
+  - the drawing: a filled region with a shoreline, the bridge as a pair of
+    abutments where the corridor meets the bank, and the water named the way
+    the hour river is named.
+
+  `feedback/research/mini-metro-notes.md` already has two of the pieces:
+  "a soft, flat water shape behind everything, with no grid and no chrome"
+  (which is what the hour river is), and "dashes as tunnels: Mini Metro
+  reserves a dashed segment for a line crossing water". The second one is a
+  conflict to settle before starting, because dashes are spent on line
+  IDENTITY here, and a line cannot be dashed for two reasons at once. Sizing
+  is the risk: on an OG panel at 800x480 a lake big enough to read is a lake
+  big enough to cost a lane, so this probably wants to be a large-panel
+  feature that degrades to nothing on a quadrant.
+
+- [ ] **E8. Thicker tracks on the large panel.** Line weights are chosen in
+  layout px and then multiplied by `S`, so a TRMNL X at 1872x1404 draws the
+  same rail the OG panel does, only bigger — which means it reads as
+  THINNER, because there is far more board around it. A metro map's line
+  weight is a share of the page, not a constant. The big panel should carry
+  visibly heavier track (and heavier marks with it, since `markOut` and
+  `NODE_STROKE` are sized off the rail), so a full-size board looks like a
+  poster rather than a small diagram enlarged.
+
 - [ ] **E5. Preset library in the editor.** A one-click dropdown in Start:
   Family of 4, Work vs Personal, Solo Freelancer, so someone can see a board
   before they have any URLs.

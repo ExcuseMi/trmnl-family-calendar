@@ -504,16 +504,30 @@ module.exports = function (test, h) {
     // weight and texture it also says "some other line". So each rail is
     // drawn in the stroke of the line it came from, and no two lines in one
     // bundle may come out looking like the same line.
-    const f = fixtures.find((x) => x.name === 'busy-day');
-    const rep = layout(f, ROOMY);
+    // Whichever board still draws one. A shared event is a CONVERGENCE
+    // wherever the lines can all be free at that minute, and a convergence
+    // has no rails at all: the lines themselves are there, in their own
+    // strokes, because they are the lines. The bundle is the fallback, and
+    // this is the rule that makes the fallback readable — so the case looks
+    // for a board that took it rather than insisting a particular one does.
     const tracks = {};
-    for (const t of pathsWhere(rep, 'track')) tracks[t.owner] = t;
     const bundles = {};
-    for (const p of rep.paths) {
-      if (!p.bundle) continue;
-      (bundles[p.bundle] = bundles[p.bundle] || []).push(p);
+    let boards = 0;
+    for (const f of fixtures) {
+      const rep = layout(f, ROOMY);
+      const mine = {};
+      for (const t of pathsWhere(rep, 'track')) mine[t.owner] = t;
+      let any = false;
+      for (const p of rep.paths) {
+        if (!p.bundle) continue;
+        any = true;
+        const key = f.name + '/' + p.bundle;
+        (bundles[key] = bundles[key] || []).push(p);
+        tracks[p.owner] = mine[p.owner];
+      }
+      if (any) boards++;
     }
-    assert(Object.keys(bundles).length > 0, 'the busy day drew no bundles at all');
+    assert(boards > 0, 'no fixture drew a bundle at all, so this rule went untested');
     for (const key of Object.keys(bundles)) {
       const looks = {};
       for (const p of bundles[key]) {
@@ -521,10 +535,17 @@ module.exports = function (test, h) {
         assert(own, key + ': a rail owned by ' + p.owner + ', which has no line on the board');
         assert(p.stroke === own.stroke, key + ': ' + p.owner + "'s rail is drawn "
           + p.stroke + ' while its line is ' + own.stroke);
-        // the treated lines are drawn wider than their nominal weight (the
+        // The treated lines are drawn wider than their nominal weight (the
         // paper knocked out of them is what the eye weighs), so this is the
-        // drawn width against the drawn width, not against line_width
-        assert(Math.abs(p.width - own.width) < 0.6, key + ': ' + p.owner + "'s rail is "
+        // drawn width against the drawn width, not against line_width.
+        //
+        // A pixel of slack, not half of one. A rail that has to cross
+        // another line is drawn in pieces with rounded caps, and the piece
+        // a bounding box reports comes back a fraction wider than the plain
+        // run it was cut from. The rule being guarded is "not some other
+        // line's weight", and on this board the weights are a whole stroke
+        // apart.
+        assert(Math.abs(p.width - own.width) <= 1, key + ': ' + p.owner + "'s rail is "
           + p.width.toFixed(1) + 'px on a ' + own.width.toFixed(1) + 'px line');
         looks[p.owner] = p.stroke + '/' + p.width.toFixed(1) + '/' + p.dash;
       }

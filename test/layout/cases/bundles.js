@@ -1,15 +1,20 @@
 'use strict';
 
-// A shared event is a BUNDLE: one rail per line that belongs to it, each
-// dropping from where its line runs to its own rung, running alongside the
-// others for the event, and ending in the same tick every other rail gets.
+// A shared event says WHICH LINES ARRIVED, and it says it in their own
+// strokes. There are two drawings for that and the board picks between
+// them: a CONVERGENCE, where each line's own trunk leans over and they run
+// together through the event, and a BUNDLE, where each line sends its own
+// rail down to a rung beside the others. The convergence is preferred and
+// the bundle is what happens when the lines cannot all be free at once.
 //
-// This reverses an earlier decision. Drawn as a comb once before, it read as
-// a smudge, and the reason was that the rails were stacked on one minute
-// with nothing between them. Everything below is a rule that made it read,
-// and every one of them is here because its absence broke a picture that was
-// looked at. They are stated as properties rather than as the positions that
-// happened to come out, because the positions move with every board.
+// Both reverse the same earlier decision: one bold rail for the group,
+// which read as a smudge and never said who was there. So the invariant
+// this file protects is the one both shapes share -- at least two distinct
+// lines, in their own ink, meeting at that minute -- and the rules below it
+// are the ones that made the bundle read. Every one of them is here because
+// its absence broke a picture that was looked at, and they are stated as
+// properties rather than as the positions that happened to come out,
+// because the positions move with every board.
 
 module.exports = function (test, h) {
   const { layout, VIEWPORTS, fixtures, textLabels, overlap, assert } = h;
@@ -52,17 +57,46 @@ module.exports = function (test, h) {
     return x;
   }
 
+  // Every line that meets at a capsule, whichever way the board drew it:
+  // a bundle's rails carry the bundle key, and a convergence has no rails
+  // at all — the lines themselves are there, so it is the TRUNKS passing
+  // through the capsule that have to be counted.
+  function linesAt(rep, cap) {
+    const owners = {};
+    for (const p of rep.paths) {
+      if (p.bundle === cap.key) { owners[p.owner] = true; continue; }
+      if (p.role !== 'track') continue;
+      for (let i = 1; i < p.pts.length; i++) {
+        const a = p.pts[i - 1], b = p.pts[i];
+        const lo = Math.min(a[0], b[0]), hi = Math.max(a[0], b[0]);
+        if (hi < cap.a0 || lo > cap.a1) continue;
+        const t = hi === lo ? 0 : (Math.max(cap.a0, Math.min(cap.a1, a[0])) - a[0]) / (b[0] - a[0]);
+        const y = a[1] + (b[1] - a[1]) * Math.max(0, Math.min(1, t));
+        if (y >= cap.c0 - 2 && y <= cap.c1 + 2) { owners[p.owner] = true; break; }
+      }
+    }
+    return Object.keys(owners);
+  }
+  // the capsules on a board, with the box each one covers
+  function capsules(rep) {
+    return rep.rects.filter((r) => r.role === 'capsule').map((r) => ({
+      key: r.owner, a0: r.x, a1: r.x + r.w, c0: r.y, c1: r.y + r.h,
+    }));
+  }
+
   test('a shared event draws one rail per line, not one for the group', () => {
     // The whole point of the change: "several people are here" said with a
-    // single bold rail never says WHICH lines arrived.
+    // single bold rail never says WHICH lines arrived. Drawn as a
+    // convergence the answer is the trunks themselves; drawn as a bundle it
+    // is one rail each. Either way it is never one stroke for the group.
     for (const vname of VIEWS) {
       const rep = layout(fixtures.find((f) => f.name === 'busy-day'), byName(vname));
-      const bs = bundles(rep);
-      assert(bs.length > 0, vname + ': no bundle drawn at all on a board with three shared events');
-      for (const b of bs) {
-        const owners = Object.keys(railsByOwner(b));
-        assert(owners.length >= 2, vname + ': ' + b.key + ' drew ' + owners.length
-          + ' rail(s); a shared event has at least two lines in it');
+      const caps = capsules(rep);
+      assert(caps.length > 0, vname + ': no shared event drawn at all on a board with three of them');
+      for (const c of caps) {
+        const owners = linesAt(rep, c);
+        assert(owners.length >= 2, vname + ': ' + c.key + ' has ' + owners.length
+          + ' line(s) at it; a shared event has at least two lines in it');
       }
     }
   });
