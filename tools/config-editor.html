@@ -1199,34 +1199,62 @@
       var script = src.slice(si + 8, src.indexOf("<\/script>", si));
       var st = src.indexOf("<style>");
       var style = src.slice(st + 7, src.indexOf("</style>", st));
-      templateCache = { script: script, style: style };
+      // The plugin's mark, lifted out of the template rather than copied in
+      // here. It is static markup with no Liquid in it, so the preview can
+      // use the real thing and cannot drift from it.
+      var mk = src.indexOf("<svg class=\"metro-mark");
+      var mark = mk < 0 ? "" : src.slice(mk, src.indexOf("</svg>", mk) + 6);
+      templateCache = { script: script, style: style, mark: mark };
       return templateCache;
     });
   }
-  function renderHeader(metro) {
-    var h = el("div", { class: "metro-header flex flex--row flex--center-y flex--wrap gap--medium px--3 py--2 flex-none" });
-    h.appendChild(el("span", { class: "metro-title title title--large font--bold", text: metro.i18n && metro.i18n.today || "Today" }));
-    if (metro.date_label) h.appendChild(el("span", { class: "metro-date label label--base text--gray-40", text: metro.date_label }));
-    h.appendChild(el("span", { class: "metro-window label label--small text--gray-40", text: metro.window_label || "" }));
-    h.appendChild(el("div", { class: "grow" }));
+  // Mirrors the template's own header, element for element and class for
+  // class. It has to: the header eats depth the map does not get, so a
+  // preview whose header is a different height is previewing a different
+  // board. The two used to disagree in four ways at once (a window pill the
+  // template dropped, a swatch legend the board never draws, a flat row
+  // where the template stacks, and its own grey classes), which is exactly
+  // the drift `07-header-mirror.js` now fails on.
+  function renderHeader(metro, tpl) {
+    var h = el("div", { class: "metro-header flex flex--col gap--xsmall px--3 py--2 flex-none" });
+    var top = el("div", { class: "metro-header-top flex flex--row flex--center-y flex--wrap gap--medium" });
+    h.appendChild(top);
+    if (tpl && tpl.mark) {
+      var holder = el("div", { html: tpl.mark });
+      if (holder.firstChild) top.appendChild(holder.firstChild);
+    }
+    // "Today" only when it is: a board set to tomorrow names the day.
+    top.appendChild(el("span", { class: "metro-title title title--large font--bold",
+      text: metro.title_word || (metro.i18n && metro.i18n.today) || "Today" }));
+    if (metro.date_label) top.appendChild(el("span", { class: "metro-date metro-pill label label--base font--bold", text: metro.date_label }));
+    top.appendChild(el("div", { class: "grow" }));
     var w = metro.header_weather || {};
-    if (w.hi != null) {
+    if (w.hi) {
       var wx = el("span", { class: "metro-weather flex flex--row flex--center-y gap--xsmall" });
       if (w.icon) wx.appendChild(el("img", { class: "metro-wicon image--adaptive", src: w.icon }));
       var temp = el("span", { class: "metro-temp title title--base" }, [String(w.hi) + "°"]);
-      temp.appendChild(el("span", { class: "text--gray-40", text: " / " + w.lo + "°" }));
+      temp.appendChild(el("span", { class: "metro-quiet", text: " / " + w.lo + "°" }));
       wx.appendChild(temp);
-      wx.appendChild(el("span", { class: "metro-cond label label--small text--gray-40", text: (w.condition || "") + " · " + String((metro.i18n && metro.i18n.rain_pct) || "{n}% rain").replace("{n}", w.rain_chance) }));
-      h.appendChild(wx);
+      wx.appendChild(el("span", { class: "metro-cond label label--small metro-quiet", text: (w.condition || "") + " · " + String((metro.i18n && metro.i18n.rain_pct) || "{n}% rain").replace("{n}", w.rain_chance) }));
+      top.appendChild(wx);
     }
-    var lg = el("span", { class: "metro-legend flex flex--row flex--center-y gap--small flex--wrap" });
-    (metro.legend || []).forEach(function (p) {
-      var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("class", "metro-swatch no-shrink"); svg.setAttribute("data-hue", p.hue); svg.setAttribute("data-style", p.line_style); svg.setAttribute("data-width", p.line_width);
-      svg.setAttribute("width", "34"); svg.setAttribute("height", "8"); svg.setAttribute("viewBox", "0 0 34 8");
-      lg.appendChild(el("span", { class: "flex flex--row flex--center-y gap--xsmall" }, [svg, el("span", { class: "metro-legend-name label label--small font--bold", text: p.name })]));
-    });
-    h.appendChild(lg);
+    // Two things the board cannot say for itself, and both of them are
+    // answers to "why does my board look like that": a feed that has been
+    // unreachable for hours, and a forecast replayed from the last good
+    // fetch. A config author pasting a URL that 404s wants to see this.
+    var down = metro.calendars_down || [];
+    if (down.length) {
+      h.appendChild(el("div", { class: "metro-alerts label label--small metro-quiet",
+        text: String((metro.i18n && metro.i18n.feed_down) || "{n} unavailable").replace("{n}", down.join(", ")) }));
+    }
+    if (metro.weather_stale) {
+      h.appendChild(el("div", { class: "metro-alerts label label--small metro-quiet",
+        text: (metro.i18n && metro.i18n.weather_stale) || "Forecast may be out of date" }));
+    }
+    // The swatch legend that used to sit here is gone. The board has no
+    // legend: every line is named at its own terminus, and the Tracks
+    // section above already shows each track's swatch. In the preview it
+    // was a row of header the device never draws.
     return h;
   }
   function drawMap(metro, dev) {
@@ -1234,7 +1262,7 @@
       var inner = document.getElementById("stageInner");
       inner.innerHTML = "";
       var layout = el("div", { class: "layout layout--col gap--none metro-root" }, [
-        renderHeader(metro),
+        renderHeader(metro, tpl),
         el("div", { class: "divider divider--on-white flex-none" }),
         el("div", { class: "metro-canvas relative grow w--full" }, [(function () {
           var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
