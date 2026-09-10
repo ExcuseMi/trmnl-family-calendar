@@ -170,9 +170,42 @@ is open.
   side and take the tunnel only when there isn't one. And it wants A15
   first, because a track that can carry events on both sides lets the
   orchestrator put the school run on the same side as the school day,
-  where the connection is
-  short and crosses nothing. Landing this first means it spends its time
-  fighting the side assignment.
+  where the connection is short and crosses nothing. Landing this first
+  means it spends its time fighting the side assignment.
+- [ ] **A17. A shared bundle asks the board for nothing, so a squeezed
+  board draws it on top of the lines.** Reported off a five-line board with
+  the alert banner up: the bundle rails and their captions sit across
+  Marge, Bart and Lisa, and the line names are down on their own rails.
+  The bundle already knows exactly what it needs. `drawSharedBundle`
+  computes `need = block + 2 * LINE_GAP`, where the block is the rails plus
+  the caption that hangs off them, then hunts for the widest gap between
+  two participating lines, sampled across the whole run so a line that
+  kinks out mid-caption cannot close it, and avoiding the stretches another
+  caption already owns. All of that happens AFTER the cross solver has
+  handed out positions, so it can only ever pick the least bad gap. When
+  every gap is narrower than `need` it takes the widest one anyway and
+  overflows, which is the picture.
+  Nothing upstream reserves that room, and deliberately so: folding shared
+  events into `_sidings` inflated every band by a kink the line never
+  makes, so `ownSidings(p)` counts only the track's own sidings now. That
+  was the right fix for the wrong charge, but it left the corridor charging
+  nothing at all.
+  The missing idea is a demand the solver cannot currently express. Lanes
+  and sidings grow ONE track's band outward; a bundle needs a MINIMUM GAP
+  BETWEEN TWO ADJACENT TRACKS, which no `demand[key]` can say. So
+  `CrossSolver` wants a second input beside the per-track demand: a list of
+  `{a, b, px}` between adjacent tracks on the same side, met before the
+  spare depth is spent on anything else. Do it against `test/cross`, where
+  it is arithmetic and answers in milliseconds.
+  And a board can be too small to afford it however the depth is spent, so
+  there has to be a fallback shape rather than an overflow: below the width
+  a bundle needs, the event drops back to the tie, which is the shape short
+  shared events already keep. One event drawn as a tie on a crowded board
+  is still a board; a bundle written across three lines is not.
+  It wants doing WITH A15, not after it. A15 puts a track's inward rungs in
+  the gap between it and its neighbour, which is the same space this needs,
+  so the two are competing for one piece of board and only the solver can
+  referee. Landing them apart means the second one re-opens the first.
 
 - [~] **A14. The cross-axis solver gives up too early and then wastes what
   it saved.** Two of the three parts are done. The solver is a pure
