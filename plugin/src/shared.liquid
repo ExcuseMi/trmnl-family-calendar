@@ -303,11 +303,14 @@
     // and an SVG presentation attribute does not accept var()
     node.style.stroke = colorFor(p.hue);
     node.setAttribute('stroke-width', p.line_width * S * weightScale);
-    // A round cap sticks out half a stroke width PAST where the path stops.
-    // On an ordinary rail that is invisible; on the heavy shared one it put
-    // a blob out beyond the end tick, so the rail looked like it had run on
-    // past its own stop. Such a line asks to end flush instead.
-    node.setAttribute('stroke-linecap', p.line_cap || 'round');
+    // Every rail ends FLUSH. A round cap sticks out half a stroke width past
+    // where the path stops, and every rail on this board stops at a mark
+    // that means something: an end tick, a terminal bar, the capsule a
+    // shared spur leaves. The cap peeked out beyond all three, so a rail
+    // looked like it had run on past its own stop. Treated lines have ended
+    // flush all along, for the same reason at their joins; this is the rest
+    // of them. Bends are unaffected, being joins rather than caps.
+    node.setAttribute('stroke-linecap', 'butt');
     node.setAttribute('stroke-linejoin', 'round');
     node.setAttribute('fill', 'none');
   }
@@ -636,6 +639,10 @@
     // start of each line is what a transit map does, and it means the map
     // needs no legend at all — the name is on the line it belongs to rather
     // than in a key you have to look things up in.
+    // How long a line's name may run before it wraps: a slice of the day,
+    // never so narrow that an ordinary name breaks and never so wide that a
+    // calendar's full title crosses its own first events.
+    var nameMax = clamp(axisPx * 0.16, 100 * S, 240 * S);
     LEGEND.forEach(function (p) {
       // One size up from the hour labels. The name of a line is the only
       // thing on the board that says whose day this row is, and at
@@ -650,15 +657,36 @@
         + (horizontal ? 'label--base' : 'label--small')
         + ' font--bold text--black absolute');
       n.textContent = p.name;
-      // Standing up, the lines are only a track-step apart across the map
-      // while the names are words wide, so laid flat they pile into each
-      // other. Set along the line instead, the way a vertical transit
-      // diagram letters its termini: the name is then only a line-height
-      // wide and cannot reach its neighbour.
-      if (!horizontal) n.style.writingMode = 'vertical-rl';
+      // A long one wraps. A calendar can be called "Demo - Planet Express
+      // Crew", and on one nowrap line that ran a quarter of the way across
+      // the board, past its own line's first events. Up to THREE lines,
+      // inside a column a fraction of the day wide; how many it actually
+      // gets is decided once the bands are solved, from the room above the
+      // line it belongs to.
+      if (horizontal) {
+        n.style.maxWidth = nameMax + 'px';
+        // Measured on ONE line as well, because that is what decides
+        // whether names go above their lines at all: the answer must not
+        // change just because a name is long enough to wrap.
+        clampLines(n, 1);
+        p._nameH1 = measure(n).h;
+        clampLines(n, 3);
+      } else {
+        // Standing up, the lines are only a track-step apart across the map
+        // while the names are words wide, so laid flat they pile into each
+        // other. Set along the line instead, the way a vertical transit
+        // diagram letters its termini: the name is then only a line-height
+        // wide and cannot reach its neighbour. It still wraps, into up to
+        // three columns rather than three rows.
+        n.style.writingMode = 'vertical-rl';
+        n.style.maxHeight = nameMax + 'px';
+        n.style.whiteSpace = 'normal';
+        n.style.overflow = 'hidden';
+      }
       canvas.appendChild(n);
       var m = measure(n);
       p._nameEl = n; p._nameW = m.w; p._nameH = m.h;
+      if (p._nameH1 == null) p._nameH1 = m.h;
     });
     var nameH = LEGEND.length ? Math.max.apply(null, LEGEND.map(function (p) { return p._nameH; })) : 0;
     var maxNameW = LEGEND.length ? Math.max.apply(null, LEGEND.map(function (p) { return p._nameW; })) : 0;
@@ -1586,7 +1614,12 @@
     // interchange capsules stretched between them. Whatever is spare after
     // that gets centred instead.
     if (fits(sol)) {
-      var STEP_CAP = laneStep * 1.35, SEP_CAP = TRACK_STEP * 2;
+      // A tall name needs a tall gap above its line to sit in, so where the
+      // names wrap the separation is allowed to grow further than it
+      // otherwise would. It only ever grows into room the board actually
+      // has: the loop below stops the moment the sides stop fitting.
+      var STEP_CAP = laneStep * 1.35;
+      var SEP_CAP = Math.max(TRACK_STEP * 2, horizontal ? nameH + NODE_R * 2 : 0);
       for (var gi = 0; gi < 24; gi++) {
         var tryStep = Math.min(STEP_CAP, step + laneStep * 0.1);
         if (tryStep <= step + 0.5) break;
@@ -1793,39 +1826,17 @@
     // ---- draw: now line + alert lines first (under everything)
     var nowA = null;
     if (nowMin != null && nowMin >= winStart && nowMin <= winEnd) nowA = aFor(nowMin);
-    if (nowA != null) {
-      // One marker for the whole board. A dot in the middle of the old
-      // river said "now" in the one place the eye was not reading, and each
-      // line's car says where that person is but not where the clock is.
-      // A rule across every track answers "what time is it, and who is in
-      // the middle of what" in one look — it is the reference line the rest
-      // of the map is read against, so it is drawn under the lines rather
-      // than over them.
-      var n0 = toXY(nowA, bandThick), n1 = toXY(nowA, crossPx - EDGE / 2);
-      var rule = svgEl('line', { x1: n0[0], y1: n0[1], x2: n1[0], y2: n1[1],
-        'stroke-width': 1.6 * S, 'stroke-linecap': 'round',
-        'stroke-dasharray': (5 * S) + ' ' + (4 * S), 'stroke-opacity': 0.5 });
-      rule.style.stroke = INK;
-      rule.setAttribute('data-metro-role', 'now');
-      svg.appendChild(rule);
-    }
-    alerts.forEach(function (w) {
-      var a = aFor(w.at_min);
-      var q0 = toXY(a, bandThick), q1 = toXY(a, crossPx - EDGE);
-      // guide lines are ink at reduced opacity rather than a fixed grey, so
-      // they stay a shade under the text in either theme
-      var guide = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1], 'stroke-linecap': 'round' });
-      if (w.type === 'sun') {
-        guide.setAttribute('stroke-width', 1.2 * S);
-        guide.setAttribute('stroke-dasharray', (0.1 * S) + ' ' + (5 * S));
-        guide.setAttribute('stroke-opacity', 0.42);
-      } else {
-        guide.setAttribute('stroke-width', 1.5 * S);
-        guide.setAttribute('stroke-dasharray', (6 * S) + ' ' + (4 * S));
-        guide.setAttribute('stroke-opacity', 0.62);
-      }
-      svg.appendChild(paint(guide, null, INK));
-    });
+    // No rule across the board at "now". It was the one line drawn at a
+    // minute rather than belonging to anybody, so nothing routed around it
+    // and it cut through captions the whole width of the map. What time it
+    // is, is said once by the badge on the scale; where each person is, is
+    // said by their own car, on their own line, which is the thing a reader
+    // is actually looking for.
+    // Sunrise, sunset and the weather markers used to drop a guide line the
+    // whole depth of the board at their minute. Nothing routed around those
+    // either, so they crossed captions and rails alike for the sake of a
+    // time that is already stated at the top. The marker sits on the scale
+    // and is read against it, like every other time on this board.
 
     // a track's own line/rings kink out to "station level" for the span of
     // any station it passes through, then back to the flat baseline —
@@ -1857,7 +1868,7 @@
     (function decideNamePlacement() {
       if (!horizontal || LEGEND.length < 2) return;
       var thick = 0, minPitch = Infinity;
-      LEGEND.forEach(function (p) { thick = Math.max(thick, p._nameH); });
+      LEGEND.forEach(function (p) { thick = Math.max(thick, p._nameH1); });
       // Across the WHOLE bundle, not one side at a time. Measured per side,
       // the closest pair on the board went unseen: the innermost track of
       // each side sits half a pitch off the spine, so those two are
@@ -1866,6 +1877,30 @@
       var cs = LEGEND.map(function (q) { return q._c; }).sort(function (a, b) { return a - b; });
       for (var i = 1; i < cs.length; i++) minPitch = Math.min(minPitch, cs[i] - cs[i - 1]);
       if (minPitch < thick + NODE_R + 4 * S) namesAbove = false;
+    })();
+
+    // How many lines each name actually gets. Built at three, but a
+    // three-line name only belongs above its rail if the gap above that rail
+    // can hold it: dropped onto the line instead, a wrapped name is a block
+    // straddling its own track rather than a label on it. So each name is
+    // given as many lines as the room above it allows, and a name that
+    // cannot have even one there falls back to a single line on the rail,
+    // masked by its own paper outline, exactly as before wrapping existed.
+    (function fitNameLines() {
+      if (!horizontal || !LEGEND.length) return;
+      var cs = LEGEND.map(function (q) { return { c: spineC + q._c, w: q.line_width * S * weightScale / 2 }; })
+        .sort(function (a, b) { return a.c - b.c; });
+      LEGEND.forEach(function (p) {
+        var mine = spineC + p._c, above = bandLo;
+        cs.forEach(function (q) { if (q.c < mine - 0.5) above = Math.max(above, q.c + q.w); });
+        var room = namesAbove ? mine - p.line_width * S * weightScale / 2 - NODE_R - 4 * S - above : 0;
+        for (var lines = 3; lines >= 1; lines--) {
+          clampLines(p._nameEl, lines);
+          var m = measure(p._nameEl);
+          p._nameW = m.w; p._nameH = m.h;
+          if (lines === 1 || m.h <= room) break;
+        }
+      });
     })();
 
     var capGroups = {};
@@ -2403,7 +2438,6 @@
           // weightScale it came out barely heavier than an ordinary track,
           // a thread hanging off a fat pill.
           bold.line_width = sharedRailWidth(p);
-          bold.line_cap = 'butt';   // the end tick is the end, not a cap past it
           p = bold;
         }
         var sign = g.members[0]._sign, laneC = spineC + sign * g.members[0]._laneDist;

@@ -64,19 +64,28 @@ module.exports = function (test, h) {
       + off.map((l) => '"' + l.text + '"').join(', '));
   });
 
-  test('one rule marks now across every line', () => {
-    const rep = layout(busy, ROOMY);
-    const rules = shapes(rep, 'now');
-    assert(rules.length === 1, 'expected one now rule, found ' + rules.length);
-    const band = bandOf(rep);
-    const { lo, hi } = spanOf(rep, rules);
-    assert(lo <= band.hi + 2, 'the now rule starts below the band');
-    // it has to reach past the outermost line, or it is not "across
-    // every line" — the mark that says what time it is on a board where
-    // every other mark says what time something else was
-    let far = -Infinity;
-    for (const p of pathsWhere(rep, 'track')) for (const q of p.pts) far = Math.max(far, q[1]);
-    assert(hi >= far - 2, 'the now rule stops ' + Math.round(far - hi) + 'px short of the last line');
+  // Nothing is drawn across the board at "now". A rule there was the one
+  // line drawn at a minute rather than belonging to anybody, so nothing
+  // routed around it and it cut through captions the whole width of the
+  // map. The badge on the scale says what time it is; each line's car says
+  // where that person is.
+  test('nothing is ruled across the board at a moment in time', () => {
+    for (const v of [ROOMY, byName('x-portrait')]) {
+      const rep = render(SKY, v);
+      assert(shapes(rep, 'now').length === 0,
+        v.name + ': something is still drawn across the board at now');
+      // sunrise, sunset and the weather markers used to drop one too
+      const band = bandOf(rep);
+      const i = cross(rep);
+      const depth = rep.debug.horizontal ? rep.canvas.h : rep.canvas.w;
+      const long = (rep.paths || []).filter((p) => {
+        const at = p.pts.map((q) => q[i]);
+        return Math.max.apply(null, at) - Math.min.apply(null, at) > depth * 0.5
+          && Math.min.apply(null, at) < band.hi + 4;
+      });
+      assert(long.length === 0, v.name + ': ' + long.length
+        + ' line(s) still run from the scale across the whole board');
+    }
   });
 
   test('the clock is stated as a badge on the scale', () => {
