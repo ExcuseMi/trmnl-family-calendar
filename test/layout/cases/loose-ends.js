@@ -5,10 +5,10 @@
 // Reported off a screenshot as "floating track in the middle": a stretch of
 // Amy's line drawn across the board with nothing at either end of it. It
 // was the express half of a siding whose siding was never drawn. A solo
-// station is a loop (the main line carries straight on, the station leaves
+// siding is a loop (the main line carries straight on, the siding leaves
 // it and comes back), and the express is the straight half; where that
-// station was nested inside a corridor its own line was already in,
-// stationRaiseAt gave the whole overlap to the corridor, no loop was drawn,
+// siding was nested inside a corridor its own line was already in,
+// sidingRaiseAt gave the whole overlap to the corridor, no loop was drawn,
 // and the express was left lying on a baseline the line had left.
 //
 // Nothing in the suite noticed, because every other property held: the
@@ -30,7 +30,7 @@ module.exports = function (test, h) {
   // arithmetic that drew it, so the two agree to a rounding error, but both
   // are SAMPLED every 2px and a corner is drawn rounded, so the nearest
   // sample can be a couple of px along the fillet. The defect this catches
-  // missed by a full station raise (32px at 1x, 64px on an X).
+  // missed by a full siding raise (32px at 1x, 64px on an X).
   const NEAR = 8;
   const EDGE = 6;
 

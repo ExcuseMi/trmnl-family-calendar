@@ -509,7 +509,7 @@ function timeLabel12(min, extra) {
   if (!(extra && extra.hour12)) return pad2(h) + ':' + pad2(m);
   return (h % 12 || 12) + (m ? ':' + pad2(m) : '') + (h < 12 ? 'am' : 'pm');
 }
-function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, windowLabel, allDayEvents, extra, stationEvents) {
+function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, windowLabel, allDayEvents, extra, sidingEvents) {
   var trackByKey = {};
   tracks.forEach(function (t) { trackByKey[t.key] = t; });
 
@@ -532,7 +532,7 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     if (e.startMin != null) dayLo = Math.min(dayLo, e.startMin);
     if (e.endMin != null) dayHi = Math.max(dayHi, e.endMin);
   });
-  (stationEvents || []).forEach(function (e) {
+  (sidingEvents || []).forEach(function (e) {
     if (e.startMin != null) dayLo = Math.min(dayLo, e.startMin);
     if (e.endMin != null) dayHi = Math.max(dayHi, e.endMin);
   });
@@ -557,9 +557,9 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
   });
   (allDayEvents || []).forEach(function (ev) { if (trackByKey[ev.track]) activeKeys[ev.track] = true; });
   tracks.forEach(function (t) { if (t.keep_empty) activeKeys[t.key] = true; });
-  (stationEvents || []).forEach(function (ev) {
+  (sidingEvents || []).forEach(function (ev) {
     if (trackByKey[ev.track]) activeKeys[ev.track] = true;
-    // a station shared across lines keeps EVERY line it is on: two children
+    // a siding shared across lines keeps EVERY line it is on: two children
     // at the same school are both at school, and dropping the co-owner as
     // "inactive" took away one of the two kinks
     (ev.interchange_with || []).forEach(function (key) { if (trackByKey[key]) activeKeys[key] = true; });
@@ -594,34 +594,34 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     });
   });
 
-  // stations: a track's own line, not a lane branch — the client kinks
-  // the spine itself out to "station level" for [startMin,endMin] rather
-  // than drawing a diagonal/label run, so a status/location block doesn't
-  // compete with real meetings for lane space
-  var stationsOut = [];
-  (stationEvents || []).forEach(function (ev, gi) {
+  // sidings: a track's own line, not a lane branch. The client kinks the
+  // spine itself out to siding level for [startMin,endMin] rather than
+  // drawing a diagonal/label run, so a status/location block does not
+  // compete with real meetings for lane space.
+  var sidingsOut = [];
+  (sidingEvents || []).forEach(function (ev, gi) {
     var owners = [ev.track].concat(ev.interchange_with || []).filter(function (k) { return trackByKey[k]; });
     if (!owners.length) return;
-    // One station on several lines is still a kink on EACH of them — they
+    // One siding on several lines is still a kink on EACH of them — they
     // are all really at school — but it is one event, so it gets one
     // caption. The group id is what lets the client draw the kinks per line
     // and the caption once.
     var group = owners.length > 1 ? 's' + gi : null;
     owners.forEach(function (k) {
-      stationsOut.push({ owner: k, title: ev.title, location: ev.location || null,
+      sidingsOut.push({ owner: k, title: ev.title, location: ev.location || null,
         start_min: ev.startMin, end_min: ev.endMin, group: group });
     });
   });
-  // An all-day event is ALSO a station on its owner's line, spanning the
+  // An all-day event is ALSO a siding on its owner's line, spanning the
   // whole day — this now REPLACES the old header-strip rendering (an
   // all-day event used to appear only as small text under the date; now
   // it shows as a real kink on the person's own line instead, so a day
   // with a genuine all-day event (a holiday, "Out of office") reads the
-  // same way any other station does, deduped by title+owner). `all_day:
+  // same way any other siding does, deduped by title+owner). `all_day:
   // true` tells the client not to let this (deliberately full-day-wide)
   // span drag the content-fit time window out to match — it always
   // renders across whatever window is chosen, clamped, same as any other
-  // station.
+  // siding.
   var seenAllDay = {};
   (allDayEvents || []).forEach(function (ev) {
     var track = trackByKey[ev.track];
@@ -629,7 +629,7 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     var key = ev.title + '|' + track.key;
     if (seenAllDay[key]) return;
     seenAllDay[key] = true;
-    stationsOut.push({ owner: track.key, title: ev.title, location: null, start_min: DAY_LO, end_min: DAY_HI, all_day: true });
+    sidingsOut.push({ owner: track.key, title: ev.title, location: null, start_min: DAY_LO, end_min: DAY_HI, all_day: true });
   });
 
   (weatherMilestones || []).forEach(function (w) {
@@ -675,8 +675,8 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     // family without saying so reads as a quiet day.
     calendars_down: (extra && extra.calendarsDown) || [],
     legend: tracks,
-    all_day: [], // all-day events now render as stations (see stationsOut) instead of a header strip; the key stays for shape compatibility
-    stations: stationsOut,
+    all_day: [], // all-day events now render as sidings (see sidingsOut) instead of a header strip; the key stays for shape compatibility
+    sidings: sidingsOut,
     items: items,
   };
 }
@@ -699,7 +699,7 @@ var DEMO_TRACKS = [
 
 // A deliberately busy day in Springfield: two meetings starting minutes
 // apart on one line (lane stacking), two- and four-track interchanges, a
-// long day at school and a shift at the plant as waypoint stations, and an
+// long day at school and a shift at the plant as sidings, and an
 // evening cluster once everyone is home.
 var DEMO_EVENTS = [
   { track: 'marge', interchange_with: ['bart', 'lisa'], title: 'School Run', startMin: 7 * 60 + 45, endMin: 8 * 60 + 15 },
@@ -718,7 +718,7 @@ var DEMO_EVENTS = [
   { track: 'bart', interchange_with: ['lisa'], title: 'Itchy & Scratchy', startMin: 20 * 60, endMin: 20 * 60 + 30 },
 ];
 
-// Waypoint stations: the line kinks out to "station level" for the span
+// Sidings: the line kinks out to siding level for the span
 // rather than branching, for a place you simply ARE for a while.
 var DEMO_STATIONS = [
   { track: 'homer', title: 'Sector 7-G', location: 'Springfield Nuclear', startMin: 9 * 60, endMin: 17 * 60 },
@@ -844,7 +844,7 @@ var SIMPSONS_CONFIG = {
       { match: { type: 'word', value: 'L6' }, track: 'Bart', rename: false },
       { match: { type: 'word', value: 'K3' }, track: 'Lisa', rename: false },
       { match: { type: 'regex', value: '^(?:L6|K3)\\s+' }, rewrite: '' },
-      { match: { type: 'contains', value: 'School Day' }, station: true },
+      { match: { type: 'contains', value: 'School Day' }, siding: true },
     ]),
     demoCalendar('Family', 'simpsons/family.ics', [
       { match: { type: 'contains', value: 'Family Dinner' }, track: ['Marge', 'Homer', 'Bart', 'Lisa', 'Maggie'], rename: false },
@@ -856,7 +856,7 @@ var SIMPSONS_CONFIG = {
 
 // A crew rather than a family, and one shared team calendar rather than a
 // calendar each: everything comes in on crew.ics with a "Name:" prefix and
-// the rules split it. The delivery is one station on THREE lines at once —
+// the rules split it. The delivery is one siding on THREE lines at once —
 // the three of them really are on the same ship all day — which is the
 // shape two children at one school get, with a third line in the corridor.
 var FUTURAMA_CONFIG = {
@@ -881,7 +881,7 @@ var FUTURAMA_CONFIG = {
       { match: { type: 'regex', value: '^[A-Za-z]+:\\s*' }, rewrite: '' },
     ]),
     demoCalendar('Deliveries', 'futurama/deliveries.ics', [
-      { match: { type: 'contains', value: 'Delivery Run' }, track: ['Fry', 'Leela', 'Bender'], station: true, rename: false },
+      { match: { type: 'contains', value: 'Delivery Run' }, track: ['Fry', 'Leela', 'Bender'], siding: true, rename: false },
       { match: { type: 'contains', value: 'Good News' }, track: ['Professor', 'Fry', 'Leela', 'Bender', 'Amy'], rename: false },
       { match: { type: 'contains', value: 'Crew Debrief' }, track: ['Fry', 'Leela', 'Bender'], rename: false },
       { match: { type: 'contains', value: 'Ship Inspection' }, track: 'Leela', allDay: true, rename: false },
@@ -890,7 +890,7 @@ var FUTURAMA_CONFIG = {
 };
 
 // The smallest board worth drawing: two people who share a flat. One long
-// solo station (a day at a desk) and one evening they are both at.
+// solo siding (a day at a desk) and one evening they are both at.
 var FRIENDS_CONFIG = {
   locale: 'en-US',
   timeFormat: '12h',
@@ -902,11 +902,11 @@ var FRIENDS_CONFIG = {
     // a long block someone spends in one place is a STATION, not a meeting:
     // the line runs straight on and the block is a siding beside it
     demoCalendar('Monica', 'friends/monica.ics', [
-      { match: { type: 'contains', value: 'Head Chef Shift' }, station: true, rename: false },
+      { match: { type: 'contains', value: 'Head Chef Shift' }, siding: true, rename: false },
       { match: { type: 'any' }, track: 'Monica' },
     ]),
     demoCalendar('Rachel', 'friends/rachel.ics', [
-      { match: { type: 'contains', value: 'Desk booking' }, station: true, rename: false },
+      { match: { type: 'contains', value: 'Desk booking' }, siding: true, rename: false },
       { match: { type: 'any' }, track: 'Rachel' },
     ]),
     demoCalendar('Apartment 20', 'friends/apartment.ics', [
@@ -1504,15 +1504,18 @@ function compileRule(spec) {
   var track = normalizeNameList(spec.track !== undefined ? spec.track : spec.person);
   var allDay = spec.allDay === true;
   var hide = spec.hide === true;
-  // `station`: the event's own track kinks out to "station level" for its
-  // duration instead of branching into a lane — for a status/location
-  // block (e.g. "Desk booking") that spans real meetings without being
-  // one itself. Only meaningful for a timed event with both ends; see
-  // buildFromConfig.
-  var station = spec.station === true;
+  // `siding`: the event's own track leaves the running line for its
+  // duration instead of branching into a lane, and rejoins at the end.
+  // For a status/location block (e.g. "Desk booking") that spans real
+  // meetings without being one itself. Only meaningful for a timed event
+  // with both ends; see buildFromConfig.
+  // `siding` was called `station` when it shipped, and a config written
+  // then is still a config. The old key keeps working and is not
+  // documented anywhere any more.
+  var siding = spec.siding === true || spec.station === true;
   var rewrite = typeof spec.rewrite === 'string' ? spec.rewrite : null;
   var rewriteFull = spec.rewriteFull === true;
-  if (!track && !allDay && !hide && !station && rewrite === null) return null; // a no-op rule is dropped, not kept
+  if (!track && !allDay && !hide && !siding && rewrite === null) return null; // a no-op rule is dropped, not kept
   var isAnyMatch = spec.match && (spec.match.type === 'any' || spec.match.type === 'all');
   // rename defaults to true (a rule assigning a track also renames the
   // title to that track, historically the common case) EXCEPT on an
@@ -1520,7 +1523,7 @@ function compileRule(spec) {
   // overwriting every title would be surprising — there it defaults to
   // false and must be opted into.
   var rename = track ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
-  return { match: m.test, rx: m.rx, track: track, allDay: allDay, hide: hide, station: station, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
+  return { match: m.test, rx: m.rx, track: track, allDay: allDay, hide: hide, siding: siding, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
 }
 
 function compileRuleList(raw) {
@@ -1701,12 +1704,12 @@ function applyCalendarRules(title, desc, status, weekday, cal, globalRules, ever
   var rewriteRule = null;
   var allDay = false;
   var hide = false;
-  var station = false;
+  var siding = false;
   globalRules.concat(cal.rules).forEach(function (rule) {
     if (!rule.match(ctx)) return;
     if (rule.hide) hide = true;
     if (rule.allDay) allDay = true;
-    if (rule.station) station = true;
+    if (rule.siding) siding = true;
     if (rule.track) {
       trackNames = rule.track;
       renameRule = rule.rename ? rule : null;
@@ -1734,7 +1737,7 @@ function applyCalendarRules(title, desc, status, weekday, cal, globalRules, ever
   // family member, no rules needed) never got their events attributed to
   // themselves at all.
 
-  return { title: finalTitle, trackNames: trackNames, allDay: allDay, hide: hide, station: station };
+  return { title: finalTitle, trackNames: trackNames, allDay: allDay, hide: hide, siding: siding };
 }
 
 // Converts a config track's `color` (a plain framework hue name like
@@ -1982,7 +1985,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   var deadline = (extra && extra.deadline) || (Date.now() + RENDER_BUDGET_MS);
   var events = [];
   var allDayEvents = [];
-  var stationEvents = [];
+  var sidingEvents = [];
 
   // A named calendar that is kept when empty is kept when it is UNREACHABLE
   // too: a feed being down for an hour should not silently remove somebody
@@ -2053,18 +2056,18 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         // routes into the all-day strip instead of the timeline, same as a
         // genuine ICS all-day entry, rather than being silently dropped.
         if (resolved.allDay) { allDayEvents.push({ track: registry.add(trackNames[0], 0.25).key, title: resolved.title }); return; }
-        // A rule can mark a timed event as a station: a status/location
-        // block (e.g. "Desk booking") that its own track passes through
-        // rather than branches for — needs real start/end minutes, so
+        // A rule can mark a timed event as a siding: a status/location
+        // block (e.g. "Desk booking") that its own track runs alongside
+        // rather than branches for. Needs real start/end minutes, so it is
         // only meaningful here in the timed-events loop.
-        if (resolved.station) {
-          // A station rule takes a LIST of tracks like any other, one entry
+        if (resolved.siding) {
+          // A siding rule takes a LIST of tracks like any other, one entry
           // per track: three people on the same delivery are three kinks in
           // one corridor, the same shape two children at one school get.
-          // mergeAcrossTracks folds them back into a single station with
+          // mergeAcrossTracks folds them back into a single siding with
           // one caption, so this only has to say who is there.
           trackNames.forEach(function (nm) {
-            stationEvents.push({
+            sidingEvents.push({
               track: registry.add(nm, 0.25).key,
               title: resolved.title,
               location: ev.location || null,
@@ -2111,7 +2114,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   // Two calendars can describe the SAME thing. Bart's "L6 School Day" and
   // Lisa's "L2 School Day" both rename to "School Day", run the same hours,
   // and are the same school day — but they arrived as two events and were
-  // drawn as two stations with two captions, on lines that could be at
+  // drawn as two sidings with two captions, on lines that could be at
   // opposite ends of the board. Anything with the same title over the same
   // minutes is one event on several lines.
   //
@@ -2142,9 +2145,9 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     });
   }
   events = mergeAcrossTracks(events);
-  stationEvents = mergeAcrossTracks(stationEvents);
+  sidingEvents = mergeAcrossTracks(sidingEvents);
   linkMerged(events);
-  linkMerged(stationEvents);
+  linkMerged(sidingEvents);
 
   events.sort(function (a, b) { return a.startMin - b.startMin; });
   registry.finalize(); // every calendar is in and every event tallied — decide sides now
@@ -2157,7 +2160,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     allDayEvents,
     Object.assign({}, extra, { dateLabel: dateLabel(today, extra.locale), sun: (weather && weather.sun) || [], calendarsDown: downNames }),
-    stationEvents
+    sidingEvents
   );
 }
 

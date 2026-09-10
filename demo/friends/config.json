@@ -20,7 +20,7 @@
             "type": "contains",
             "value": "Head Chef Shift"
           },
-          "station": true,
+          "siding": true,
           "rename": false
         },
         {
@@ -40,7 +40,7 @@
             "type": "contains",
             "value": "Desk booking"
           },
-          "station": true,
+          "siding": true,
           "rename": false
         },
         {

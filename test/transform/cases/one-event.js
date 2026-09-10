@@ -3,7 +3,7 @@
 // Two calendars can describe the same thing. Bart's "L6 School Day" and
 // Lisa's "L2 School Day" both rename to "School Day", run the same hours,
 // and are the same school day; they arrived as two events and were drawn as
-// two stations with two captions, on lines that could be at opposite ends of
+// two sidings with two captions, on lines that could be at opposite ends of
 // the board. These check that they arrive as one, and that sharing an event
 // is what decides which lines end up next to each other.
 
@@ -52,20 +52,20 @@ module.exports = function (test, h) {
       'two o\'clock and four o\'clock are not the same lesson');
   });
 
-  test('the same station on two calendars keeps a kink on each line but is one station', async () => {
+  test('the same siding on two calendars keeps a kink on each line but is one siding', async () => {
     const r = await runTransform(twoFeeds('School Day', 'School Day', SAME[0], SAME[1]), NOW)
       .run(baseInput(NOW, cfgWith({
         tracks: [{ name: 'Ada' }, { name: 'Bo' }],
-        rules: [{ match: { type: 'word', value: 'School' }, station: true }],
+        rules: [{ match: { type: 'word', value: 'School' }, siding: true }],
         calendars: [
           { url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'Ada' }] },
           { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, track: 'Bo' }] },
         ],
       })));
-    const st = (r.metro.stations || []).filter((s) => s.title === 'School Day');
+    const st = (r.metro.sidings || []).filter((s) => s.title === 'School Day');
     assertEqual(st.length, 2, 'both children really are at school, so both lines kink');
     assert(st[0].group && st[0].group === st[1].group,
-      'but it is one station: the two entries must share a group, so the caption is drawn once');
+      'but it is one siding: the two entries must share a group, so the caption is drawn once');
     assert(st[0].owner !== st[1].owner, 'the two kinks belong to different lines');
   });
 

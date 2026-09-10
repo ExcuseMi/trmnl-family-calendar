@@ -112,7 +112,7 @@
             "type": "contains",
             "value": "School Day"
           },
-          "station": true
+          "siding": true
         }
       ]
     },

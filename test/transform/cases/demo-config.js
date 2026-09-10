@@ -87,8 +87,8 @@ module.exports = function (test, h) {
     const lisaKey = r.metro.legend.filter((t) => t.name === 'Lisa').map((t) => t.key)[0];
     // the class code routes the entry and is then stripped from the title —
     // "L6 School Day" belongs to Bart and reads as "School Day"
-    const schoolDays = (r.metro.stations || []).filter((s) => s.title === 'School Day').map((s) => s.owner).sort();
-    assert(schoolDays.length === 2, 'expected a School Day station for each child, got ' + schoolDays.length);
+    const schoolDays = (r.metro.sidings || []).filter((s) => s.title === 'School Day').map((s) => s.owner).sort();
+    assert(schoolDays.length === 2, 'expected a School Day siding for each child, got ' + schoolDays.length);
     assert(schoolDays.indexOf(bartKey) >= 0, 'no School Day on Bart');
     assert(schoolDays.indexOf(lisaKey) >= 0, 'no School Day on Lisa');
     assert(owners['Field Trip'] === bartKey, 'the L6 field trip should sit on Bart, got ' + owners['Field Trip']);
@@ -152,19 +152,19 @@ module.exports = function (test, h) {
     assert(names.join(',') === SETS.simpsons.tracks.join(','), 'got ' + names.join(', '));
   });
 
-  test('the Planet Express delivery is one station on three lines', async () => {
+  test('the Planet Express delivery is one siding on three lines', async () => {
     // the shape two children at one school get, with a third line in the
     // corridor: one caption, three kinks, and the three of them adjacent
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(baseInput(NOW, { use_demo_data: 'true', demo_set: 'futurama' }));
-    const run3 = (r.metro.stations || []).filter((s) => s.title === 'Delivery Run');
+    const run3 = (r.metro.sidings || []).filter((s) => s.title === 'Delivery Run');
     assert(run3.length === 3, 'expected the delivery on three lines, got ' + run3.length);
     const groups = [...new Set(run3.map((s) => s.group))];
     assert(groups.length === 1 && groups[0], 'the three kinks should share one group id, got ' + JSON.stringify(groups));
     const key = {};
     r.metro.legend.forEach((t, i) => { key[t.key] = i; });
     const at = run3.map((s) => key[s.owner]).sort((a, b) => a - b);
-    assert(at[2] - at[0] === 2, 'the three lines on one station should end up adjacent, got positions ' + at.join(','));
+    assert(at[2] - at[0] === 2, 'the three lines on one siding should end up adjacent, got positions ' + at.join(','));
   });
 
   test('every demo board names files that exist, and only its own', async () => {

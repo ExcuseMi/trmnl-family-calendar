@@ -229,7 +229,7 @@
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var LEGEND = METRO.legend || [];
-  var STATIONS = METRO.stations || [];
+  var SIDINGS = METRO.sidings || [];
   var DAY_START = METRO.day_start_min, DAY_END = METRO.day_end_min;
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -538,12 +538,12 @@
     var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 13 * S;
     var MIN_DIAG = Math.max(10 * S, 6 * 2.4 * S + 2 * S);
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
-    var STATION_RAISE = 32 * S; // how far a track's own line kinks out to "station level"; for a short station a smaller raise also means a shallower, less jarring kink instead of a deep sideways "V"
-    var STATION_GAP = 4 * S; // clear space kept between the raised line itself and the near edge of its caption
+    var SIDING_RAISE = 32 * S; // how far a track's own line kinks out to siding level; for a short siding a smaller raise also means a shallower, less jarring kink instead of a deep sideways "V"
+    var SIDING_GAP = 4 * S; // clear space kept between the raised line itself and the near edge of its caption
 
     function toXY(a, c) { return horizontal ? [a, c] : [c, a]; }
 
-    // ---- probe an hour label, and a representative station caption, for sizing
+    // ---- probe an hour label, and a representative siding caption, for sizing
     var probe = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute');
     probe.textContent = HOUR12 ? '12pm' : '00:00';
     canvas.appendChild(probe);
@@ -561,36 +561,36 @@
     var bandC = bandThick / 2;        // centre of the strip, in cross units
     var bandLo = bandThick + 4 * S;   // first cross coordinate the map may use
     // fixed at 'label' sizing (not 'title') regardless of what the real
-    // events on the canvas are currently using — a station is meta/status
+    // events on the canvas are currently using — a siding is meta/status
     // info, not a primary event, and letting it scale up with everything
     // else (up to title--xlarge on a big canvas) made it big enough to
     // physically overlap its own track's ramp geometry. Measured for real
     // here (title line + tag line, same as an actual caption's shape)
-    // rather than assumed, so STATION_LABEL_ROOM below reserves exactly
+    // rather than assumed, so SIDING_LABEL_ROOM below reserves exactly
     // what a caption really needs instead of guessing and being wrong for
     // some font/scale combination.
-    var STATION_TITLE_CLASS = 'label label--base', STATION_TAG_CLASS = 'label label--small';
+    var SIDING_TITLE_CLASS = 'label label--base', SIDING_TAG_CLASS = 'label label--small';
     var capProbe = el('div', 'metro-gen absolute');
-    var capProbeTitle = labelRow('metro-title-text ' + STATION_TITLE_CLASS + ' font--bold text--black');
+    var capProbeTitle = labelRow('metro-title-text ' + SIDING_TITLE_CLASS + ' font--bold text--black');
     capProbeTitle.textContent = 'Mg'; // ascender+descender, for a realistic line height
-    var capProbeTag = labelRow(STATION_TAG_CLASS + ' ' + quietText());
+    var capProbeTag = labelRow(SIDING_TAG_CLASS + ' ' + quietText());
     capProbeTag.textContent = 'Mg';
     capProbe.appendChild(capProbeTitle); capProbe.appendChild(capProbeTag);
     canvas.appendChild(capProbe);
-    var stationCapH = measure(capProbe).h;
+    var sidingCapH = measure(capProbe).h;
     capProbe.remove();
     // room reserved (in bundleHalf, below) between the spine bundle and the
-    // first real lane on a side that has stations: the raise itself, plus
+    // first real lane on a side that has sidings: the raise itself, plus
     // clearance, plus the caption's own real height — a caption sits
     // OUTSIDE the raised line (never straddling/centered on it), so a
     // neighboring lane can't crowd or cross through it, and the raised
     // line can't run through the caption's own box either.
-    var STATION_LABEL_ROOM = STATION_RAISE + STATION_GAP + stationCapH;
+    var SIDING_LABEL_ROOM = SIDING_RAISE + SIDING_GAP + sidingCapH;
 
     // ---- how many lines this canvas can actually carry -------------------
     //
     // A line needs its own stretch of the cross axis: the line itself, the
-    // room a station kink wants, and at least one lane to hang a label in.
+    // room a siding kink wants, and at least one lane to hang a label in.
     // Below about that, five lines on a 240px panel do not get cramped, they
     // get illegible — labels ran off the top and bottom of the board and the
     // rails underneath them ran off with them.
@@ -617,13 +617,13 @@
         if (load[i.owner] != null) load[i.owner]++;
         (i.co_owners || []).forEach(function (k) { if (load[k] != null) load[k] += 0.5; });
       });
-      (STATIONS || []).forEach(function (st) { if (load[st.owner] != null) load[st.owner] += 0.25; });
+      (SIDINGS || []).forEach(function (st) { if (load[st.owner] != null) load[st.owner] += 0.25; });
       var keep = LEGEND.slice().sort(function (a, b) { return load[b.key] - load[a.key]; }).slice(0, maxLines);
       var kept = {};
       keep.forEach(function (p) { kept[p.key] = true; });
       droppedLines = LEGEND.length - keep.length;
       LEGEND = LEGEND.filter(function (p) { return kept[p.key]; });
-      STATIONS = STATIONS.filter(function (st) { return kept[st.owner]; });
+      SIDINGS = SIDINGS.filter(function (st) { return kept[st.owner]; });
     })();
 
     // ---- tracks: side A = 'left' (up / left of axis), side B = 'right'
@@ -638,9 +638,9 @@
         p._c = sign * p._dist;
         p._sign = sign;
         p._sideKey = s;
-        // raw minute-range stations for this track — converted to axis-unit
+        // raw minute-range sidings for this track — converted to axis-unit
         // segments once aFor() exists, below
-        p._stations = STATIONS.filter(function (st) { return st.owner === p.key; }).sort(function (a, b) { return a.start_min - b.start_min; });
+        p._sidings = SIDINGS.filter(function (st) { return st.owner === p.key; }).sort(function (a, b) { return a.start_min - b.start_min; });
         trackByKey[p.key] = p;
       });
     });
@@ -650,7 +650,7 @@
       // re-solves them per attempt rather than packing at a fixed pitch
       var far = 0;
       sides[s].forEach(function (p) {
-        far = Math.max(far, p._dist + NODE_R + (p._stations.length ? STATION_RAISE + STATION_GAP : 0));
+        far = Math.max(far, p._dist + NODE_R + (p._sidings.length ? SIDING_RAISE + SIDING_GAP : 0));
       });
       return far;
     }
@@ -664,11 +664,11 @@
     var MIN_SPAN = 6 * 60;  // never fit tighter than this, even on a nearly-empty day
     var contentTimes = [];
     METRO.items.forEach(function (i) { if (i.type === 'event') { contentTimes.push(i.start_min); contentTimes.push(i.end_min); } });
-    // an all-day-derived station is deliberately full-day-wide — it must
+    // an all-day-derived siding is deliberately full-day-wide — it must
     // not drag the content-fit window out to match it, or a single
     // all-day event would defeat the whole "narrow around what's actually
     // busy" feature for everyone else on a quiet day
-    STATIONS.forEach(function (st) { if (st.all_day) return; contentTimes.push(st.start_min); contentTimes.push(st.end_min); });
+    SIDINGS.forEach(function (st) { if (st.all_day) return; contentTimes.push(st.start_min); contentTimes.push(st.end_min); });
     if (nowMin != null) contentTimes.push(nowMin);
     var winStart = DAY_START, winEnd = DAY_END;
     if (contentTimes.length) {
@@ -804,25 +804,25 @@
     var pxPerHour = 60 * pxPerMin;
     function isExpress(min) { return min < busyFrom || min > busyTo; }
 
-    // ---- stations: convert each track's raw minute ranges to clamped
+    // ---- sidings: convert each track's raw minute ranges to clamped
     // axis-unit segments now that aFor()/axisStart/axisEnd exist.
     //
-    // An all-day-derived station's [start,end] is DAY_START..DAY_END, so it
-    // clamps to the full visible axis just like any other station — it's
+    // An all-day-derived siding's [start,end] is DAY_START..DAY_END, so it
+    // clamps to the full visible axis just like any other siding — it's
     // meant to read as "the whole day", not a short flag. Real events on
     // the same line still branch off the raised segment normally
-    // (e._trackDist/e._trackDistEnd factor in stationRaiseAt at that
+    // (e._trackDist/e._trackDistEnd factor in sidingRaiseAt at that
     // event's own position), so a busy early morning doesn't need the
     // all-day span to get out of its way.
     LEGEND.forEach(function (p) {
-      p._stations = p._stations.map(function (st) {
+      p._sidings = p._sidings.map(function (st) {
         var a0 = clamp(aFor(st.start_min), axisStart, axisEnd), a1 = clamp(aFor(st.end_min), axisStart, axisEnd);
         return { a0: a0, a1: a1, title: st.title, location: st.location || null, allDay: !!st.all_day, group: st.group || null, toward: 1 };
       }).filter(function (s) { return s.a1 > s.a0; });
     });
-    // A SHARED station pulls its lines TOGETHER. A station normally kinks a
+    // A SHARED siding pulls its lines TOGETHER. A siding normally kinks a
     // line away from the spine, and two people at the same school kinking
-    // away from each other looked like two unrelated stations that happened
+    // away from each other looked like two unrelated sidings that happened
     // to share a name. Converging instead — the inner line steps out, the
     // outer line steps in — draws them alongside each other for the length
     // of the thing they are both at, which is what "they are both here"
@@ -832,10 +832,10 @@
     // still being solved when this is read. Members on opposite sides of the
     // spine keep the ordinary outward kink: converging across the middle
     // would take them through the hour river.
-    (function orientSharedStations() {
+    (function orientSharedSidings() {
       var groups = {};
       LEGEND.forEach(function (p) {
-        p._stations.forEach(function (s) {
+        p._sidings.forEach(function (s) {
           if (s.group) (groups[s.group] = groups[s.group] || []).push({ p: p, s: s });
         });
       });
@@ -848,7 +848,7 @@
         mem.forEach(function (m, i) {
           m.s.toward = i <= half ? 1 : -1;
           // Who this one is closing on, so the kink can be capped at half
-          // the gap between them. Unclamped they each moved a full station
+          // the gap between them. Unclamped they each moved a full siding
           // raise and, on a board where the lines sit closer together than
           // that, swapped places and crossed.
           var other = mem[m.s.toward > 0 ? i + 1 : i - 1];
@@ -857,22 +857,22 @@
       });
     })();
     // the raise (in c-units) a track's own line sits at, at a given axis
-    // position — 0 outside any station, ramping up/down across the same
-    // 45° kink stationPath() actually draws (not a flat step), so an
+    // position — 0 outside any siding, ramping up/down across the same
+    // 45° kink sidingPath() actually draws (not a flat step), so an
     // event whose ring lands inside the kink itself — not just the flat
     // middle — still sits exactly on the drawn line, not floating off it
-    function stationRaiseAt(p, a) {
-      var segs = p._stations;
+    function sidingRaiseAt(p, a) {
+      var segs = p._sidings;
       for (var i = 0; i < segs.length; i++) {
         var s = segs[i];
         if (a < s.a0 || a > s.a1) continue;
-        var rr = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
+        var rr = Math.min(SIDING_RAISE, (s.a1 - s.a0) / 2);
         // Not on a PACKED board: the tracks are already a track-step apart
         // there, so converging them buys nothing and only takes room the map
         // has none of. Read here rather than baked into `toward`, because
         // whether the bands fit is not known until they have been solved.
         var tw = packedFallback ? 1 : s.toward;
-        // A shared station's two lines close on each other, so each may move
+        // A shared siding's two lines close on each other, so each may move
         // at most half the gap between them, less the air they need to stay
         // two lines. Uncapped they moved a full raise each and, where the
         // board puts them closer together than that, swapped places.
@@ -891,8 +891,8 @@
             : (gapC - 2 * LINE_GAP) / 2;
           rr = Math.min(rr, Math.max(0, room));
         }
-        // signed: +1 kinks away from the spine (the ordinary station), -1
-        // toward it, which is how a shared station brings its lines together
+        // signed: +1 kinks away from the spine (the ordinary siding), -1
+        // toward it, which is how a shared siding brings its lines together
         if (a < s.a0 + rr) return (a - s.a0) * tw;
         if (a > s.a1 - rr) return (s.a1 - a) * tw;
         return rr * tw;
@@ -900,11 +900,11 @@
       return 0;
     }
     // Where a track's line ACTUALLY is at an axis position: its baseline
-    // plus any station kink, and — in the stretch where the terminus fan
+    // plus any siding kink, and — in the stretch where the terminus fan
     // pulls it out to its own named end — the fan's ramp instead. Mirrors
     // exactly how the path is built, including the fact that the ramp
     // starts from wherever the line already was at the merge point (raised,
-    // if a station reaches that far), which is what put end-of-day rings a
+    // if a siding reaches that far), which is what put end-of-day rings a
     // dozen px off their own track. Rings and capsules are placed with this
     // rather than the bare baseline.
     // Where a line ends up for its named terminus. Each track already has
@@ -915,7 +915,7 @@
     // middle — the last structural way a track could cross another.
     function spreadCFor(p) { return spineC + p._c; }
     function lineCAt(p, a) {
-      var flat = spineC + p._c + p._sign * stationRaiseAt(p, a);
+      var flat = spineC + p._c + p._sign * sidingRaiseAt(p, a);
       if (!fan) return flat;
       var spreadC = spreadCFor(p);
       var delta = Math.abs(spreadC - (spineC + p._c));
@@ -923,7 +923,7 @@
       var u = d * (a - fanStart);
       if (u <= 0) return spreadC;              // out past the fan: flat at the spread position
       if (!delta || u >= delta) return flat;   // inside the map proper
-      var atMerge = spineC + p._c + p._sign * stationRaiseAt(p, fanStart + d * delta);
+      var atMerge = spineC + p._c + p._sign * sidingRaiseAt(p, fanStart + d * delta);
       return spreadC + (atMerge - spreadC) * (u / delta);
     }
 
@@ -1116,11 +1116,11 @@
         // corner just after the event.
         var p = e._p, lo = trackByKey[e._laneOwner] || p;
         // if this event's start (or end) falls inside one of that track's own
-        // stations, its ring sits on the raised "station level" segment of
+        // sidings, its ring sits on the raised siding level segment of
         // the line, not the flat baseline — so the branch has to originate
         // (or merge back) from that raised height too
-        e._trackDist = lo._dist + stationRaiseAt(lo, e._nodeA) + NODE_R;      // branch origin (edge of the ring/capsule)
-        e._trackDistEnd = lo._dist + stationRaiseAt(lo, e._endA) + NODE_R;    // merge target (same line, after the event)
+        e._trackDist = lo._dist + sidingRaiseAt(lo, e._nodeA) + NODE_R;      // branch origin (edge of the ring/capsule)
+        e._trackDistEnd = lo._dist + sidingRaiseAt(lo, e._endA) + NODE_R;    // merge target (same line, after the event)
       });
     }
     recomputeTrackDists();
@@ -1156,7 +1156,7 @@
     // with their owner. A branch always leaves its ring at 45° (the elbow
     // never moves); what slides along the lane is only the TEXT, and only
     // over the owner's OWN earlier spur — the later ring then feeds into
-    // the same spur line (a shared branch with several stations on it).
+    // the same spur line (a shared branch with several sidings on it).
     // Anything belonging to another line, or another owner's text, makes
     // the lane unusable for this event, so it tries the next lane out.
     // `slots` is this side's lane ladder, innermost first: each rung is a
@@ -1260,7 +1260,7 @@
         // depended on how deep the lane was, so the deeper the lane the
         // further back in time the line departed — Saxophone Lesson at 16:00
         // left its line at 15:00, and Detention's climb started so far back
-        // it ran through the ramp of a station that had not ended yet. Both
+        // it ran through the ramp of a siding that had not ended yet. Both
         // were read off the board as the wrong time, which is the one thing
         // this map cannot get wrong.
         //
@@ -1281,7 +1281,7 @@
         // bar and carries on past the outermost ring. Backing its elbow off
         // by a corner radius, as a solo event's does, made the spur peel
         // away a few minutes BEFORE the bar and miss the rings entirely —
-        // Family Dinner left Maggie's line to the left of its own station.
+        // Family Dinner left Maggie's line to the left of its own siding.
         var shared0 = e._involved && e._involved.length > 1;
         var elbow = shared0 ? e._nodeA : e._nodeA - dir * CORNER;
         var L = lane(k), len = e._textLen;
@@ -1356,7 +1356,7 @@
         // A deep drop does not get a shallower version of it. A 45° ramp to
         // a lane a whole band away starts an HOUR before the meeting —
         // Saxophone Lesson at 16:00 left its line at 15:00, and Detention's
-        // began so far back it ran through a station ramp that had not
+        // began so far back it ran through a siding ramp that had not
         // ended yet. Steepening the ramp instead just looks like a mistake.
         // Past the budget the branch goes fully vertical, leaving at its own
         // minute, and the drop itself becomes the start mark.
@@ -1371,7 +1371,7 @@
         var LEAD_CAP = Math.max(2 * CORNER, MIN_DIAG);
         var diagFrom = (!shared0 && dy <= LEAD_CAP) ? elbow - dir * dy : elbow;
         // A ramp needs FLAT trunk to leave from. Reaching back into a
-        // station's own kink, it left at a point the line had not finished
+        // siding's own kink, it left at a point the line had not finished
         // climbing to, so the drop it had to make was bigger than the run it
         // had to make it in: the ramp came out steeper than 45°, parallel to
         // the kink it was standing on, and the two read as one long climb
@@ -1381,7 +1381,7 @@
         // at the event's own minute instead — the shape that needs no run.
         var leadTrack = trackByKey[e._laneOwner] || e._p;
         if (diagFrom !== elbow
-            && Math.abs(stationRaiseAt(leadTrack, diagFrom) - stationRaiseAt(leadTrack, elbow)) > 0.5) {
+            && Math.abs(sidingRaiseAt(leadTrack, diagFrom) - sidingRaiseAt(leadTrack, elbow)) > 0.5) {
           diagFrom = elbow;
         }
         // And it needs board to leave from. A 45° ramp for an event in the
@@ -1582,7 +1582,7 @@
 
     // ---- band layout ------------------------------------------------
     // Every track gets its own stretch of the cross-axis: its baseline, the
-    // room its line needs to kink out for a station, then its OWN lanes.
+    // room its line needs to kink out for a siding, then its OWN lanes.
     // Two things fall out of that. A branch never reaches across a
     // neighbouring track to find room, so it cannot cross one. And the
     // bands can be spread over whatever the canvas really has, instead of
@@ -1594,12 +1594,12 @@
     // back when every lane had to clear the whole bundle, and spending that
     // per track is what pushes a four-line day off the canvas.
     function laneBase(p) {
-      return NODE_R + Math.max(LINE_GAP, MIN_DIAG) + (p._stations.length ? STATION_RAISE + STATION_GAP : 0);
+      return NODE_R + Math.max(LINE_GAP, MIN_DIAG) + (p._sidings.length ? SIDING_RAISE + SIDING_GAP : 0);
     }
-    // a station caption sits ON the baseline, so a track carrying one needs
+    // a siding caption sits ON the baseline, so a track carrying one needs
     // room on the inward side too for the half that reaches back toward the
     // spine
-    function capIn(p) { return p._stations.length ? stationCapH / 2 + STATION_GAP : 0; }
+    function capIn(p) { return p._sidings.length ? sidingCapH / 2 + SIDING_GAP : 0; }
 
     // Lay one side out for a given per-track lane count, lane pitch and
     // extra track separation. Returns the lane ladder (innermost first,
@@ -1618,7 +1618,7 @@
         for (var j = 0; j < n; j++) out.push({ dist: start + j * stepPx, owner: p.key });
         acc = n ? start + (n - 1) * stepPx + LINE_GAP + maxLabelThick
                : acc + Math.max(laneBase(p), fan ? fan.nameH / 2 : 0);
-        // where this track's band stops: its line, its station room and all
+        // where this track's band stops: its line, its siding room and all
         // of its own lanes. Anything beyond this belongs to the next track.
         p._bandEnd = acc;
       });
@@ -1638,7 +1638,7 @@
         p._dist = acc;
         p._c = p._sign * acc;
       });
-      var kink = sides[sideKey].some(function (p) { return p._stations.length; }) ? STATION_RAISE + STATION_GAP : 0;
+      var kink = sides[sideKey].some(function (p) { return p._sidings.length; }) ? SIDING_RAISE + SIDING_GAP : 0;
       var start = acc + NODE_R + kink + LANE_BASE;
       for (var j = 0; j < nLanes; j++) out.push({ dist: start + j * stepPx, owner: null });
       return { slots: out, extent: nLanes ? start + (nLanes - 1) * stepPx + LINE_GAP + maxLabelThick : acc + NODE_R + kink };
@@ -1951,26 +1951,26 @@
     // time that is already stated at the top. The marker sits on the scale
     // and is read against it, like every other time on this board.
 
-    // a track's own line/rings kink out to "station level" for the span of
-    // any station it passes through, then back to the flat baseline —
+    // a track's own line/rings kink out to siding level for the span of
+    // any siding it passes through, then back to the flat baseline —
     // waypoints in [fromA,toA] order, ready for roundedPath
-    function stationPath(baseC, sign, fromA, toA, p) {
-      // Every breakpoint's height comes from stationRaiseAt itself, not an
+    function sidingPath(baseC, sign, fromA, toA, p) {
+      // Every breakpoint's height comes from sidingRaiseAt itself, not an
       // assumption that fromA/toA sit at baseline — a clip that lands
       // mid-ramp or mid-shelf (the fan's own merge point can, when a
-      // station's true span reaches all the way to the axis edge, e.g. a
-      // full-day station) must not be treated as if THAT were the
-      // station's real boundary, or it reads as ramping fully down to
+      // siding's true span reaches all the way to the axis edge, e.g. a
+      // full-day siding) must not be treated as if THAT were the
+      // siding's real boundary, or it reads as ramping fully down to
       // baseline right at the clip and then immediately back up for the
       // fan's own diagonal — a double bend ("squiggle") instead of one.
       var lo = Math.min(fromA, toA), hi = Math.max(fromA, toA);
       var marks = [lo, hi];
-      p._stations.forEach(function (s) {
-        var rr = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
+      p._sidings.forEach(function (s) {
+        var rr = Math.min(SIDING_RAISE, (s.a1 - s.a0) / 2);
         [s.a0, s.a0 + rr, s.a1 - rr, s.a1].forEach(function (a) { if (a > lo && a < hi) marks.push(a); });
       });
       marks.sort(function (a, b) { return a - b; });
-      return marks.map(function (a) { return [a, baseC + sign * stationRaiseAt(p, a)]; });
+      return marks.map(function (a) { return [a, baseC + sign * sidingRaiseAt(p, a)]; });
     }
     // Now the bands are solved, so how close the lines run is known. A name
     // set above its line is a name's height clear of it; where the tracks
@@ -2018,59 +2018,59 @@
 
     var capGroups = {};
     LEGEND.forEach(function (p) {
-      p._stations.forEach(function (s) {
+      p._sidings.forEach(function (s) {
         if (!s.group) return;
         (capGroups[s.group] = capGroups[s.group] || []).push(p);
       });
     });
-    // A station shared by two lines is a CORRIDOR: they close on each other
-    // for the length of it, and the bend is the whole point. A station only
+    // A siding shared by two lines is a CORRIDOR: they close on each other
+    // for the length of it, and the bend is the whole point. A siding only
     // one person is at is not — bending a line down for nine hours of "Desk
     // booking" displaces that person's entire day off its own baseline for
     // a fact about where they are sitting.
-    function sharedStation(s) { return !!(s.group && capGroups[s.group] && capGroups[s.group].length > 1); }
-    // So a solo station is drawn as a SIDING instead: the main line carries
-    // straight on at its own height and the station is the loop that leaves
+    function sharedSiding(s) { return !!(s.group && capGroups[s.group] && capGroups[s.group].length > 1); }
+    // So a solo siding is drawn as a SIDING instead: the main line carries
+    // straight on at its own height and the siding is the loop that leaves
     // it and comes back. That is the express/local pair a transit map draws,
     // it keeps the baseline hierarchy — one line, one height, all day — and
     // it costs nothing in truth, since the kink already runs exactly the
-    // station's span.
+    // siding's span.
     // Where this line would run at `a` if it had not kinked out for a
-    // station: its drawn position less whatever the kink lifted it by. Taken
+    // siding: its drawn position less whatever the kink lifted it by. Taken
     // as a constant instead, the siding was drawn at the line's FANNED
     // position (where its name is) while the trunk either side of it ran at
     // the line's real one, so the two met with a step in the middle of the
     // rail: Homer's line was visibly interrupted where "Desk booking"
     // began. It also blends correctly inside the fan, which a constant
     // cannot do.
-    function flatCAt(p, a) { return lineCAt(p, a) - p._sign * stationRaiseAt(p, a); }
-    // Which station has the line at `a`. stationRaiseAt takes the FIRST
+    function flatCAt(p, a) { return lineCAt(p, a) - p._sign * sidingRaiseAt(p, a); }
+    // Which siding has the line at `a`. sidingRaiseAt takes the FIRST
     // segment whose span contains the position and returns, so where two
-    // stations on one line overlap only one of them moves the line at all.
+    // sidings on one line overlap only one of them moves the line at all.
     // Read the same way here so the two cannot disagree about which.
-    function governingStation(p, a) {
-      var segs = p._stations;
+    function governingSiding(p, a) {
+      var segs = p._sidings;
       for (var i = 0; i < segs.length; i++) {
         if (a >= segs[i].a0 && a <= segs[i].a1) return segs[i];
       }
       return null;
     }
     function expressThrough(p) {
-      p._stations.forEach(function (s) {
-        if (sharedStation(s)) return;
+      p._sidings.forEach(function (s) {
+        if (sharedSiding(s)) return;
         if (s.a1 - s.a0 < CORNER * 2) return;   // too short to read as a loop
-        // Only where this station is the one that actually kinked the line.
-        // A solo station nested inside another of its own line's stations
+        // Only where this siding is the one that actually kinked the line.
+        // A solo siding nested inside another of its own line's sidings
         // (Amy's "Lab Rotation" sitting inside the crew's "Delivery Run"
         // corridor) never gets a siding: the corridor already has the line
-        // and stationRaiseAt hands it the whole overlap. The express was
+        // and sidingRaiseAt hands it the whole overlap. The express was
         // drawn for it anyway, at the baseline the line had left, so it
         // came out as a stretch of rail floating in the middle of the board
         // with nothing at either end. No siding, no loop, nothing to close.
-        if (governingStation(p, (s.a0 + s.a1) / 2) !== s) return;
-        // Run it a corner PAST each end of the station. The kink's corners
+        if (governingSiding(p, (s.a0 + s.a1) / 2) !== s) return;
+        // Run it a corner PAST each end of the siding. The kink's corners
         // are drawn rounded, so the trunk leaves its baseline a corner
-        // radius before the station's own start and comes back a radius
+        // radius before the siding's own start and comes back a radius
         // after its end: a siding drawn between the bare vertices left a
         // notch of bare paper at each end where neither line was on the
         // baseline, and Homer's rail read as interrupted where "Desk
@@ -2121,10 +2121,10 @@
           : (d > 0 ? 2 * S : axisPx - 2 * S - nameLen);
         // Off the line where it REALLY is under the name, not off its flat
         // baseline: a track that begins inside one of its own all-day
-        // stations starts raised, and measured from the baseline the name
+        // sidings starts raised, and measured from the baseline the name
         // sat where the line now was and got a stroke through it. Sampled
         // ACROSS the name's whole width, taking the closest the line comes —
-        // one reading at the middle still let a station ramp climb into the
+        // one reading at the middle still let a siding ramp climb into the
         // name's far end.
         var nameC = spreadC;
         if (namesAbove) {
@@ -2203,7 +2203,7 @@
         p._nameC1 = p._nameC0 + nameThick;
         placedNames.push({ a0: nameA, a1: nameA + nameLen, c0: p._nameC0, c1: p._nameC1 });
         var far = d > 0 ? axisEnd : axisStart;
-        var legPts = stationPath(c, p._sign, Math.min(merge, far), Math.max(merge, far), p);
+        var legPts = sidingPath(c, p._sign, Math.min(merge, far), Math.max(merge, far), p);
         if (d < 0) legPts = legPts.slice().reverse();
         // Map through toXY like every other path: these points are in
         // (axis, cross), which only coincides with (x, y) lying down. Fed
@@ -2227,14 +2227,14 @@
           svg.appendChild(cap);
         });
       } else {
-        var ln = svgEl('path', { d: roundedPath(stationPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
+        var ln = svgEl('path', { d: roundedPath(sidingPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
         ln.setAttribute('data-metro-role', 'track'); ln.setAttribute('data-metro-owner', p.key);
         paintLine(ln, p, S, svg, 0);
         p._trunkEl = ln;
         expressThrough(p);
       }
     });
-    // ---- station markers: a hollow ring at each end, sitting exactly where
+    // ---- siding markers: a hollow ring at each end, sitting exactly where
     // the kink itself starts/ends (the true, unmoved boundary time — same
     // convention as every other ring in this design), plus a caption built
     // the SAME way a real event's label is (title + location, current text
@@ -2242,13 +2242,13 @@
     // map instead of reading as an afterthought. Positioned OUTSIDE the
     // raised line entirely (past the shelf, away from the spine) rather
     // than straddling/centered on it — a box centered on a raise only as
-    // deep as STATION_RAISE routinely stood taller than the gap actually
+    // deep as SIDING_RAISE routinely stood taller than the gap actually
     // was, so the raised line ran right through the caption's own box
     // (read as the line "clipping" the text) and, on a side with more than
     // one track, into whatever lane sat just beyond the reserved room too.
     // Sitting past the shelf instead means the caption only ever needs
     // clearance from the ONE flat line directly below it, guaranteed by
-    // STATION_LABEL_ROOM (computed from this same real measured height).
+    // SIDING_LABEL_ROOM (computed from this same real measured height).
     // One event, one caption. Two children at the same school are two kinks
     // — they really are both there — but it is one School Day, and drawn
     // once per line it appeared twice, on lines that could be at opposite
@@ -2258,40 +2258,40 @@
     var capQueue = [];
     LEGEND.forEach(function (p) {
       var baseC = spineC + p._c;
-      p._stations.forEach(function (s) {
-        var raise = Math.min(STATION_RAISE, (s.a1 - s.a0) / 2);
+      p._sidings.forEach(function (s) {
+        var raise = Math.min(SIDING_RAISE, (s.a1 - s.a0) / 2);
         var members = s.group ? capGroups[s.group] : null;
         var ownsCaption = !members || members[0] === p;
         // No marker at the kink boundaries. A hollow diamond there claimed
-        // to mark the exact minute a station starts and ends, and it does
+        // to mark the exact minute a siding starts and ends, and it does
         // not: the kink is a 45° ramp whose run is a fixed number of pixels,
         // so where it begins and ends on the axis is a drawing decision, not
         // a time. The kink itself already shows the span, and the caption
-        // says which station it is.
+        // says which siding it is.
         if (!ownsCaption) return;   // the rings above are per line; the caption is not
         // metro-caption as well as metro-label: it is cleaned up with the
         // labels and painted like one, but it is placed by different rules
         // in a different pass, and a test about captions has to be able to
         // pick them out of the text on the board.
         var box = el('div', 'metro-gen metro-label metro-caption absolute text--black');
-        // Lying down a caption may run as long as its station; standing up
+        // Lying down a caption may run as long as its siding; standing up
         // it has only the column between two lines, so cap it there or two
-        // neighbouring stations write straight over each other.
+        // neighbouring sidings write straight over each other.
         var availW = horizontal ? clamp((s.a1 - s.a0) - raise * 2, 70 * S, maxTitle)
                                 : Math.max(60 * S, colW);
-        var t = labelRow('metro-title-text ' + STATION_TITLE_CLASS + ' font--bold text--black');
+        var t = labelRow('metro-title-text ' + SIDING_TITLE_CLASS + ' font--bold text--black');
         t.textContent = s.title;
         t.style.maxWidth = availW + 'px';
         clampLines(t, 2);
         box.appendChild(t);
-        // On a board too small for bands, the second line goes. A station
+        // On a board too small for bands, the second line goes. A siding
         // caption sits in the space its own kink vacates, and on a packed
         // board that space is one track-step tall — the location line spills
         // straight out of it onto the next line's lane, and at 1-bit it is
         // grey text on a grey rail besides. The title alone still says what
-        // the station is.
+        // the siding is.
         if (s.location && !packedFallback) {
-          var loc = labelRow('metro-loc ' + STATION_TAG_CLASS + ' ' + quietText());
+          var loc = labelRow('metro-loc ' + SIDING_TAG_CLASS + ' ' + quietText());
           loc.textContent = s.location;
           loc.style.maxWidth = (availW * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
           box.appendChild(loc);
@@ -2318,10 +2318,10 @@
           });
         }
         // exactly where this track's own line WOULD run if it hadn't kinked
-        // out for the station: the kink vacates that space for the whole
+        // out for the siding: the kink vacates that space for the whole
         // span, so the caption lands in a gap nothing else is using — no
         // clearance arithmetic, and no line to clip through the text
-        // Where this line ACTUALLY runs across the station, not where its
+        // Where this line ACTUALLY runs across the siding, not where its
         // baseline is: the kink raises the line away from the spine, so a
         // caption measured off the baseline sits in the gap the kink opened
         // and the raised line is written straight through it.
@@ -2329,7 +2329,7 @@
         var midC = baseC, capLo = lineCAt(p, capMid), capHi = capLo;
         if (members && members.length > 1) {
           // between the lines WHERE THEY NOW ARE — they have converged for
-          // the length of this station, and the caption belongs in the space
+          // the length of this siding, and the caption belongs in the space
           // that opened up between them, not between the baselines they left
           var lo2 = Infinity, hi2 = -Infinity;
           members.forEach(function (q) {
@@ -2340,7 +2340,7 @@
           midC = (lo2 + hi2) / 2;
           capLo = lo2; capHi = hi2;
           // and a bar across the lines at each end of the shared span, so it
-          // reads as one station both of them call at rather than two that
+          // reads as one siding both of them call at rather than two that
           // happen to share a name
           [s.a0 + raise, s.a1 - raise].forEach(function (at) {
             if (at <= axisStart + 1 || at >= axisEnd - 1) return;
@@ -2359,7 +2359,7 @@
             svg.appendChild(bar);
           });
         }
-        if (horizontal && sharedStation(s) && members.length > 2) {
+        if (horizontal && sharedSiding(s) && members.length > 2) {
           // Between two of the lines it belongs to, in the widest gap the
           // corridor has — NOT at the midpoint. With three lines in one
           // corridor the midpoint is the middle line itself, and "Delivery
@@ -2370,20 +2370,20 @@
             var g2 = cs2[ci] - cs2[ci - 1];
             if (!wide || g2 > wide.gap) wide = { gap: g2, at: (cs2[ci] + cs2[ci - 1]) / 2 };
           }
-          midC = (wide && wide.gap >= bm.h + 2 * STATION_GAP)
+          midC = (wide && wide.gap >= bm.h + 2 * SIDING_GAP)
             ? wide.at
-            : cs2[cs2.length - 1] + STATION_GAP + bm.h / 2;
+            : cs2[cs2.length - 1] + SIDING_GAP + bm.h / 2;
         }
-        if (horizontal && !sharedStation(s)) {
-          // The main line runs straight through a solo station, so the
+        if (horizontal && !sharedSiding(s)) {
+          // The main line runs straight through a solo siding, so the
           // baseline is no longer free: the caption goes INSIDE the loop,
           // between the express line and the siding — the space the siding
           // itself opened. A two-line caption does not fit a loop one
           // raise deep, and pushed outside the siding it lands in the
           // lanes; the location line goes instead, exactly as it does on a
           // board too small for bands. The title alone still says what the
-          // station is.
-          if (bm.h + 2 * STATION_GAP > raise) {
+          // siding is.
+          if (bm.h + 2 * SIDING_GAP > raise) {
             var lc0 = box.querySelector('.metro-loc');
             if (lc0) { lc0.remove(); bm = measure(box); }
           }
@@ -2392,30 +2392,30 @@
           // nothing there and cost it twice the chance of landing on
           // something: "Lab Rotation" wrapped inside a 70px allowance and
           // then dropped its second line onto "Bend Some Girders" in the
-          // lane below, with no room along its own two-hour station to
+          // lane below, with no room along its own two-hour siding to
           // slide out of the way. Wrapping is what the narrow allowance is
           // for, and the allowance is about fitting the LOOP.
-          if (bm.h + 2 * STATION_GAP > raise) {
+          if (bm.h + 2 * SIDING_GAP > raise) {
             t.style.maxWidth = 'none';
             t.style.overflow = 'hidden'; t.style.textOverflow = 'ellipsis';
             clampLines(t, 1);
             bm = measure(box);
           }
-          // Inside the loop only if there IS a loop. A solo station nested
-          // inside another of its own line's stations never gets a siding
-          // (stationRaiseAt hands the whole overlap to the outer one), so
+          // Inside the loop only if there IS a loop. A solo siding nested
+          // inside another of its own line's sidings never gets a siding
+          // (sidingRaiseAt hands the whole overlap to the outer one), so
           // the space "inside the loop" was never vacated: Amy's "Lab
           // Rotation", sitting inside the crew's "Delivery Run" corridor,
           // was set half a raise off a baseline her line had left, which
           // put it across the rail one line up. With no kink of its own it
           // is an ordinary caption beside an ordinary line, so it sits off
           // the line WHERE THAT LINE ACTUALLY RUNS.
-          var ownsKink = governingStation(p, capMid) === s;
+          var ownsKink = governingSiding(p, capMid) === s;
           midC = !ownsKink
-            ? lineCAt(p, capMid) + p._sign * (STATION_GAP + bm.h / 2)
-            : (bm.h + 2 * STATION_GAP <= raise
+            ? lineCAt(p, capMid) + p._sign * (SIDING_GAP + bm.h / 2)
+            : (bm.h + 2 * SIDING_GAP <= raise
               ? baseC + p._sign * raise / 2
-              : baseC + p._sign * (raise + STATION_GAP + bm.h / 2));
+              : baseC + p._sign * (raise + SIDING_GAP + bm.h / 2));
         }
         if (horizontal) {
           // Lying down, a caption is placed in a second pass (capQueue,
@@ -2431,25 +2431,25 @@
           // pushes it across the gutter and over the hour labels. Set it
           // beside the line instead, on the side the kink went.
           box.style.top = capA + 'px';
-          // Clear of the OUTERMOST line of the station, not of the middle
-          // between them: where two lines have converged for the station,
+          // Clear of the OUTERMOST line of the siding, not of the middle
+          // between them: where two lines have converged for the siding,
           // a caption measured from the midpoint is written straight over
           // whichever of them is on that side.
-          box.style.left = (p._sign > 0 ? capHi + STATION_GAP : capLo - bm.w - STATION_GAP) + 'px';
+          box.style.left = (p._sign > 0 ? capHi + SIDING_GAP : capLo - bm.w - SIDING_GAP) + 'px';
         }
       });
     });
 
     // ---- where the captions actually go ---------------------------------
     //
-    // Lying down, a caption slides along its OWN station's span until it is
-    // clear of what is already there. A station caption is not part of the
+    // Lying down, a caption slides along its OWN siding's span until it is
+    // clear of what is already there. A siding caption is not part of the
     // lane bookkeeping (it sits in the space the kink vacated) so nothing
     // else knows to keep out of its way, and on a line with a meeting
-    // inside its own station's span the two wrote over each other.
+    // inside its own siding's span the two wrote over each other.
     //
     // The captions also have to clear EACH OTHER, and that is why this is a
-    // second pass rather than part of the loop above. Two stations on
+    // second pass rather than part of the loop above. Two sidings on
     // different lines can want the same strip of canvas: a solo caption too
     // tall for its own loop sits just outside it, and a corridor caption
     // sits just outside the outermost line it joins, which on a packed
@@ -2458,7 +2458,7 @@
     //
     // Which one should move is decided by how much room it has to move IN,
     // not by the order the lines happen to be in: a caption is placed
-    // least-freedom-first, so the one pinned to a two-hour station takes
+    // least-freedom-first, so the one pinned to a two-hour siding takes
     // the spot it needs and the one with seven hours of corridor to slide
     // along is the one that yields. Sorting the other way round moves the
     // caption that cannot go anywhere, which is how it ends up back on top
@@ -2496,7 +2496,7 @@
       // belonging to anybody, so nothing routes around it, and a caption
       // sitting on it broke both: the rule came out dashed through the
       // words and the words came out with a stroke through them. The
-      // station is long; the caption only needs somewhere along it, so it
+      // siding is long; the caption only needs somewhere along it, so it
       // steps past the rule, or back before it when there is no room after.
       if (nowA != null) {
         var nowClear = 5 * S;
@@ -2536,7 +2536,7 @@
     var RAMP_LEAD = 2 * CORNER;
 
     // How far along its own drawn path a track is when it reaches axis
-    // position `a`. Measured on the real element, so station kinks and the
+    // position `a`. Measured on the real element, so siding kinks and the
     // terminus fan — which make the drawn line longer than the axis span —
     // are included rather than assumed away.
     // How far along its own drawn path an element is when it reaches axis
@@ -2595,14 +2595,14 @@
     // The lead-in is a SLICE OF THE TRUNK, not a straight line at the
     // trunk's height where the branch leaves. Those are the same thing only
     // while the trunk is level, and it is not level inside one of its own
-    // station kinks: Assembly at 9am left a School Day shelf that had only
+    // siding kinks: Assembly at 9am left a School Day shelf that had only
     // existed since 8:57, so its lead-in was drawn flat across the last of
     // the climb, floating above the line, and the kink's diagonal appeared
     // to run straight into Assembly's own drop. Taking the trunk's real
     // breakpoints over that window makes the lead-in lie on the line
     // whatever the line is doing there — which is the whole point of it.
     function trunkSlice(p, a0, a1) {
-      var pts = stationPath(spineC + p._c, p._sign, Math.min(a0, a1), Math.max(a0, a1), p);
+      var pts = sidingPath(spineC + p._c, p._sign, Math.min(a0, a1), Math.max(a0, a1), p);
       return a1 < a0 ? pts.slice().reverse() : pts;
     }
     function rampOut(p, aFrom, aElbow, laneC, dir, fromRing, tailTo) {
@@ -2618,7 +2618,7 @@
       // and gets filleted like every other bend, and it is invisible because
       // it lies on the trunk in the trunk's own stroke — but a shared
       // branch is drawn BOLD, so its lead-in showed up as a heavy stretch of
-      // somebody else's main line running away from the station. The ring
+      // somebody else's main line running away from the siding. The ring
       // sits exactly on the departure and covers the unfilleted corner.
       if (fromRing) {
         // Unless the elbow had to slide off the interchange minute to find
@@ -2702,7 +2702,7 @@
         var sign = g.members[0]._sign, laneC = spineC + sign * g.members[0]._laneDist;
         // The whole group is drawn at ONE lane height — the first member's —
         // but each member computed its own, and those differ when one of
-        // them sits inside a station and another does not. A marker placed
+        // them sits inside a siding and another does not. A marker placed
         // from the member's own reading floated off the rail it belongs to.
         g.members.forEach(function (m) { m._drawnLaneC = laneC; });
         // The flat run is drawn as a straight spine PLUS each member's own
@@ -2740,7 +2740,7 @@
         // roundedPath cannot fillet, and the branch snapped off at a hard
         // angle. The lead-in lies exactly on the trunk, dash phase and all,
         // so it is invisible. It leaves from where the line REALLY is at
-        // that minute — a track still ramping out of a station is not at its
+        // that minute — a track still ramping out of a siding is not at its
         // baseline, and drawn from the baseline the branch starts detached
         // and crosses the ramp instead of forking off it.
         var sorted = g.members.slice().sort(function (a, b) { return a._elbow - b._elbow; });
@@ -2803,7 +2803,7 @@
       if (e._involved.length > 1) {
         // each involved track's actual rendered position at this axis point —
         // not just its flat baseline — since a track passing through one of
-        // its own stations (e.g. an all-day band) sits kinked out to "station
+        // its own sidings (e.g. an all-day band) sits kinked out to "siding
         // level" here, and the capsule has to reach the line where it really
         // is, not where it'd be on an ordinary day
         var cs = e._involved.map(function (q) { return lineCAt(q, e._nodeA); });
@@ -2812,8 +2812,8 @@
         // solid capsule spanning them: now that each track has its own band
         // the lines can be a long way apart, and a filled bar stretched
         // across that gap dominates everything around it. This is the way a
-        // transit map links stations that aren't adjacent anyway.
-        // Dashed, the way a transit map draws an out-of-station
+        // transit map links sidings that aren't adjacent anyway.
+        // Dashed, the way a transit map draws an out-of-siding
         // interchange: these lines are not adjacent platforms, they are a
         // family in different places agreeing to be in the same one. A
         // solid bar across four bands also reads far heavier than the
@@ -2921,7 +2921,7 @@
           // behind it and reads on a 4px black trunk as clearly as on a
           // dotted grey one. A solid dot on its own line's colour is the one
           // thing that cannot be seen: it is the same ink as what it sits on.
-          // This is the Mini Metro convention — every station is a
+          // This is the Mini Metro convention — every siding is a
           // paper-filled shape with a heavy outline, and importance is
           // carried by SIZE, not by fill. Ours run stop < interchange < hub.
           //
@@ -3019,7 +3019,7 @@
         // map: a solid block was a hole in the line rather than a thing
         // standing on it, and where it happened to park on a junction it
         // read as part of the junction. The one at 08:39 on Lisa's line sat
-        // across a station ramp and a branch leaving at the same minute,
+        // across a siding ramp and a branch leaving at the same minute,
         // and the three of them came out as one black blob with a line
         // grazing its corner.
         var body = svgEl('rect', {
@@ -3138,7 +3138,7 @@
         // bar crosses the middle of one, because clearing it then costs
         // half the caption's width and the caption ends up pointing at
         // nothing. "Coffee (100 cups)" moved 71px off its own rail and
-        // landed on a station caption two lanes away, which is worse than
+        // landed on a siding caption two lanes away, which is worse than
         // the bar passing behind the words, where the paper outline every
         // caption carries already deals with it.
         //

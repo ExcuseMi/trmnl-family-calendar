@@ -1,7 +1,7 @@
 'use strict';
 
 // Regression tests for the METRO MAP LAYOUT — the client-side geometry in
-// plugin/src/shared.liquid (band/lane placement, station kinks and their
+// plugin/src/shared.liquid (band/lane placement, siding kinks and their
 // captions, branches, interchange capsules, terminus fan, hour axis).
 //
 // transform.js has its own suite next door (../transform); that one covers
@@ -398,7 +398,7 @@ function overlap(a, b) {
 function pointIn(p, r) { return p[0] >= r.x && p[0] <= r.x + r.w && p[1] >= r.y && p[1] <= r.y + r.h; }
 
 function hasClass(label, cls) { return (' ' + label.cls + ' ').indexOf(' ' + cls + ' ') >= 0; }
-// the text boxes a reader is meant to read: event labels, station captions,
+// the text boxes a reader is meant to read: event labels, siding captions,
 // terminus names, hour ticks and the sky band
 function textLabels(rep) {
   return rep.labels.filter((l) => hasClass(l, 'metro-label') || hasClass(l, 'metro-terminus')

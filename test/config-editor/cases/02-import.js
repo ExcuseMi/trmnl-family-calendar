@@ -51,16 +51,16 @@ module.exports = function (test, h) {
     assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'L6' }, track: 'Nala' }]);
   });
 
-  test('importing a "station" rule round-trips and checks the station box', () => {
+  test('importing a "siding" rule round-trips and checks the siding box', () => {
     const { document } = loadEditor();
     document.getElementById('importIn').value = JSON.stringify({
       tracks: [{ name: 'Ward' }],
-      calendars: [{ url: 'https://a.example/x.ics', rules: [{ match: { type: 'word', value: 'Desk booking' }, station: true }] }],
+      calendars: [{ url: 'https://a.example/x.ics', rules: [{ match: { type: 'word', value: 'Desk booking' }, siding: true }] }],
     });
     click(document.getElementById('loadImport'));
-    assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'Desk booking' }, station: true }]);
+    assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'Desk booking' }, siding: true }]);
     const rule = document.querySelector('#calendars .card .rule');
-    assert(rule.querySelectorAll('input[type=checkbox]')[3].checked, 'the station checkbox should reflect the imported rule');
+    assert(rule.querySelectorAll('input[type=checkbox]')[3].checked, 'the siding checkbox should reflect the imported rule');
   });
 
   test('importing hideIfEmpty:false round-trips and ticks the keep-empty box', () => {

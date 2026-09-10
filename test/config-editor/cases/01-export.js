@@ -56,16 +56,16 @@ module.exports = function (test, h) {
     assertEqual(jsonOut(document).rules[0].hide, true);
   });
 
-  test('a rule with "station" checked exports { station: true }', () => {
+  test('a rule with "siding" checked exports { siding: true }', () => {
     const { document } = loadEditor();
     fireInput(document.querySelector('#tracks .card .title-input'), 'Ward');
     fireChange(document.querySelector('#tracks .card .title-input'));
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), 'Desk booking');
-    const station = rule.querySelectorAll('input[type=checkbox]')[3];
-    station.checked = true; fireChange(station);
-    assertEqual(jsonOut(document).rules[0], { match: { type: 'word', value: 'Desk booking' }, station: true });
+    const siding = rule.querySelectorAll('input[type=checkbox]')[3];
+    siding.checked = true; fireChange(siding);
+    assertEqual(jsonOut(document).rules[0], { match: { type: 'word', value: 'Desk booking' }, siding: true });
   });
 
   test('a rule with no action is left out of the JSON and flagged', () => {

@@ -277,46 +277,46 @@ module.exports = function (test, h) {
     assertEqual(r.metro.legend.map((p) => p.name), ['Nala'], 'legacy people[] should still seed the track registry (Familie has no events today, so no empty track)');
   });
 
-  test('a "station" rule routes a timed event into metro.stations instead of the timeline', async () => {
+  test('a "siding" rule routes a timed event into metro.sidings instead of the timeline', async () => {
     const ev = { start: '20260907T080000Z', end: '20260907T190000Z', summary: 'Desk booking', location: 'BE-Ghent A01' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      calendars: [{ url: 'https://example.com/a.ics', name: 'Ward', rules: [{ match: { type: 'word', value: 'Desk' }, station: true }] }],
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Ward', rules: [{ match: { type: 'word', value: 'Desk' }, siding: true }] }],
     })));
-    assertEqual(eventItems(r.metro).length, 0, 'a station event should not appear on the timeline as a normal branch');
-    assertEqual(r.metro.stations.length, 1);
-    const st = r.metro.stations[0];
+    assertEqual(eventItems(r.metro).length, 0, 'a siding event should not appear on the timeline as a normal branch');
+    assertEqual(r.metro.sidings.length, 1);
+    const st = r.metro.sidings[0];
     assertEqual(st.title, 'Desk booking');
     assertEqual(st.location, 'BE-Ghent A01');
     assertEqual(st.start_min, 8 * 60);
     assertEqual(st.end_min, 19 * 60);
     const wardTrack = r.metro.legend.find((p) => p.name === 'Ward');
-    assertEqual(st.owner, wardTrack.key, 'a station-only track should still get a legend entry (it is "active")');
+    assertEqual(st.owner, wardTrack.key, 'a siding-only track should still get a legend entry (it is "active")');
   });
 
-  test('an all-day event renders as a full-day station on its track, not a header strip entry', async () => {
+  test('an all-day event renders as a full-day siding on its track, not a header strip entry', async () => {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Staff Training Day' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'Training' }, allDay: true }] }],
     })));
     assertEqual(r.metro.all_day, [], 'no longer duplicated into the header strip');
-    assertEqual(r.metro.stations.length, 1, 'renders as a full-day station on its track instead');
-    const st = r.metro.stations[0];
+    assertEqual(r.metro.sidings.length, 1, 'renders as a full-day siding on its track instead');
+    const st = r.metro.sidings[0];
     assertEqual(st.title, 'Staff Training Day');
     assertEqual(st.start_min, r.metro.day_start_min);
     assertEqual(st.end_min, r.metro.day_end_min);
     assertEqual(st.all_day, true, 'flagged so the client does not widen the content-fit window to match it');
   });
 
-  test('a real meeting during a station\'s span still renders normally alongside it', async () => {
+  test('a real meeting during a siding\'s span still renders normally alongside it', async () => {
     const evStation = { start: '20260907T080000Z', end: '20260907T190000Z', summary: 'Desk booking' };
     const evMeeting = { start: '20260907T090000Z', end: '20260907T093000Z', summary: 'Standup' };
     const fetchImpl = async () => okText(icsWithEvents([evStation, evMeeting]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      calendars: [{ url: 'https://example.com/a.ics', name: 'Ward', rules: [{ match: { type: 'word', value: 'Desk' }, station: true }] }],
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Ward', rules: [{ match: { type: 'word', value: 'Desk' }, siding: true }] }],
     })));
-    assertEqual(r.metro.stations.length, 1);
+    assertEqual(r.metro.sidings.length, 1);
     assertEqual(eventItems(r.metro).map((e) => e.title), ['Standup']);
   });
 };

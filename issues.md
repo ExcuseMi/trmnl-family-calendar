@@ -110,6 +110,27 @@ is open.
   be built as its own arc from a point ON the trunk, and then the branch
   starts where it leaves and nothing is redrawn. Worth doing before A10,
   which is the same elbow seen from the other side.
+- [ ] **A14. The cross-axis solver gives up too early and then wastes what
+  it saved.** Reported off an X quadrant of the Simpsons board: five lines
+  crammed into a 40px pitch in the middle, every label stacked outside the
+  bundle, and the bottom fifth of the canvas empty.
+  It is A1 again, on the other path. `solve()` lays each side out as
+  bands, where a track's own lanes sit in the gap between it and the next
+  track outward, which is exactly "use the inner spaces". When the bands
+  do not fit at their tightest it falls back to `buildPacked`: every track
+  at a fixed pitch with ONE lane ladder per side, beyond all of them. That
+  is a cliff, not a gradient. The board either gets inner lanes for every
+  track or none for any, and having chosen none it does not go back and
+  spend the room it just freed.
+  What the picture asks for is a first pass that decides the layout from
+  what each track actually needs and then keeps spending: bands where they
+  fit, packing only the tracks that cannot have one, and the surplus back
+  into the gaps between the rails rather than centred as whitespace. Pass 3
+  already has the shape of this (`STEP_CAP`, `SEP_CAP`, grow while it still
+  fits); it just never runs on the packed path, and packing is all or
+  nothing per side.
+  This is a rework of the solver, not a patch. Sizeable, and worth doing
+  before more is layered on top of the current split.
 - [x] **A11. Every "small view" in the layout suite was rendering full
   size.** Fixed in the harness (a half or a quadrant is a slot inside the
   screen, not a smaller screen). Left here as a note: any conclusion drawn
@@ -216,16 +237,16 @@ is open.
 
 ## Notes
 
-- **"Station" is two different things and the name is going.** The transit
+- **"Station" is now one thing.** The word had two meanings: the transit
   grammar sense (a point on a line: tick, ring, diamond, hub) and the
-  config's `station: true` sense (a SPAN the line kinks out for) share one
-  word, and AGENTS.md already has to warn "not to be confused with the
-  ring-station above". The proposal is **siding**, which is what the second
-  one actually draws and what `test/layout/cases/sidings.js` already calls
-  it. Renaming touches the config key, `metro.stations`, the `STATION_*`
-  constants, `data-metro-role="station-ring"`, CONFIG.md, the AI prompt and
-  the editor; `parseConfig` keeps reading `station` so existing configs do
-  not break.
+  config's `station: true` sense (a SPAN the line leaves the running line
+  for). The second is called a **siding** everywhere now, which is what it
+  draws. The config key is `siding: true`, the payload is `metro.sidings`,
+  the constants are `SIDING_*`, and the fixtures are `siding-day` and
+  `shared-siding`. `station` is still read by `parseConfig` and by the
+  editor's importer, undocumented, so a config written before the rename
+  still works; `data-metro-role="station-ring"` keeps its name because a
+  hub ring really is the point sense.
 
 - **The layout suite can render the Liquid side now.** The banner is drawn
   by Liquid from the build's own `metro:`, so no fixture could ever reach

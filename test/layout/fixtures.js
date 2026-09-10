@@ -13,7 +13,7 @@ function ev(title, owner, startMin, endMin, extra) {
     owner: owner, co_owners: [], side: 'left', hue: 'black', track_width: 3, track_style: 'solid', track_offset: -10,
   }, extra || {});
 }
-function station(owner, title, startMin, endMin, extra) {
+function siding(owner, title, startMin, endMin, extra) {
   return Object.assign({ owner: owner, title: title, location: null, start_min: startMin, end_min: endMin }, extra || {});
 }
 
@@ -31,7 +31,7 @@ function base(over) {
     orientation: 'auto', hour12: false,
     i18n: { today: 'Today', more: '+{n} more', earlier: '+{n} earlier', rain_pct: '{n}% rain' },
     header_weather: { hi: 21, lo: 13, condition: 'Rain', rain_chance: 60, icon: '' },
-    legend: TRACKS, all_day: [], stations: [], items: [],
+    legend: TRACKS, all_day: [], sidings: [], items: [],
   }, over);
 }
 
@@ -61,27 +61,27 @@ const busyDay = base({
 });
 
 // The same day with an all-day event on EVERY track. All-day events render
-// as a full-width station band, which moves every line off its baseline for
+// as a full-width siding band, which moves every line off its baseline for
 // the whole day — that is what broke the interchange capsule (it reached for
 // a baseline nobody was sitting on any more) and what put a track's own line
 // through its caption.
 const allDayEveryTrack = base({
-  stations: [
-    station('work', 'Office Closed', 420, 1260, { all_day: true }),
-    station('alex', 'PTO', 420, 1260, { all_day: true }),
-    station('sam', 'Conference', 420, 1260, { all_day: true }),
-    station('kids', 'School Holiday', 420, 1260, { all_day: true }),
+  sidings: [
+    siding('work', 'Office Closed', 420, 1260, { all_day: true }),
+    siding('alex', 'PTO', 420, 1260, { all_day: true }),
+    siding('sam', 'Conference', 420, 1260, { all_day: true }),
+    siding('kids', 'School Holiday', 420, 1260, { all_day: true }),
   ],
   items: busyDay.items,
 });
 
-// A waypoint station (config `station: true`) with a location line, spanning
+// A siding (config `siding: true`) with a location line, spanning
 // most of the day, with real meetings inside its span. The caption is two
 // lines here, which is what used to overflow the gap the kink opens up.
-const waypointStation = base({
-  stations: [
-    station('work', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
-    station('kids', 'Schoolfotografie', 420, 1260, { all_day: true }),
+const sidingDay = base({
+  sidings: [
+    siding('work', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
+    siding('kids', 'Schoolfotografie', 420, 1260, { all_day: true }),
   ],
   items: busyDay.items,
 });
@@ -122,13 +122,13 @@ const fullDay = base({
   ],
 });
 
-// One station shared by two lines: both kink (they really are both there)
+// One siding shared by two lines: both kink (they really are both there)
 // but it is one event, so one caption, set between them. Drawn once per line
 // it appeared twice, on lines that could be at opposite ends of the board.
-const sharedStation = base({
-  stations: [
-    station('sam', 'School Day', 480, 960, { location: 'Springfield Elementary', group: 'g1' }),
-    station('kids', 'School Day', 480, 960, { location: 'Springfield Elementary', group: 'g1' }),
+const sharedSiding = base({
+  sidings: [
+    siding('sam', 'School Day', 480, 960, { location: 'Springfield Elementary', group: 'g1' }),
+    siding('kids', 'School Day', 480, 960, { location: 'Springfield Elementary', group: 'g1' }),
   ],
   items: [
     ev('Standup', 'work', 540, 555, { track_width: 4 }),
@@ -152,10 +152,10 @@ const FIVE = [
 ];
 const fiveLines = Object.assign(base({
   now_min: 519,
-  stations: [
-    station('bar', 'School Day', 510, 900, { location: 'Springfield Elementary', group: 'g1' }),
-    station('lis', 'School Day', 510, 900, { location: 'Springfield Elementary', group: 'g1' }),
-    station('hom', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
+  sidings: [
+    siding('bar', 'School Day', 510, 900, { location: 'Springfield Elementary', group: 'g1' }),
+    siding('lis', 'School Day', 510, 900, { location: 'Springfield Elementary', group: 'g1' }),
+    siding('hom', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
   ],
   items: [
     ev('School Run', 'mar', 480, 510, { co_owners: ['bar', 'lis'], side: 'right', hue: 'black', track_offset: 10 }),
@@ -178,7 +178,7 @@ const fiveLines = Object.assign(base({
 }), { legend: FIVE });
 
 // A work crew rather than a family, and the shape the Futurama demo board
-// has: a whole-crew interchange first thing, three of them on one station
+// has: a whole-crew interchange first thing, three of them on one siding
 // for most of the day, and two short events just before the interchange
 // whose captions the interchange bar cuts across. Those two are what caught
 // a caption being thrown 71px off its own rail to dodge that bar.
@@ -191,10 +191,10 @@ const CREW = [
 ];
 const crewDay = Object.assign(base({
   day_start_min: 360, day_end_min: 1380, window_label: '6am 11pm', now_min: 611,
-  stations: [
-    station('fry', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
-    station('leela', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
-    station('bender', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
+  sidings: [
+    siding('fry', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
+    siding('leela', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
+    siding('bender', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
   ],
   items: [
     ev('Coffee (100 cups)', 'fry', 450, 480, { side: 'right', hue: 'black', track_style: 'dotted', track_offset: 10 }),
@@ -217,7 +217,7 @@ const crewDay = Object.assign(base({
 // nothing to be done about it from the layout's side — which is the point.
 // This is the board that was drawn at a 20px pitch in a 780px-deep canvas
 // with every line's name lying across its own rail, and the whole crew's
-// station drawn as a stack of unrelated pills.
+// siding drawn as a stack of unrelated pills.
 const SEVEN = [
   track('deliv', 'Deliveries', 'left', 'black', -20, 5.5, 'dashed'),
   track('crew', 'Crew', 'left', 'black', -10, 5, 'dotted'),
@@ -230,10 +230,10 @@ const SEVEN = [
 const CREW_KEYS = ['fry', 'leela', 'bender', 'amy', 'prof'];
 const sevenLines = Object.assign(base({
   day_start_min: 360, day_end_min: 1380, window_label: '6am 11pm', now_min: 683,
-  stations: [
-    station('amy', 'Lab Rotation', 570, 690, { location: 'Mars University' }),
+  sidings: [
+    siding('amy', 'Lab Rotation', 570, 690, { location: 'Mars University' }),
   ].concat(CREW_KEYS.map(function (k) {
-    return station(k, 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 's1' });
+    return siding(k, 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 's1' });
   })),
   items: [
     ev('Coffee (100 cups)', 'fry', 450, 480, { side: 'right', hue: 'black', track_offset: 10 }),
@@ -252,11 +252,11 @@ const sevenLines = Object.assign(base({
 module.exports = [
   { name: 'busy-day', metro: busyDay },
   { name: 'all-day-every-track', metro: allDayEveryTrack },
-  { name: 'waypoint-station', metro: waypointStation },
+  { name: 'siding-day', metro: sidingDay },
   { name: 'quiet-day', metro: quietDay },
   { name: 'tight-pair', metro: tightPair },
   { name: 'full-day', metro: fullDay },
-  { name: 'shared-station', metro: sharedStation },
+  { name: 'shared-siding', metro: sharedSiding },
   { name: 'five-lines', metro: fiveLines },
   { name: 'crew-day', metro: crewDay },
   { name: 'seven-lines', metro: sevenLines },

@@ -35,7 +35,7 @@ for anyone who set this up before tracks were called tracks.)
   pattern tells them apart; on 2/4-bit panels the shade follows the panel's
   own theme.
 - `hideIfEmpty`: `false` keeps this track's line on the board on a day it
-  has nothing on it. By default a track with no events, stations or all-day
+  has nothing on it. By default a track with no events, sidings or all-day
   entries today gets no line, so a day when most of the family is idle does
   not spend the board's depth on empty rails. Turn it off for anyone whose
   line should always be there, so the board reads the same shape every day.
@@ -99,13 +99,13 @@ answers.
   "rewrite"?: string,             // replace the matched text (or the whole title with rewriteFull)
   "rewriteFull"?: boolean,
   "hide"?: boolean,
-  "station"?: boolean             // its own track kinks to "station level" for its span, instead of branching into a lane
+  "siding"?: boolean              // its own track leaves the running line for its span and rejoins, instead of branching into a lane
 }
 ```
 
 (Legacy rules may use `"person"` in place of `"track"`; still accepted.)
 
-A `station` event needs both a start and end time (it only applies to a
+A `siding` event needs both a start and end time (it only applies to a
 timed event, never an all-day one). Use it for a status/location block that
 spans real meetings without being one itself: a synced-in "Desk booking",
 an "In the office" block, anything you don't want competing for lane space
@@ -114,13 +114,13 @@ with the actual meetings inside it:
 ```json
 {
   "match": { "type": "word", "value": "Desk booking" },
-  "station": true
+  "siding": true
 }
 ```
 
-The event's own track draws a shallow 45° kink out to a raised "station
-level" for exactly that event's [start, end] span, with a small ring at
-each end and a caption riding the line: no lane, no label run, no branch.
+The event's own track draws a shallow 45° kink out to siding level for
+exactly that event's [start, end] span and rejoins at the end, with a
+caption riding the line: no lane, no label run, no branch.
 Real meetings during that span still fork off the line normally, they just
 aren't crowded out by a long status block hogging the innermost lane.
 
@@ -180,7 +180,7 @@ the **Start** section's preset dropdown, for when you have no ICS links yet:
   interchange rather than once per person; the school feed's menu postings
   are hidden, and the quiet toddler's line is kept with `hideIfEmpty`.
 - **Work vs Personal Split**: two lines for one person. The office day is a
-  `station` the work line runs through instead of a label lane of its own,
+  `siding` the work line runs alongside instead of a label lane of its own,
   and a top-level rule hides cancelled holds in every calendar.
 - **Solo Freelancer Track**: one work feed fanned out into a line per
   client on the title prefix, which a `rewrite` then strips, so the board

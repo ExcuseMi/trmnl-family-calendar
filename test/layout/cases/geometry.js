@@ -50,12 +50,12 @@ module.exports = function (test, h) {
   // without the corner radius the diagonal starts before its ring.
   // What is left is the 800x480 panel, and it is one situation with two
   // faces. That board has about a line-height of depth per line, so as soon
-  // as a couple of lines carry a station the bands do not fit and the
+  // as a couple of lines carry a siding the bands do not fit and the
   // layout falls back to PACKING: one lane ladder shared by the whole side,
   // which is exactly the trade the fallback exists to make — packing still
   // reads correctly there, just with the crossings bands would prevent. A
   // branch reaching a rung then passes a neighbouring line's caption, and a
-  // station's kink is deeper than the gap between two packed tracks, so its
+  // siding's kink is deeper than the gap between two packed tracks, so its
   // caption lands on the next line's rail.
   //
   // busy-day is the one that is NOT packed: there a single interchange bar
@@ -67,8 +67,8 @@ module.exports = function (test, h) {
   // saying so.
   const PIERCE_KNOWN_VIEW = {
     'busy-day/og-landscape': 'not packed: the whole-family interchange at 7pm drops its bar through "Piano Lesson", whose lane it has to cross to reach its own. The second placement pass costs a dropped event to avoid it, which is the worse board.',
-    'all-day-every-track/og-landscape': 'packed: every line carries an all-day band, so the bands cannot fit and the side shares one lane ladder. Three branches cross a neighbouring caption, and a 32px station kink on a 10px pitch puts three all-day captions on the next line\'s rail.',
-    'waypoint-station/og-landscape': 'packed, same as above with one waypoint instead of four all-day bands: three branch crossings and one caption on a neighbouring rail.',
+    'all-day-every-track/og-landscape': 'packed: every line carries an all-day band, so the bands cannot fit and the side shares one lane ladder. Three branches cross a neighbouring caption, and a 32px siding kink on a 10px pitch puts three all-day captions on the next line\'s rail.',
+    'siding-day/og-landscape': 'packed, same as above with one waypoint instead of four all-day bands: three branch crossings and one caption on a neighbouring rail.',
     'five-lines/og-landscape': 'packed: five lines on a 480px-deep board leave no room for bands, so three branches cross a neighbouring caption on the shared ladder.',
     'crew-day/og-landscape': 'packed, and one line short of fitting at all (the Professor is dropped): three branches cross a neighbouring caption on the shared ladder.',
     // These two are the price of holding an elbow inside its own event.
@@ -148,7 +148,7 @@ module.exports = function (test, h) {
   // which at 2x device scale is a few px. The ring still reads as sitting on
   // the line there. This has to absorb that and nothing more: the bug this
   // guards against put rings tens of px from their own track.
-  // Corner rounding at a station kink pulls the drawn line up to about a
+  // Corner rounding at a siding kink pulls the drawn line up to about a
   // corner radius off the ideal one, and a ring sitting on that kink is
   // measured against the drawn path. The bug this guards against put rings
   // 58-68px from their own track.
@@ -204,7 +204,7 @@ module.exports = function (test, h) {
 
   // Where a branch leaves its line it must actually TOUCH that line. The
   // fork's height was taken at the event's own minute while the fork is
-  // drawn earlier, so wherever the line was still ramping out of a station
+  // drawn earlier, so wherever the line was still ramping out of a siding
   // in between, the branch began at one height and the line was at another:
   // it started in mid-air and crossed the ramp instead of forking off it.
   for (const f of fixtures) {
@@ -224,7 +224,7 @@ module.exports = function (test, h) {
           const d = Math.hypot(pt[0] - start[0], pt[1] - start[1]);
           if (d < best) best = d;
         }
-        // A fork that lands inside a station's ramp is attached to a
+        // A fork that lands inside a siding's ramp is attached to a
         // CORNER-rounded curve, and rounding pulls the drawn line up to
         // about a corner radius off the ideal one. That is the slack here
         // and nothing more: the bug this guards against started branches
@@ -272,7 +272,7 @@ module.exports = function (test, h) {
 
   // ------------------------------------------------------------ all-day bands
 
-  test('an all-day station band runs the width of the visible day', () => {
+  test('an all-day siding band runs the width of the visible day', () => {
     const f = fixtures.find((x) => x.name === 'all-day-every-track');
     const rep = layout(f, ROOMY);
     const tracks = pathsWhere(rep, 'track');
@@ -351,34 +351,34 @@ module.exports = function (test, h) {
     });
   }
 
-  test('a station shared by two lines kinks both and is captioned once', () => {
+  test('a siding shared by two lines kinks both and is captioned once', () => {
     // Two children at the same school are two kinks — they really are both
     // there — but it is one School Day. Drawn once per line the caption
     // appeared twice, on lines that could be at opposite ends of the board.
-    const f = fixtures.find((x) => x.name === 'shared-station');
+    const f = fixtures.find((x) => x.name === 'shared-siding');
     const rep = layout(f, ROOMY);
     const captions = textLabels(rep).filter((l) => l.text.indexOf('School Day') >= 0);
     assert(captions.length === 1,
-      'expected one "School Day" caption for the shared station, got ' + captions.length);
+      'expected one "School Day" caption for the shared siding, got ' + captions.length);
     // and both lines still leave their baseline for it
     const kinked = pathsWhere(rep, 'track').filter((t) => {
       const ys = t.pts.map((q) => q[1]);
       return Math.max(...ys) - Math.min(...ys) > 6;
     });
     assert(kinked.length >= 2,
-      'both lines should kink out to station level, only ' + kinked.length + ' did');
+      'both lines should kink out to siding level, only ' + kinked.length + ' did');
   });
 
-  test('a shared station draws its lines TOGETHER, not apart', () => {
-    // A station normally kinks a line away from the spine. Two people at the
+  test('a shared siding draws its lines TOGETHER, not apart', () => {
+    // A siding normally kinks a line away from the spine. Two people at the
     // same school kinking away from EACH OTHER looked like two unrelated
-    // stations that happened to share a name. Converging instead draws them
+    // sidings that happened to share a name. Converging instead draws them
     // alongside each other for the length of the thing they are both at.
-    const f = fixtures.find((x) => x.name === 'shared-station');
+    const f = fixtures.find((x) => x.name === 'shared-siding');
     const rep = layout(f, ROOMY);
-    const owners = new Set(f.metro.stations.map((s) => s.owner));
+    const owners = new Set(f.metro.sidings.map((s) => s.owner));
     const lines = pathsWhere(rep, 'track').filter((t) => owners.has(t.owner));
-    assert(lines.length === 2, 'expected the two lines that share the station');
+    assert(lines.length === 2, 'expected the two lines that share the siding');
     // the gap between them, at the ends of the board versus in the middle
     // of the shared span
     const at = (t, x) => {
@@ -389,7 +389,7 @@ module.exports = function (test, h) {
     const edge = Math.abs(at(lines[0], 8) - at(lines[1], 8));
     const mid = Math.abs(at(lines[0], rep.canvas.w / 2) - at(lines[1], rep.canvas.w / 2));
     assert(mid < edge - 8,
-      'the lines should be closer together inside the shared station than outside it: '
+      'the lines should be closer together inside the shared siding than outside it: '
       + Math.round(mid) + 'px vs ' + Math.round(edge) + 'px');
     // and a bar across them at each end says where it starts and stops
     const bars = (rep.rects || []).filter((r) => r.role === 'capsule');

@@ -64,7 +64,7 @@ written before the pickers were removed keeps drawing the same board.
   the quieter side (vertical, where they block lanes), plus a guide line
   across the map (dotted for sun, dashed for rain).
 
-## Stations and branches
+## Sidings and branches
 
 - A ring on the owner's line at the true start time. Rings never move.
 - An interchange (an event with `co_owners`) is a capsule spanning every
