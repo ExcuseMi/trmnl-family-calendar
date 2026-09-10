@@ -247,6 +247,52 @@ is open.
   means solving the same argument twice. It also subsumes the ordering half
   of A16, which weights the one-shot chain by how close in time a shared
   event is; that is this problem with a single layer.
+- [ ] **A19. The orchestrator should SCORE boards, not just produce one.**
+  The frame the four above are all inside. Asked for: fewest crossings,
+  efficient use of the depth without cramping, every label legible and
+  everything visible, and the orchestrator working out which arrangement
+  breaks the fewest of those.
+  What there is now is a pipeline of greedy passes: sides balanced by event
+  count, order from `affinityChain`, three passes of the cross solver,
+  lanes, labels, and the bundles drawn last out of whatever is left. Each
+  pass commits and the ones after it live with the result. A17 (a bundle
+  that cannot ask for room) and A18 (an order fixed for the whole day) are
+  both that same shape of bug, and each is being written as its own patch
+  because there is nothing that can say "this board is better than that
+  one".
+  **Build the score first, on its own.** It is the cheap half and it is
+  useful immediately: `test/layout/run.js` already extracts labels, paths,
+  rects and a debug dump of the bands out of a rendered board, so a scorer
+  consumes a report that exists rather than a new measurement path. With
+  it, every argument in this file stops being two screenshots and a
+  judgement and becomes a number on the demo boards across every view.
+  Do NOT start with the search.
+  **Feasibility is not a penalty term.** "Every label legible, everything
+  visible" has to be a test a board passes or fails, because as a weighted
+  cost the optimiser will happily buy fewer crossings with a hidden label,
+  which is the one trade nobody wants. Boards too small to satisfy it fall
+  back to the degradation ladder in D5 (drop the location, then the times,
+  before bending any geometry): that ladder is the ordered list of what may
+  be surrendered, each rung costing more than the last, and it is only
+  consulted once feasibility has actually failed.
+  **Cramping is a two-sided term.** "Efficient" cannot mean minimising the
+  depth used, or the best board is the tightest one, which is the picture in
+  A17. Score each GAP against what that gap has to hold (A17's `need` is
+  exactly this number for a corridor), require every gap to reach it, and
+  then reward spreading the surplus rather than banking it.
+  **Stability belongs in the score.** A board that rearranges itself every
+  morning is worse to live with than one that is slightly worse every day,
+  because the household learns where its own line is. Yesterday's order can
+  be carried in `trmnl_state`, which already persists across renders, and
+  differing from it should cost something.
+  **Calibrate the weights, do not invent them.** Pick them so the scorer
+  agrees with boards already judged by eye: the cramped five-line board in
+  A17 has to come out worse than the same day drawn roomy. A weight nobody
+  can defend is a number that will be tuned forever.
+  **Then search, in the arithmetic.** The pure models answer in
+  milliseconds (`test/cross` runs 400 seeded cases in one), while a render
+  is most of a second: evaluate candidate side splits, orders and
+  allocations against the model, and draw only the winner.
 
 - [~] **A14. The cross-axis solver gives up too early and then wastes what
   it saved.** Two of the three parts are done. The solver is a pure
