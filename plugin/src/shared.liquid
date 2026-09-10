@@ -1580,6 +1580,240 @@
       return used;
     }
 
+    // ==== CROSS_SOLVER_BEGIN ====
+    // The cross-axis solver: where every line sits across the board, and
+    // which rungs each of them gets to hang labels on.
+    //
+    // It is PURE. It touches no DOM, reads no closure, and every number it
+    // needs arrives in its argument, because it is the part of this layout
+    // that is worth testing exhaustively and the part that used to be
+    // impossible to test at all: reaching it meant rendering a whole board
+    // in a browser and reading positions back out, which is a minute a run
+    // and tells you about one board at a time. `test/cross/` runs it
+    // thousands of times a second against boards that would take a day to
+    // construct as fixtures.
+    //
+    // What is NOT in here is anything that needs measuring: how many lanes
+    // a track wants (`demand`) comes from actually placing that track's
+    // labels, and arrives as input. The split is exactly "what can be
+    // decided from sizes" against "what has to be tried".
+    //
+    // Extracted by the tests between the two marker comments, so keep them.
+    var CrossSolver = (function () {
+      function clampN(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+      // How far past a track's baseline its own first lane sits. Inside a
+      // band a lane only has to clear its OWN line and rings.
+      function laneBase(k, t) {
+        return k.nodeR + Math.max(k.lineGap, k.minDiag) + (t.sidings ? k.sidingRaise + k.sidingGap : 0);
+      }
+      // A siding caption sits ON the baseline, so a track carrying one
+      // needs room on the inward side too, for the half of the caption
+      // that reaches back toward the spine.
+      function capIn(k, t) { return t.sidings ? k.sidingCapH / 2 + k.sidingGap : 0; }
+
+      // One side, laid out as BANDS: each track gets its baseline, its
+      // siding room, then its own lanes, and the next track starts beyond
+      // all of that. Returns the lane ladder (innermost first, each rung
+      // owned by one track), where each track ended up, and how far the
+      // side reaches.
+      function buildSide(k, tracks, lanesFor, stepPx, sepPx) {
+        var acc = 0, slots = [], dist = {}, bandEnd = {};
+        // Half a pitch for the first track on each side, a whole one after
+        // that: with no gutter left in the middle the two innermost lines
+        // would otherwise sit a double pitch apart, which reads as a
+        // missing line rather than as the middle of the map.
+        tracks.forEach(function (t, i) {
+          acc += (i ? k.trackStep + sepPx : (k.trackStep + sepPx) / 2) + capIn(k, t);
+          dist[t.key] = acc;
+          var n = lanesFor(t), start = acc + laneBase(k, t);
+          for (var j = 0; j < n; j++) slots.push({ dist: start + j * stepPx, owner: t.key });
+          acc = n ? start + (n - 1) * stepPx + k.lineGap + k.maxLabelThick
+                  : acc + Math.max(laneBase(k, t), k.nameH / 2);
+          // where this track's band stops: its line, its siding room and
+          // all of its own lanes. Anything beyond belongs to the next.
+          bandEnd[t.key] = acc;
+        });
+        return { slots: slots, extent: acc, dist: dist, bandEnd: bandEnd };
+      }
+
+      // The fallback when bands cannot fit: every track at a fixed pitch
+      // with ONE ladder of lanes shared by the side (owner null means any
+      // track may take the rung). Bands need a band's worth of room per
+      // track, which a small panel does not have once a couple of tracks
+      // carry a siding; packing still reads correctly there, just with the
+      // crossings bands would prevent.
+      function buildPacked(k, tracks, nLanes, stepPx, sepPx) {
+        var acc = 0, slots = [], dist = {}, bandEnd = {};
+        sepPx = sepPx || 0;
+        tracks.forEach(function (t, i) {
+          acc += i ? k.trackStep + sepPx : (k.trackStep + sepPx) / 2;
+          dist[t.key] = acc;
+          bandEnd[t.key] = acc;
+        });
+        var kink = tracks.some(function (t) { return t.sidings; }) ? k.sidingRaise + k.sidingGap : 0;
+        var start = acc + k.nodeR + kink + k.laneBasePacked;
+        for (var j = 0; j < nLanes; j++) slots.push({ dist: start + j * stepPx, owner: null });
+        return {
+          slots: slots, dist: dist, bandEnd: bandEnd,
+          extent: nLanes ? start + (nLanes - 1) * stepPx + k.lineGap + k.maxLabelThick : acc + k.nodeR + kink
+        };
+      }
+
+      function needOf(k, tracks, extent, isA) {
+        // names sit at their own line's height, so the bands already
+        // account for them bar the last one's half-height
+        var fanNeed = k.nameH && tracks.length ? extent + k.nameH / 2 : 0;
+        return Math.max(extent, fanNeed) + k.edge + (isA ? k.alertBand : 0);
+      }
+
+      // input: { k: constants, sides: {A: [{key, sidings}], B: [...]}, demand: {key: lanes} }
+      function solve(input) {
+        var k = input.k, sides = input.sides, demand = input.demand;
+        var step = k.laneStep, sep = 0;
+        var alloc = {};
+        ['A', 'B'].forEach(function (s) {
+          sides[s].forEach(function (t) { alloc[t.key] = demand[t.key] || 0; });
+        });
+        function lanesFor(t) { return alloc[t.key]; }
+        function banded(stepPx, sepPx) {
+          var A = buildSide(k, sides.A, lanesFor, stepPx, sepPx);
+          var B = buildSide(k, sides.B, lanesFor, stepPx, sepPx);
+          return { A: A, B: B, needA: needOf(k, sides.A, A.extent, true),
+                   needB: needOf(k, sides.B, B.extent, false), packed: false };
+        }
+        function packedAt(la, lb, stepPx, sepPx) {
+          var A = buildPacked(k, sides.A, la, stepPx, sepPx);
+          var B = buildPacked(k, sides.B, lb, stepPx, sepPx);
+          return { A: A, B: B, needA: needOf(k, sides.A, A.extent, true),
+                   needB: needOf(k, sides.B, B.extent, false), packed: true };
+        }
+        // the time strip is off the top of the map, so what the two sides
+        // have to fit inside is what it leaves, not the whole canvas
+        var room = k.depth - k.bandLo;
+        function fits(sol) { return sol.needA + sol.needB <= room; }
+
+        var sol = banded(step, sep);
+        // Tighten the lane pitch before taking anyone's lane away: the
+        // slack between lanes is worth less than a lane, and losing a lane
+        // means losing events off the board entirely.
+        var MIN_STEP = k.maxLabelThick + k.lineGap + k.laneGap * 0.25;
+        for (var sh = 0; sh < 24 && !fits(sol) && step > MIN_STEP + 0.5; sh++) {
+          step = Math.max(MIN_STEP, step - k.laneStep * 0.08);
+          sol = banded(step, sep);
+        }
+        // Trim the GREEDIEST track first rather than capping every track
+        // alike: squeezing a two-lane track down to one to make room for a
+        // neighbour that only ever needed one is how a busy line ends up
+        // with six meetings stacked in a single row.
+        for (var trim = 0; trim < 60 && !fits(sol); trim++) {
+          var worst = null;
+          ['A', 'B'].forEach(function (s) {
+            sides[s].forEach(function (t) {
+              if (alloc[t.key] > 1 && (!worst || alloc[t.key] > alloc[worst])) worst = t.key;
+            });
+          });
+          if (!worst) break;
+          alloc[worst]--;
+          sol = banded(step, sep);
+        }
+
+        // Spend what is left over. Lane pitch first, so a label has air
+        // around it, then separation between the tracks themselves. Both
+        // are capped: with a band per track the lane count is the SUM over
+        // tracks, so unbounded growth leaves the lines adrift in whitespace
+        // with interchange ties stretched between them. Whatever is spare
+        // after that gets centred instead.
+        // A tall name needs a tall gap above its line to sit in, so where
+        // the names wrap the separation may grow further than it otherwise
+        // would. Both caps only ever grow into room the board has: every
+        // loop stops the moment the sides stop fitting.
+        var STEP_CAP = k.laneStep * 1.35;
+        var SEP_CAP = Math.max(k.trackStep * 2, k.nameH ? k.nameH + k.nodeR * 2 : 0);
+        if (fits(sol)) {
+          for (var gi = 0; gi < 24; gi++) {
+            var tryStep = Math.min(STEP_CAP, step + k.laneStep * 0.1);
+            if (tryStep <= step + 0.5) break;
+            var s2 = banded(tryStep, sep);
+            if (!fits(s2)) break;
+            step = tryStep; sol = s2;
+          }
+          for (var gj = 0; gj < 24 && sep < SEP_CAP; gj++) {
+            var trySep = Math.min(SEP_CAP, sep + k.trackStep * 0.2);
+            var s3 = banded(step, trySep);
+            if (!fits(s3)) break;
+            sep = trySep; sol = s3;
+          }
+        }
+
+        // If bands still do not fit at their tightest, fall back to the
+        // packed bundle and hand out lanes to whichever side wants them
+        // more. Better a correct packed map than a beautiful one with a
+        // track hanging off the bottom edge.
+        var packed = !fits(sol);
+        if (packed) {
+          step = k.laneStep;
+          var sum = { A: 0, B: 0 };
+          ['A', 'B'].forEach(function (s) {
+            sides[s].forEach(function (t) { sum[s] += demand[t.key] || 0; });
+          });
+          var la = sum.A ? 1 : 0, lb = sum.B ? 1 : 0;
+          sep = 0;
+          sol = packedAt(la, lb, step, sep);
+          for (var pg = 0; pg < 80; pg++) {
+            var moreA = la < sum.A, moreB = lb < sum.B;
+            if (!moreA && !moreB) break;
+            var takeA = moreA && (!moreB || (sum.A - la) >= (sum.B - lb));
+            if (takeA && fits(packedAt(la + 1, lb, step, sep))) { la++; sol = packedAt(la, lb, step, sep); continue; }
+            if (moreB && fits(packedAt(la, lb + 1, step, sep))) { lb++; sol = packedAt(la, lb, step, sep); continue; }
+            if (!takeA && moreA && fits(packedAt(la + 1, lb, step, sep))) { la++; sol = packedAt(la, lb, step, sep); continue; }
+            break;
+          }
+          // Everything the lanes did not want goes into separating the
+          // tracks. Packing used to draw every line at the minimum pitch
+          // however much room was going spare, which is how a seven-line
+          // board ended up squashed into a third of the canvas with each
+          // line's name lying on its own rail: there was nowhere else for
+          // a name to go. Lanes are handed out first because a lane is an
+          // event that would otherwise be dropped, and no amount of air is
+          // worth an event.
+          for (var pj = 0; pj < 24 && sep < SEP_CAP; pj++) {
+            var trySepP = Math.min(SEP_CAP, sep + k.trackStep * 0.2);
+            var s4 = packedAt(la, lb, step, trySepP);
+            if (!fits(s4)) break;
+            sep = trySepP; sol = s4;
+          }
+        }
+
+        // How close the tracks ended up. A line drawn at full weight when
+        // the next one is a track-step away turns the map into stripes, so
+        // the weights come down with the pitch.
+        var pitch = k.trackStep + sep;
+        var weightScale = clampN(pitch / (k.trackStep * 1.7), 0.5, 1);
+        var spineC = k.bandLo + clampN(sol.needA + (room - sol.needA - sol.needB) / 2,
+          Math.min(sol.needA, room / 2), Math.max(room - sol.needB, room / 2));
+
+        var dist = {}, bandEnd = {};
+        ['A', 'B'].forEach(function (s) {
+          var side = sol[s];
+          Object.keys(side.dist).forEach(function (key) { dist[key] = side.dist[key]; });
+          Object.keys(side.bandEnd).forEach(function (key) { bandEnd[key] = side.bandEnd[key]; });
+        });
+        return {
+          step: step, sep: sep, packed: packed, alloc: alloc,
+          lanes: { A: sol.A.slots, B: sol.B.slots },
+          extentA: sol.A.extent, extentB: sol.B.extent,
+          needA: sol.needA, needB: sol.needB, room: room,
+          dist: dist, bandEnd: bandEnd,
+          weightScale: weightScale, spineC: spineC,
+          fits: sol.needA + sol.needB <= room
+        };
+      }
+
+      return { solve: solve, laneBase: laneBase, capIn: capIn };
+    })();
+    // ==== CROSS_SOLVER_END ====
+
     // ---- band layout ------------------------------------------------
     // Every track gets its own stretch of the cross-axis: its baseline, the
     // room its line needs to kink out for a siding, then its OWN lanes.
@@ -1588,68 +1822,28 @@
     // bands can be spread over whatever the canvas really has, instead of
     // every line huddling into one bundle in the middle with a shared pool
     // of lanes stacked beyond it.
+    //
+    // All of that arithmetic lives in CrossSolver above, which knows
+    // nothing about this page. What is left here is gathering the numbers
+    // it needs and writing its answer back onto the tracks.
 
-    // How far past a track's baseline its own first lane sits. Inside a band
-    // a lane only has to clear its OWN line and rings — LANE_BASE was sized
-    // back when every lane had to clear the whole bundle, and spending that
-    // per track is what pushes a four-line day off the canvas.
-    function laneBase(p) {
-      return NODE_R + Math.max(LINE_GAP, MIN_DIAG) + (p._sidings.length ? SIDING_RAISE + SIDING_GAP : 0);
+    // The constants it works in. LANE_BASE is the packed bundle's own
+    // lane offset, sized back when every lane had to clear the whole
+    // bundle; inside a band a lane only has to clear its own line.
+    function crossConsts() {
+      return {
+        trackStep: TRACK_STEP, lineGap: LINE_GAP, laneGap: LANE_GAP, minDiag: MIN_DIAG,
+        nodeR: NODE_R, sidingRaise: SIDING_RAISE, sidingGap: SIDING_GAP, sidingCapH: sidingCapH,
+        maxLabelThick: maxLabelThick, laneStep: laneStep, laneBasePacked: LANE_BASE,
+        nameH: fan ? fan.nameH : 0, edge: EDGE, alertBand: alertBand,
+        depth: crossPx, bandLo: bandLo,
+      };
     }
-    // a siding caption sits ON the baseline, so a track carrying one needs
-    // room on the inward side too for the half that reaches back toward the
-    // spine
-    function capIn(p) { return p._sidings.length ? sidingCapH / 2 + SIDING_GAP : 0; }
-
-    // Lay one side out for a given per-track lane count, lane pitch and
-    // extra track separation. Returns the lane ladder (innermost first,
-    // each rung owned by one track) and how far the side reaches.
-    function buildSide(sideKey, lanesFor, stepPx, sepPx) {
-      var acc = 0, out = [];
-      // Half a pitch for the first track on each side, a whole one after
-      // that: with no gutter left in the middle the two innermost lines
-      // would otherwise sit a double pitch apart, which reads as a missing
-      // line rather than as the middle of the map.
-      sides[sideKey].forEach(function (p, i) {
-        acc += (i ? TRACK_STEP + sepPx : (TRACK_STEP + sepPx) / 2) + capIn(p);
-        p._dist = acc;
-        p._c = p._sign * acc;
-        var n = lanesFor(p), start = acc + laneBase(p);
-        for (var j = 0; j < n; j++) out.push({ dist: start + j * stepPx, owner: p.key });
-        acc = n ? start + (n - 1) * stepPx + LINE_GAP + maxLabelThick
-               : acc + Math.max(laneBase(p), fan ? fan.nameH / 2 : 0);
-        // where this track's band stops: its line, its siding room and all
-        // of its own lanes. Anything beyond this belongs to the next track.
-        p._bandEnd = acc;
-      });
-      return { slots: out, extent: acc };
+    function crossTracks(sideKey) {
+      return sides[sideKey].map(function (p) { return { key: p.key, sidings: p._sidings.length }; });
     }
-    // The fallback when bands cannot fit: the original packed bundle — every
-    // track at a fixed pitch, with ONE ladder of lanes shared by the side
-    // (owner null means any track may take the rung). Bands need a band's
-    // worth of room per track, which the small 800x480 panel simply does not
-    // have once a couple of tracks carry an all-day kink; packing still
-    // reads correctly there, just with the crossings bands would prevent.
-    function buildPacked(sideKey, nLanes, stepPx, sepPx) {
-      var acc = 0, out = [];
-      sepPx = sepPx || 0;
-      sides[sideKey].forEach(function (p, i) {
-        acc += i ? TRACK_STEP + sepPx : (TRACK_STEP + sepPx) / 2;
-        p._dist = acc;
-        p._c = p._sign * acc;
-      });
-      var kink = sides[sideKey].some(function (p) { return p._sidings.length; }) ? SIDING_RAISE + SIDING_GAP : 0;
-      var start = acc + NODE_R + kink + LANE_BASE;
-      for (var j = 0; j < nLanes; j++) out.push({ dist: start + j * stepPx, owner: null });
-      return { slots: out, extent: nLanes ? start + (nLanes - 1) * stepPx + LINE_GAP + maxLabelThick : acc + NODE_R + kink };
-    }
-    function needOf(sideKey, extent) {
-      // names now sit at their own line's height, so the bands already
-      // account for them bar the last one's half-height
-      var fanNeed = fan && sides[sideKey].length ? extent + fan.nameH / 2 : 0;
-      var legendNeed = 0; // no legend any more: every line is named at its own terminus
-      return Math.max(extent, fanNeed) + EDGE + legendNeed + (sideKey === 'A' ? alertBand : 0);
-    }
+    // the same shape CrossSolver reads, so the two cannot drift
+    function laneBase(p) { return CrossSolver.laneBase(crossConsts(), { sidings: p._sidings.length }); }
 
     // pass 1: what does each track want on its own, with room to spare?
     step = laneStep;
@@ -1673,131 +1867,27 @@
       demand[p.key] = Math.max(want, mine ? 1 : 0);
     });
 
-    // pass 2: fit. Trim the GREEDIEST track first rather than capping every
-    // track alike — squeezing a two-lane track down to one to make room for
-    // a neighbour that only ever needed one is how a busy line ends up with
-    // six meetings stacked in a single row.
-    alloc = {};
-    LEGEND.forEach(function (p) { alloc[p.key] = demand[p.key]; });
-    function solve(stepPx, sepPx) {
-      function lanesFor(p) { return alloc[p.key]; }
-      var A = buildSide('A', lanesFor, stepPx, sepPx), B = buildSide('B', lanesFor, stepPx, sepPx);
-      return { A: A, B: B, needA: needOf('A', A.extent), needB: needOf('B', B.extent) };
-    }
-    // the time strip is off the top of the map, so what the two sides have
-    // to fit inside is what it leaves, not the whole canvas
-    function fits(sol) { return sol.needA + sol.needB <= crossPx - bandLo; }
-    sep = 0;
-    var sol = solve(step, sep);
-    // Tighten the lane pitch before taking anyone's lane away: the slack
-    // between lanes is worth less than a lane, and losing a lane means
-    // losing events off the board entirely.
-    var MIN_STEP = maxLabelThick + LINE_GAP + LANE_GAP * 0.25;
-    for (var sh = 0; sh < 24 && !fits(sol) && step > MIN_STEP + 0.5; sh++) {
-      step = Math.max(MIN_STEP, step - laneStep * 0.08);
-      sol = solve(step, sep);
-    }
-    for (var trim = 0; trim < 60 && !fits(sol); trim++) {
-      var worst = null;
-      LEGEND.forEach(function (p) { if (alloc[p.key] > 1 && (!worst || alloc[p.key] > alloc[worst])) worst = p.key; });
-      if (!worst) break;
-      alloc[worst]--;
-      sol = solve(step, sep);
-    }
-
-    // pass 3: spend what is left over. Lane pitch first, so a label has air
-    // around it, then separation between the tracks themselves. Both are
-    // capped: with a band per track the lane count is the SUM over tracks,
-    // so unbounded growth leaves the lines adrift in whitespace with
-    // interchange capsules stretched between them. Whatever is spare after
-    // that gets centred instead.
-    // A tall name needs a tall gap above its line to sit in, so where the
-    // names wrap the separation is allowed to grow further than it
-    // otherwise would. Both caps only ever grow into room the board
-    // actually has: every loop below stops the moment the sides stop
-    // fitting.
-    var STEP_CAP = laneStep * 1.35;
-    var SEP_CAP = Math.max(TRACK_STEP * 2, horizontal ? nameH + NODE_R * 2 : 0);
-    if (fits(sol)) {
-      for (var gi = 0; gi < 24; gi++) {
-        var tryStep = Math.min(STEP_CAP, step + laneStep * 0.1);
-        if (tryStep <= step + 0.5) break;
-        var s2 = solve(tryStep, sep);
-        if (!fits(s2)) break;
-        step = tryStep; sol = s2;
-      }
-      for (var gj = 0; gj < 24 && sep < SEP_CAP; gj++) {
-        var trySep = Math.min(SEP_CAP, sep + TRACK_STEP * 0.2);
-        var s3 = solve(step, trySep);
-        if (!fits(s3)) break;
-        sep = trySep; sol = s3;
-      }
-    }
-    // If bands still do not fit at their tightest, fall back to the packed
-    // bundle and hand out lanes to whichever side wants them more, the way
-    // this layout worked before bands existed. Better a correct packed map
-    // than a beautiful one with a track hanging off the bottom edge.
-    packedFallback = !fits(sol);
-    if (packedFallback) {
-      step = laneStep;
-      var wantA = 0, wantB = 0;
-      LEGEND.forEach(function (p) {
-        if (p._sideKey === 'A') wantA = Math.max(wantA, demand[p.key]);
-        else wantB = Math.max(wantB, demand[p.key]);
-      });
-      // a side's shared ladder has to hold every track's lanes at once
-      var sumA = 0, sumB = 0;
-      LEGEND.forEach(function (p) { if (p._sideKey === 'A') sumA += demand[p.key]; else sumB += demand[p.key]; });
-      function packedSol(la, lb, sepPx) {
-        var A = buildPacked('A', la, step, sepPx), B = buildPacked('B', lb, step, sepPx);
-        return { A: A, B: B, needA: needOf('A', A.extent), needB: needOf('B', B.extent), packed: true };
-      }
-      var la = sumA ? 1 : 0, lb = sumB ? 1 : 0;
-      sep = 0;
-      sol = packedSol(la, lb, sep);
-      for (var pg = 0; pg < 80; pg++) {
-        var moreA = la < sumA, moreB = lb < sumB;
-        if (!moreA && !moreB) break;
-        var takeA = moreA && (!moreB || (sumA - la) >= (sumB - lb));
-        if (takeA && fits(packedSol(la + 1, lb, sep))) { la++; sol = packedSol(la, lb, sep); continue; }
-        if (moreB && fits(packedSol(la, lb + 1, sep))) { lb++; sol = packedSol(la, lb, sep); continue; }
-        if (!takeA && moreA && fits(packedSol(la + 1, lb, sep))) { la++; sol = packedSol(la, lb, sep); continue; }
-        break;
-      }
-      // Everything the lanes did not want goes into separating the tracks.
-      // Packing used to draw every line at the minimum pitch however much
-      // room was going spare, which is how a seven-line board ended up
-      // squashed into a third of the canvas with each line's name lying on
-      // its own rail: there was nowhere else for a name to go. Lanes are
-      // handed out first because a lane is an event that would otherwise be
-      // dropped, and no amount of air is worth an event.
-      for (var pj = 0; pj < 24 && sep < SEP_CAP; pj++) {
-        var trySepP = Math.min(SEP_CAP, sep + TRACK_STEP * 0.2);
-        var s4 = packedSol(la, lb, trySepP);
-        if (!fits(s4)) break;
-        sep = trySepP; sol = s4;
-      }
-    }
-    // buildSide/buildPacked write the track distances as they go, so the
-    // last solve tried — possibly a rejected one — is what the tracks are
-    // holding. Re-solve the winner to put them back, then place for real.
-    sol = sol.packed ? (function () {
-      var A = buildPacked('A', sol.A.slots.length, step, sep), B = buildPacked('B', sol.B.slots.length, step, sep);
-      return { A: A, B: B, needA: needOf('A', A.extent), needB: needOf('B', B.extent), packed: true };
-    })() : solve(step, sep);
+    // pass 2: hand the whole thing to the solver, then write its answer
+    // back onto the tracks. Everything the rest of this file reads about
+    // where a line sits comes from here and nowhere else.
+    var cross = CrossSolver.solve({
+      k: crossConsts(),
+      sides: { A: crossTracks('A'), B: crossTracks('B') },
+      demand: demand,
+    });
+    step = cross.step; sep = cross.sep; packedFallback = cross.packed;
+    alloc = cross.alloc;
+    LEGEND.forEach(function (p) {
+      p._dist = cross.dist[p.key];
+      p._c = p._sign * p._dist;
+      p._bandEnd = cross.bandEnd[p.key];
+    });
+    weightScale = cross.weightScale;
+    spineC = cross.spineC;
+    needA = cross.needA; needB = cross.needB;
     recomputeTrackDists();
-    usedA = placeSide('A', sol.A.slots, obstacles.A.concat(barBlocks.A));
-    usedB = placeSide('B', sol.B.slots, obstacles.B.concat(barBlocks.B));
-    needA = sol.needA; needB = sol.needB;
-    // How close the tracks ended up. A line drawn at full weight when the
-    // next one is a track-step away turns the map into stripes, so the
-    // weights come down with the pitch — and with them the paper cores,
-    // which are a fraction of the width.
-    var pitch = TRACK_STEP + (sep || 0);
-    weightScale = clamp(pitch / (TRACK_STEP * 1.7), 0.5, 1);
-    var mapSpan = crossPx - bandLo;
-    spineC = bandLo + clamp(needA + (mapSpan - needA - needB) / 2,
-      Math.min(needA, mapSpan / 2), Math.max(mapSpan - needB, mapSpan / 2));
+    usedA = placeSide('A', cross.lanes.A, obstacles.A.concat(barBlocks.A));
+    usedB = placeSide('B', cross.lanes.B, obstacles.B.concat(barBlocks.B));
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0, adrift = 0;
     visible.forEach(function (e) {
