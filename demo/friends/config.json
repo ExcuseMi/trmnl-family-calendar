@@ -1,0 +1,84 @@
+{
+  "locale": "en-US",
+  "timeZone": "America/New_York",
+  "timeFormat": "12h",
+  "tracks": [
+    {
+      "name": "Monica",
+      "side": "left"
+    },
+    {
+      "name": "Rachel"
+    }
+  ],
+  "calendars": [
+    {
+      "name": "Monica",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/friends/monica.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "contains",
+            "value": "Head Chef Shift"
+          },
+          "station": true,
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "any"
+          },
+          "track": "Monica"
+        }
+      ]
+    },
+    {
+      "name": "Rachel",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/friends/rachel.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "contains",
+            "value": "Desk booking"
+          },
+          "station": true,
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "any"
+          },
+          "track": "Rachel"
+        }
+      ]
+    },
+    {
+      "name": "Apartment 20",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/friends/apartment.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "contains",
+            "value": "Central Perk"
+          },
+          "track": [
+            "Monica",
+            "Rachel"
+          ],
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "Laundry"
+          },
+          "track": [
+            "Monica",
+            "Rachel"
+          ],
+          "rename": false
+        }
+      ]
+    }
+  ]
+}

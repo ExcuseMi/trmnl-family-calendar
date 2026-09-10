@@ -31,14 +31,21 @@ No server of your own.
 1. In TRMNL: **Plugins → Private Plugins → New**, name it, save. Then from
    this repo's `plugin/` folder run `trmnlp push` (it uploads settings,
    templates and `transform.js`).
-2. The plugin starts with demo data. To show your own calendars turn **Use
-   Demo Data** off and paste a configuration into **Calendar Config (JSON)**.
-   Build it with the [Configuration editor](https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html),
+2. The plugin starts on a demo board. **Demo Board** picks which one — see
+   [the demo folder](demo/) for what each shows.
+3. To show your own calendars, turn **Use Demo Data** off and paste your ICS
+   links into **Calendar Links**, one per line. That is the whole setup:
+   each calendar becomes its own line on the map, named after the calendar.
+4. Only if you want more — routing events to people, sharing an event
+   between them, renaming or hiding things — fill in **Calendar Config
+   (JSON)** instead. Build it with the
+   [Configuration editor](https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html),
    which also previews the map at every device size, or write it by hand
-   (see [CONFIG.md](CONFIG.md)). The simplest possible config is one ICS
-   link per line.
-3. Optional settings: **Timeline Orientation** (auto picks horizontal on a
-   landscape screen), **Time Format**, and **Location** for weather and sun
+   (see [CONFIG.md](CONFIG.md)). Each demo board is a worked example:
+   [demo/simpsons/config.json](demo/simpsons/config.json),
+   [demo/futurama/config.json](demo/futurama/config.json),
+   [demo/friends/config.json](demo/friends/config.json).
+5. Optional settings: **Time Format**, and **Location** for weather and sun
    times.
 
 ### Getting an ICS link

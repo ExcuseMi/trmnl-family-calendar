@@ -1,10 +1,10 @@
 BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//trmnl-family-calendar//demo//EN
+PRODID:-//trmnl-metro-calendar//demo//EN
 CALSCALE:GREGORIAN
 X-WR-CALNAME:Demo - Lisa
 BEGIN:VEVENT
-UID:lisa-sax@demo.trmnl-family-calendar
+UID:lisa-sax@demo.trmnl-metro-calendar
 DTSTAMP:20240101T000000Z
 SUMMARY:Saxophone Lesson
 DTSTART:20240101T160000
@@ -12,7 +12,7 @@ DTEND:20240101T170000
 RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU
 END:VEVENT
 BEGIN:VEVENT
-UID:lisa-mensa@demo.trmnl-family-calendar
+UID:lisa-mensa@demo.trmnl-metro-calendar
 DTSTAMP:20240101T000000Z
 SUMMARY:Mensa Meeting
 DTSTART:20240101T183000

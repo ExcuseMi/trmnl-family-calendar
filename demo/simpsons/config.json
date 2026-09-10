@@ -1,0 +1,162 @@
+{
+  "locale": "en-US",
+  "timeZone": "Europe/Brussels",
+  "timeFormat": "12h",
+  "tracks": [
+    {
+      "name": "Homer",
+      "side": "left"
+    },
+    {
+      "name": "Marge"
+    },
+    {
+      "name": "Bart"
+    },
+    {
+      "name": "Lisa"
+    },
+    {
+      "name": "Maggie"
+    }
+  ],
+  "calendars": [
+    {
+      "name": "Homer",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/homer.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "any"
+          },
+          "track": "Homer"
+        }
+      ]
+    },
+    {
+      "name": "Marge",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/marge.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "any"
+          },
+          "track": "Marge"
+        }
+      ]
+    },
+    {
+      "name": "Bart",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/bart.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "any"
+          },
+          "track": "Bart"
+        }
+      ]
+    },
+    {
+      "name": "Lisa",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/lisa.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "any"
+          },
+          "track": "Lisa"
+        }
+      ]
+    },
+    {
+      "name": "Maggie",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/maggie.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "any"
+          },
+          "track": "Maggie"
+        }
+      ]
+    },
+    {
+      "name": "School",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/school.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "word",
+            "value": "L6"
+          },
+          "track": "Bart",
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "word",
+            "value": "K3"
+          },
+          "track": "Lisa",
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "regex",
+            "value": "^(?:L6|K3)\\s+"
+          },
+          "rewrite": ""
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "School Day"
+          },
+          "station": true
+        }
+      ]
+    },
+    {
+      "name": "Family",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/family.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "contains",
+            "value": "Family Dinner"
+          },
+          "track": [
+            "Marge",
+            "Homer",
+            "Bart",
+            "Lisa",
+            "Maggie"
+          ],
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "School Run"
+          },
+          "track": [
+            "Marge",
+            "Bart",
+            "Lisa"
+          ],
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "Spring Break"
+          },
+          "track": "Bart",
+          "allDay": true,
+          "rename": false
+        }
+      ]
+    }
+  ]
+}

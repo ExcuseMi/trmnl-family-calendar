@@ -1,0 +1,133 @@
+{
+  "locale": "en-US",
+  "timeZone": "America/New_York",
+  "timeFormat": "12h",
+  "tracks": [
+    {
+      "name": "Professor",
+      "side": "left"
+    },
+    {
+      "name": "Amy",
+      "side": "left"
+    },
+    {
+      "name": "Fry"
+    },
+    {
+      "name": "Leela"
+    },
+    {
+      "name": "Bender"
+    }
+  ],
+  "calendars": [
+    {
+      "name": "Planet Express",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/futurama/crew.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "regex",
+            "value": "^Fry:"
+          },
+          "track": "Fry",
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "regex",
+            "value": "^Leela:"
+          },
+          "track": "Leela",
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "regex",
+            "value": "^Bender:"
+          },
+          "track": "Bender",
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "regex",
+            "value": "^Amy:"
+          },
+          "track": "Amy",
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "regex",
+            "value": "^Professor:"
+          },
+          "track": "Professor",
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "regex",
+            "value": "^[A-Za-z]+:\\s*"
+          },
+          "rewrite": ""
+        }
+      ]
+    },
+    {
+      "name": "Deliveries",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/futurama/deliveries.ics",
+      "rules": [
+        {
+          "match": {
+            "type": "contains",
+            "value": "Delivery Run"
+          },
+          "track": [
+            "Fry",
+            "Leela",
+            "Bender"
+          ],
+          "station": true,
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "Good News"
+          },
+          "track": [
+            "Professor",
+            "Fry",
+            "Leela",
+            "Bender",
+            "Amy"
+          ],
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "Crew Debrief"
+          },
+          "track": [
+            "Fry",
+            "Leela",
+            "Bender"
+          ],
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "Ship Inspection"
+          },
+          "track": "Leela",
+          "allDay": true,
+          "rename": false
+        }
+      ]
+    }
+  ]
+}

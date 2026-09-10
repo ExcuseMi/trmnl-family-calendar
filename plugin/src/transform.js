@@ -575,7 +575,7 @@ function demoCalendar(name, file, rules) {
 function demoOwnTrack(name, file) {
   return demoCalendar(name, file, [{ match: { type: 'any' }, track: name }]);
 }
-var DEMO_CONFIG = {
+var SIMPSONS_CONFIG = {
   // Springfield is American, so the demo reads American: US date order and a
   // 12-hour clock, both set here rather than inherited from the account, so
   // the demo looks the same on every device. The zone is deliberately NOT
@@ -598,28 +598,99 @@ var DEMO_CONFIG = {
     { name: 'Maggie' },
   ],
   calendars: [
-    demoOwnTrack('Homer', 'homer.ics'),
-    demoOwnTrack('Marge', 'marge.ics'),
-    demoOwnTrack('Bart', 'bart.ics'),
-    demoOwnTrack('Lisa', 'lisa.ics'),
-    demoOwnTrack('Maggie', 'maggie.ics'),
+    demoOwnTrack('Homer', 'simpsons/homer.ics'),
+    demoOwnTrack('Marge', 'simpsons/marge.ics'),
+    demoOwnTrack('Bart', 'simpsons/bart.ics'),
+    demoOwnTrack('Lisa', 'simpsons/lisa.ics'),
+    demoOwnTrack('Maggie', 'simpsons/maggie.ics'),
     // One school calendar split by class code, the way a real school feed
     // is. rename:false throughout — a track assignment rewrites the matched
     // text into the track's name by default, which would turn "Family
     // Dinner" into the entire guest list.
-    demoCalendar('School', 'school.ics', [
+    demoCalendar('School', 'simpsons/school.ics', [
       { match: { type: 'word', value: 'L6' }, track: 'Bart', rename: false },
       { match: { type: 'word', value: 'K3' }, track: 'Lisa', rename: false },
       { match: { type: 'regex', value: '^(?:L6|K3)\\s+' }, rewrite: '' },
       { match: { type: 'contains', value: 'School Day' }, station: true },
     ]),
-    demoCalendar('Family', 'family.ics', [
+    demoCalendar('Family', 'simpsons/family.ics', [
       { match: { type: 'contains', value: 'Family Dinner' }, track: ['Marge', 'Homer', 'Bart', 'Lisa', 'Maggie'], rename: false },
       { match: { type: 'contains', value: 'School Run' }, track: ['Marge', 'Bart', 'Lisa'], rename: false },
       { match: { type: 'contains', value: 'Spring Break' }, track: 'Bart', allDay: true, rename: false },
     ]),
   ],
 };
+
+// A crew rather than a family, and one shared team calendar rather than a
+// calendar each: everything comes in on crew.ics with a "Name:" prefix and
+// the rules split it. The delivery is one station on THREE lines at once —
+// the three of them really are on the same ship all day — which is the
+// shape two children at one school get, with a third line in the corridor.
+var FUTURAMA_CONFIG = {
+  locale: 'en-US',
+  timeZone: 'America/New_York',
+  timeFormat: '12h',
+  tracks: [
+    { name: 'Professor', side: 'left' },
+    { name: 'Amy', side: 'left' },
+    { name: 'Fry' },
+    { name: 'Leela' },
+    { name: 'Bender' },
+  ],
+  calendars: [
+    demoCalendar('Planet Express', 'futurama/crew.ics', [
+      // route by the name the entry is filed under, then take the prefix
+      // back off so the board reads "Coffee (100 cups)", not "Fry: Coffee"
+      { match: { type: 'regex', value: '^Fry:' }, track: 'Fry', rename: false },
+      { match: { type: 'regex', value: '^Leela:' }, track: 'Leela', rename: false },
+      { match: { type: 'regex', value: '^Bender:' }, track: 'Bender', rename: false },
+      { match: { type: 'regex', value: '^Amy:' }, track: 'Amy', rename: false },
+      { match: { type: 'regex', value: '^Professor:' }, track: 'Professor', rename: false },
+      { match: { type: 'regex', value: '^[A-Za-z]+:\\s*' }, rewrite: '' },
+    ]),
+    demoCalendar('Deliveries', 'futurama/deliveries.ics', [
+      { match: { type: 'contains', value: 'Delivery Run' }, track: ['Fry', 'Leela', 'Bender'], station: true, rename: false },
+      { match: { type: 'contains', value: 'Good News' }, track: ['Professor', 'Fry', 'Leela', 'Bender', 'Amy'], rename: false },
+      { match: { type: 'contains', value: 'Crew Debrief' }, track: ['Fry', 'Leela', 'Bender'], rename: false },
+      { match: { type: 'contains', value: 'Ship Inspection' }, track: 'Leela', allDay: true, rename: false },
+    ]),
+  ],
+};
+
+// The smallest board worth drawing: two people who share a flat. One long
+// solo station (a day at a desk) and one evening they are both at.
+var FRIENDS_CONFIG = {
+  locale: 'en-US',
+  timeZone: 'America/New_York',
+  timeFormat: '12h',
+  tracks: [
+    { name: 'Monica', side: 'left' },
+    { name: 'Rachel' },
+  ],
+  calendars: [
+    // a long block someone spends in one place is a STATION, not a meeting:
+    // the line runs straight on and the block is a siding beside it
+    demoCalendar('Monica', 'friends/monica.ics', [
+      { match: { type: 'contains', value: 'Head Chef Shift' }, station: true, rename: false },
+      { match: { type: 'any' }, track: 'Monica' },
+    ]),
+    demoCalendar('Rachel', 'friends/rachel.ics', [
+      { match: { type: 'contains', value: 'Desk booking' }, station: true, rename: false },
+      { match: { type: 'any' }, track: 'Rachel' },
+    ]),
+    demoCalendar('Apartment 20', 'friends/apartment.ics', [
+      { match: { type: 'contains', value: 'Central Perk' }, track: ['Monica', 'Rachel'], rename: false },
+      { match: { type: 'contains', value: 'Laundry' }, track: ['Monica', 'Rachel'], rename: false },
+    ]),
+  ],
+};
+
+// Which board "Use Demo Data" shows. The Simpsons stays the default: it is
+// the busiest of the three and the one the offline fallback mirrors.
+var DEMO_SETS = { simpsons: SIMPSONS_CONFIG, futurama: FUTURAMA_CONFIG, friends: FRIENDS_CONFIG };
+function demoConfigFor(name) {
+  return DEMO_SETS[String(name || '').trim().toLowerCase()] || SIMPSONS_CONFIG;
+}
 
 function buildFromDemo(weather, nowMin, extra) {
   var strings = (extra && extra.strings) || I18N.en;
@@ -832,10 +903,17 @@ function parseIcs(text, tz, today, includeDescription) {
   var lines = unfoldIcs(text);
   var raw = [];
   var cur = null;
+  // The feed's own name. A config that names its calendars never needs it,
+  // but the simplest setup there is — a list of ICS links and nothing else
+  // — has no other way to know whose line this is.
+  var calName = null;
   lines.forEach(function (line) {
     if (line === 'BEGIN:VEVENT') { cur = {}; return; }
     if (line === 'END:VEVENT') { if (cur) raw.push(cur); cur = null; return; }
-    if (!cur) return;
+    if (!cur) {
+      if (line.indexOf('X-WR-CALNAME:') === 0) calName = unescapeIcsText(line.slice('X-WR-CALNAME:'.length)).trim() || null;
+      return;
+    }
     var idx = line.indexOf(':');
     if (idx < 0) return;
     var keyPart = line.slice(0, idx);
@@ -915,7 +993,7 @@ function parseIcs(text, tz, today, includeDescription) {
       endMin: durationMin != null ? startMin + durationMin : null,
     });
   });
-  return { timed: out, allDay: allDay };
+  return { timed: out, allDay: allDay, calName: calName };
 }
 
 // ---------------------------------------------------------------------
@@ -1346,6 +1424,17 @@ function makeTrackRegistry(parsed) {
   };
 }
 
+// A readable name from a calendar URL, for a feed that carries no name of
+// its own: "https://cloud.example.com/alex-work.ics" -> "Alex Work".
+function urlLabel(url) {
+  var last = String(url || '').split(/[?#]/)[0].split('/').filter(Boolean).pop() || '';
+  last = last.replace(/\.ics$/i, '').replace(/[._+-]+/g, ' ').trim();
+  if (!last) return null;
+  return last.split(/\s+/).map(function (w) {
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }).join(' ');
+}
+
 async function buildFromConfig(input, parsed, weather, extra) {
   var tz = resolveTz(parsed.timeZone, input); // config.timeZone > account time_zone_iana > account utc_offset > UTC
   var nowTs = (input.trmnl && input.trmnl.system && input.trmnl.system.timestamp_utc) || Math.floor(Date.now() / 1000);
@@ -1375,10 +1464,17 @@ async function buildFromConfig(input, parsed, weather, extra) {
       if (!resp.ok) return;
       var text = await resp.text();
       var parsedIcs = parseIcs(text, tz, today, cal.includeDescription);
+      // Last resort for whose line this is: the feed's own X-WR-CALNAME,
+      // then the last thing in the URL. Only reached when the config named
+      // neither the calendar nor a single track — which is the simplest
+      // setup there is, a list of ICS links and nothing else. Before this
+      // that setup drew an empty board.
+      var calLabel = parsedIcs.calName || urlLabel(cal.url);
       parsedIcs.timed.forEach(function (ev) {
         var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
         if (resolved.hide) return;
-        var trackNames = resolved.trackNames || (cal.name ? [cal.name] : null) || (parsed.everyoneTrack ? [parsed.everyoneTrack] : null);
+        var trackNames = resolved.trackNames || (cal.name ? [cal.name] : null)
+          || (parsed.everyoneTrack ? [parsed.everyoneTrack] : null) || (calLabel ? [calLabel] : null);
         if (!trackNames || !trackNames.length) return;
         // A rule can mark an otherwise-timed event allDay (e.g. a calendar
         // that lists "Public Holiday" as a timed 00:00 entry) — that now
@@ -1390,12 +1486,19 @@ async function buildFromConfig(input, parsed, weather, extra) {
         // rather than branches for — needs real start/end minutes, so
         // only meaningful here in the timed-events loop.
         if (resolved.station) {
-          stationEvents.push({
-            track: registry.add(trackNames[0], 0.25).key,
-            title: resolved.title,
-            location: ev.location || null,
-            startMin: ev.startMin,
-            endMin: ev.endMin != null ? ev.endMin : ev.startMin + 30,
+          // A station rule takes a LIST of tracks like any other, one entry
+          // per track: three people on the same delivery are three kinks in
+          // one corridor, the same shape two children at one school get.
+          // mergeAcrossTracks folds them back into a single station with
+          // one caption, so this only has to say who is there.
+          trackNames.forEach(function (nm) {
+            stationEvents.push({
+              track: registry.add(nm, 0.25).key,
+              title: resolved.title,
+              location: ev.location || null,
+              startMin: ev.startMin,
+              endMin: ev.endMin != null ? ev.endMin : ev.startMin + 30,
+            });
           });
           return;
         }
@@ -1417,7 +1520,8 @@ async function buildFromConfig(input, parsed, weather, extra) {
       parsedIcs.allDay.forEach(function (ev) {
         var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
         if (resolved.hide) return;
-        var trackNames = resolved.trackNames || (cal.name ? [cal.name] : null) || (parsed.everyoneTrack ? [parsed.everyoneTrack] : null);
+        var trackNames = resolved.trackNames || (cal.name ? [cal.name] : null)
+          || (parsed.everyoneTrack ? [parsed.everyoneTrack] : null) || (calLabel ? [calLabel] : null);
         if (!trackNames || !trackNames.length) return;
         allDayEvents.push({ track: registry.add(trackNames[0], 0.25).key, title: resolved.title });
       });
@@ -1489,6 +1593,15 @@ async function run(input) {
   var useDemoRaw = cf(input, 'use_demo_data').trim().toLowerCase();
   var useDemo = useDemoRaw !== 'false'; // default true (demo) unless explicitly turned off
   var configRaw = cf(input, 'config_json').trim();
+  // The simple way in: a plain list of ICS links, one per line, with no
+  // JSON and no editor. parseConfig already reads that shape (it is the
+  // fallback for text that is not JSON), so this only has to hand it over.
+  // The JSON box wins where both are filled — anyone who has written one
+  // has said more than a list can.
+  var urlsRaw = cf(input, 'calendar_urls').trim();
+  if (!configRaw && urlsRaw) configRaw = urlsRaw;
+  // Which demo board to show. Unknown or unset falls back to Springfield.
+  var demoCfg = demoConfigFor(cf(input, 'demo_set'));
   var latLonRaw = cf(input, 'lat_lon').trim();
   // The timeline runs along whichever side of the canvas is longer. That is
   // the only answer that is ever right — a vertical timeline on a landscape
@@ -1501,7 +1614,7 @@ async function run(input) {
   // read the same three settings from the same place. (Demo mode may still
   // fall back to the built-in day further down; that fallback keeps whatever
   // locale and clock were resolved here.)
-  var effectiveCfg = (useDemo || !configRaw) ? parseConfig(JSON.stringify(DEMO_CONFIG)) : parseConfig(configRaw);
+  var effectiveCfg = (useDemo || !configRaw) ? parseConfig(JSON.stringify(demoCfg)) : parseConfig(configRaw);
   var locale = effectiveCfg.locale || userLocale(input);
   var strings = stringsFor(locale);
   var hour12 = resolveHour12(
@@ -1547,7 +1660,7 @@ async function run(input) {
       // calendar while the rest are current is the case that actually
       // happens, and it renders a mixed board that is nobody's day. An
       // unexpected line is as wrong as a missing one; both fall back.
-      var want = DEMO_CONFIG.tracks.map(function (t) { return t.name; });
+      var want = demoCfg.tracks.map(function (t) { return t.name; });
       var got = (demoMetro && demoMetro.legend ? demoMetro.legend : []).map(function (t) { return t.name; });
       var complete = want.length === got.length
         && want.every(function (n) { return got.indexOf(n) >= 0; });
@@ -1570,4 +1683,10 @@ async function run(input) {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = run;
+if (typeof module !== 'undefined') {
+  module.exports = run;
+  // The demo boards, for the test that keeps demo/<show>/config.json in
+  // step with them and for the script that writes those files out. The
+  // serverless runtime only ever calls the function.
+  module.exports.DEMO_SETS = DEMO_SETS;
+}

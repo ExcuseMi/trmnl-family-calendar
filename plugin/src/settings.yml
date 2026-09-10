@@ -41,17 +41,37 @@ custom_fields:
 - keyname: use_demo_data
   field_type: boolean
   name: Use Demo Data
-  description: Show built-in example events instead of your own calendars. Turn this off once you have pasted a config below.
+  description: Show a built-in example board instead of your own calendars. Turn this off once you have added your own calendars below.
   default: true
   optional: true
   conditional_validation:
   - when: 'true'
     hidden:
+    - calendar_urls
     - config_json
+  - when: 'false'
+    hidden:
+    - demo_set
+- keyname: demo_set
+  field_type: select
+  name: Demo Board
+  description: 'Which example day to show. Each one is a real config in this project''s <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/ folder</a>, driven by real ICS files &mdash; copy the one closest to your situation and change the links.'
+  options:
+  - Springfield &mdash; a family of five (shared school day, family dinner): simpsons
+  - Planet Express &mdash; a work crew (one team calendar split by rules, a delivery three of them are on all day): futurama
+  - Apartment 20 &mdash; two flatmates (a day at a desk, an evening they are both at): friends
+  default: simpsons
+  optional: true
+- keyname: calendar_urls
+  field_type: text
+  name: Calendar Links
+  description: 'One ICS link per line &mdash; that is the whole setup. Each calendar becomes its own line on the map, named after the calendar. Use the Calendar Config below instead when you want to route events to people, share events between them, or rename things.'
+  placeholder: "https://cloud.example.com/alex.ics\nhttps://cloud.example.com/school.ics"
+  optional: true
 - keyname: config_json
   field_type: code
   name: Calendar Config (JSON)
-  description: 'Only used when Use Demo Data is off. Build it with <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">the Configuration Editor</a> and paste the result here. Same shape as this project''s calendar-config.json/demo-config.json (or just paste one ICS URL per line): <br /><code>{"timeZone":"...","rules":[...],"tracks":[{"name":"Sam","color":"blue"}],"calendars":[{"name":"Work","url":"https://.../calendar.ics","headers":{"Authorization":"..."},"includeDescription":false,"rules":[{"match":{"type":"any"},"track":"Sam"}]}]}</code><br />Which side each track renders on is balanced automatically by event count once every calendar loads (busiest first, evenly split) &mdash; set <code>"side": "left"</code> or <code>"right"</code> on a track to pin them instead. The first entry in <code>tracks</code> claims any event no rule assigns. Rule <code>match.type</code>: <code>any</code>/<code>all</code>, <code>exact</code>, <code>word</code>, <code>contains</code>, <code>regex</code>, <code>status</code>, <code>weekday</code>, <code>and</code>/<code>or</code> (with <code>matchers</code>). Actions: <code>track</code> (a name or a list — a list becomes a shared interchange), <code>rename</code>, <code>rewrite</code> (+<code>rewriteFull</code>), <code>hide</code>, <code>allDay</code>. Top-level <code>rules</code> apply to every calendar; a calendar''s own rules win. Set <code>includeDescription: true</code> on a calendar to let its rules also match the event description. Recurring events only show if they use <code>RRULE:FREQ=WEEKLY</code> (optionally with BYDAY/UNTIL) or their start date is today; all-day events are not shown yet. (Legacy configs may use <code>people</code>/<code>person</code> in place of <code>tracks</code>/<code>track</code> &mdash; still accepted.)'
+  description: 'Optional, and only used when Use Demo Data is off &mdash; it replaces Calendar Links above. Build it with <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">the Configuration Editor</a> and paste the result here. Same shape as this project''s calendar-config.json/demo-config.json (or just paste one ICS URL per line): <br /><code>{"timeZone":"...","rules":[...],"tracks":[{"name":"Sam","color":"blue"}],"calendars":[{"name":"Work","url":"https://.../calendar.ics","headers":{"Authorization":"..."},"includeDescription":false,"rules":[{"match":{"type":"any"},"track":"Sam"}]}]}</code><br />Which side each track renders on is balanced automatically by event count once every calendar loads (busiest first, evenly split) &mdash; set <code>"side": "left"</code> or <code>"right"</code> on a track to pin them instead. The first entry in <code>tracks</code> claims any event no rule assigns. Rule <code>match.type</code>: <code>any</code>/<code>all</code>, <code>exact</code>, <code>word</code>, <code>contains</code>, <code>regex</code>, <code>status</code>, <code>weekday</code>, <code>and</code>/<code>or</code> (with <code>matchers</code>). Actions: <code>track</code> (a name or a list — a list becomes a shared interchange), <code>rename</code>, <code>rewrite</code> (+<code>rewriteFull</code>), <code>hide</code>, <code>allDay</code>. Top-level <code>rules</code> apply to every calendar; a calendar''s own rules win. Set <code>includeDescription: true</code> on a calendar to let its rules also match the event description. Recurring events only show if they use <code>RRULE:FREQ=WEEKLY</code> (optionally with BYDAY/UNTIL) or their start date is today; all-day events are not shown yet. (Legacy configs may use <code>people</code>/<code>person</code> in place of <code>tracks</code>/<code>track</code> &mdash; still accepted.)'
   optional: true
 - keyname: time_format
   field_type: select

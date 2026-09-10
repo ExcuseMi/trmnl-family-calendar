@@ -2101,6 +2101,21 @@
             svg.appendChild(bar);
           });
         }
+        if (horizontal && sharedStation(s) && members.length > 2) {
+          // Between two of the lines it belongs to, in the widest gap the
+          // corridor has — NOT at the midpoint. With three lines in one
+          // corridor the midpoint is the middle line itself, and "Delivery
+          // Run" was written along Leela's rail.
+          var cs2 = members.map(function (q) { return lineCAt(q, capMid); }).sort(function (a, b) { return a - b; });
+          var wide = null;
+          for (var ci = 1; ci < cs2.length; ci++) {
+            var g2 = cs2[ci] - cs2[ci - 1];
+            if (!wide || g2 > wide.gap) wide = { gap: g2, at: (cs2[ci] + cs2[ci - 1]) / 2 };
+          }
+          midC = (wide && wide.gap >= bm.h + 2 * STATION_GAP)
+            ? wide.at
+            : cs2[cs2.length - 1] + STATION_GAP + bm.h / 2;
+        }
         if (horizontal && !sharedStation(s)) {
           // The main line runs straight through a solo station, so the
           // baseline is no longer free: the caption goes INSIDE the loop,
