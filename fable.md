@@ -9,31 +9,33 @@ Read `AGENTS.md` and `plugin/AGENTS.md` first. They are still accurate.
 
 ---
 
-## 1. The tree is not clean, and two agents are still writing to it
+## 1. Where the work stands
 
-At the time of writing, `git status` shows three modified files, and **two
-background agents are still working and will drop more changes in**:
+Everything described below is committed and pushed. The two background
+agents that were running when this file was first written have both
+finished and their work is in: settings groups under a Developer heading
+(`issues.md` C1), the data half of the weather alert (E6), and the editor's
+three one-click presets (E5).
 
-| path | who | state |
-|---|---|---|
-| `plugin/src/shared.liquid` | me | one unverified change, see §2 |
-| `test/layout/cases/views.js` | me | a new test that does not work, see §2 |
-| `plugin/src/settings.yml` | an agent, mid-flight | do not touch |
+**One thing is half-done and in the tree right now: the weather banner's
+drawing.** `transform.js` sends
 
-The two agents in flight were asked for:
+```
+metro.service_alert = { text, kind } | null
+```
 
-- **Settings groups + the weather alert's data half** (`settings.yml`,
-  `transform.js`, `test/transform/`, `i18n/`). That is `issues.md` C1 and
-  the non-drawing half of E6. It was told to expose
-  `metro.service_alert = { text, kind } | null`, fully composed and
-  translated, so the template only prints it. **The banner drawing and the
-  canvas reflow were deliberately left out of its brief and are still to
-  do.**
-- **Preset library in the editor** (`tools/config-editor.html`,
-  `test/config-editor/`, and the three top-level `.md` docs). That is E5.
-
-Both were told not to commit. If their results never arrive, their work is
-still on disk; check the files above and run the suites.
+fully composed and translated, so the template only has to print it. The
+markup and style for it are written in `plugin/src/shared.liquid` (a
+`.metro-banner` footer, a sibling of the canvas so the canvas shrinks by
+itself rather than reserving a band inside it), **but it trips the
+framework's inline-style lint**: `LimitedInlineStyles` counts the property
+names `justify-content padding margin background-color border-radius
+text-align object-fit font-size` with a budget of 6, and `padding` plus
+`text-align` in the new rule take it to 7. The fix is to use the framework's
+own utility classes instead of those two properties (`text--center` exists;
+find the padding equivalent in the cached `plugins.css`). Run `trmnlp lint`
+in `plugin/` to check. Until that is resolved the banner is unverified and
+unscreenshotted.
 
 **Do not `git add -A` while an agent is running.** I did that earlier and
 swept three agents' in-flight files into a commit whose message says nothing
@@ -41,32 +43,15 @@ about them. Commit explicit paths.
 
 ---
 
-## 2. The one change in the tree I do not stand behind
+## 2. The one thing I would double-check
 
-`plugin/src/shared.liquid`, in the terminus-name block: I moved the line
-name clear of its own terminal bar and increased the vertical clearance,
-because at 3x zoom on the `seven-lines` board the bar sits hard against the
-first letter ("Crew" reading as "|Crew").
-
-Three things you need to know about it:
-
-1. **The test I wrote for it (`views.js`, "a line name never touches its own
-   terminal bar") passes on the old code as well.** It asserts the boxes do
-   not overlap, and they never did: the label element carries 3px of padding,
-   so the bar lands in the padding rather than on the glyph. The test
-   therefore pins nothing. Either rewrite it to assert a minimum *gap* (and
-   justify the number from a measurement, not a guess) or delete it.
-2. **After the change the gap is still about 1.3px** at the rendered size,
-   so the change may not even have achieved what it was for. I had not
-   finished checking when the session ended.
-3. Reverting it costs nothing. `git checkout -- plugin/src/shared.liquid
-   test/layout/cases/views.js` if you would rather start clean.
-
-What I am confident of: at 300% zoom on `seven-lines`, six of seven names
-are drawn **on** their rail rather than above it. That is the documented
-fallback (`-nameThick / 2`, "centred ON the line, masked by its own paper
-outline") and the masking works: the rail visibly stops at the text. It is
-not a bug. It only looks like one at high zoom.
+Not a defect, but the kind of thing that looks like one: at 300% zoom on
+`seven-lines`, six of seven line names are drawn **on** their rail rather
+than above it. That is the documented fallback (`-nameThick / 2`, "centred
+ON the line, masked by its own paper outline"), and the masking works, the
+rail visibly stops at the text. It is only ugly at a magnification nobody
+reads the board at. If it bothers you, the room has to come from somewhere
+and the honest answer is fewer lines, not a cleverer placement.
 
 ---
 
@@ -88,7 +73,8 @@ not a bug. It only looks like one at high zoom.
 
 ## 4. What is actually left, and what it costs
 
-14 open items. Grouped by what they really are:
+14 open items when this was written, three of them since closed. Grouped by
+what they really are:
 
 **Cheap, well understood (an hour or two each)**
 
@@ -101,15 +87,15 @@ not a bug. It only looks like one at high zoom.
   until this session the harness could not render a quadrant at all (§5).
 - `E1b` one car. Small, but it is a design comparison: build it, screenshot
   both, keep the better one.
-- `C1` settings groups. An agent may already have finished it.
+- `C1` settings groups. Done.
 
 **Moderate**
 
 - `D5` collapse location and time metadata before bending geometry on small
   boards.
-- `E5` editor presets. An agent may already have finished it.
-- `E6` the weather banner. An agent has the data half; the drawing and the
-  canvas reflow in `shared.liquid` are still open.
+- `E5` editor presets. Done.
+- `E6` the weather banner. The data half is done; the drawing is written
+  but blocked on the lint budget, see section 1.
 
 **The big one, and it is not written down as such anywhere but here**
 
@@ -147,10 +133,13 @@ in the comment beside it. Do not "fix" it without reading that first.
   the layout suite was measuring a full-size board under a small view's
   name**. They pass now, but any conclusion drawn from one before this is
   worth re-checking, and that includes conclusions written into comments.
-- **`{n}` inside a Liquid output tag ends the tag.** `{{ x | default: "{n}
-  more" }}` takes the whole template down with a syntax error that only shows
-  up as a 900-byte build. Build the string with `{% assign %}` first, the way
-  `rain_pct` does.
+- **A `{n}` placeholder inside a Liquid output tag ends the tag.** An output
+  tag whose default string contains one takes the whole template down with a
+  syntax error that shows up only as a 900-byte build. Build the string with
+  an assign tag first, the way `rain_pct` does.
+  <!-- Written in prose rather than shown, because this file is served by
+       Jekyll and an example of the bug IS the bug: the first version of this
+       line broke the docs site build. -->
 - **A test that passes the moment you write it has told you nothing.** Two of
   mine did today; one is still in the tree (§2). Before believing a new test,
   put the old file back and watch it fail:
