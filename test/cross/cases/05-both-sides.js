@@ -213,16 +213,32 @@ module.exports = function (test, h) {
   });
 
   test('a gap between lines that are not neighbours is not invented', () => {
-    // Only adjacent tracks on one side have a gap between them to widen.
-    // A request naming any other pair has nowhere to put the room, and
-    // must not silently push the whole side out.
+    // Only adjacent tracks have a gap between them to widen. A request
+    // naming a pair with a line in between has nowhere to put the room,
+    // and must not silently push the whole side out.
     const b = board(['a:1', 'b:1', 'c:1'], ['d:1'], { depth: 900 });
     const plain = solve(b);
     const far = solve(withGap(b, 'a', 'c', 400));
-    const cross = solve(withGap(b, 'a', 'd', 400));
     if (plain.packed) return;
     assertEqual(Math.round(far.extentA), Math.round(plain.extentA), 'a to c is not a neighbouring pair');
-    assertEqual(Math.round(cross.extentA), Math.round(plain.extentA), 'a and d are on opposite sides');
+  });
+
+  test('the two innermost lines are neighbours across the middle', () => {
+    // They are adjacent on the board even though they are on opposite
+    // sides, and the gap between them is the one place a same-side rule
+    // cannot reach: each stands half a pitch off the spine, so the pair is
+    // closer together than any other pair on the board. Two lines
+    // exchanging places there (A18) need it widened, and the only lever is
+    // how far each side holds its first line off the middle.
+    const b = board(['a:1', 'b:1'], ['c:1', 'd:1'], { depth: 900 });
+    const plain = solve(b);
+    const wide = solve(withGap(b, 'a', 'c', 200));
+    if (plain.packed || wide.packed) return;
+    assert(plain.dist.a + plain.dist.c < 200, 'the fixture is not tight enough to be testing anything');
+    assert(wide.dist.a + wide.dist.c >= 200 - 0.001,
+      'asked for 200px across the middle, got ' + Math.round(wide.dist.a + wide.dist.c));
+    // and it is shared out, not taken from one side
+    assert(Math.abs(wide.dist.a - wide.dist.c) < 0.001, 'one side paid for all of it');
   });
 
   test('a gap nobody can afford does not break the board', () => {

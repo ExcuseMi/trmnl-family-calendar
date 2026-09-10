@@ -83,7 +83,7 @@ module.exports = function (test, h) {
     const rep = layout(f, byName('x-landscape'));
     const w = rep.debug.weave || [];
     assertEqual(w.length, 2, 'a swap is two lines exchanging places, so both carry it: ' + JSON.stringify(w));
-    assertEqual(w.map((x) => x.key).sort(), ['alex', 'sam'], 'the pair that had to move');
+    assertEqual(w.map((x) => x.key).sort(), ['hom', 'mar'], 'the pair that had to move');
     // and they really do exchange, rather than both drifting somewhere
     assertEqual(w[0].from, w[1].to, 'the first ends where the second started');
     assertEqual(w[1].from, w[0].to, 'and the other way about');
@@ -98,10 +98,9 @@ module.exports = function (test, h) {
   });
 
   test('a day that no single order can draw costs four crossings without the swap', () => {
-    // Two parents and two children who regroup after school: Alex takes Ben
-    // and Sam takes Ivy in the morning, then Alex has Ivy and Sam has Ben
-    // all evening. The four pairings form a cycle, and a cycle cannot be
-    // laid along a line without breaking one of its links.
+    // Marge takes Bart to school and Homer drops Lisa at band practice;
+    // after school they swap. The four pairings form a cycle, and a cycle
+    // cannot be laid along a line without breaking one of its links.
     //
     // So the morning is clean and every evening event crosses the parent it
     // is not with. FOUR is the price of deciding the order once. A18 would
@@ -116,7 +115,7 @@ module.exports = function (test, h) {
     assertEqual(bad.length, 4, 'crossings the fixed order would force: ' + bad.join('; '));
     // and all four are in the evening: the morning's pairings are the ones
     // the chosen order does satisfy
-    assert(bad.every((s) => /Football|Swimming|Homework|Bedtime/.test(s)),
+    assert(bad.every((s) => /Jazz Club|Skate Park|Homework|Bedtime/.test(s)),
       'a morning event is crossing something, so the order is not the one described: ' + bad.join('; '));
   });
 

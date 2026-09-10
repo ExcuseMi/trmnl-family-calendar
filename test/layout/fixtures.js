@@ -174,38 +174,42 @@ const doubleBooked = base({
 
 // THE DAY THAT NO SINGLE ORDER CAN DRAW (A18).
 //
-// Two parents and two children, who regroup after school. In the morning
-// Alex takes Ben and Sam takes Ivy; in the evening Alex has Ivy at
-// football and homework while Sam has Ben at swimming and a bedtime
+// Marge takes Bart to school and Homer drops Lisa at band practice; after
+// school they swap, and it is Marge who has Lisa at the jazz club and over
+// her homework while Homer has Bart at the skate park and reading him a
 // story. Every one of those is a shared event, so every one of them wants
 // its two lines next to each other.
 //
-// They cannot all have it. The four pairings form a CYCLE (Alex-Ben,
-// Ben-Sam, Sam-Ivy, Ivy-Alex), and a cycle cannot be laid along a line
-// without breaking one of its links, so whichever order the board picks,
-// one pairing is left spanning the whole board and every event on it
-// crosses the two lines in between.
+// They cannot all have it. The four pairings form a CYCLE (Marge-Bart,
+// Bart-Homer, Homer-Lisa, Lisa-Marge), and a cycle cannot be laid along a
+// line without breaking one of its links, so whichever order the board
+// picks, one pairing spans it and every event on that pairing crosses the
+// two lines in between.
 //
-// One swap at teatime fixes it: the morning wants Alex-Ben and Sam-Ivy
-// adjacent, the evening wants Alex-Ivy and Sam-Ben, and those two orders
-// differ by exchanging one adjacent pair. One crossing, made on purpose,
-// in place of one per evening event for the rest of the day.
+// One exchange at teatime settles it: the morning wants Marge-Bart and
+// Homer-Lisa adjacent, the evening wants Marge-Lisa and Homer-Bart, and
+// those two orders differ by swapping one adjacent pair. One crossing,
+// made on purpose, instead of one per evening event for the rest of the
+// day.
 const regroups = Object.assign(base({
   legend: [
-    track('alex', 'Alex', 'left', 'black', -10, 4, 'solid'),
-    track('ben', 'Ben', 'left', 'gray-30', -20, 3, 'dashed'),
-    track('sam', 'Sam', 'right', 'orange-40', 10, 3, 'solid'),
-    track('ivy', 'Ivy', 'right', 'green-40', 20, 3, 'dotted'),
+    track('mar', 'Marge', 'left', 'black', -10, 4, 'solid'),
+    track('bar', 'Bart', 'left', 'gray-30', -20, 3, 'dashed'),
+    track('hom', 'Homer', 'right', 'orange-40', 10, 3, 'solid'),
+    track('lis', 'Lisa', 'right', 'green-40', 20, 3, 'dotted'),
   ],
   items: [
-    ev('School Run', 'alex', 480, 510, { co_owners: ['ben'], track_width: 4 }),
-    ev('Nursery Drop', 'sam', 500, 530, { co_owners: ['ivy'], side: 'right', hue: 'orange-40', track_offset: 10 }),
-    ev('Standup', 'alex', 540, 555, { track_width: 4 }),
-    ev('Clinic', 'sam', 600, 660, { side: 'right', hue: 'orange-40', track_offset: 10 }),
-    ev('Football', 'alex', 1020, 1080, { co_owners: ['ivy'], track_width: 4 }),
-    ev('Swimming', 'sam', 1050, 1110, { co_owners: ['ben'], side: 'right', hue: 'orange-40', track_offset: 10 }),
-    ev('Homework', 'alex', 1110, 1170, { co_owners: ['ivy'], track_width: 4 }),
-    ev('Bedtime Story', 'sam', 1140, 1200, { co_owners: ['ben'], side: 'right', hue: 'orange-40', track_offset: 10 }),
+    ev('School Run', 'mar', 480, 510, { co_owners: ['bar'], track_width: 4 }),
+    ev('Band Practice', 'hom', 500, 530, { co_owners: ['lis'], side: 'right', hue: 'orange-40', track_offset: 10 }),
+    ev('Kwik-E-Mart', 'mar', 540, 555, { track_width: 4 }),
+    ev('Sector 7-G', 'hom', 600, 660, { side: 'right', hue: 'orange-40', track_offset: 10 }),
+    // one after another rather than on top of each other: what this board
+    // is for is the REGROUPING, and four shared events inside two hours
+    // would be testing how tightly captions pack instead
+    ev('Jazz Club', 'mar', 1020, 1080, { co_owners: ['lis'], track_width: 4 }),
+    ev('Skate Park', 'hom', 1080, 1140, { co_owners: ['bar'], side: 'right', hue: 'orange-40', track_offset: 10 }),
+    ev('Homework', 'mar', 1140, 1200, { co_owners: ['lis'], track_width: 4 }),
+    ev('Bedtime Story', 'hom', 1200, 1260, { co_owners: ['bar'], side: 'right', hue: 'orange-40', track_offset: 10 }),
   ],
 }), {});
 

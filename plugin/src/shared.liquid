@@ -1344,7 +1344,16 @@
     // line's height. (`fan` is kept as the shape the drawing code reads.)
     var fan = LEGEND.length ? { len: nameCol, dir: 1, nameH: nameH } : null;
 
-    // static per-event facts (independent of the label tier)
+    // Static per-event facts (independent of the label tier), and RE-RUN
+    // once a weave is planned: which side an event is on, which way its
+    // label hangs and which band it may use are all answers to "where is
+    // this line at this minute", and until the exchange is decided the
+    // answer is only the morning's. Left running once, these came out
+    // right only because the map re-lays itself on load and on fonts and
+    // on resize, so the second pass inherited the first pass's weave off
+    // the payload objects: the stale-state trap this file has been caught
+    // by before, and it would have read as a mystery on the first paint.
+    function staticFacts() {
     visible.forEach(function (e) {
       var p = trackByKey[e.owner];
       e._p = p;
@@ -1388,6 +1397,9 @@
       e._lead = outermost.key;
       e._laneOwner = bandKeyAt(outermost, e._nodeA);
     });
+    }
+    staticFacts();
+
     // Where a branch leaves its owner's line and where it merges back. Both
     // are read off the track distances, which the band layout re-solves on
     // every attempt, so this is a function rather than a one-off pass.
@@ -1999,7 +2011,13 @@
           // What is left after the inward rungs have taken their share of
           // the gap; never less than the gap itself, so a track that wants
           // none is placed exactly where it always was.
-          acc += Math.max(gap, rungRoom(k, t, inN, stepPx));
+          // The innermost track on a side may be asked to stand further off
+          // the middle than the half-pitch: that is what widens the gap
+          // ACROSS the spine, which no same-side pair can reach. It is the
+          // only way to give two lines on opposite sides room to exchange
+          // places (A18) rather than cross in a slot narrower than either
+          // of them is wide.
+          acc += Math.max(gap, rungRoom(k, t, inN, stepPx), i ? 0 : (opts.minFirst || 0));
 
           // A17: A CORRIDOR NEEDS A GAP WIDE ENOUGH TO RUN DOWN.
           //
@@ -2076,9 +2094,22 @@
         // behaviour: a caller that asks for neither gets exactly the board
         // it got before, which is what lets the two land separately from
         // the drawing that reads them.
+        // A pair asking for room across the SPINE is not a gap between
+        // neighbours, it is a floor on how far each of the two innermost
+        // lines stands off the middle. Half each, so the two of them
+        // together make the width that was asked for.
+        var minFirst = 0;
+        if (input.gaps && input.gaps.length && sides.A.length && sides.B.length) {
+          var iA = sides.A[0].key, iB = sides.B[0].key;
+          input.gaps.forEach(function (g) {
+            if (!g || !(g.px > 0)) return;
+            if ((g.a === iA && g.b === iB) || (g.a === iB && g.b === iA)) minFirst = Math.max(minFirst, g.px / 2);
+          });
+        }
         var opts = {
           bothSides: input.bothSides === true,
           gapNeed: input.gaps && input.gaps.length ? gapBetween : null,
+          minFirst: minFirst,
         };
         // The widest thing anybody asked to run between this pair.
         function gapBetween(aKey, bKey) {
@@ -2437,7 +2468,15 @@
     function laneBase(p) { return CrossSolver.laneBase(crossConsts(), { sidings: ownSidings(p) }); }
 
     // pass 1: what does each track want on its own, with room to spare?
+    //
+    // Measured again once a weave is planned, because a band belongs to a
+    // POSITION and a track that exchanges places lands in the band its
+    // neighbour was sized for. Measured only once, Marge's evening moved
+    // into a band cut for Homer's morning: "Skate Park" and "Bedtime
+    // Story" ended up 6px into each other, and on the small panel two
+    // morning captions slid off their rails.
     step = laneStep;
+    function measureDemand() {
     demand = {};
     LEGEND.forEach(function (p) {
       var probe = [], start = p._dist + laneBase(p);
@@ -2457,26 +2496,45 @@
       if (lastPlaceDrift) want++;
       demand[p.key] = Math.max(want, mine ? 1 : 0);
     });
+    }
+    measureDemand();
 
     // pass 2: hand the whole thing to the solver, then write its answer
     // back onto the tracks. Everything the rest of this file reads about
     // where a line sits comes from here and nowhere else.
-    var cross = CrossSolver.solve({
-      k: crossConsts(),
-      sides: { A: crossTracks('A'), B: crossTracks('B') },
-      demand: demand,
-      bothSides: true,
-    });
-    step = cross.step; sep = cross.sep; packedFallback = cross.packed;
-    alloc = cross.alloc;
-    LEGEND.forEach(function (p) {
-      p._dist = cross.dist[p.key];
-      p._c = p._sign * p._dist;
-      p._bandEnd = cross.bandEnd[p.key];
-    });
-    weightScale = cross.weightScale;
-    spineC = cross.spineC;
-    needA = cross.needA; needB = cross.needB;
+    // Solved twice when a weave is on the cards, because the two questions
+    // depend on each other: WHICH pair should exchange places is decided
+    // from where everybody is, and a pair that is going to exchange places
+    // needs room to do it in. So solve, ask, and if the answer is yes,
+    // solve again with a gap booked between the two of them. The solver is
+    // arithmetic; the second pass costs nothing worth counting.
+    function solveCross(gaps) {
+      return CrossSolver.solve({
+        k: crossConsts(),
+        sides: { A: crossTracks('A'), B: crossTracks('B') },
+        demand: demand,
+        gaps: gaps || null,
+        // A15: a track hangs rungs on either side of its line. The gap
+        // between two lines is where the outer one's inward labels belong,
+        // and leaving it empty cost the board depth it had to find further
+        // out.
+        bothSides: true,
+      });
+    }
+    var cross = solveCross(null);
+    function applyCross() {
+      step = cross.step; sep = cross.sep; packedFallback = cross.packed;
+      alloc = cross.alloc;
+      LEGEND.forEach(function (p) {
+        p._dist = cross.dist[p.key];
+        p._c = p._sign * p._dist;
+        p._bandEnd = cross.bandEnd[p.key];
+      });
+      weightScale = cross.weightScale;
+      spineC = cross.spineC;
+      needA = cross.needA; needB = cross.needB;
+    }
+    applyCross();
 
     // ---- A18: the weave --------------------------------------------
     //
@@ -2510,19 +2568,41 @@
       if (!pa || !pb) return;
       var atA = aFor(w.atMin);
       function posOf(p) { return { sideKey: p._sideKey, sign: p._sign, dist: p._dist, c: p._c, bandKey: p.key }; }
-      var from = { a: posOf(pa), b: posOf(pb) };
-      // How long the exchange takes along the axis. Proportional to how far
-      // the lines have to travel, so a swap of close neighbours is a quick
-      // lean and a swap across the board is a long shallow curve: the same
-      // rule a siding's ramp follows, and for the same reason. Never longer
-      // than the clear stretch it was given, so it cannot run into the
-      // events on either side of it.
-      var travel = Math.abs(from.a.c - from.b.c);
-      var run = Math.min(Math.max(travel * 1.6, 24 * S), axisPx * 0.22);
-      [[pa, from.a, from.b], [pb, from.b, from.a]].forEach(function (t) {
-        t[0]._weave = { a0: atA - run / 2, a1: atA + run / 2, mid: atA,
-                        fromC: t[1].c, toC: t[2].c, from: t[1], to: t[2] };
-      });
+      function setWeave() {
+        var fa = posOf(pa), fb = posOf(pb);
+        [[pa, fa, fb], [pb, fb, fa]].forEach(function (t) {
+          var travel = Math.abs(fa.c - fb.c);
+          // How long the exchange takes along the axis. Proportional to how
+          // far the lines have to travel, so a swap of close neighbours is a
+          // quick lean and a swap across the board a long shallow curve: the
+          // rule a siding's ramp follows, for the same reason. Never longer
+          // than the clear stretch it was given.
+          var run = Math.min(Math.max(travel * 1.6, 24 * S), axisPx * 0.22);
+          t[0]._weave = { a0: atA - run / 2, a1: atA + run / 2, mid: atA,
+                          fromC: t[1].c, toC: t[2].c, from: t[1], to: t[2] };
+        });
+      }
+      // Set it once so everything downstream knows the two of them exchange
+      // places, which is what makes the measurement below weave-aware: an
+      // event resolves its side and its band at its own minute.
+      setWeave();
+      // Then work the facts out again, now that the two of them are known
+      // to exchange places, and measure against those.
+      staticFacts();
+      // Then measure and solve again. The room the exchange needs is booked
+      // this time: two lines a bare track-step apart cross in a slot
+      // narrower than either of them is wide, which reads as a kink rather
+      // than as two lines passing, and the gap is asked for through the same
+      // mechanism a corridor uses (A17). Kept only if the answer still draws
+      // bands: a board too shallow to spare the room keeps the tighter one
+      // rather than lose a line to make an exchange handsome.
+      measureDemand();
+      var re = solveCross([{ a: w.a, b: w.b, px: TRACK_STEP * 2.4 + NODE_R * 2 }]);
+      if (re && !re.packed) { cross = re; applyCross(); }
+      // and now the positions are final, so where the lines actually go is
+      // read off them rather than off the answer they were planned against
+      setWeave();
+      recomputeTrackDists();
     })();
 
     recomputeTrackDists();

@@ -16,19 +16,18 @@
 module.exports = function (test, h) {
   const { CrossSolver, assert, assertEqual } = h;
 
-  // Two parents, two children, regrouping after school. Alex takes Ben and
-  // Sam takes Ivy in the morning; in the evening Alex has Ivy and Sam has
-  // Ben, twice each.
+  // Marge takes Bart and Homer takes Lisa in the morning; after school
+  // they swap, and Marge has Lisa while Homer has Bart, twice each.
   const REGROUP = {
-    sides: { A: [{ key: 'alex' }, { key: 'ben' }], B: [{ key: 'sam' }, { key: 'ivy' }] },
-    dist: { alex: 10, ben: 122, sam: 10, ivy: 319 },
+    sides: { A: [{ key: 'mar' }, { key: 'bar' }], B: [{ key: 'hom' }, { key: 'lis' }] },
+    dist: { mar: 10, bar: 122, hom: 10, lis: 319 },
     events: [
-      { atMin: 480, members: ['alex', 'ben'] },
-      { atMin: 500, members: ['sam', 'ivy'] },
-      { atMin: 1020, members: ['alex', 'ivy'] },
-      { atMin: 1050, members: ['sam', 'ben'] },
-      { atMin: 1110, members: ['alex', 'ivy'] },
-      { atMin: 1140, members: ['sam', 'ben'] },
+      { atMin: 480, members: ['mar', 'bar'] },
+      { atMin: 500, members: ['hom', 'lis'] },
+      { atMin: 1020, members: ['mar', 'lis'] },
+      { atMin: 1050, members: ['hom', 'bar'] },
+      { atMin: 1110, members: ['mar', 'lis'] },
+      { atMin: 1140, members: ['hom', 'bar'] },
     ],
   };
   const weave = (over) => CrossSolver.weave(Object.assign({}, REGROUP, over || {}));
@@ -36,7 +35,7 @@ module.exports = function (test, h) {
   test('the day no single order can draw is drawn by swapping once', () => {
     const w = weave();
     assert(w, 'no swap found on a board where standing still costs four crossings');
-    assertEqual([w.a, w.b].sort(), ['alex', 'sam'], 'the pair that has to exchange places');
+    assertEqual([w.a, w.b].sort(), ['hom', 'mar'], 'the pair that has to exchange places');
     assertEqual(w.stay, 4, 'what the fixed order costs');
     assertEqual(w.cost, 1, 'one crossing, made on purpose, and nothing else');
     assertEqual(w.before + w.after, 0, 'every event is adjacent on one side of the swap or the other');
@@ -51,12 +50,12 @@ module.exports = function (test, h) {
   });
 
   test('a day one order can draw asks for no swap', () => {
-    // Alex with Ben all day and Sam with Ivy all day: the chain already has
+    // Marge with Bart all day and Homer with Lisa all day: the chain already has
     // an answer, and a swap could only cost.
     const w = weave({ events: [
-      { atMin: 480, members: ['alex', 'ben'] },
-      { atMin: 1020, members: ['alex', 'ben'] },
-      { atMin: 1080, members: ['sam', 'ivy'] },
+      { atMin: 480, members: ['mar', 'bar'] },
+      { atMin: 1020, members: ['mar', 'bar'] },
+      { atMin: 1080, members: ['hom', 'lis'] },
     ] });
     assertEqual(w, null);
   });
@@ -66,8 +65,8 @@ module.exports = function (test, h) {
     // the board is no better off and the reader has a line that moved for
     // nothing.
     const w = weave({ events: [
-      { atMin: 480, members: ['alex', 'ben'] },
-      { atMin: 1020, members: ['alex', 'ivy'] },
+      { atMin: 480, members: ['mar', 'bar'] },
+      { atMin: 1020, members: ['mar', 'lis'] },
     ] });
     assertEqual(w, null);
   });
@@ -78,16 +77,16 @@ module.exports = function (test, h) {
   });
 
   test('only neighbours exchange places', () => {
-    // Ben and Ivy are the outermost lines on either side. Swapping them
+    // Bart and Lisa are the outermost lines on either side. Swapping them
     // would mean each crossing everything in between, which is not a swap,
     // it is two lines moving house.
     const w = weave();
-    const order = ['ben', 'alex', 'sam', 'ivy'];
+    const order = ['bar', 'mar', 'hom', 'lis'];
     assertEqual(Math.abs(order.indexOf(w.a) - order.indexOf(w.b)), 1);
   });
 
   test('nothing to fix, nothing offered', () => {
     assertEqual(weave({ events: [] }), null, 'no shared events at all');
-    assertEqual(weave({ events: [{ atMin: 600, members: ['alex', 'ben'] }] }), null, 'one shared event');
+    assertEqual(weave({ events: [{ atMin: 600, members: ['mar', 'bar'] }] }), null, 'one shared event');
   });
 };
