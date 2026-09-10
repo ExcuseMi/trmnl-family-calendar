@@ -69,9 +69,9 @@
       {% if metro.header_weather.hi %}
         <span class="metro-weather flex flex--row flex--center-y gap--xsmall">
           {% if metro.header_weather.icon %}<img class="metro-wicon image--adaptive" src="{{ metro.header_weather.icon }}">{% endif %}
-          <span class="metro-temp title title--base">{{ metro.header_weather.hi }}&deg;<span class="text--gray-40"> / {{ metro.header_weather.lo }}&deg;</span></span>
+          <span class="metro-temp title title--base">{{ metro.header_weather.hi }}&deg;<span class="metro-quiet"> / {{ metro.header_weather.lo }}&deg;</span></span>
           {% assign rain_pct = metro.i18n.rain_pct | default: "{n}% rain" | replace: "{n}", metro.header_weather.rain_chance %}
-          <span class="metro-cond label label--small text--gray-40">{{ metro.header_weather.condition }} &middot; {{ rain_pct }}</span>
+          <span class="metro-cond label label--small metro-quiet">{{ metro.header_weather.condition }} &middot; {{ rain_pct }}</span>
         </span>
       {% endif %}
     </div>
@@ -139,6 +139,11 @@
   .metro-terminus { white-space: nowrap; }
   .metro-sky { white-space: nowrap; }
   .metro-label, .metro-hour, .metro-axis-note, .metro-terminus, .metro-sky { padding: 1px 3px; }
+  /* Ink mixed toward the canvas: a grey in either theme, at full opacity so
+     the paper outline behind the glyphs stays solid. Where color-mix is not
+     understood the declaration is dropped and the text is simply full ink,
+     which is legible either way round. */
+  .metro-quiet { color: color-mix(in srgb, var(--framework-semantic-text-primary-text-color, #000) 68%, var(--framework-semantic-canvas-bg-color, #fff)); }
   /* the badge is its own background, so it wants no paper outline: white
      text with a white outline behind it is a white blob */
   .metro-axis-note.metro-pill { padding: 1px 9px; -webkit-text-stroke: 0; }
@@ -256,12 +261,17 @@
   // How long one repeat of a treatment's rung pattern is, so a run of line
   // drawn as several elements can be given a continuous phase. An
   // odd-length dasharray repeats twice before it comes back round, per SVG.
-  // Secondary text — the time tag, a location line, a sun marker. On a
+  // Secondary text: the time tag, a location line, a sun marker. On a
   // greyscale panel a lighter grey says "this matters less"; on a 1-BIT one
   // there is no lighter grey, only a dither, and small dithered text under a
   // paper outline is a smudge. There it goes full ink and earns its
   // secondary reading from being smaller instead.
-  function quietText(token) { return ONE_BIT ? 'text--black' : token; }
+  //
+  // Not a named grey. gray-40 is a soft grey on a white board and nearly
+  // invisible on a black one, which is where the event times went in dark
+  // mode. .metro-quiet is ink mixed toward the canvas instead, so it reads
+  // as a step down from the titles whichever way round the two are.
+  function quietText() { return ONE_BIT ? 'text--black' : 'metro-quiet'; }
   function dashPeriod(style, S) {
     var t = treatmentFor(style, S, 3);
     if (!t || !t.dash) return 0;
@@ -486,7 +496,7 @@
     var capProbe = el('div', 'metro-gen absolute');
     var capProbeTitle = labelRow('metro-title-text ' + STATION_TITLE_CLASS + ' font--bold text--black');
     capProbeTitle.textContent = 'Mg'; // ascender+descender, for a realistic line height
-    var capProbeTag = labelRow(STATION_TAG_CLASS + ' ' + quietText('text--gray-45'));
+    var capProbeTag = labelRow(STATION_TAG_CLASS + ' ' + quietText());
     capProbeTag.textContent = 'Mg';
     capProbe.appendChild(capProbeTitle); capProbe.appendChild(capProbeTag);
     canvas.appendChild(capProbe);
@@ -855,7 +865,15 @@
       var n = el('div', 'metro-gen metro-sky flex flex--row flex--center-y gap--xsmall absolute text--black');
       var size = hourH * (w.type === 'sun' ? 1.5 : 1.3);
       var ic = el('img', 'image--adaptive'); ic.src = w.icon; ic.style.width = size + 'px'; ic.style.height = size + 'px';
-      var tx = el('span', 'label label--small ' + (w.type === 'sun' ? quietText('text--gray-30') : 'font--bold text--black'));
+      // The framework paints an adaptive icon by masking it with the text
+      // colour, but it only arms the ones present when the page loads, and
+      // these are drawn later by this script. Armed by hand here, which is
+      // the manual form the framework documents: set the mask source and
+      // flip the gate. Without it a sunrise stayed black line art, and went
+      // invisible the moment the device was in dark mode.
+      ic.style.setProperty('--framework-icon-src', 'url("' + w.icon + '")');
+      ic.setAttribute('data-adaptive', 'true');
+      var tx = el('span', 'label label--small ' + (w.type === 'sun' ? quietText() : 'font--bold text--black'));
       tx.style.whiteSpace = 'nowrap';
       tx.textContent = w.type === 'sun' ? timeLabel(w.at_min) : w.label;
       n.appendChild(ic); n.appendChild(tx);
@@ -899,7 +917,7 @@
       var textW = horizontal ? maxTitle : colW;
       if (!horizontal) box.style.maxWidth = colW + 'px';
       if (showTime) {
-        var tm = labelRow('metro-time-tag ' + tagClass + ' ' + quietText('text--gray-40'));
+        var tm = labelRow('metro-time-tag ' + tagClass + ' ' + quietText());
         // an en dash between them: two times side by side with only a space
         // read as one string of digits, not as a span
         tm.textContent = timeLabel(e.start_min) + ' \u2013 ' + timeLabel(e.end_min);
@@ -918,7 +936,7 @@
       clampLines(t, 2);
       box.appendChild(t);
       if (showLocation && e.location) {
-        var loc = labelRow(tagClass + ' ' + quietText('text--gray-45'));
+        var loc = labelRow(tagClass + ' ' + quietText());
         loc.textContent = e.location;
         loc.style.maxWidth = (horizontal ? maxTitle * 1.3 : colW) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
         box.appendChild(loc);
@@ -2046,7 +2064,7 @@
         // grey text on a grey rail besides. The title alone still says what
         // the station is.
         if (s.location && !packedFallback) {
-          var loc = labelRow('metro-loc ' + STATION_TAG_CLASS + ' ' + quietText('text--gray-45'));
+          var loc = labelRow('metro-loc ' + STATION_TAG_CLASS + ' ' + quietText());
           loc.textContent = s.location;
           loc.style.maxWidth = (availW * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
           box.appendChild(loc);
