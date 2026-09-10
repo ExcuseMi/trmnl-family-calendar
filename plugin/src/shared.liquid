@@ -2346,6 +2346,33 @@
           hl.setAttribute('data-metro-role', 'express');
           svg.appendChild(hl);
         }
+        // SPEED LINES along every rail in the stretch. The hatch says the
+        // time is compressed; this says what that means for the lines, and
+        // it is the mark everyone already reads as fast: short strokes
+        // trailing a thing that is moving. They sit clear of the rail on
+        // both sides rather than on it, so they never touch a line's own
+        // texture, which is what tells the lines apart.
+        //
+        // Taken from lineCAt at each step, not from the baseline, so they
+        // follow a rail that is kinked out for a siding instead of
+        // floating beside it.
+        var lineLen = 11 * S, pitch = 17 * S;
+        for (var sx = a0 + 6 * S; sx < a1 - lineLen - 4 * S; sx += pitch) {
+          LEGEND.forEach(function (p) {
+            var w = Math.max(2, p.line_width) * S * weightScale;
+            var c = lineCAt(p, sx + lineLen / 2);
+            [-1, 1].forEach(function (sd) {
+              var off = c + sd * (w / 2 + 3.5 * S);
+              var s0 = toXY(sx, off), s1 = toXY(sx + lineLen, off);
+              var sl = svgEl('line', { x1: s0[0], y1: s0[1], x2: s1[0], y2: s1[1],
+                'stroke-width': 1.2 * S, 'stroke-linecap': 'round', 'stroke-opacity': 0.5 });
+              sl.style.stroke = colorFor(p.hue);
+              sl.setAttribute('data-metro-role', 'speed');
+              sl.setAttribute('data-metro-owner', p.key);
+              svg.appendChild(sl);
+            });
+          });
+        }
         // the portals: where the scale changes, across the whole map, so
         // the change is visible on the lines and not only on the strip
         [a0, a1].forEach(function (at) {
