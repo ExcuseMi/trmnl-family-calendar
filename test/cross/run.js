@@ -77,6 +77,11 @@ function board(aSpec, bSpec, over) {
 }
 
 function solve(input) { return CrossSolver.solve(input); }
+// The side builder on its own, for the claims that only mean anything at a
+// fixed pitch (see 05-both-sides.js).
+function buildSide(k, tracks, lanesFor, stepPx, sepPx, opts) {
+  return CrossSolver.buildSide(k, tracks, lanesFor, stepPx, sepPx, opts);
+}
 
 // ---------------------------------------------------------------- helpers
 
@@ -99,7 +104,7 @@ function close(a, b, tol, msg) {
   if (Math.abs(a - b) > tol) throw new Error((msg ? msg + ': ' : '') + a + ' is not within ' + tol + ' of ' + b);
 }
 
-const helpers = { CrossSolver, solve, board, consts, allTracks, lanesOwnedBy, laneCount,
+const helpers = { buildSide, CrossSolver, solve, board, consts, allTracks, lanesOwnedBy, laneCount,
   assert, assertEqual, close };
 
 for (const file of fs.readdirSync(path.join(__dirname, 'cases')).sort()) {

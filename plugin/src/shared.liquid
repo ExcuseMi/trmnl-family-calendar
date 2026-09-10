@@ -1882,24 +1882,105 @@
       // all of that. Returns the lane ladder (innermost first, each rung
       // owned by one track), where each track ended up, and how far the
       // side reaches.
-      function buildSide(k, tracks, lanesFor, stepPx, sepPx) {
-        var acc = 0, slots = [], dist = {}, bandEnd = {};
+      // How much room `n` rungs need beyond the line they hang off: the
+      // clearance to the first one, the pitch between them, and the label
+      // on the last one.
+      function rungRoom(k, t, n, stepPx) {
+        return n ? laneBase(k, t) + (n - 1) * stepPx + k.lineGap + k.maxLabelThick : 0;
+      }
+
+      function buildSide(k, tracks, lanesFor, stepPx, sepPx, opts) {
+        var acc = 0, slots = [], dist = {}, bandEnd = {}, inward = {};
+        opts = opts || {};
         // Half a pitch for the first track on each side, a whole one after
         // that: with no gutter left in the middle the two innermost lines
         // would otherwise sit a double pitch apart, which reads as a
         // missing line rather than as the middle of the map.
         tracks.forEach(function (t, i) {
-          acc += (i ? k.trackStep + sepPx : (k.trackStep + sepPx) / 2) + capIn(k, t);
+          var gap = (i ? k.trackStep + sepPx : (k.trackStep + sepPx) / 2) + capIn(k, t);
+          var want = lanesFor(t);
+
+          // A15: A TRACK CARRIES EVENTS ON BOTH SIDES OF ITS LINE.
+          //
+          // Every lane used to sit outward of the line that owns it, so a
+          // line at the edge of the bundle had all of its labels on one
+          // side and the gap between it and its neighbour went unused.
+          // Work would have six events stacked above it and nothing below,
+          // with the space south of its rail empty.
+          //
+          // The gap between two lines is not empty space, it is where the
+          // outer one's inward labels belong. So rungs go there FIRST, as
+          // many as fit in the gap that already exists, and only what does
+          // not fit pushes the line further out. That is what makes this
+          // free on a board with room and silent on a board without: "both
+          // sides, unless constricted by space".
+          //
+          // Never for the innermost track on a side. Its inward neighbour
+          // is not a line, it is the spine and the hour strip, and a label
+          // there is in the middle of the board.
+          // Which split is CHEAPEST, not which is free. A rung costs its
+          // side a fixed overhead once (the clearance off the line, plus
+          // the label on the outermost one) and a lane step for each rung
+          // after that. So the second side starts expensive and gets cheap,
+          // and the question is arithmetic: try every split and keep the
+          // one that makes this track's band smallest.
+          //
+          // Only taking what was FREE made this inert on exactly the boards
+          // that need it. A full board has no spare gap at all: `sep` is 0,
+          // the lines sit a bare track-step apart, and nothing would ever
+          // move. But a 3-lane track on that board pays 20 + 22.4 + 2x61 +
+          // 43 = 207px with everything on one side, and 65.4 + 22.4 + 61 +
+          // 43 = 192px with one rung inward. The wider gap costs 45px and
+          // buys back a 61px lane step.
+          var inN = 0;
+          if (opts.bothSides && i > 0 && want > 1) {
+            var bestCost = gap + rungRoom(k, t, want, stepPx), bestN = 0;
+            for (var c = 1; c <= want - 1; c++) {
+              var cost = Math.max(gap, rungRoom(k, t, c, stepPx))
+                + rungRoom(k, t, want - c, stepPx);
+              // strictly cheaper, so a tie keeps everything on one side:
+              // two sides of labels is more for the eye to follow and is
+              // only worth it when it actually buys depth
+              if (cost < bestCost - 0.001) { bestCost = cost; bestN = c; }
+            }
+            inN = bestN;
+          }
+          inward[t.key] = inN;
+          // What is left after the inward rungs have taken their share of
+          // the gap; never less than the gap itself, so a track that wants
+          // none is placed exactly where it always was.
+          acc += Math.max(gap, rungRoom(k, t, inN, stepPx));
+
+          // A17: A CORRIDOR NEEDS A GAP WIDE ENOUGH TO RUN DOWN.
+          //
+          // A bundle of rails between two lines takes room that no
+          // per-track demand can ask for: lanes and sidings grow ONE
+          // track's band outward, while a corridor needs a minimum
+          // DISTANCE BETWEEN TWO ADJACENT TRACKS. Without it the bundle is
+          // drawn from whatever the solver happened to leave, which on a
+          // packed board is less than its rails and caption need, and it is
+          // drawn across the lines instead.
+          if (opts.gapNeed && i > 0) {
+            var floor = dist[tracks[i - 1].key] + opts.gapNeed(tracks[i - 1].key, t.key);
+            if (acc < floor) acc = floor;
+          }
+
           dist[t.key] = acc;
-          var n = lanesFor(t), start = acc + laneBase(k, t);
-          for (var j = 0; j < n; j++) slots.push({ dist: start + j * stepPx, owner: t.key });
+          for (var m = 0; m < inN; m++) {
+            slots.push({ dist: acc - laneBase(k, t) - m * stepPx, owner: t.key, side: -1 });
+          }
+          var n = want - inN, start = acc + laneBase(k, t);
+          for (var j = 0; j < n; j++) slots.push({ dist: start + j * stepPx, owner: t.key, side: 1 });
           acc = n ? start + (n - 1) * stepPx + k.lineGap + k.maxLabelThick
                   : acc + Math.max(laneBase(k, t), k.nameH / 2);
           // where this track's band stops: its line, its siding room and
           // all of its own lanes. Anything beyond belongs to the next.
           bandEnd[t.key] = acc;
         });
-        return { slots: slots, extent: acc, dist: dist, bandEnd: bandEnd };
+        // Innermost first, whichever side of a line they hang off, because
+        // everything downstream reads this ladder as "nearest rung first".
+        slots.sort(function (a, b) { return a.dist - b.dist; });
+        return { slots: slots, extent: acc, dist: dist, bandEnd: bandEnd, inward: inward };
       }
 
       // The fallback when bands cannot fit: every track at a fixed pitch
@@ -1941,9 +2022,27 @@
           sides[s].forEach(function (t) { alloc[t.key] = demand[t.key] || 0; });
         });
         function lanesFor(t) { return alloc[t.key]; }
+        // Both of these are OPTIONS the caller turns on, not new
+        // behaviour: a caller that asks for neither gets exactly the board
+        // it got before, which is what lets the two land separately from
+        // the drawing that reads them.
+        var opts = {
+          bothSides: input.bothSides === true,
+          gapNeed: input.gaps && input.gaps.length ? gapBetween : null,
+        };
+        // The widest thing anybody asked to run between this pair.
+        function gapBetween(aKey, bKey) {
+          var most = 0;
+          for (var i = 0; i < input.gaps.length; i++) {
+            var g = input.gaps[i];
+            if (!g || !(g.px > most)) continue;
+            if ((g.a === aKey && g.b === bKey) || (g.a === bKey && g.b === aKey)) most = g.px;
+          }
+          return most;
+        }
         function banded(stepPx, sepPx) {
-          var A = buildSide(k, sides.A, lanesFor, stepPx, sepPx);
-          var B = buildSide(k, sides.B, lanesFor, stepPx, sepPx);
+          var A = buildSide(k, sides.A, lanesFor, stepPx, sepPx, opts);
+          var B = buildSide(k, sides.B, lanesFor, stepPx, sepPx, opts);
           return { A: A, B: B, needA: needOf(k, sides.A, A.extent, true),
                    needB: needOf(k, sides.B, B.extent, false), packed: false };
         }
@@ -2117,7 +2216,13 @@
         };
       }
 
-      return { solve: solve, laneBase: laneBase, capIn: capIn };
+      // buildSide is exported for the tests as well as used above: it is
+      // where a track's rungs are split between the two sides of its line,
+      // and the claim that doing so never costs depth is only meaningful
+      // at a FIXED pitch. Through solve() the freed depth is immediately
+      // spent on lane pitch and separation, which grows the other side, so
+      // the invariant is invisible there.
+      return { solve: solve, laneBase: laneBase, capIn: capIn, buildSide: buildSide };
     })();
     // ==== CROSS_SOLVER_END ====
 
