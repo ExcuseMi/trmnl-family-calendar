@@ -155,6 +155,31 @@ is open.
   lanes on one side are full, so the caption either slides or the branch
   dives past somebody's words. Both A15 and A17 are about the same missing
   room, which is why the seven belong to them and not to a placement fix.
+  **The arithmetic is done and the drawing is not.** `CrossSolver` splits a
+  track's rungs across both sides of its line and `test/cross` covers it;
+  `bothSides` is off at the call site because turning it on makes the board
+  worse. What a rung on the inward side needs, beyond the sign work already
+  written and reverted (a signed `dy` and `rowDist` in `settle`, a `side` on
+  every lane item so `diagonalCrosses` reads the text band on the right
+  side of the rung, and `_labelSign` for `band()` and the box placement):
+  1. The caption passes still assume a label hangs away from the spine.
+     `capClamp`, the interchange dodge and the bundle-caption slide all
+     compute `want` from the elbow with the event's own `_sign`, so an
+     inward label is measured against a position on the other side of its
+     own rail.
+  2. Two tracks' labels now share one gap from opposite directions. The
+     solver reserves the room, but the collision grid keys obstacles by
+     LANE INDEX, and an inward rung of the outer track and an outward rung
+     of the inner one are different indices in the same physical band.
+  3. The reach that keeps a caption "beside its own branch" is measured
+     along the axis and is side-agnostic, but a label that flipped sides
+     also flipped which neighbours it can collide with, and nothing
+     re-checks that.
+  Evidence, on the demo board with it switched on: "School Run" written
+  through "Assembly", "Skate Park" into "Family Dinner", "Saxophone Lesson"
+  into "Mensa Meeting", and the layout suite 13 to 14. Fix those three
+  before turning it back on, and check the picture before the count: the
+  suite moved by one and the board fell apart.
 - [ ] **A16. Two commitments back to back should not send the line home in
   between, and the orchestrator should order the tracks so they don't have
   far to go.** Reported off a zoomed morning: Bart and Lisa ride the School
