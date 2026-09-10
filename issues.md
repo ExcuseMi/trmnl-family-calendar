@@ -147,7 +147,7 @@ is open.
 - [ ] **E5. Preset library in the editor.** A one-click dropdown in Start:
   Family of 4, Work vs Personal, Solo Freelancer, so someone can see a board
   before they have any URLs.
-- [ ] **E6. Localized weather alert banner.** A settings group (`enabled`,
+- [x] **E6. Localized weather alert banner.** A settings group (`enabled`,
   `rain_threshold`, `snow_alert`, `temp_extremes`) using the account
   location and locale. When a threshold is breached, a full-width
   high-contrast banner along the bottom edge:
@@ -159,15 +159,15 @@ is open.
 
 ## Notes
 
-- **E6 is half open.** `transform.js` sends
-  `metro.service_alert = { text, kind } | null`, fully composed and
-  translated, and `shared.liquid` draws it as a full-width ink band along the
-  bottom, a sibling of the canvas so the canvas shrinks by itself and there
-  is no second place for the two to disagree. What is NOT done: no test
-  covers it, and it has only been seen by injecting the markup into a built
-  page by hand, because the banner is Liquid and the screenshot harness only
-  swaps the runtime payload. It also needs a look on a board where the
-  translated text wraps to two lines.
+- **The layout suite can render the Liquid side now.** The banner is drawn
+  by Liquid from the build's own `metro:`, so no fixture could ever reach
+  it: `layout(fixture, view, { service_alert: ... })` patches those keys
+  into `.trmnlp.yml`, builds, and puts the file back, and a viewport may
+  name a `page` (`quadrant`, `half_vertical`, ...) to render that view's own
+  build rather than the full one scaled into a slot. The framework's type is
+  not the same size in the two, which is why the German snow alert wraps in
+  one and not the other. Anything else Liquid draws (the header) is now
+  testable the same way.
 - The layout suite's small views became real this session. `A7` (the mangled
   backwards branch on a quadrant) should be cheaper to chase now than it
   looked when it was written down.

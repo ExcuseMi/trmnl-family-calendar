@@ -30,7 +30,7 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '../..');
 const PLUGIN = path.join(ROOT, 'plugin');
-const BUILT = path.join(PLUGIN, '_build/full.html');
+const BUILT = path.join(PLUGIN, '_build');
 const CACHE = path.join(__dirname, '.cache');
 
 const CHROME = process.env.METRO_CHROME
@@ -61,16 +61,53 @@ function frameworkAssets() {
 
 // ---------------------------------------------------------------- page building
 
-let builtHtml = null;
-function baseHtml() {
-  if (builtHtml) return builtHtml;
+// The demo `metro:` block in .trmnlp.yml reaches the built page TWICE: as
+// the runtime `var METRO` the script lays the map out from (swapMetro below
+// replaces that, which is what a fixture is), and through the Liquid tags
+// that draw everything the script never touches: the header, and the
+// service alert banner. A fixture cannot reach the second one at all, so a
+// test about something Liquid draws needs its own BUILD, with those keys
+// patched into the yml. `trmnlp build` is about a second, and each variant
+// is built once for the whole run.
+const YML = path.join(PLUGIN, '.trmnlp.yml');
+
+// Insert keys at the top of the metro mapping. It is a JSON literal
+// embedded in the yml (a YAML flow mapping, so JSON-shaped lines are
+// valid), and inserting straight after its opening brace needs no YAML
+// parser and cannot disturb the ~600 lines already in there.
+function patchDemoMetro(yml, extra) {
+  const at = yml.indexOf('\n  metro:');
+  if (at < 0) throw new Error('.trmnlp.yml has no metro: block to patch');
+  const open = yml.indexOf('{', at);
+  const lines = Object.keys(extra)
+    .map((k) => '      ' + JSON.stringify(k) + ': ' + JSON.stringify(extra[k]) + ',').join('\n');
+  return yml.slice(0, open + 1) + '\n' + lines + yml.slice(open + 1);
+}
+
+// One `trmnlp build` writes all four views. `page` picks which of them a
+// test renders: they are the SAME template with a different `view` number,
+// and the framework's typography is not the same in a quadrant as in a
+// full view, so a string that fits on one line in one of them wraps in the
+// other. Everything else in this suite renders `full`, which is what a
+// mashup slot scales; a case about a view's own build asks for it by name.
+const builtHtml = new Map();
+function baseHtml(liquidExtra, page) {
+  const key = (liquidExtra ? JSON.stringify(liquidExtra) : '') + '|' + (page || 'full');
+  if (builtHtml.has(key)) return builtHtml.get(key);
+  // The yml is a tracked source file, so it is patched, built and put back
+  // in a finally, because a failed build must not leave a test fixture
+  // behind in the working tree.
+  const orig = fs.readFileSync(YML, 'utf-8');
   try {
+    if (liquidExtra) fs.writeFileSync(YML, patchDemoMetro(orig, liquidExtra));
     execFileSync('trmnlp', ['build'], { cwd: PLUGIN, stdio: 'pipe', timeout: 120000 });
   } catch (e) {
     throw new Error('`trmnlp build` failed (is trmnlp on PATH?): ' + (e.stderr || e.message));
+  } finally {
+    if (liquidExtra) fs.writeFileSync(YML, orig);
   }
-  builtHtml = fs.readFileSync(BUILT, 'utf-8');
-  return builtHtml;
+  builtHtml.set(key, fs.readFileSync(path.join(BUILT, (page || 'full') + '.html'), 'utf-8'));
+  return builtHtml.get(key);
 }
 
 // Replace the baked `var METRO = {...};` literal with a fixture. The JSON is
@@ -223,6 +260,40 @@ const REPORTER = `
         w: r.width, h: r.height
       });
     });
+    // The service banner is NOT part of the map: it is a sibling of the
+    // canvas, so it takes its height off the canvas rather than covering
+    // it. Reported in the same canvas-relative space as everything else,
+    // together with the root that both of them share, so a case can ask
+    // whether the map really gave up exactly that much room.
+    // No regex here. This whole reporter is a template literal in run.js,
+    // where a backslash is an escape, so an escaped bracket in a pattern
+    // reaches the page unescaped: the test read as a capture group and
+    // matched nothing, and every board reported a transparent background.
+    function bgOf(el) {
+      for (var n = el; n; n = n.parentElement) {
+        var c = (getComputedStyle(n).backgroundColor || '').replace(/ /g, '');
+        if (c && c !== 'transparent' && c !== 'rgba(0,0,0,0)') return getComputedStyle(n).backgroundColor;
+      }
+      return null;
+    }
+    var root = document.querySelector('.metro-root');
+    // The slot the board is given: .view when the framework wraps one (a
+    // mashup slot takes its box from --full-w/--full-h there), else the
+    // screen itself. Reported so a case can ask whether the board still
+    // fits what it was given, which is the one thing a device shows by
+    // silently cutting the bottom off.
+    var viewEl = root.closest('.view') || document.querySelector('.screen');
+    var bannerEl = document.querySelector('.metro-banner');
+    var banner = null;
+    if (bannerEl) {
+      var bcs = getComputedStyle(bannerEl);
+      banner = Object.assign(rel(bannerEl.getBoundingClientRect()), {
+        text: (bannerEl.textContent || '').trim(),
+        kind: bannerEl.getAttribute('data-metro-alert'),
+        ink: bcs.backgroundColor, paper: bcs.color,
+        lineHeight: parseFloat(bcs.lineHeight) || 0
+      });
+    }
     var dbg = null;
     try { dbg = JSON.parse(canvas.getAttribute('data-metro-debug')); } catch (e) {}
     if (dbg) dbg.runs = window.__metroRuns || 0;
@@ -231,6 +302,8 @@ const REPORTER = `
     out.id = 'metro-report';
     out.textContent = JSON.stringify({
       canvas: { w: cr.width, h: cr.height },
+      root: rel(root.getBoundingClientRect()), view: rel(viewEl.getBoundingClientRect()),
+      boardBg: bgOf(canvas), banner: banner,
       debug: dbg, labels: labels, paths: paths, rects: rects, painted: painted, overlays: overlays,
       circles: circles.concat(shapeMarkers)
     });
@@ -248,9 +321,9 @@ const REPORTER = `
 </script>
 `;
 
-function pageFor(metro, screenClasses, slot) {
+function pageFor(metro, screenClasses, slot, liquidExtra, page) {
   const fw = frameworkAssets();
-  let html = swapMetro(baseHtml(), metro);
+  let html = swapMetro(baseHtml(liquidExtra, page), metro);
   html = html.split(CSS_URL).join('file://' + fw.css).split(JS_URL).join('file://' + fw.js);
   // Add the device classes to whatever the build put on the screen element,
   // rather than matching one exact string. The bleed setting changes that
@@ -286,17 +359,18 @@ let renderSeq = 0;
 // Keyed on the CONTENT instead, every one of those is a cache hit, which is
 // most of the suite's wall time.
 const contentCache = new Map();
-function render(metro, viewport) {
+function render(metro, viewport, liquidExtra) {
   const key = viewport.name + '|' + viewport.w + 'x' + viewport.h
     + '|' + (viewport.slot ? viewport.slot.w + 'x' + viewport.slot.h : 'full') + '|'
-    + crypto.createHash('sha1').update(JSON.stringify(metro)).digest('hex');
-  if (!contentCache.has(key)) contentCache.set(key, renderUncached(metro, viewport));
+    + '|' + (viewport.page || 'full') + '|'
+    + crypto.createHash('sha1').update(JSON.stringify(metro) + '|' + JSON.stringify(liquidExtra || null)).digest('hex');
+  if (!contentCache.has(key)) contentCache.set(key, renderUncached(metro, viewport, liquidExtra));
   return contentCache.get(key);
 }
 
-function renderUncached(metro, viewport) {
+function renderUncached(metro, viewport, liquidExtra) {
   const file = path.join(tmpDir, 'page' + (renderSeq++) + '.html');
-  fs.writeFileSync(file, pageFor(metro, viewport.classes, viewport.slot));
+  fs.writeFileSync(file, pageFor(metro, viewport.classes, viewport.slot, liquidExtra, viewport.page));
   const dom = execFileSync(CHROME, [
     '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
     '--window-size=' + viewport.w + ',' + viewport.h,
@@ -311,7 +385,7 @@ function renderUncached(metro, viewport) {
 
 // results are reused across assertions in a case file, so render once per
 // (fixture, viewport) pair and memoise
-function layout(fixture, viewport) { return render(fixture.metro, viewport); }
+function layout(fixture, viewport, liquidExtra) { return render(fixture.metro, viewport, liquidExtra); }
 
 // ---------------------------------------------------------------- geometry helpers
 
