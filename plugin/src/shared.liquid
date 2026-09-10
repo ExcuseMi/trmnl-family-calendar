@@ -1746,8 +1746,30 @@
         if (crossing && !allowCross) return null;
         // How far the elbow ended up past the event's own start, if at all.
         var pastStart = dir > 0 ? Math.max(0, elbow - e._nodeA) : Math.max(0, e._nodeA - elbow);
-        var shift = Math.abs(ts - (dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len)) + elbowShift;
+        var slid = Math.abs(ts - (dir > 0 ? elbow + TEXT_PAD : elbow - TEXT_PAD - len));
+        var shift = slid + elbowShift;
         if (shift > (dir > 0 ? MAX_SHIFT : MAX_SHIFT * 0.5)) return null;
+        // WHAT PUSHING A LABEL COSTS. Charged flat, a push was often the
+        // cheapest thing on offer: sliding a caption 80px cost 80 while
+        // taking the next lane out cost about 40, so the score kept
+        // choosing the push and the board filled with captions drifting
+        // off their rails.
+        //
+        // A few pixels is invisible and stays cheap. Past a fifth of the
+        // label's own width it climbs steeply, because that is where the
+        // eye stops pairing the words with the rail under them, and the
+        // alternatives (another lane, a shorter title) are what should win
+        // from there on. It scales with the label because half a long
+        // caption still overlaps its elbow while half a short one is gone.
+        //
+        // Not capped against what a crossing costs. It was, on the reading
+        // that a line through a caption costs the reader the word while a
+        // slid caption only costs the pairing. Measured, that cap changed
+        // nothing at all: with it the board came out identical to the flat
+        // charge, case for case. What moves is the weight below, and a
+        // pierced caption is not in fact worse than a pushed one. Two
+        // labels ON TOP of each other is worse than either.
+        var pushed = slid + Math.max(0, slid - len * 0.2) * 4;
         return { k: k, dir: dir, elbow: elbow, diagFrom: diagFrom, shift: shift, ld: rowDist, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift, inward: inward,
                  // Depth is charged at what it actually costs the reader:
                  // the dive. A lane one further out is not "one lane
@@ -1766,7 +1788,7 @@
                  // is a different lane or a slid label. Both are cheaper
                  // than the crossing, and the score has to say so: at 50*S
                  // a pierce was cheaper than sliding a label its own width.
-                 score: shift + elbowShift * 1.5 + (elbowShift ? 30 * S : 0)
+                 score: pushed + elbowShift * 1.5 + (elbowShift ? 30 * S : 0)
                  // An elbow past the start means the ring no longer sits
                  // on the rail it marks. Charged by how far, not as a flat
                  // fee: a few px of overshoot is invisible and a flat fee
@@ -2655,7 +2677,22 @@
     // sits by its own rail nearly as bad, a diagonal through a label or a
     // slid elbow ugly, a backward branch mildly so.
     var lost = (tier.time ? 0 : 200) + (tier.loc ? 0 : 15);
-    return dropped * 1000 + lost + adrift * 45 + (crossings + barPierces()) * 40 + slides * 15 + backwards * 10;
+    // A caption that has come loose is a rail with no name beside a name
+    // with no rail, and the reader pairs the name with whatever rail is
+    // nearest: they cannot recover it by looking harder, which is why it
+    // is now the dearest thing here bar losing the event outright.
+    //
+    // It is dearer than a crossing on purpose. A line through a caption is
+    // read THROUGH: the words are still under the reader's eye and still
+    // in the right place. Four boards trade a drifting label for a pierced
+    // one at these weights and that is the trade being asked for. What
+    // neither may be traded for is two captions on top of each other,
+    // where one of them is simply not there to read.
+    //
+    // Measured before believing: 45 to 120 clears six drifting labels and
+    // one overlap, and buys four pierces. Moving the crossing to match
+    // (120 against 60) broke three other boards, so it stayed where it is.
+    return dropped * 1000 + lost + adrift * 120 + (crossings + barPierces()) * 40 + slides * 15 + backwards * 10;
     }
 
     // Where each interchange bar ends up, as an obstacle for the next run:
