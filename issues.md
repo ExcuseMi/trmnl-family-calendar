@@ -289,10 +289,35 @@ is open.
   agrees with boards already judged by eye: the cramped five-line board in
   A17 has to come out worse than the same day drawn roomy. A weight nobody
   can defend is a number that will be tuned forever.
-  **Then search, in the arithmetic.** The pure models answer in
-  milliseconds (`test/cross` runs 400 seeded cases in one), while a render
-  is most of a second: evaluate candidate side splits, orders and
-  allocations against the model, and draw only the winner.
+  **One measurement at two fidelities, and the fast one has to be checked
+  against the slow one.** The two paragraphs above do not fit together as
+  first written: a score read off a RENDERED board cannot be what a search
+  evaluates, because every candidate would then cost a render. So there are
+  two, and the relationship between them is the whole design.
+  The RENDERED score is the truth, read off the report the layout harness
+  already produces. The MODEL score is an estimate computed from the
+  solver's own numbers with no DOM at all: crossings counted from the
+  order, gaps against what each has to hold, label demand against the room
+  its band was given. The search only ever evaluates the model score.
+  A model score that disagrees with the rendered one is not an
+  approximation, it is a thing you optimise a board into being worse
+  against. So the two get compared, on every demo board and every view, and
+  they have to agree on the RANKING: if the model prefers board A to board
+  B, so must the render. That comparison is the same discipline the cross
+  solver is already held to, where the extracted pure model has to match
+  what is drawn.
+  **And the rendered score costs nothing extra, because the suite already
+  renders all of it.** `node run.js` walks every board and every view
+  already; the score comes out of the same pass as a by-product, printed as
+  a table beside the pass/fail. There is no second harness to build and no
+  second minute to wait.
+  **The search budget is the DEVICE's, not the suite's.** The board is laid
+  out client side, once, inside the panel's own render. That is what makes
+  the arithmetic requirement non-negotiable: it would still hold if the
+  test suite were instant. The pure models are the right size for it
+  (`test/cross` runs 400 seeded cases in one), so the search evaluates
+  candidate side splits, orders and allocations there and the panel draws
+  exactly one board: the winner.
 
 - [~] **A14. The cross-axis solver gives up too early and then wastes what
   it saved.** Two of the three parts are done. The solver is a pure
