@@ -155,7 +155,22 @@ is open.
   lanes on one side are full, so the caption either slides or the branch
   dives past somebody's words. Both A15 and A17 are about the same missing
   room, which is why the seven belong to them and not to a placement fix.
-  **The arithmetic is done and the drawing is not.** `CrossSolver` splits a
+  **DONE, with one gate left.** A track carries events on both sides of
+  its line: `settle` reads a signed reach, `_labelSign` puts the words on
+  the far side of the rung from the line, and every lane item carries the
+  side its text runs to. What is still gated off is a track that is in a
+  CORRIDOR: a bundle is planned after the lanes are handed out and its
+  caption is placed outside the lane grid, so it is the one thing a lane
+  cannot be checked against, and it sits in exactly the gap an inward rung
+  wants. Lift that gate by making a bundle's caption an obstacle the grid
+  can see, at which point every line on the board can use both sides.
+  Worth knowing for whoever picks this up: it takes TWO busy lines on one
+  side before any of it is reachable. A track only wants a second lane when
+  two of its own events run at once, the sides are balanced busiest-first
+  so the busiest line is always innermost, and the innermost line's inward
+  neighbour is the spine rather than a line. `overlapping-day` is the
+  fixture for it.
+  **The first attempt, for the record.** `CrossSolver` splits a
   track's rungs across both sides of its line and `test/cross` covers it;
   `bothSides` is off at the call site because turning it on makes the board
   worse. What a rung on the inward side needs, beyond the sign work already
