@@ -1693,97 +1693,138 @@
         var room = k.depth - k.bandLo;
         function fits(sol) { return sol.needA + sol.needB <= room; }
 
-        var sol = banded(step, sep);
-        // Tighten the lane pitch before taking anyone's lane away: the
-        // slack between lanes is worth less than a lane, and losing a lane
-        // means losing events off the board entirely.
+        // Slack between lanes is worth less than a lane, so the pitch comes
+        // down before anybody loses one; losing a lane means losing events
+        // off the board entirely.
         var MIN_STEP = k.maxLabelThick + k.lineGap + k.laneGap * 0.25;
-        for (var sh = 0; sh < 24 && !fits(sol) && step > MIN_STEP + 0.5; sh++) {
-          step = Math.max(MIN_STEP, step - k.laneStep * 0.08);
-          sol = banded(step, sep);
+
+        // Spending the surplus. Lane pitch first, so a label has air around
+        // it, then separation between the tracks themselves.
+        //
+        // SEP_CAP used to be a constant of a couple of track-steps, which
+        // meant a board with room to spare drew its lines at that pitch in
+        // the middle of the canvas and centred the rest as margin: two
+        // lines on a 1300px panel used a fifth of it. The space BETWEEN two
+        // lines is where the inner one's labels belong, so a surplus spent
+        // there is not decoration, it is the room the map runs out of. It
+        // is shared out as an equal slice per line rather than poured into
+        // one gap.
+        var STEP_CAP = k.laneStep * 1.35;
+        var widest = Math.max(sides.A.length, sides.B.length);
+        var SEP_CAP = Math.max(k.trackStep * 2, k.nameH ? k.nameH + k.nodeR * 2 : 0,
+          widest ? room / (widest + 1) : 0);
+        // Grow one solution into the room it has: pitch to its cap, then
+        // separation, stopping the moment the sides stop fitting.
+        function grow(build, st, sp) {
+          var best = build(st, sp);
+          if (!fits(best)) return { sol: best, step: st, sep: sp };
+          for (var gi = 0; gi < 40; gi++) {
+            var tryStep = Math.min(STEP_CAP, st + k.laneStep * 0.1);
+            if (tryStep <= st + 0.5) break;
+            var s2 = build(tryStep, sp);
+            if (!fits(s2)) break;
+            st = tryStep; best = s2;
+          }
+          // The increment is a fortieth of whatever is on offer, never a
+          // fixed number of pixels: a constant step of a fifth of a
+          // track-step needed four hundred tries to cross a deep canvas
+          // and the loop gave up a third of the way, so the map stopped
+          // spreading well before the room ran out.
+          var sepStep = Math.max(k.trackStep * 0.2, SEP_CAP / 40);
+          for (var gj = 0; gj < 60 && sp < SEP_CAP; gj++) {
+            var trySep = Math.min(SEP_CAP, sp + sepStep);
+            if (trySep <= sp + 0.01) break;
+            var s3 = build(st, trySep);
+            if (!fits(s3)) break;
+            sp = trySep; best = s3;
+          }
+          return { sol: best, step: st, sep: sp };
+        }
+
+        // ---- the banded attempt
+        var bStep = step, bSep = 0;
+        var bSol = banded(bStep, bSep);
+        for (var sh = 0; sh < 24 && !fits(bSol) && bStep > MIN_STEP + 0.5; sh++) {
+          bStep = Math.max(MIN_STEP, bStep - k.laneStep * 0.08);
+          bSol = banded(bStep, bSep);
         }
         // Trim the GREEDIEST track first rather than capping every track
         // alike: squeezing a two-lane track down to one to make room for a
         // neighbour that only ever needed one is how a busy line ends up
         // with six meetings stacked in a single row.
-        for (var trim = 0; trim < 60 && !fits(sol); trim++) {
+        for (var trim = 0; trim < 60 && !fits(bSol); trim++) {
           var worst = null;
-          ['A', 'B'].forEach(function (s) {
-            sides[s].forEach(function (t) {
+          ['A', 'B'].forEach(function (sk) {
+            sides[sk].forEach(function (t) {
               if (alloc[t.key] > 1 && (!worst || alloc[t.key] > alloc[worst])) worst = t.key;
             });
           });
           if (!worst) break;
           alloc[worst]--;
-          sol = banded(step, sep);
+          bSol = banded(bStep, bSep);
         }
+        var bGrown = grow(banded, bStep, bSep);
+        var bandedRungs = bGrown.sol.A.slots.length + bGrown.sol.B.slots.length;
 
-        // Spend what is left over. Lane pitch first, so a label has air
-        // around it, then separation between the tracks themselves. Both
-        // are capped: with a band per track the lane count is the SUM over
-        // tracks, so unbounded growth leaves the lines adrift in whitespace
-        // with interchange ties stretched between them. Whatever is spare
-        // after that gets centred instead.
-        // A tall name needs a tall gap above its line to sit in, so where
-        // the names wrap the separation may grow further than it otherwise
-        // would. Both caps only ever grow into room the board has: every
-        // loop stops the moment the sides stop fitting.
-        var STEP_CAP = k.laneStep * 1.35;
-        var SEP_CAP = Math.max(k.trackStep * 2, k.nameH ? k.nameH + k.nodeR * 2 : 0);
-        if (fits(sol)) {
-          for (var gi = 0; gi < 24; gi++) {
-            var tryStep = Math.min(STEP_CAP, step + k.laneStep * 0.1);
-            if (tryStep <= step + 0.5) break;
-            var s2 = banded(tryStep, sep);
-            if (!fits(s2)) break;
-            step = tryStep; sol = s2;
-          }
-          for (var gj = 0; gj < 24 && sep < SEP_CAP; gj++) {
-            var trySep = Math.min(SEP_CAP, sep + k.trackStep * 0.2);
-            var s3 = banded(step, trySep);
-            if (!fits(s3)) break;
-            sep = trySep; sol = s3;
-          }
+        // ---- the packed attempt, always, not only when bands fail
+        //
+        // Packing puts every track at one pitch with a single ladder of
+        // lanes per side beyond all of them. It gives up what bands buy (a
+        // branch cannot reach across a neighbour, so it cannot cross one)
+        // and buys rungs with it, because a rung costs a shared ladder much
+        // less than it costs a band. Computed here whatever happened above,
+        // so the two can be compared rather than one being a last resort:
+        // treated as a last resort, forty pixels of extra canvas took the
+        // board from six rungs packed to five rungs banded, which is a
+        // bigger board fitting less.
+        var sum = { A: 0, B: 0 };
+        ['A', 'B'].forEach(function (sk) {
+          sides[sk].forEach(function (t) { sum[sk] += demand[t.key] || 0; });
+        });
+        var pStep = k.laneStep, pSep = 0;
+        var la = sum.A ? 1 : 0, lb = sum.B ? 1 : 0;
+        function packedStep(stepPx, sepPx) { return packedAt(la, lb, stepPx, sepPx); }
+        var pSol = packedStep(pStep, pSep);
+        for (var pg = 0; pg < 80; pg++) {
+          var moreA = la < sum.A, moreB = lb < sum.B;
+          if (!moreA && !moreB) break;
+          var takeA = moreA && (!moreB || (sum.A - la) >= (sum.B - lb));
+          if (takeA && fits(packedAt(la + 1, lb, pStep, pSep))) { la++; pSol = packedStep(pStep, pSep); continue; }
+          if (moreB && fits(packedAt(la, lb + 1, pStep, pSep))) { lb++; pSol = packedStep(pStep, pSep); continue; }
+          if (!takeA && moreA && fits(packedAt(la + 1, lb, pStep, pSep))) { la++; pSol = packedStep(pStep, pSep); continue; }
+          break;
         }
+        // Everything the lanes did not want goes into separating the
+        // tracks. Packing used to draw every line at the minimum pitch
+        // however much room was going spare, which is how a seven-line
+        // board ended up squashed into a third of the canvas with each
+        // line's name lying on its own rail: there was nowhere else for a
+        // name to go. Lanes are handed out first because a lane is an event
+        // that would otherwise be dropped, and no amount of air is worth an
+        // event.
+        var pGrown = grow(packedStep, pStep, pSep);
+        var packedRungs = pGrown.sol.A.slots.length + pGrown.sol.B.slots.length;
 
-        // If bands still do not fit at their tightest, fall back to the
-        // packed bundle and hand out lanes to whichever side wants them
-        // more. Better a correct packed map than a beautiful one with a
-        // track hanging off the bottom edge.
-        var packed = !fits(sol);
-        if (packed) {
-          step = k.laneStep;
-          var sum = { A: 0, B: 0 };
-          ['A', 'B'].forEach(function (s) {
-            sides[s].forEach(function (t) { sum[s] += demand[t.key] || 0; });
-          });
-          var la = sum.A ? 1 : 0, lb = sum.B ? 1 : 0;
-          sep = 0;
-          sol = packedAt(la, lb, step, sep);
-          for (var pg = 0; pg < 80; pg++) {
-            var moreA = la < sum.A, moreB = lb < sum.B;
-            if (!moreA && !moreB) break;
-            var takeA = moreA && (!moreB || (sum.A - la) >= (sum.B - lb));
-            if (takeA && fits(packedAt(la + 1, lb, step, sep))) { la++; sol = packedAt(la, lb, step, sep); continue; }
-            if (moreB && fits(packedAt(la, lb + 1, step, sep))) { lb++; sol = packedAt(la, lb, step, sep); continue; }
-            if (!takeA && moreA && fits(packedAt(la + 1, lb, step, sep))) { la++; sol = packedAt(la, lb, step, sep); continue; }
-            break;
-          }
-          // Everything the lanes did not want goes into separating the
-          // tracks. Packing used to draw every line at the minimum pitch
-          // however much room was going spare, which is how a seven-line
-          // board ended up squashed into a third of the canvas with each
-          // line's name lying on its own rail: there was nowhere else for
-          // a name to go. Lanes are handed out first because a lane is an
-          // event that would otherwise be dropped, and no amount of air is
-          // worth an event.
-          for (var pj = 0; pj < 24 && sep < SEP_CAP; pj++) {
-            var trySepP = Math.min(SEP_CAP, sep + k.trackStep * 0.2);
-            var s4 = packedAt(la, lb, step, trySepP);
-            if (!fits(s4)) break;
-            sep = trySepP; sol = s4;
-          }
+        // ---- which one
+        //
+        // Bands are the better drawing and win every tie. Packing has to
+        // earn it by fitting MORE content, and a board where neither fits
+        // takes whichever comes closer to fitting, because at that point
+        // the choice is between two overflows and the shallower one leaves
+        // less hanging off the edge.
+        var packed;
+        if (!fits(bGrown.sol) && !fits(pGrown.sol)) {
+          packed = (pGrown.sol.needA + pGrown.sol.needB) < (bGrown.sol.needA + bGrown.sol.needB);
+        } else if (!fits(bGrown.sol)) {
+          packed = true;
+        } else {
+          packed = fits(pGrown.sol) && packedRungs > bandedRungs;
         }
+        var chosen = packed ? pGrown : bGrown;
+        var sol = chosen.sol;
+        step = chosen.step; sep = chosen.sep;
+        var considered = { bandedRungs: bandedRungs, bandedFits: fits(bGrown.sol),
+          packedRungs: packedRungs, packedFits: fits(pGrown.sol) };
 
         // How close the tracks ended up. A line drawn at full weight when
         // the next one is a track-step away turns the map into stripes, so
@@ -1806,6 +1847,7 @@
           needA: sol.needA, needB: sol.needB, room: room,
           dist: dist, bandEnd: bandEnd,
           weightScale: weightScale, spineC: spineC,
+          considered: considered,
           fits: sol.needA + sol.needB <= room
         };
       }

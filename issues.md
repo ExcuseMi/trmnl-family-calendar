@@ -110,8 +110,26 @@ is open.
   be built as its own arc from a point ON the trunk, and then the branch
   starts where it leaves and nothing is redrawn. Worth doing before A10,
   which is the same elbow seen from the other side.
-- [ ] **A14. The cross-axis solver gives up too early and then wastes what
-  it saved.** Reported off an X quadrant of the Simpsons board: five lines
+- [~] **A14. The cross-axis solver gives up too early and then wastes what
+  it saved.** Two of the three parts are done. The solver is a pure
+  function now, lifted out of the closure between `CROSS_SOLVER_BEGIN/END`
+  markers, and `test/cross` runs it directly: 32 cases including 400 seeded
+  random boards, in milliseconds, with no browser.
+  Fixed: the CLIFF (packing was a last resort, so forty pixels of extra
+  canvas took a board from six rungs packed to five rungs banded, a bigger
+  board fitting less; both layouts are now computed and compared every
+  time, bands win ties and packing has to earn it with more content), and
+  the WASTE (the surplus was capped at a couple of track-steps and the rest
+  centred as margin, so two lines on a 1300px panel used a fifth of it;
+  the cap is a share of the room per line now, and the surplus goes into
+  the gaps BETWEEN the lines, which is where the inner one's labels live).
+  Still open: `fitLines` decides how many lines the board carries from a
+  cost estimate of its own (`TRACK_STEP + LANE_BASE + hourH * 2.6`) that is
+  much cheaper than a band. On an X quadrant it allows five lines, none of
+  which can then have one, so the board packs five rails into 50px with
+  every label stacked beyond them. Asking the solver instead would carry
+  three lines with bands. That is a trade of content for legibility and
+  wants a decision, not a patch. Reported off an X quadrant of the Simpsons board: five lines
   crammed into a 40px pitch in the middle, every label stacked outside the
   bundle, and the bottom fifth of the canvas empty.
   It is A1 again, on the other path. `solve()` lays each side out as
