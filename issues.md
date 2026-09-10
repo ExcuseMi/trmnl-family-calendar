@@ -114,6 +114,12 @@ is open.
 
 - [x] **E1. The metro car should read as a train.** Outline it, hollow it
   out, or set the track's initial inside it.
+- [ ] **E1b. One car, not one per line.** Instead of a train on every line,
+  a single high-contrast car marking the current time for the whole board:
+  riding the hour strip, or sitting on the active time position, as the "you
+  are here". Worth trying against what is there now (a car per line, each
+  carrying its line's initial, which says where each person is rather than
+  only what time it is) and keeping whichever reads better on a panel.
 - [ ] **E2. Dynamic date range header.** Single day: `Today · Thu 10 Sep ·
   07:00 - 21:00`. Multi-day: `Thu 10 Sep - Fri 11 Sep` with a small high/low
   and icon per day, side by side.

@@ -77,10 +77,15 @@ function baseHtml() {
 // emitted on one line, so scanning balanced braces from the opening one is
 // exact (and beats a regex that would trip over nested objects).
 function swapMetro(html, metro) {
-  const marker = 'var METRO = ';
-  const at = html.indexOf(marker);
-  if (at < 0) throw new Error('could not find the METRO literal in the built page');
-  const open = html.indexOf('{', at);
+  // Matched loosely on purpose: push.sh minifies the template's script on
+  // the way to the device, which closes the spaces up to `var METRO=`. The
+  // whole reason that minifier leaves identifiers alone is so this suite can
+  // measure the artefact that actually ships, and a marker that only matched
+  // the pretty form would have quietly given that up.
+  const m = /var\s+METRO\s*=\s*/.exec(html);
+  if (!m) throw new Error('could not find the METRO literal in the built page');
+  const at = m.index;
+  const open = html.indexOf('{', at + m[0].length - 1);
   let depth = 0, i = open, inStr = false, esc = false;
   for (; i < html.length; i++) {
     const ch = html[i];
