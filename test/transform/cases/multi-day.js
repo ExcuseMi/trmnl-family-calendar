@@ -1,21 +1,19 @@
 'use strict';
 
-// The day model.
+// The day model, and which day the board draws.
 //
-// This plugin drew one day for its whole life: one `day_start_min`, one
-// `day_end_min`, `forecast_days=1`, and every minute counted from that
-// day's own midnight. A second day is not a second copy of any of that, it
-// is a different shape of number line.
+// The board draws ONE day. A run of days on one axis was built and thrown
+// away: on a panel this size three days of a family's week is three columns
+// of an hour each, and what a wall calendar is for is the day you are in.
 //
-// Everything here is about that shape. Minutes are ABSOLUTE across the run
-// the board may draw: 09:00 on day 1 is 1980, not 540. One number line is
-// what lets a night be a stretch of axis like any other, an event that
-// crosses midnight be one event rather than two halves, and every
-// downstream comparison stay a plain comparison instead of a pair of
-// (day, minute) tuples that have to be unpacked before they can be sorted.
-//
-// How many of those days get DRAWN is not decided here. Transform sends
-// what it has; the client picks against the real canvas.
+// What stayed is the day MODEL, because it is right for its own reasons.
+// Transform gathers today and tomorrow, and every minute it works in is
+// absolute across that pair: 09:00 tomorrow is 1980, not 540. That is what
+// lets a recurrence be evaluated per day, an EXDATE be matched to the day
+// it names, and an event crossing midnight stay one event. The day being
+// SHOWN is then rebased onto its own midnight, so everything downstream
+// sees an ordinary single-day board and none of it has to know which day
+// it is looking at.
 
 module.exports = function (test, h) {
   const { runTransform, icsWithEvents, okText, baseInput, assert, assertEqual } = h;
@@ -45,95 +43,122 @@ module.exports = function (test, h) {
     }, fields || {}));
   }
 
-  test('the payload carries a run of days, not a day', async () => {
+  test('the payload describes exactly the day being drawn', async () => {
     const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
     const { run } = runTransform(net(ics), NOW);
     const r = await run(input());
     assert(Array.isArray(r.metro.days), 'no days array at all');
-    assert(r.metro.days.length >= 1, 'the run is empty');
-    assert(r.metro.days.length <= 3, 'more than three days: past that a day gets less axis '
-      + 'than its own events need, so there is no point fetching it');
+    assertEqual(r.metro.days.length, 1, 'the board draws one day, so it is told about one day');
   });
 
-  test('each day owns a block of the same number line', async () => {
-    // Day n is [n*1440, (n+1)*1440). Anything else and "is this event on
-    // day 2" stops being arithmetic.
-    const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
-    const r = await runTransform(net(ics), NOW).run(input());
-    r.metro.days.forEach((d, i) => {
-      assertEqual(d.index, i, 'day ' + i + ' is misnumbered');
-      assertEqual(d.start_min, i * DAY, 'day ' + i + ' starts at the wrong minute');
-      assertEqual(d.end_min, (i + 1) * DAY, 'day ' + i + ' ends at the wrong minute');
-    });
+  test('the day being drawn is rebased onto its own midnight', async () => {
+    // Whichever day it is. Everything downstream reads minutes from
+    // midnight, and none of it should have to know which midnight.
+    const ics = icsWithEvents([{ start: '20260910T090000Z', end: '20260910T100000Z', summary: 'Tomorrow' }]);
+    const r = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
+    const e = r.metro.items.find((i) => i.type === 'event' && i.title === 'Tomorrow');
+    assert(e, 'tomorrow\'s event is missing on a board set to tomorrow');
+    assertEqual(e.start_min, 9 * 60, 'a 09:00 event on the day being shown should be at 540');
+    assertEqual(r.metro.days[0].start_min, 0, 'the day being shown does not start at zero');
+    assertEqual(r.metro.days[0].end_min, DAY, 'the day being shown is not a day long');
   });
 
-  test('an event tomorrow lands on tomorrow, at tomorrow\'s minutes', async () => {
-    // The whole point. Counted from its own midnight it would be
-    // indistinguishable from the same meeting today.
+  test('the board shows one day, and the setting says which', async () => {
     const ics = icsWithEvents([
       { start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today Meeting' },
       { start: '20260910T090000Z', end: '20260910T100000Z', summary: 'Tomorrow Meeting' },
     ]);
-    const r = await runTransform(net(ics), NOW).run(input());
-    const evs = r.metro.items.filter((i) => i.type === 'event');
-    const today = evs.find((e) => e.title === 'Today Meeting');
-    const tomorrow = evs.find((e) => e.title === 'Tomorrow Meeting');
-    assert(today, 'today\'s event is missing');
-    assert(tomorrow, 'tomorrow\'s event is missing: the board only ever looked at one day');
-    assert(today.start_min < DAY, 'today\'s event is not on day 0: ' + today.start_min);
-    assert(tomorrow.start_min >= DAY && tomorrow.start_min < 2 * DAY,
-      'tomorrow\'s event is at ' + tomorrow.start_min + ', which is not day 1');
-    // and the two are ordered on one line, without unpacking anything
-    assert(tomorrow.start_min > today.start_min,
-      'tomorrow sorts before today, so the number line is not one line');
+    const t = await runTransform(net(ics), NOW).run(input());
+    const titlesT = t.metro.items.filter((i) => i.type === 'event').map((i) => i.title);
+    assertEqual(titlesT, ['Today Meeting'], 'a board set to today drew something else');
+
+    const m = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
+    const titlesM = m.metro.items.filter((i) => i.type === 'event').map((i) => i.title);
+    assertEqual(titlesM, ['Tomorrow Meeting'], 'a board set to tomorrow drew something else');
   });
 
-  test('a weekly meeting recurs on every day of the run', async () => {
-    // It is Wednesday. A Wednesday standup appears on day 0 only; a daily
-    // habit expressed as BYDAY over the week appears on all three.
+  test('a recurrence is evaluated against the day being shown', async () => {
+    // It is Wednesday. A Thursday-only standup is not on today's board and
+    // IS on tomorrow's. Evaluated against today whichever day is drawn, a
+    // board set to tomorrow would show today's meetings at tomorrow's date,
+    // which is the worst of both.
     const ics = icsWithEvents([
-      { start: '20260909T090000Z', end: '20260909T091500Z', summary: 'Standup',
-        rrule: 'FREQ=WEEKLY;BYDAY=WE,TH,FR' },
+      { start: '20260903T090000Z', end: '20260903T091500Z', summary: 'Thursday Standup',
+        rrule: 'FREQ=WEEKLY;BYDAY=TH' },
+    ]);
+    const today = await runTransform(net(ics), NOW).run(input());
+    assertEqual(today.metro.items.filter((i) => i.type === 'event').length, 0,
+      'a Thursday standup was drawn on a Wednesday board');
+    const tomorrow = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
+    const t = tomorrow.metro.items.filter((i) => i.type === 'event');
+    assertEqual(t.length, 1, 'the Thursday standup is missing from Thursday');
+    assertEqual(t[0].start_min, 9 * 60, 'it is not at its own time of day');
+  });
+
+  test('the window stays inside the day being drawn', async () => {
+    const ics = icsWithEvents([
+      { start: '20260909T060000Z', end: '20260909T070000Z', summary: 'Early' },
+      { start: '20260909T220000Z', end: '20260909T230000Z', summary: 'Late' },
     ]);
     const r = await runTransform(net(ics), NOW).run(input());
-    const standups = r.metro.items.filter((i) => i.type === 'event' && i.title === 'Standup');
-    assertEqual(standups.length, 3, 'a Wed/Thu/Fri standup should land on all three days of the run');
-    const dayOf = standups.map((e) => Math.floor(e.start_min / DAY)).sort();
-    assertEqual(dayOf, [0, 1, 2], 'the three occurrences are not one per day');
+    assert(r.metro.day_start_min >= 0, 'the window starts before midnight');
+    assert(r.metro.day_end_min <= DAY, 'the window runs past midnight into a day nobody asked for');
   });
 
-  test('the window may reach past midnight', async () => {
-    // Clamped to 24 * 60 it could never show anything on day 1, whatever
-    // was on it.
+  test('the forecast is the one for the day being drawn', async () => {
+    // A board set to tomorrow that carries today's temperature is wrong
+    // about the only day it is drawing.
+    const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
+    const today = await runTransform(net(ics), NOW).run(input());
+    const tomorrow = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
+    assertEqual(today.metro.header_weather.hi, 18, 'today\'s high is not today\'s');
+    assertEqual(tomorrow.metro.header_weather.hi, 21, 'a board set to tomorrow shows today\'s high');
+  });
+
+  test('the header names the day it is drawing, and calls it Today only when it is', async () => {
+    const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
+    const today = await runTransform(net(ics), NOW).run(input());
+    const tomorrow = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
+    assert(today.metro.date_label !== tomorrow.metro.date_label,
+      'both boards carry the same date: ' + today.metro.date_label);
+    assertEqual(today.metro.title_word, null, 'a board showing today should keep the word Today');
+    assert(tomorrow.metro.title_word, 'a board showing tomorrow still says Today, which names the '
+      + 'wrong day');
+  });
+
+  test('switching over in the evening shows tomorrow, and not before', async () => {
+    // A screen on a wall: in the evening what you need to see is what you
+    // are getting up to, and by then today has already happened.
     const ics = icsWithEvents([
-      { start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' },
-      { start: '20260910T090000Z', end: '20260910T100000Z', summary: 'Tomorrow' },
+      { start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today Meeting' },
+      { start: '20260910T090000Z', end: '20260910T100000Z', summary: 'Tomorrow Meeting' },
     ]);
-    const r = await runTransform(net(ics), NOW).run(input());
-    assert(r.metro.day_end_min > DAY, 'the window stops at midnight (' + r.metro.day_end_min
-      + '), so nothing on day 1 could ever be drawn');
+    const at = (iso) => Date.parse(iso);
+    const board = async (nowIso, fields) => {
+      const when = at(nowIso);
+      const r = await runTransform(net(ics), when).run(
+        baseInput(when, Object.assign({
+          use_demo_data: 'false', lat_lon: '51.05,3.72',
+          config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
+        }, fields)));
+      return r.metro.items.filter((i) => i.type === 'event').map((i) => i.title);
+    };
+    assertEqual(await board('2026-09-09T09:00:00Z', { show_day: 'auto' }), ['Today Meeting'],
+      'the morning board should still be today');
+    assertEqual(await board('2026-09-09T19:00:00Z', { show_day: 'auto' }), ['Tomorrow Meeting'],
+      'the evening board should have switched over');
+    // and the hour is the reader's to set
+    assertEqual(await board('2026-09-09T15:00:00Z', { show_day: 'auto', switch_hour: '14' }),
+      ['Tomorrow Meeting'], 'a switch hour of 14 did not take effect at 15:00');
+    assertEqual(await board('2026-09-09T13:00:00Z', { show_day: 'auto', switch_hour: '14' }),
+      ['Today Meeting'], 'a switch hour of 14 took effect at 13:00');
   });
 
-  test('every day carries its own forecast', async () => {
-    // A two-day board showing one high and low is telling the truth about
-    // one of the days and inventing it for the other.
-    const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
-    const r = await runTransform(net(ics), NOW).run(input());
-    const withWx = r.metro.days.filter((d) => d.weather && d.weather.hi != null);
-    assert(withWx.length >= 2, 'only ' + withWx.length + ' day(s) have a forecast');
-    const his = withWx.map((d) => d.weather.hi);
-    assert(new Set(his).size > 1, 'every day was given the same high (' + his.join(', ')
-      + '), which is one day\'s forecast copied');
-  });
-
-  test('every day is named', async () => {
-    const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
-    const r = await runTransform(net(ics), NOW).run(input());
-    r.metro.days.forEach((d, i) => {
-      assert(d.date_label && d.date_label.length, 'day ' + i + ' has no date label, so a range '
-        + 'header has nothing to print');
-    });
-    const labels = r.metro.days.map((d) => d.date_label);
-    assert(new Set(labels).size === labels.length, 'two days share a label: ' + labels.join(' / '));
+  test('a nonsense switch hour falls back rather than breaking the board', async () => {
+    const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today Meeting' }]);
+    for (const bad of ['', 'evening', '99', '-3']) {
+      const r = await runTransform(net(ics), NOW).run(input({ show_day: 'auto', switch_hour: bad }));
+      assert(Array.isArray(r.metro.items), 'a switch hour of ' + JSON.stringify(bad) + ' broke the payload');
+    }
   });
 };

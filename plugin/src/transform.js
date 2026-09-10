@@ -674,6 +674,11 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     // caller, which cannot know it until the events are in
     window_label: timeLabel12(DAY_LO, extra) + ' ' + timeLabel12(DAY_HI, extra),
     date_label: (extra && extra.dateLabel) || null,
+    // What the header calls the day. "Today" only when it is: a board set
+    // to tomorrow that says Today is naming the wrong day, and the day's
+    // own name is more use than the word "Tomorrow" anyway, because it is
+    // what everyone else in the house will call it.
+    title_word: (extra && extra.todayWord === false && extra.days && extra.days[0] && extra.days[0].weekday) || null,
     now_min: nowMin != null ? nowMin : null, // minutes since local midnight; the client decides whether/where to draw it
     orientation: (extra && extra.orientation) || 'auto', // auto | horizontal | vertical — client picks for auto from the canvas aspect
     hour12: !!(extra && extra.hour12),
@@ -1341,11 +1346,16 @@ function parseIcsDateTime(paramsStr, value, fallbackTz) {
   return c;
 }
 
-// How many days of data transform sends. The client draws one, two or
-// three of them depending on what the canvas can give each one; it can
-// never draw more than it was sent, and sending a fourth would cost a
-// fetch nobody can use.
-var DAY_SPAN = 3;
+// How many days of data transform gathers: today and tomorrow. The board
+// draws ONE of them, chosen by the Show setting.
+//
+// A run of days on one axis was built and thrown away. On a panel this
+// size it does not earn its place: three days of a family's week is three
+// columns of an hour each, and what a wall calendar is for is the day you
+// are in. The day model it needed stays, because it is right for its own
+// reasons: absolute minutes across the run are what let a recurrence be
+// evaluated per day and an event crossing midnight stay one event.
+var DAY_SPAN = 2;
 
 // Civil date arithmetic, deliberately not epoch arithmetic: "the day after
 // the 30th" is a calendar question, and answering it by adding 86400
@@ -2271,6 +2281,43 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
       if (names.length > 1) registry.link(names);
     });
   }
+  // ---- which day the board draws
+  //
+  // One day, chosen by the setting, and everything is rebased onto it so
+  // the rest of the pipeline sees an ordinary single-day board: minutes
+  // from that day's own midnight, one entry in `days`, that day's date on
+  // the header and that day's forecast beside it. Nothing downstream has
+  // to know which day it is looking at, which is the point: "show
+  // tomorrow" is a question about WHICH day, not about how a day is drawn.
+  // Today, tomorrow, or "tomorrow once today is mostly over". The last is
+  // what a screen on a wall actually wants: in the evening, what you need
+  // to see is what you are getting up to, and by then today has already
+  // happened.
+  var showPref = cf(input, 'show_day').trim().toLowerCase();
+  var showIx = 0;
+  if (showPref === 'tomorrow') showIx = 1;
+  else if (showPref === 'auto') {
+    var sh = parseInt(cf(input, 'switch_hour').trim(), 10);
+    if (!isFinite(sh) || sh < 0 || sh > 23) sh = 18;
+    if (nowMin >= sh * 60) showIx = 1;
+  }
+  if (showIx >= days.length) showIx = days.length - 1;
+  var shownDay = days[showIx];
+  var dayLo = showIx * 1440, dayHi = dayLo + 1440;
+  function onShownDay(list) {
+    return list.filter(function (e) {
+      return e.startMin != null && e.startMin >= dayLo && e.startMin < dayHi;
+    }).map(function (e) {
+      var c = Object.assign({}, e);
+      c.startMin = e.startMin - dayLo;
+      if (e.endMin != null) c.endMin = e.endMin - dayLo;
+      return c;
+    });
+  }
+  events = onShownDay(events);
+  sidingEvents = onShownDay(sidingEvents);
+  allDayEvents = allDayEvents.filter(function (e) { return (e.day || 0) === showIx; });
+
   events = mergeAcrossTracks(events);
   sidingEvents = mergeAcrossTracks(sidingEvents);
   linkMerged(events);
@@ -2282,22 +2329,27 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   return buildMetro(
     registry.all(), events,
     (weather && weather.milestones) || [],
-    (weather && weather.header) || { hi: null, lo: null, condition: null, rain_chance: null },
+    // the forecast for the day being shown, not for today: a board set to
+    // tomorrow that carries today's temperature is wrong about the only
+    // day it is drawing
+    (showIx > 0 && weather && weather.perDay && weather.perDay[showIx])
+      || (weather && weather.header)
+      || { hi: null, lo: null, condition: null, rain_chance: null },
     nowMin,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     allDayEvents,
     Object.assign({}, extra, {
-      dateLabel: dateLabel(today, extra.locale),
+      dateLabel: dateLabel(shownDay, extra.locale),
+      // "Today" is only true when it is
+      todayWord: showIx === 0,
       // one entry per day the board MAY draw, each with its own date and
       // its own forecast: a two-day board showing one temperature is
       // wrong about one of the days
-      days: days.map(function (d, i) {
-        return {
-          label: dateLabel(d, extra.locale),
-          weekday: localeDatePart(extra.locale || 'en', 'long', 'weekday', d.y, d.mo, d.d),
-          weather: (weather && weather.perDay && weather.perDay[i]) || null,
-        };
-      }),
+      days: [{
+        label: dateLabel(shownDay, extra.locale),
+        weekday: localeDatePart(extra.locale || 'en', 'long', 'weekday', shownDay.y, shownDay.mo, shownDay.d),
+        weather: (weather && weather.perDay && weather.perDay[showIx]) || null,
+      }],
       sun: (weather && weather.sun) || [], calendarsDown: downNames }),
     sidingEvents
   );

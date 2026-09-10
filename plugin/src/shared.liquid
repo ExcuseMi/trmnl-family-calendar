@@ -67,7 +67,7 @@
         </mask>
         <circle cx="256" cy="256" r="240" mask="url(#metro-mark-cut)"/>
       </svg>
-      <span class="metro-title title title--large font--bold">{{ metro.i18n.today | default: "Today" }}</span>
+      <span class="metro-title title title--large font--bold">{% if metro.title_word %}{{ metro.title_word }}{% else %}{{ metro.i18n.today | default: "Today" }}{% endif %}</span>
       {% if metro.date_label %}<span class="metro-date metro-pill label label--base font--bold">{{ metro.date_label }}</span>{% endif %}
       {%- comment -%}
         The window the board covers ("06:00 23:00") used to be stated as a
@@ -956,20 +956,6 @@
     // decided to draw
     var dayFrom = 0, dayTo = dayCount * 1440;
     if (winLabel) winLabel.textContent = timeLabel(dayFrom) + ' ' + timeLabel(dayTo);
-    // The header names what the board is showing. On a run that is a
-    // RANGE, and the word "Today" goes: a board carrying Tuesday and
-    // Wednesday that says "Today" is naming one of them and ignoring the
-    // other. One day keeps the word, because there it is exactly right.
-    (function nameTheRun() {
-      if (dayCount < 2) return;
-      var first = DAY_RUN[0], last = DAY_RUN[dayCount - 1];
-      var pill = ROOT.querySelector('.metro-date');
-      if (pill && first && last && first.date_label && last.date_label) {
-        pill.textContent = first.date_label + ' \u2013 ' + last.date_label;
-      }
-      var title = ROOT.querySelector('.metro-title');
-      if (title) title.remove();
-    })();
 
     // ---- sidings: convert each track's raw minute ranges to clamped
     // axis-unit segments now that aFor()/axisStart/axisEnd exist.
@@ -2328,6 +2314,51 @@
       colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
       events: eventsDump()
     }));
+
+    // ---- where the day runs at speed -----------------------------------
+    //
+    // The scale is not linear: a quiet minute is worth a fraction of a busy
+    // one, which is what keeps the whole day on the board instead of a
+    // cropped window of it. That is a real thing about the drawing and the
+    // reader has to be able to SEE it, or the morning looks like it lasted
+    // twenty minutes.
+    //
+    // Marked the way a transit map marks a stretch a line takes at speed:
+    // a portal at each end where the scale changes, and a hatch along the
+    // hour strip over the compressed run. On the strip rather than across
+    // the map, because what is compressed is the TIME, and the strip is
+    // where time is drawn; hatching the whole board would say the events
+    // in it were somehow different.
+    (function drawExpressStretches() {
+      if (!horizontal) return;
+      AXIS.segments.forEach(function (sg) {
+        if (sg.rate === 1) return;
+        var a0 = aFor(sg.from), a1 = aFor(sg.to);
+        if (a1 - a0 < 6 * S) return;
+        // the hatch: diagonals across the strip, close enough to read as a
+        // texture and light enough to leave the hour labels legible
+        var step = 7 * S, h = bandThick;
+        for (var x = a0; x < a1; x += step) {
+          var p0 = toXY(x, 0), p1 = toXY(Math.min(x + h, a1), h);
+          var hl = svgEl('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
+            'stroke-width': 1 * S, 'stroke-opacity': 0.35 });
+          hl.style.stroke = INK;
+          hl.setAttribute('data-metro-role', 'express');
+          svg.appendChild(hl);
+        }
+        // the portals: where the scale changes, across the whole map, so
+        // the change is visible on the lines and not only on the strip
+        [a0, a1].forEach(function (at) {
+          if (at <= axisStart + 1 || at >= axisEnd - 1) return;
+          var q0 = toXY(at, bandLo), q1 = toXY(at, crossPx);
+          var pl = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
+            'stroke-width': 1 * S, 'stroke-opacity': 0.28, 'stroke-dasharray': (3 * S) + ' ' + (5 * S) });
+          pl.style.stroke = INK;
+          pl.setAttribute('data-metro-role', 'express');
+          svg.appendChild(pl);
+        });
+      });
+    })();
 
     // ---- midnight: where one day ends and the next begins ---------------
     //

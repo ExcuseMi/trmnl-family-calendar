@@ -44,6 +44,22 @@ custom_fields:
   placeholder: https://cloud.example.com/alex.ics
   description: 'One ICS link per line is the whole setup: each calendar becomes its own line on the map, named after the calendar, and its events sit on that line. Links may be <code>https://</code> or <code>webcal://</code>. Recurring events show if they use <code>RRULE:FREQ=WEEKLY</code> (optionally with BYDAY/UNTIL) or start today.<br /><br />For anything more than that (routing one calendar''s events to several people, sharing an event between them, renaming or hiding things, feeds that need an auth header) paste a JSON config here instead: whatever is in this box is read as JSON if it parses as JSON, and as a list of links if it does not. Build one in <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">the Configuration Editor</a>, which previews the map as it goes and documents every option, or copy one of the demo boards from <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/</a>.'
   optional: true
+- keyname: show_day
+  field_type: select
+  name: Show
+  description: Which day the board draws. Tomorrow is useful on an evening screen, where what you want to see is what you are getting up to.
+  options:
+  - Today: today
+  - Tomorrow: tomorrow
+  - Switch over in the evening: auto
+  default: today
+  optional: true
+- keyname: switch_hour
+  field_type: string
+  name: Switch Over At
+  description: With Show set to switch over, the board moves to tomorrow at this hour. 24-hour clock; blank means 18.
+  placeholder: '18'
+  optional: true
 - keyname: time_format
   field_type: select
   name: Time Format
