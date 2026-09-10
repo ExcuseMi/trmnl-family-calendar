@@ -130,6 +130,31 @@ is open.
   Do it against `test/cross`, not against renders: the fit, the ordering
   and the monotonicity are all arithmetic, and that suite answers in
   milliseconds.
+  **Measured, 2026-09-10.** Seven of the layout suite's failures are one
+  caption sliding most of its own width off its elbow ("1:1 with Priya" is
+  86px from its branch, and the label is 88px wide). They are not a
+  placement bug and three separate attempts to treat them as one all
+  failed, which is what says this is the fix:
+  1. The axis is not the problem. `contentPad` hands 150 minutes of
+     full-rate axis to nothing, and taking it back gives the busy stretch
+     12% more width; that cleared exactly one of the seven and broke three
+     other cases, one of them a correctness test.
+  2. The interchange dodge is not the problem either, though it has its own
+     flaw: it accepts a move measured from where the caption has already
+     been slid to rather than from its branch. Fixing that changed nothing.
+  3. The placer is not choosing badly. `settle` caps the slide with
+     `MAX_SHIFT`, a fraction of the whole axis, so a short caption may ride
+     250px and still be placeable. Making the cap scale with the label
+     (`textLen * 0.55`, the reach the rest of the layout already agrees on)
+     took the seven to one, and cost two "line through a text label"
+     failures instead, because for these seven EVERY attached placement
+     crosses something. By this file's own ranking, a pierced word costs
+     the reader more than a loose caption, so that is a worse board with a
+     better scoreboard, and it was reverted.
+  What is left is that these boards have nowhere to put the label: the
+  lanes on one side are full, so the caption either slides or the branch
+  dives past somebody's words. Both A15 and A17 are about the same missing
+  room, which is why the seven belong to them and not to a placement fix.
 - [ ] **A16. Two commitments back to back should not send the line home in
   between, and the orchestrator should order the tracks so they don't have
   far to go.** Reported off a zoomed morning: Bart and Lisa ride the School
