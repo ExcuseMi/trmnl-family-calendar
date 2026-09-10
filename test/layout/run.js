@@ -145,6 +145,12 @@ function sourceStamp() {
   for (const f of fs.readdirSync(SRC).sort()) {
     parts.push(f + ':' + crypto.createHash('sha1').update(fs.readFileSync(path.join(SRC, f))).digest('hex'));
   }
+  // The yml too, and not only the patch applied to it. It is a tracked file
+  // that a build reads, and a run that raced something else can leave a
+  // fixture in it (see AGENTS.md): without this the cache went on serving
+  // the board that was built while it was wrong, complete with the alert
+  // banner, long after the file itself was put back.
+  parts.push('yml:' + crypto.createHash('sha1').update(fs.readFileSync(YML)).digest('hex'));
   return parts.join('|');
 }
 

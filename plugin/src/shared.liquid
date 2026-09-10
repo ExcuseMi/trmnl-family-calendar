@@ -425,13 +425,19 @@
 
   // Polyline with rounded corners: every interior vertex becomes a short
   // quadratic bend, so a 45° branch reads like a metro line, not a hinge.
+  // `r` is one radius for every corner, or a list of them, one per corner
+  // in order (the last one repeats). A rail leaving a bundle needs both: a
+  // wide sweep where it parts from its own line, and a tight turn where it
+  // flattens into the bundle, because the rails there are a pitch apart and
+  // two wide corners at that spacing round into each other.
   function roundedPath(pts, r) {
     if (pts.length < 2) return '';
     var d = 'M' + pts[0][0] + ',' + pts[0][1];
     for (var i = 1; i < pts.length - 1; i++) {
       var A = pts[i - 1], P = pts[i], B = pts[i + 1];
       var la = Math.hypot(P[0] - A[0], P[1] - A[1]), lb = Math.hypot(B[0] - P[0], B[1] - P[1]);
-      var rr = Math.min(r, la / 2, lb / 2);
+      var want = Array.isArray(r) ? (r[i - 1] == null ? r[r.length - 1] : r[i - 1]) : r;
+      var rr = Math.min(want, la / 2, lb / 2);
       if (rr <= 0.5) { d += ' L' + P[0] + ',' + P[1]; continue; }
       var p1 = [P[0] + (A[0] - P[0]) / la * rr, P[1] + (A[1] - P[1]) / la * rr];
       var p2 = [P[0] + (B[0] - P[0]) / lb * rr, P[1] + (B[1] - P[1]) / lb * rr];
@@ -1058,6 +1064,17 @@
     //
     // A siding of one line's own keeps the old proportions: it is stepping
     // aside, not meeting anybody, and a fixed step is exactly right for it.
+    // Is there a line BETWEEN the two ends of this group that is not in
+    // it? A corridor between neighbours crosses nothing; one that reaches
+    // over somebody has to cross them, and a crossing wants to be square.
+    function crossesBetween(mem) {
+      if (mem.length < 2) return false;
+      var lo = Infinity, hi = -Infinity;
+      mem.forEach(function (q) { lo = Math.min(lo, q._c); hi = Math.max(hi, q._c); });
+      return LEGEND.some(function (q) {
+        return mem.indexOf(q) < 0 && q._c > lo && q._c < hi;
+      });
+    }
     function sidingGeom(p, s) {
       var span = s.a1 - s.a0;
       // A third of the span to turn in, a third running, a third to turn
@@ -1106,9 +1123,37 @@
           tw = (delta * p._sign) < 0 ? -1 : 1;
           // TWO SHAPES ONLY, the same rule every branch on this board
           // follows: a shallow move takes the eased ramp, anything deeper
-          // goes fully vertical at its own minute, nothing in between. A
-          // line dropping out of the bundle's order is always the second.
-          if (rr > rampA) rampA = Math.min(CORNER, span / 3);
+          // goes fully vertical at its own minute, nothing in between.
+          //
+          // WHICH of the two is a question about room, not about being a
+          // corridor. A line dropping into a bundle used to take the
+          // vertical always, because a drop is usually deep and an event
+          // is usually short. Where the event is long enough to hold a
+          // ramp as long as the move is deep, the ramp is the better
+          // drawing: the line leans into the bundle and leans out again,
+          // which is what the shape means, and it is the shape a siding of
+          // its own would get for the same move.
+          if (rr > rampA) {
+            // The eased ramp is for the SIMPLE corridor and nothing else:
+            // exactly two lines, next to each other with nobody in
+            // between, and an event long enough to hold a turn as long as
+            // the move is deep. Two lines leaning together and apart again
+            // is a shape a reader can follow at a glance; three or more,
+            // or a pair with somebody between them, is a comb, and a comb
+            // wants its verticals so the rungs stay legible and so the
+            // drops that cross a line cross it square rather than slicing
+            // through it at a shallow angle.
+            var pair = mem.length === 2 && !crossesBetween(mem);
+            var eased = Math.min(span / 3, rr * 1.2);
+            rampA = (pair && eased >= rr * 0.8) ? eased
+              // Otherwise the vertical, and its turn is a proper ELBOW: a
+              // corner radius of run where the event can spare it, so the
+              // line turns through a quarter circle instead of breaking at
+              // a point. span/3 gave a shorter turn than the radius the
+              // rest of the map rounds its corners with, which read as a
+              // kink on anything under an hour.
+              : Math.min(CORNER, span * 0.45);
+          }
           // STAGGERED, so the drops nest instead of stacking on one minute.
           // The line nearest the bundle turns first and the one furthest
           // from it turns last, which means every vertical sits to the
@@ -2619,8 +2664,24 @@
       // bands: a board too shallow to spare the room keeps the tighter one
       // rather than lose a line to make an exchange handsome.
       measureDemand();
-      var re = solveCross([{ a: w.a, b: w.b, px: TRACK_STEP * 2.4 + NODE_R * 2 }]);
-      if (re && !re.packed) { cross = re; applyCross(); }
+      // Wide enough to CROSS in, plus a lane's worth on top, because the
+      // gap two lines exchange places in is a gap like any other: with the
+      // room, one of them can hang a rung in it (A15) and an event can sit
+      // between the two of them. Booked at crossing-width alone, nothing
+      // ever could, which is why no board has shown one.
+      //
+      // Kept only if it costs nothing: the wider gap comes out of the same
+      // depth every other band is drawn in, so if paying for it means the
+      // solver hands out fewer rungs, the tighter answer was the better
+      // board and this one is thrown away.
+      function rungsOf(sol) { return sol ? sol.lanes.A.length + sol.lanes.B.length : -1; }
+      var want = TRACK_STEP * 2.4 + NODE_R * 2 + laneStep;
+      var re = solveCross([{ a: w.a, b: w.b, px: want }]);
+      if (!re || re.packed || rungsOf(re) < rungsOf(cross)) {
+        // ...and if it does cost, fall back to just enough to cross in
+        re = solveCross([{ a: w.a, b: w.b, px: TRACK_STEP * 2.4 + NODE_R * 2 }]);
+      }
+      if (re && !re.packed && rungsOf(re) >= rungsOf(cross)) { cross = re; applyCross(); }
       // and now the positions are final, so where the lines actually go is
       // read off them rather than off the answer they were planned against
       setWeave();
@@ -4280,13 +4341,30 @@
         // on top stays whole. The trunk is already painted by the time a
         // branch is drawn over it, so a gap in the branch is the whole
         // trick — what shows through the gap is the trunk itself.
+        // WHERE IT PARTS FROM ITS OWN LINE IS A CURVE. The rail used to
+        // start ON the trunk and go straight down, so the junction was a
+        // T: a right angle with nothing rounding it, which is the one
+        // corner on this board that was not a corner. It now runs a short
+        // way ALONG its own line first and sweeps off, which is what a
+        // junction looks like where a real line divides.
+        //
+        // The lead is drawn in the line's own stroke on top of its own
+        // trunk, so it costs nothing visually: it exists to give the bend
+        // something to bend from (roundedPath can only fillet an interior
+        // vertex, and without the lead the departure is an endpoint).
+        var topBend = Math.max(bend, CORNER);
+        var lead = topBend * 2;
         var segs = tunnelSegments(r.dropA, fromC, r.rungC, r.q, e);
         segs.forEach(function (sg, si) {
           var last = si === segs.length - 1;
           var pts = last
             ? [toXY(r.dropA, sg[0]), toXY(r.dropA, r.rungC), toXY(end, r.rungC)]
             : [toXY(r.dropA, sg[0]), toXY(r.dropA, sg[1])];
-          var el = svgEl('path', { d: roundedPath(pts, last ? bend : 0) });
+          var radii = last ? [topBend, bend] : [topBend];
+          // only the piece that actually starts on the trunk gets the lead
+          if (si === 0) pts.unshift(toXY(r.dropA - lead, fromC));
+          else radii = last ? bend : 0;
+          var el = svgEl('path', { d: roundedPath(pts, radii) });
           el.setAttribute('data-metro-role', 'branch');
           el.setAttribute('data-metro-owner', r.q.key);
           // which bundle this rail belongs to, so the suite can ask about
@@ -4298,13 +4376,17 @@
           // were there and never which
           paintLine(el, r.q, S, svg, null);
         });
-        // where it leaves its own line, and where its rail stops
-        var dot = svgEl('circle', { cx: toXY(r.dropA, fromC)[0], cy: toXY(r.dropA, fromC)[1],
-          r: markOut(r.q, NODE_R * 0.62), 'stroke-width': NODE_STROKE * 0.8 });
-        dot.style.stroke = colorFor(r.q.hue); dot.style.fill = PAPER;
-        dot.setAttribute('data-metro-role', 'stop-start');
-        dot.setAttribute('data-metro-owner', r.q.key);
-        svg.appendChild(dot);
+        // WHERE IT LEAVES ITS OWN LINE IS A JUNCTION, NOT A STOP. It used
+        // to carry a hollow dot, the same mark a branch gets at the start
+        // of an event, and on a bundle that read as four stations: the
+        // drops are staggered so the rails can nest, so one seven o'clock
+        // dinner showed four dots at four different minutes, none of which
+        // is when it starts. Nobody stops where a line divides.
+        //
+        // What is left is the turn itself, and the turn is a rounded elbow
+        // (`bend`, above), which is what a junction looks like on a transit
+        // map. The event still has its end tick, and the rails running side
+        // by side are what say the thing is shared.
         if (e.end_min > e.start_min) {
           var half = markOut(r.q, NODE_R);
           var t0 = toXY(end, r.rungC - half), t1 = toXY(end, r.rungC + half);
