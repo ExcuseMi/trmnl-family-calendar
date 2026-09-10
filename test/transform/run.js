@@ -71,6 +71,7 @@ function icsWithEvents(events) {
     if (e.recurrenceId) s += 'RECURRENCE-ID:' + e.recurrenceId + '\r\n';
     s += 'DTSTART:' + e.start + '\r\nDTEND:' + e.end + '\r\n';
     if (e.rrule) s += 'RRULE:' + e.rrule + '\r\n';
+    if (e.exdate) s += 'EXDATE:' + e.exdate + '\r\n';
     s += 'SUMMARY:' + e.summary + '\r\n';
     if (e.description) s += 'DESCRIPTION:' + e.description + '\r\n';
     if (e.status) s += 'STATUS:' + e.status + '\r\n';

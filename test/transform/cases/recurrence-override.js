@@ -1,5 +1,18 @@
 module.exports = function (test, h) {
-  const { runTransform, icsWithEvents, okText, baseInput, eventItems, assertEqual } = h;
+  const { runTransform, icsWithEvents, okText, fail, baseInput, eventItems, assert, assertEqual } = h;
+
+  // a board with one calendar on it and no weather, which is all the
+  // recurrence cases need
+  function net(ics) {
+    return async (url) => (String(url).indexOf('api.open-meteo.com') >= 0 ? fail(500) : okText(ics));
+  }
+  function input(nowMs) {
+    return baseInput(nowMs, {
+      use_demo_data: 'false',
+      config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
+    });
+  }
+  const titles = (r) => r.metro.items.filter((i) => i.type === 'event').map((i) => i.title);
 
   // "We also have standup twice" — an Outlook-style export where a weekly
   // series has a same-UID RECURRENCE-ID override for one occurrence (an
@@ -42,5 +55,51 @@ module.exports = function (test, h) {
     const cfg = JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] });
     const r = await runTransform(fetchImpl, MONDAY).run(baseInput(MONDAY, { config_json: cfg }));
     assertEqual(eventItems(r.metro).map((e) => e.title), ['Standup'], 'today\'s own occurrence is untouched by an override targeting a different date');
+  });
+
+  // ---- occurrences the series does NOT have -------------------------
+  //
+  // Both of these were reported the same way: "why does the board show a
+  // meeting that is not in my calendar?". Both were the same shape of
+  // mistake, reading a recurrence rule as if it said less than it does,
+  // and both got three times as visible the day the board started drawing
+  // three days instead of one.
+
+  test('a fortnightly meeting does not happen every week', async () => {
+    // FREQ=WEEKLY;INTERVAL=2 read as plain weekly fires on the off weeks
+    // too. The ceremonies most likely to carry an INTERVAL are exactly the
+    // ones a work calendar is full of: sprint reviews, retros, 1:1s.
+    //
+    // The series starts Thu 10 Sep 2026 and runs fortnightly, so it is on
+    // the 10th and the 24th, and NOT on the 17th.
+    const ics = icsWithEvents([
+      { start: '20260910T100000Z', end: '20260910T110000Z', summary: 'Sprint Review',
+        rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=TH' },
+    ]);
+    const onWeek = await runTransform(net(ics), Date.parse('2026-09-10T08:00:00Z'))
+      .run(input(Date.parse('2026-09-10T08:00:00Z')));
+    assert(titles(onWeek).indexOf('Sprint Review') >= 0,
+      'the fortnightly meeting is missing from the week it is actually on');
+
+    const offWeek = await runTransform(net(ics), Date.parse('2026-09-17T08:00:00Z'))
+      .run(input(Date.parse('2026-09-17T08:00:00Z')));
+    assertEqual(titles(offWeek).filter((t) => t === 'Sprint Review').length, 0,
+      'a fortnightly meeting was drawn on its off week');
+  });
+
+  test('an occurrence taken out of a series is not drawn', async () => {
+    // A standup you deleted for one day is still in the file: the rule
+    // fires and an EXDATE says not this time. Ignored, the board shows a
+    // meeting the calendar says is not happening.
+    const ics = icsWithEvents([
+      { start: '20260910T093000Z', end: '20260910T094500Z', summary: 'Standup',
+        rrule: 'FREQ=WEEKLY;BYDAY=TH,FR', exdate: '20260911T093000Z' },
+    ]);
+    const r = await runTransform(net(ics), Date.parse('2026-09-10T08:00:00Z')).run(input(Date.parse('2026-09-10T08:00:00Z')));
+    const standups = r.metro.items.filter((i) => i.type === 'event' && i.title === 'Standup');
+    const days = standups.map((e) => Math.floor(e.start_min / 1440));
+    assert(days.indexOf(0) >= 0, 'Thursday\'s standup is missing');
+    assertEqual(days.indexOf(1), -1, 'Friday\'s standup was drawn, and the calendar says it '
+      + 'was taken out of the series');
   });
 };

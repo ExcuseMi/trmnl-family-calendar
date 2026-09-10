@@ -1379,13 +1379,29 @@ function weeklyRruleMatchesToday(rruleValue, dtstartCivil, todayY, todayMo, toda
     if (um && todayOrdinal > Date.UTC(+um[1], +um[2] - 1, +um[3])) return false;
   }
 
+  // INTERVAL. A fortnightly meeting is FREQ=WEEKLY;INTERVAL=2, and read as
+  // plain weekly it fires on the off weeks too. That is how a sprint review
+  // nobody had scheduled turned up on the board: the ceremonies most likely
+  // to carry an INTERVAL are exactly the ones a work calendar is full of.
+  // Weeks are counted from Monday (WKST defaults to MO) so that a Friday
+  // occurrence is in the same week as the Monday its series started on.
+  var interval = Math.max(1, parseInt(parts.INTERVAL, 10) || 1);
+  if (interval > 1) {
+    var DAY_MS_R = 24 * 60 * 60 * 1000;
+    var startWd = (new Date(startOrdinal).getUTCDay() + 6) % 7;
+    var startMonday = startOrdinal - startWd * DAY_MS_R;
+    var todayMonday = todayOrdinal - todayWeekday * DAY_MS_R;
+    var weeksApart = Math.round((todayMonday - startMonday) / (7 * DAY_MS_R));
+    if (weeksApart % interval !== 0) return false;
+  }
+
   if (parts.BYDAY) {
     var days = parts.BYDAY.split(',');
     return days.indexOf(WD_NAMES[todayWeekday]) !== -1;
   }
   // No BYDAY: recurs weekly on DTSTART's own weekday.
-  var startWeekday = (new Date(startOrdinal).getUTCDay() + 6) % 7; // 0=Mon
-  return startWeekday === todayWeekday;
+  var startWeekday2 = (new Date(startOrdinal).getUTCDay() + 6) % 7; // 0=Mon
+  return startWeekday2 === todayWeekday;
 }
 
 // `includeDescription` (a per-calendar config flag, off by default) is the
@@ -1432,6 +1448,18 @@ function parseIcs(text, tz, days, includeDescription) {
     else if (key === 'RRULE') cur.rrule = value;
     else if (key === 'UID') cur.uid = value.trim();
     else if (key === 'RECURRENCE-ID') cur.recurrenceId = parseIcsDateTime(params, value, tz);
+    // EXDATE: the occurrences of a series that were taken OUT of it. A
+    // standup you deleted for one day is still in the file, as a rule that
+    // fires and a date that says not this time; without this the board
+    // shows a meeting the calendar says is not happening. Comma-separated
+    // and repeatable, so both forms are collected.
+    else if (key === 'EXDATE') {
+      value.split(',').forEach(function (v) {
+        var ex = parseIcsDateTime(params, v.trim(), tz);
+        if (!ex) return;
+        (cur.exdates = cur.exdates || {})[ex.y + '-' + ex.mo + '-' + ex.d] = true;
+      });
+    }
   });
 
   var DAY_MS = 24 * 60 * 60 * 1000;
@@ -1476,6 +1504,7 @@ function parseIcs(text, tz, days, includeDescription) {
           && weeklyRruleMatchesToday(ev.rrule, ev.dtstart, di.d.y, di.d.mo, di.d.d, di.weekday, tz);
         if (!isDirectSpan && !isWeeklySpan) return;
         if (!ev.recurrenceId && ev.uid && overriddenDates[ev.uid + '|' + di.key]) return;
+        if (ev.exdates && ev.exdates[di.key]) return;   // taken out of the series
         allDay.push({ title: ev.title, desc: ev.desc || '', status: ev.status || '', day: dayIx });
       });
       return;
@@ -1494,6 +1523,7 @@ function parseIcs(text, tz, days, includeDescription) {
       if (!isDirectHit && !isWeeklyHit) return;
       // superseded by an override on THAT day
       if (!ev.recurrenceId && ev.uid && overriddenDates[ev.uid + '|' + di.key]) return;
+      if (ev.exdates && ev.exdates[di.key]) return;   // taken out of the series
       // absolute on the run of days: the time of day it lands at, plus the
       // whole days before it
       var startMin = dayIx * 1440 + ev.dtstart.h * 60 + ev.dtstart.mi;
