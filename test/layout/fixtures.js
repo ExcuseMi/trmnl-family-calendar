@@ -249,6 +249,21 @@ const sevenLines = Object.assign(base({
   ],
 }), { legend: SEVEN });
 
+// A day with two entries that have no duration: a reminder saved at a
+// moment, and a shared one at the same minute for several people. Real
+// calendars are full of these (a birthday, an invitation accepted with no
+// end, anything a phone saved as "now"), and every part of the drawing that
+// reasons about a span has to survive one that is zero minutes long.
+const momentDay = base({
+  day_start_min: 420, day_end_min: 1260, window_label: '7am 9pm', now_min: 600,
+  items: [
+    ev('Bin Day', 'work', 480, 480),
+    ev('Standup', 'work', 540, 555, { track_width: 4 }),
+    ev('Family Dinner', 'alex', 1110, 1110, { co_owners: ['sam', 'kids'], side: 'right', hue: 'orange-40', track_offset: 10 }),
+    ev('Swim', 'sam', 900, 960, { side: 'right', hue: 'green-40', track_style: 'dashed', track_offset: 20 }),
+  ],
+});
+
 module.exports = [
   { name: 'busy-day', metro: busyDay },
   { name: 'all-day-every-track', metro: allDayEveryTrack },
@@ -260,4 +275,5 @@ module.exports = [
   { name: 'five-lines', metro: fiveLines },
   { name: 'crew-day', metro: crewDay },
   { name: 'seven-lines', metro: sevenLines },
+  { name: 'moment-day', metro: momentDay },
 ];

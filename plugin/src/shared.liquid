@@ -1021,8 +1021,14 @@
       if (showTime) {
         var tm = labelRow('metro-time-tag ' + tagClass + ' ' + quietText());
         // an en dash between them: two times side by side with only a space
-        // read as one string of digits, not as a span
-        tm.textContent = timeLabel(e.start_min) + ' \u2013 ' + timeLabel(e.end_min);
+        // read as one string of digits, not as a span.
+        // A moment gets ONE time. Calendars really do carry entries whose
+        // end is their start (a reminder, a birthday, an invitation saved
+        // with no duration), and "6:30pm - 6:30pm" is not a span, it is the
+        // same time printed twice with a dash between it and itself.
+        tm.textContent = e.end_min > e.start_min
+          ? timeLabel(e.start_min) + ' \u2013 ' + timeLabel(e.end_min)
+          : timeLabel(e.start_min);
         if (!horizontal) { tm.style.maxWidth = colW + 'px'; tm.style.overflow = 'hidden'; }
         box.appendChild(tm);
       }
@@ -2955,7 +2961,7 @@
         // rail rather than by one rail per line: drawn as a bundle of five
         // parallel rails it was a dense comb of near-identical strokes that
         // read as a smudge, not as five lines arriving somewhere.
-        if (e._laneDist) {
+        if (e._laneDist && e.end_min > e.start_min) {
           var laneC0 = e._drawnLaneC != null ? e._drawnLaneC : spineC + e._sign * e._laneDist;
           // The capsule spans the LINES it joins and stops there. Stretched
           // on down to the rail it feeds it became a long pill reaching
@@ -2966,6 +2972,13 @@
           // and the same end mark every other rail gets. A shared event's
           // rail was ending in a plain round cap while every other rail on
           // the board ended in a tick — the one place the vocabulary broke.
+          //
+          // A moment has no end to mark, and drawing one is worse here than
+          // on a solo rail: a shared event's rail is placed by its label
+          // rather than by its length, and a backward one runs away from
+          // its own minute, so the tick for an end that does not exist was
+          // landing 58px clear of the rail it belonged to with nothing
+          // under it.
           var sh = sharedRailWidth(p) * S * weightScale / 2 + NODE_R * 1.15 * 0.85;
           var q0 = toXY(e._endA, laneC0 - sh), q1 = toXY(e._endA, laneC0 + sh);
           var etick = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
@@ -3073,8 +3086,16 @@
         }
         // always, however short the event: the start is a dot and the end a
         // tick, two different shapes, so they read as two marks even when
-        // they nearly touch
-        if (e._endA >= lo - 1 && e._endA <= hi + 1) {
+        // they nearly touch.
+        //
+        // Unless there is no end to mark. A calendar entry whose end is its
+        // start is a MOMENT, not a short event: a bin day, a birthday, an
+        // invitation saved with no duration. Two marks at one point say the
+        // line called there and left again, and the tick lands on top of
+        // the dot to say it. One mark is the truth, and it is the same
+        // answer the caption gives when it prints one time instead of the
+        // same time twice.
+        if (e.end_min > e.start_min && e._endA >= lo - 1 && e._endA <= hi + 1) {
           var tc = spurC(e._endA);
           var half = markOut(p, NODE_R);
           var t0 = toXY(e._endA, tc - half), t1 = toXY(e._endA, tc + half);
