@@ -43,23 +43,36 @@ module.exports = function (test, h) {
   // fixes the tightest version — reorders long runs badly enough to cost
   // more events than it saves.
   const OVERLAP_KNOWN = {};
-  // Three fixtures came off this list when a pierce stopped scoring cheaper
-  // than sliding a label. The one left is geometry, not scoring.
-  // On the 800x480 panel the whole map is half the size but the text is
-  // not: a lane is about a line-height deep, so a branch diving to the next
-  // lane out passes within a few px of the label already sitting there. The
-  // pierces below are all 6-10px grazes of that kind, and the only cures
-  // are fewer lanes (fewer events shown) or smaller text than the panel can
-  // carry. Listed so they cannot get worse without the suite saying so.
+  // Emptied: the last entry was two 15-minute meetings 20 minutes apart on
+  // one line, where the second had to climb through the first one's label.
+  // The rule that hands the inner lane to the LATER of a tight pair missed
+  // them by half a pixel, because it measured the gap between the rings
+  // without the corner radius the diagonal starts before its ring.
+  // What is left is the 800x480 panel, and it is one situation with two
+  // faces. That board has about a line-height of depth per line, so as soon
+  // as a couple of lines carry a station the bands do not fit and the
+  // layout falls back to PACKING: one lane ladder shared by the whole side,
+  // which is exactly the trade the fallback exists to make — packing still
+  // reads correctly there, just with the crossings bands would prevent. A
+  // branch reaching a rung then passes a neighbouring line's caption, and a
+  // station's kink is deeper than the gap between two packed tracks, so its
+  // caption lands on the next line's rail.
+  //
+  // busy-day is the one that is NOT packed: there a single interchange bar
+  // crosses one caption, and the layout does try the alternative — the
+  // second placement pass, which knows where the bars landed, scores it at
+  // a dropped event against a crossed caption, and keeps the caption.
+  //
+  // Listed per fixture so none of them can get worse without the suite
+  // saying so.
   const PIERCE_KNOWN_VIEW = {
-    'busy-day/og-landscape': 'a 480px-deep board packs four lines and three lanes a side: Work\'s rail runs under Alex\'s name, and one kids branch grazes another kids label by 8px.',
-    'all-day-every-track/og-landscape': 'same packing, with every line kinked out for an all-day band on top of it: four branches graze a neighbouring label by 6-8px.',
-    'waypoint-station/og-landscape': 'same packing again, plus a waypoint caption: five 6-8px grazes.',
-    'five-lines/og-landscape': 'five lines on a 480px-deep board leaves each of them about a line-height of band: three branches graze a neighbouring label by 7-8px.',
+    'busy-day/og-landscape': 'not packed: the whole-family interchange at 7pm drops its bar through "Piano Lesson", whose lane it has to cross to reach its own. The second placement pass costs a dropped event to avoid it, which is the worse board.',
+    'all-day-every-track/og-landscape': 'packed: every line carries an all-day band, so the bands cannot fit and the side shares one lane ladder. Three branches cross a neighbouring caption, and a 32px station kink on a 10px pitch puts three all-day captions on the next line\'s rail.',
+    'waypoint-station/og-landscape': 'packed, same as above with one waypoint instead of four all-day bands: three branch crossings and one caption on a neighbouring rail.',
+    'five-lines/og-landscape': 'packed: five lines on a 480px-deep board leave no room for bands, so three branches cross a neighbouring caption on the shared ladder.',
   };
-  const PIERCE_KNOWN = {
-    'tight-pair': 'two 15-minute meetings 20 minutes apart on one line: the second has to reach a deeper lane, and its branch now drops at its own minute rather than easing in from before, so it passes through the first label — which is 20x wider than the gap between them at any text size. The alternatives are a label 500px from the rail it belongs to, or a branch that lies about when the meeting starts.',
-  };
+  const PIERCE_KNOWN = {};
+
 
   const OVERLAP_TOL = 2;
   for (const f of fixtures) {

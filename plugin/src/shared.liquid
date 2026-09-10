@@ -993,6 +993,12 @@
     recomputeTrackDists();
 
     var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped, demand, alloc, sep, packedFallback;
+    // An interchange is drawn as a heavy bar straight down the board at one
+    // minute: the capsule across the lines, then the spur dropping from it
+    // to its own lane. WHICH lanes that bar crosses is not known until the
+    // lanes are solved, so it cannot be an obstacle on the first pass — the
+    // layout is run twice, and the second run knows where the bars landed.
+    var barBlocks = { A: [], B: [] };
     var lastPlaceCrossings = 0; // set by placeSide: how many placements had to accept a crossing
     var lastPlaceDrift = 0;     // ...and how many ended up far from the rail they name
     function layoutAttempt(tier) {
@@ -1049,7 +1055,15 @@
       // more events than it saves crossings.
       for (var si = 0; si < evs.length - 1; si++) {
         var e0 = evs[si], e1 = evs[si + 1];
-        if (e0._laneOwner === e1._laneOwner && e1._nodeA - e0._nodeA < LANE_BASE) { evs[si] = e1; evs[si + 1] = e0; }
+        // The measure includes the CORNER, because the diagonal starts a
+        // corner radius before the ring: two meetings 32px apart with a
+        // 31.5px LANE_BASE missed this by half a pixel and the second one
+        // climbed straight through the first one's label.
+        // Packed, the ladder belongs to nobody, so the pair does not have to
+        // be one track's: any two rings that close together compete for the
+        // same rung whoever owns them.
+        var pair = packedFallback || e0._laneOwner === e1._laneOwner;
+        if (pair && e1._nodeA - e0._nodeA < LANE_BASE + CORNER) { evs[si] = e1; evs[si + 1] = e0; }
       }
       var lanes = [];
       function laneDist(k) { return slots[k].dist; }
@@ -1595,8 +1609,8 @@
       return { A: A, B: B, needA: needOf('A', A.extent), needB: needOf('B', B.extent), packed: true };
     })() : solve(step, sep);
     recomputeTrackDists();
-    usedA = placeSide('A', sol.A.slots, obstacles.A);
-    usedB = placeSide('B', sol.B.slots, obstacles.B);
+    usedA = placeSide('A', sol.A.slots, obstacles.A.concat(barBlocks.A));
+    usedB = placeSide('B', sol.B.slots, obstacles.B.concat(barBlocks.B));
     needA = sol.needA; needB = sol.needB;
     // How close the tracks ended up. A line drawn at full weight when the
     // next one is a track-step away turns the map into stripes, so the
@@ -1633,7 +1647,53 @@
     // sits by its own rail nearly as bad, a diagonal through a label or a
     // slid elbow ugly, a backward branch mildly so.
     var lost = (tier.time ? 0 : 200) + (tier.loc ? 0 : 15);
-    return dropped * 1000 + lost + adrift * 45 + crossings * 40 + slides * 15 + backwards * 10;
+    return dropped * 1000 + lost + adrift * 45 + (crossings + barPierces()) * 40 + slides * 15 + backwards * 10;
+    }
+
+    // Where each interchange bar ends up, as an obstacle for the next run:
+    // it runs from the bundle out to its own lane at one minute, so it
+    // blocks every rung inside that one.
+    function collectBars() {
+      var out = { A: [], B: [] };
+      visible.forEach(function (e) {
+        if (e._dropped || e._involved.length < 2 || !e._laneDist) return;
+        var w = Math.max(e._p.line_width, 4) * 1.5 * S / 2 + 3 * S;
+        out[e._sideKey].push({ a0: e._nodeA - w, a1: e._nodeA + w, distMax: e._laneDist - LINE_GAP, bar: e });
+      });
+      return out;
+    }
+    // How many captions an interchange bar is currently written across. The
+    // diagonal crossings the lane solver already scores do not include it —
+    // the bar is drawn from the solved positions, after the fact — so
+    // without this the run that avoids one scores no better than the run
+    // that does not.
+    function barPierces() {
+      var n = 0;
+      var bars = collectBars();
+      visible.forEach(function (e) {
+        if (e._dropped || e._textStart == null) return;
+        var row = bars[e._sideKey];
+        for (var i = 0; i < row.length; i++) {
+          var b = row[i];
+          if (b.bar === e || e._laneDist > b.distMax) continue;
+          if (e._textStart < b.a1 && b.a0 < e._textStart + e._textLen) { n++; break; }
+        }
+      });
+      return n;
+    }
+    // One layout, then a second one that knows where the first put the
+    // bars. The better of the two wins, and the winner is drawn again so
+    // the DOM matches the score that was chosen.
+    function attempt(tier) {
+      barBlocks = { A: [], B: [] };
+      var q1 = layoutAttempt(tier);
+      var bars = collectBars();
+      if (!bars.A.length && !bars.B.length) return q1;
+      barBlocks = bars;
+      var q2 = layoutAttempt(tier);
+      if (q2 <= q1) return q2;
+      barBlocks = { A: [], B: [] };
+      return layoutAttempt(tier);
     }
 
     // Try the biggest text first and step down only while it improves the
@@ -1641,12 +1701,12 @@
     // bigger text).
     var bestTier = null, bestQ = Infinity;
     for (var ti = 0; ti < tiers.length; ti++) {
-      var q = layoutAttempt(tiers[ti]);
+      var q = attempt(tiers[ti]);
       if (q < bestQ) { bestQ = q; bestTier = ti; }
       if (q === 0) break;
       if (ti > bestTier + 1) break; // two smaller steps without improvement — stop
     }
-    if (bestTier !== ti) layoutAttempt(tiers[bestTier]);
+    if (bestTier !== ti) attempt(tiers[bestTier]);
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
     function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA)]; }); }
     canvas.setAttribute('data-metro-debug', JSON.stringify({
