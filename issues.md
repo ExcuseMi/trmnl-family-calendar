@@ -130,6 +130,49 @@ is open.
   Do it against `test/cross`, not against renders: the fit, the ordering
   and the monotonicity are all arithmetic, and that suite answers in
   milliseconds.
+- [ ] **A16. Two commitments back to back should not send the line home in
+  between, and the orchestrator should order the tracks so they don't have
+  far to go.** Reported off a zoomed morning: Bart and Lisa ride the School
+  Run bundle at 08:00, drop all the way back to their own rails, and
+  immediately dive out again for the School Day siding at 08:30. The return
+  is drawn, costs two ramps and a crossing, and says nothing: nobody went
+  home for those thirty minutes.
+  Two halves, and they want doing in this order.
+  **Ordering.** The machinery is already there and is simply not being told
+  about time. `registry.link(names, weight)` takes a weight and
+  `affinityChain` lays the tracks out as one chain, strongest link first,
+  so the board order genuinely optimises for who belongs beside whom. But
+  `linkMerged` adds a flat 1 per shared event, so two people sharing the
+  school run at 08:00 and the school day at 08:30 count exactly as much as
+  two people sharing one thing at opposite ends of the day. Weight a link
+  by how close in time the shared things are, so consecutive ones pull
+  harder. One function, and it is declared as affinity rather than baked
+  into the drawing.
+  **Connecting through.** When the gap between two of a track's own
+  commitments is too small to return into, run the rail straight from one
+  to the next instead of rejoining the trunk and leaving again.
+  The threshold is a DRAWN DISTANCE, not a clock reading. "Less than an
+  hour" was the first instinct and it is the one thing to get right here:
+  since compression landed an hour is not a width. An hour of the small
+  hours is a handful of pixels and an hour of a busy morning is wide, so a
+  fixed hour would connect through a gap that is plainly visible on an
+  expanded stretch and refuse to connect two things three minutes apart
+  inside a compressed one, which is backwards. Ask instead whether there is
+  room to come back: if the gap is narrower than the two ramps a return and
+  a fresh departure would take, run through. That scales itself, needs no
+  constant to tune per board, and is the same reasoning `sidingGeom`
+  already uses when it caps a ramp at `span / 3`. It also keeps the rule
+  honest, because the only gaps it hides are ones too small to have drawn.
+  Two things it runs into. A connection between a bundle above the trunk
+  and a siding below it crosses the track's own line, so it buys a tunnel
+  by the crossing rule in `plugin/AGENTS.md` (a rail crossing a line it does
+  not belong to is broken for it): prefer a connection that stays on one
+  side and take the tunnel only when there isn't one. And it wants A15
+  first, because a track that can carry events on both sides lets the
+  orchestrator put the school run on the same side as the school day,
+  where the connection is
+  short and crosses nothing. Landing this first means it spends its time
+  fighting the side assignment.
 
 - [~] **A14. The cross-axis solver gives up too early and then wastes what
   it saved.** Two of the three parts are done. The solver is a pure
