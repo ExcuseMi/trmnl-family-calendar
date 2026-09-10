@@ -50,7 +50,7 @@ is open.
   each other.** With the car no longer a solid block the junction reads, but
   the branch still leaves tangent to the corner rather than out of it, and a
   spike of the flat rail pokes out from under the kink.
-- [ ] **A11. Every "small view" in the layout suite was rendering full
+- [x] **A11. Every "small view" in the layout suite was rendering full
   size.** Fixed in the harness (a half or a quadrant is a slot inside the
   screen, not a smaller screen). Left here as a note: any conclusion drawn
   from a small-view test before this is worth re-checking.
@@ -111,6 +111,16 @@ is open.
 - [x] **D6. Optimise the logo SVG per colour variant.**
 
 ## E. New features
+
+> **E2, E3 and E4 assume a multi-day board, and this plugin has never drawn
+> one.** There is one day in the payload (`day_start_min` / `day_end_min`),
+> the weather is fetched with `forecast_days: 1`, and the template has no
+> notion of a second day at all. A date RANGE header, a midnight terminal
+> and a sleeper event spanning the night are all views of a thing that does
+> not exist yet, so the day model comes first and is the largest single
+> piece of work on this list. E4's axis compression is the exception: the
+> scale already compresses quiet hours (`aFor`, EXPRESS_RATE), so the night
+> express is an extension of something real.
 
 - [x] **E1. The metro car should read as a train.** Outline it, hollow it
   out, or set the track's initial inside it.
