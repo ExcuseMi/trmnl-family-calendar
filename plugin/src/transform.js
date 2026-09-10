@@ -965,6 +965,10 @@ function buildFromDemo(weather, nowMin, extra) {
     // a run, so the client takes the same path for it as for three.
     Object.assign({}, extra || {}, {
       days: (extra && extra.days) || [{ label: (extra && extra.dateLabel) || null, weekday: null, weather: null }],
+      // The offline fallback is always today, and it is always subject to
+      // the clock: the demo forecast is fixed, so its wettest hour is in
+      // the past every single evening.
+      serviceAlert: alertFor(extra, 0, nowMin != null ? nowMin : DEMO_NOW_MIN),
       sun: (w.sun && w.sun.length) ? w.sun : DEMO_SUN }),
     DEMO_STATIONS.map(function (st) {
       return { track: st.track, title: st.title, location: st.location || null, startMin: st.startMin, endMin: st.endMin };
@@ -1031,6 +1035,19 @@ function convertTemp(v, from, to) {
   return Math.round(from === 'C' ? v * 9 / 5 + 32 : (v - 32) * 5 / 9);
 }
 
+function materializeMilestones(list, strings) {
+  return (Array.isArray(list) ? list : [])
+    .filter(function (m) { return m && typeof m.atMin === 'number' && isFinite(m.atMin) && MILESTONE_ICON[m.kind]; })
+    .map(function (m) {
+      return { atMin: m.atMin, icon: WEATHER_ICON_BASE + MILESTONE_ICON[m.kind], label: tr(strings, m.kind) + ' ' + timeLabel(m.atMin) };
+    });
+}
+
+function materializeSun(list) {
+  return (Array.isArray(list) ? list : [])
+    .filter(function (m) { return m && typeof m.atMin === 'number' && isFinite(m.atMin) && (m.kind === 'sunrise' || m.kind === 'sunset'); });
+}
+
 // snapshot -> the { header, milestones, sun } shape buildMetro takes.
 function materializeWeather(snap, strings, unit) {
   if (!snap || typeof snap !== 'object') return null;
@@ -1038,6 +1055,7 @@ function materializeWeather(snap, strings, unit) {
   unit = unit || 'C';
   var icon = typeof snap.icon === 'string' && snap.icon ? snap.icon : 'wi-day-sunny.svg';
   return {
+    date: typeof snap.date === 'string' ? snap.date : null,
     header: {
       hi: convertTemp(snap.hi, snap.unit, unit),
       lo: convertTemp(snap.lo, snap.unit, unit),
@@ -1048,13 +1066,8 @@ function materializeWeather(snap, strings, unit) {
       // number is a fact about the payload, so it travels with it.
       unit: unit,
     },
-    milestones: (Array.isArray(snap.milestones) ? snap.milestones : [])
-      .filter(function (m) { return m && typeof m.atMin === 'number' && isFinite(m.atMin) && MILESTONE_ICON[m.kind]; })
-      .map(function (m) {
-        return { atMin: m.atMin, icon: WEATHER_ICON_BASE + MILESTONE_ICON[m.kind], label: tr(strings, m.kind) + ' ' + timeLabel(m.atMin) };
-      }),
-    sun: (Array.isArray(snap.sun) ? snap.sun : [])
-      .filter(function (m) { return m && typeof m.atMin === 'number' && isFinite(m.atMin) && (m.kind === 'sunrise' || m.kind === 'sunset'); }),
+    milestones: materializeMilestones(snap.milestones, strings),
+    sun: materializeSun(snap.sun),
     // One forecast per day of the run, converted the same way the header
     // is: saved state outlives the temperature setting, so a snapshot
     // taken in Celsius has to come back out in whatever the board is
@@ -1068,6 +1081,10 @@ function materializeWeather(snap, strings, unit) {
         rain_chance: typeof d.rain_chance === 'number' && isFinite(d.rain_chance) ? d.rain_chance : null,
         icon: di.indexOf('http') === 0 ? di : WEATHER_ICON_BASE + di,
         unit: unit,
+        // A day's own sky band. The board draws one day of the run, and
+        // its rain markers and its sunset have to be that day's.
+        milestones: materializeMilestones(d.milestones, strings),
+        sun: materializeSun(d.sun),
       };
     }),
   };
@@ -1115,48 +1132,72 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
     var daily = body.daily || {};
     var info = weatherCodeInfo((daily.weathercode || [])[0]);
 
-    var sun = [];
-    var sr = isoToMinutes((daily.sunrise || [])[0]), ss = isoToMinutes((daily.sunset || [])[0]);
-    if (sr != null) sun.push({ kind: 'sunrise', atMin: sr });
-    if (ss != null) sun.push({ kind: 'sunset', atMin: ss });
+    // Sunrise and sunset of a given day of the run. Read at a fixed [0]
+    // this drew TODAY's sunset on a board showing tomorrow: a small error
+    // in minutes, but the sky band is meant to be the day's own shape.
+    function sunFor(ix) {
+      var out = [];
+      var sr = isoToMinutes((daily.sunrise || [])[ix]), ss = isoToMinutes((daily.sunset || [])[ix]);
+      if (sr != null) out.push({ kind: 'sunrise', atMin: sr });
+      if (ss != null) out.push({ kind: 'sunset', atMin: ss });
+      return out;
+    }
+    var sun = sunFor(0);
 
-    // Milestones: first threshold up-crossing -> "Rain Starts", the next
-    // down-crossing after it -> "Rain Stops" — same idea as the dummy
-    // data's illustrative example, just driven from real hourly
-    // probabilities within the visible window.
     var hourly = body.hourly || {};
     var times = hourly.time || [];
     var probs = hourly.precipitation_probability || [];
-    var milestones = [];
-    var wasAbove = false;
-    for (var i = 0; i < times.length && milestones.length < 2; i++) {
-      var hourMatch = /T(\d{2}):/.exec(times[i]);
-      if (!hourMatch) continue;
-      var hour = +hourMatch[1];
-      var atMin = hour * 60;
-      if (atMin < DAY_START_MIN || atMin > DAY_END_MIN) continue;
-      var above = (probs[i] || 0) >= RAIN_THRESHOLD;
-      if (above && !wasAbove) milestones.push({ atMin: atMin, kind: 'rain_starts' });
-      else if (!above && wasAbove) milestones.push({ atMin: atMin, kind: 'rain_stops' });
-      wasAbove = above;
-    }
 
-    // The wettest hour of the visible day, out of the SAME hourly array the
-    // milestones came from. The service alert has to name an hour and a
-    // probability, and this is the only place both are known; deriving it
-    // later would mean a second call to the forecast API for numbers this
-    // response already carried. It goes in the snapshot, so a board running
-    // on the last good forecast out of saved state still has an alert.
-    var peak = null;
+    // Every in-window hour of every day of the run, kept apart BY DAY, out
+    // of the SAME hourly array the milestones came from. The service alert
+    // has to name an hour and a probability, and this is the only place
+    // both are known; deriving them later would mean a second call to the
+    // forecast API for numbers this response already carried.
+    //
+    // Two reasons it is the whole day's hours and not just the wettest one
+    // of them. The response covers the RUN of days and the board draws one
+    // of them, so the wettest hour in the response may belong to a day
+    // nobody is looking at. And the snapshot outlives the fetch by hours
+    // (see resolveWeather), so the hour that was worth warning about when
+    // it went out can be over by the time it is read; the banner picks its
+    // hour at draw time, against the clock, and needs the day behind it to
+    // pick a different one.
+    var dayKeys = [];
+    var dayHours = [];
     for (var j = 0; j < times.length; j++) {
-      var pm = /T(\d{2}):/.exec(times[j]);
+      var pm = /^(\d{4}-\d{2}-\d{2})T(\d{2}):/.exec(times[j]);
       if (!pm) continue;
-      var pMin = (+pm[1]) * 60;
+      var pMin = (+pm[2]) * 60;
       if (pMin < DAY_START_MIN || pMin > DAY_END_MIN) continue;
       var p = probs[j];
       if (typeof p !== 'number' || !isFinite(p)) continue;
-      if (!peak || p > peak.pct) peak = { atMin: pMin, pct: p };
+      var dk = dayKeys.indexOf(pm[1]);
+      if (dk < 0) { dk = dayKeys.length; dayKeys.push(pm[1]); dayHours.push([]); }
+      dayHours[dk].push({ atMin: pMin, pct: p });
     }
+    var peak = wettestHour(dayHours[0], null);
+
+    // Milestones: first threshold up-crossing -> "Rain Starts", the next
+    // down-crossing after it -> "Rain Stops", within ONE day. Reading
+    // straight down the response instead put tomorrow's crossings on
+    // today's board as soon as today had fewer than two of its own, and
+    // carried "it is raining" across the midnight gap, so a dry 07:00
+    // tomorrow became a "Rain Stops 07:00" drawn six hours BEFORE the
+    // "Rain Starts 13:00" it belonged to. A day's rain starts and stops
+    // within that day or not at all.
+    function milestonesFor(hours) {
+      var out = [];
+      var wasAbove = false;
+      (hours || []).forEach(function (h) {
+        if (out.length >= 2) return;
+        var above = h.pct >= RAIN_THRESHOLD;
+        if (above && !wasAbove) out.push({ atMin: h.atMin, kind: 'rain_starts' });
+        else if (!above && wasAbove) out.push({ atMin: h.atMin, kind: 'rain_stops' });
+        wasAbove = above;
+      });
+      return out;
+    }
+    var milestones = milestonesFor(dayHours[0]);
 
     var rain = Math.round((daily.precipitation_probability_max || [])[0]);
     var hi = Math.round((daily.temperature_2m_max || [])[0]);
@@ -1173,7 +1214,14 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
         hi: Math.round(pdHi),
         lo: Math.round((daily.temperature_2m_min || [])[pd]),
         rain_chance: Math.round((daily.precipitation_probability_max || [])[pd]),
-        condition: pdInfo.label, icon: pdInfo.icon,
+        // the KEY, not a label: this is a snapshot, and the string it
+        // becomes depends on a language that can change between the fetch
+        // and the render
+        condition: pdInfo.key, icon: pdInfo.icon,
+        hours: dayHours[pd] || [],
+        peak: wettestHour(dayHours[pd], null),
+        milestones: milestonesFor(dayHours[pd]),
+        sun: sunFor(pd),
       });
     }
     return {
@@ -1185,6 +1233,12 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
       // as a forecast of a dry day rather than as a missing number
       rain_chance: isFinite(rain) ? rain : null,
       unit: unit === 'F' ? 'F' : 'C',
+      // Which civil day this snapshot's day 0 IS. A snapshot outlives its
+      // fetch by hours and can outlive the day: without this, a forecast
+      // taken at 23:30 is read at 04:00 as if its first day were the day
+      // the reader is standing in, which is how yesterday's rain becomes
+      // this morning's alert.
+      date: (daily.time || [])[0] || dayKeys[0] || null,
       peak: peak,
       perDay: perDay,
       milestones: milestones,
@@ -1265,6 +1319,32 @@ function alertSettings(input, unit, strings, hour12) {
   };
 }
 
+// The wettest hour at or after `from` minutes past midnight, out of one
+// day's hourly probabilities. `from` is the whole point: an alert is a
+// promise about what is COMING, and a banner reading "Heavy Rain Expected
+// at 09:00" at seven in the evening is not a warning but a wrong statement
+// about a morning everyone already lived through. An hour that is
+// happening RIGHT NOW is still ahead of us (>=, not >): that is the rain
+// starting, which is exactly what there is to say.
+//
+// Ties go to the earlier hour, which is the one you would move something
+// out of. Anything malformed is dropped rather than defaulted: a snapshot
+// is saved state, and an older build wrote a different shape.
+function wettestHour(hours, from) {
+  var best = null;
+  (Array.isArray(hours) ? hours : []).forEach(function (h) {
+    if (!h || typeof h.atMin !== 'number' || !isFinite(h.atMin)) return;
+    if (typeof h.pct !== 'number' || !isFinite(h.pct)) return;
+    if (from != null && h.atMin < from) return;
+    if (!best || h.pct > best.pct) best = { atMin: h.atMin, pct: h.pct };
+  });
+  return best;
+}
+
+// `opts.dayIx` is which day of the run the board is drawing and
+// `opts.nowMin` what time it is, both of which only the build knows (see
+// alertFor). Without them this reads the whole forecast and can warn about
+// tomorrow's rain on today's board, or about an hour that has gone.
 function serviceAlert(snap, opts) {
   if (!opts || !opts.enabled || !snap || typeof snap !== 'object') return null;
   var strings = opts.strings || I18N.en;
@@ -1272,8 +1352,22 @@ function serviceAlert(snap, opts) {
     return { kind: kind, text: tr(strings, 'alert_label') + ' · ' + fmt(tr(strings, 'alert_' + kind), vars) };
   }
 
-  var peak = (snap.peak && typeof snap.peak.atMin === 'number' && isFinite(snap.peak.atMin)
-    && typeof snap.peak.pct === 'number' && isFinite(snap.peak.pct)) ? snap.peak : null;
+  var dayIx = (typeof opts.dayIx === 'number' && opts.dayIx > 0) ? opts.dayIx : 0;
+  var day = (Array.isArray(snap.perDay) && snap.perDay[dayIx]) || null;
+  // The caller hands over a clock only when the day on the board is the
+  // day we are standing in. Every hour of a later day is still ahead,
+  // including its early ones: bounding those too would silence every
+  // morning alert on a board set to tomorrow, which is the setting whose
+  // whole job is warning you in advance.
+  var from = (typeof opts.nowMin === 'number' && isFinite(opts.nowMin)) ? opts.nowMin : null;
+
+  var peak;
+  if (day && Array.isArray(day.hours)) peak = wettestHour(day.hours, from);
+  // A snapshot from a build that saved one wettest hour and no day behind
+  // it. There is nothing to re-pick from, so it is that hour or nothing,
+  // and it is still held to the clock. It can only ever have been today's.
+  else if (dayIx === 0) peak = wettestHour(snap.peak ? [snap.peak] : [], from);
+  else peak = null;
   var when = peak ? { t: timeLabel12(peak.atMin, { hour12: opts.hour12 }), p: Math.round(peak.pct) } : null;
 
   // One banner, so the kinds are ranked by how much of the day has to
@@ -1285,15 +1379,54 @@ function serviceAlert(snap, opts) {
   // Snow is the forecast's own condition bucket (weatherCodeInfo), not a
   // temperature guess: sleet and freezing rain are 'rain' there and this is
   // not the place to re-derive that mapping.
-  if (opts.snow && snap.condition === 'snow' && when) return banner('snow', when);
+  // The hour it names has to be one it is actually going to snow in.
+  // While the banner was picked at fetch time this was implicit: the
+  // wettest hour of a snowy day is a snowy hour. The wettest hour STILL TO
+  // COME on a snowy morning can be a dry evening, and "Heavy Snow Expected
+  // at 19:00 (5%)" is a worse banner than no banner. RAIN_THRESHOLD is
+  // this file's own line between weather and precipitation (it is what
+  // draws a rain_starts marker); the reader's rain threshold is not used,
+  // because snow is a switch and not a number here.
+  if (opts.snow && (day ? day.condition : snap.condition) === 'snow'
+    && when && when.p >= RAIN_THRESHOLD) return banner('snow', when);
 
-  var lo = convertTemp(snap.lo, snap.unit, opts.unit);
-  var hi = convertTemp(snap.hi, snap.unit, opts.unit);
+  // The day on the board, falling back to the top-level forecast for a
+  // snapshot that has no run of days in it. Cold and heat name no hour, so
+  // there is no hour of theirs to be in the past: a high of 36 is still
+  // the day you had at eight in the evening.
+  var lo = convertTemp(day ? day.lo : snap.lo, snap.unit, opts.unit);
+  var hi = convertTemp(day ? day.hi : snap.hi, snap.unit, opts.unit);
   if (opts.tempLow != null && lo != null && lo <= opts.tempLow) return banner('cold', { v: Math.round(lo) });
   if (opts.tempHigh != null && hi != null && hi >= opts.tempHigh) return banner('heat', { v: Math.round(hi) });
 
   if (opts.rainThreshold != null && when && when.p >= opts.rainThreshold) return banner('rain', when);
   return null;
+}
+
+// How many civil days have passed since `iso` (a "YYYY-MM-DD" out of a
+// snapshot), from the point of view of the civil day `today`. 0 when there
+// is nothing to compare, so a snapshot that never recorded its day is read
+// exactly as it was before.
+function civilDaysSince(iso, today) {
+  if (typeof iso !== 'string' || !today) return 0;
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return 0;
+  var was = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  var now = Date.UTC(today.y, today.mo - 1, today.d);
+  var d = Math.round((now - was) / 86400000);
+  return isFinite(d) ? d : 0;
+}
+
+// The banner belongs to the day on the board, at the time it is being
+// read, and neither of those is known where the forecast is resolved: the
+// day is chosen from `show_day` deep inside the build, and the clock is
+// the build's own `nowMin`. So the snapshot and the reader's thresholds
+// travel in `extra` and the banner is composed here, once, by whichever
+// build path ends up drawing.
+function alertFor(extra, dayIx, nowMin) {
+  if (!extra || !extra.alertOpts) return null;
+  return serviceAlert(extra.wxSnapshot, Object.assign({}, extra.alertOpts,
+    { dayIx: dayIx, nowMin: nowMin }));
 }
 
 async function fetchWithTimeout(url, ms, extraHeaders) {
@@ -2326,20 +2459,50 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   events.sort(function (a, b) { return a.startMin - b.startMin; });
   registry.finalize(); // every calendar is in and every event tallied — decide sides now
 
+  // Everything drawn from the forecast belongs to the day on the board.
+  // Read at a fixed day 0, the rain markers and the sunset were today's on
+  // a board headed with tomorrow's date, which is the same mistake as the
+  // temperature and less obvious to catch.
+  //
+  // The index is into the SNAPSHOT's own run of days, which may have
+  // started before today: a forecast fetched last night is still being
+  // drawn this morning, and its day 0 is yesterday. Slide by however many
+  // civil days have passed since it was taken, and if that runs off the
+  // end of the run there is simply nothing to say about this day.
+  var snapIx = showIx + civilDaysSince(weather && weather.date, today);
+  var shownWx = (snapIx >= 0 && weather && weather.perDay && weather.perDay[snapIx]) || null;
+  function ofShownDay(key) {
+    if (shownWx && Array.isArray(shownWx[key])) return shownWx[key];
+    // A snapshot with no run of days in it can only be describing its own
+    // first day. On any other day, nothing is better than the wrong day's.
+    return (snapIx === 0 && weather && Array.isArray(weather[key])) ? weather[key] : [];
+  }
+
   return buildMetro(
     registry.all(), events,
-    (weather && weather.milestones) || [],
+    ofShownDay('milestones'),
     // the forecast for the day being shown, not for today: a board set to
     // tomorrow that carries today's temperature is wrong about the only
     // day it is drawing
-    (showIx > 0 && weather && weather.perDay && weather.perDay[showIx])
-      || (weather && weather.header)
+    shownWx
+      || (snapIx === 0 && weather && weather.header)
       || { hi: null, lo: null, condition: null, rain_chance: null },
-    nowMin,
+    // The "now" marker, and every car riding it, is a statement about
+    // where in the day we are. On a board showing tomorrow there is no
+    // such minute: drawn anyway it parks a train on each line at a time
+    // nobody has reached yet, and drags the axis out to hold a clock badge
+    // for a day that has not started.
+    showIx === 0 ? nowMin : null,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     allDayEvents,
     Object.assign({}, extra, {
       dateLabel: dateLabel(shownDay, extra.locale),
+      // Composed against the day being shown and the clock on it, so it
+      // can neither warn about a day nobody is looking at nor about an
+      // hour that has gone.
+      // The clock only travels with the day we are standing in: on any
+      // other day there is no "already gone".
+      serviceAlert: alertFor(extra, snapIx, showIx === 0 ? nowMin : null),
       // "Today" is only true when it is
       todayWord: showIx === 0,
       // one entry per day the board MAY draw, each with its own date and
@@ -2348,9 +2511,9 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
       days: [{
         label: dateLabel(shownDay, extra.locale),
         weekday: localeDatePart(extra.locale || 'en', 'long', 'weekday', shownDay.y, shownDay.mo, shownDay.d),
-        weather: (weather && weather.perDay && weather.perDay[showIx]) || null,
+        weather: shownWx || (snapIx === 0 && weather && weather.header) || null,
       }],
-      sun: (weather && weather.sun) || [], calendarsDown: downNames }),
+      sun: ofShownDay('sun'), calendarsDown: downNames }),
     sidingEvents
   );
 }
@@ -2406,7 +2569,7 @@ async function run(input) {
   // 0" means 0 of whatever the header is showing.
   var alertOpts = alertSettings(input, tempUnit, strings, hour12);
   var extra = { orientation: orientation, locale: locale, strings: strings, hour12: hour12,
-    tempUnit: tempUnit, deadline: deadline };
+    tempUnit: tempUnit, deadline: deadline, alertOpts: alertOpts };
 
   // Every exit returns through here. The runtime stores what comes back as
   // `trmnl_state` and hands it to the next render as `input.trmnl.state`, so
@@ -2442,7 +2605,7 @@ async function run(input) {
       demoWx = { weather: materializeWeather(demoSnap, strings, tempUnit), stale: false, snapshot: demoSnap };
     }
     var demoExtra = Object.assign({ dateLabel: demoDate }, extra,
-      { weatherStale: demoWx.stale, serviceAlert: serviceAlert(demoWx.snapshot, alertOpts) });
+      { weatherStale: demoWx.stale, wxSnapshot: demoWx.snapshot });
     // Prefer driving the demo through the real pipeline against this repo's
     // own ICS files, so what it shows is what a working config produces.
     // Any failure — offline device, GitHub unreachable, a bad fetch — falls
@@ -2486,7 +2649,7 @@ async function run(input) {
     var configTz = resolveTz(parsed.timeZone, input);
     var wx = await resolveWeather(latLonRaw, configTz, deadline, state, tempUnit, strings);
     var cfgExtra = Object.assign({}, extra,
-      { weatherStale: wx.stale, serviceAlert: serviceAlert(wx.snapshot, alertOpts) });
+      { weatherStale: wx.stale, wxSnapshot: wx.snapshot });
     return done(await buildFromConfig(input, parsed, wx.weather, cfgExtra, state));
   } catch (e) {
     return done(buildFromDemo(null, null, extra));

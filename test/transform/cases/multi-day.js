@@ -161,4 +161,117 @@ module.exports = function (test, h) {
       assert(Array.isArray(r.metro.items), 'a switch hour of ' + JSON.stringify(bad) + ' broke the payload');
     }
   });
+
+  // -------------------------------------------------------------------
+  // The sky band, the clock, and the day they belong to.
+  //
+  // The forecast is fetched for the whole run and the board draws one day
+  // of it. Everything read out of that response at a fixed day 0 is right
+  // by accident on a board showing today and wrong on every other one.
+  // -------------------------------------------------------------------
+
+  // Two days of hourly probabilities, 07:00-21:00 each. Today rains from
+  // 13:00 and is still raining at nightfall (one crossing, not two);
+  // tomorrow rains from 09:00 to 12:00 (two).
+  function twoDayForecast() {
+    const time = [], pp = [];
+    const push = (date, wet) => {
+      for (let hh = 7; hh <= 21; hh++) {
+        time.push(date + 'T' + String(hh).padStart(2, '0') + ':00');
+        pp.push(wet(hh) ? 80 : 5);
+      }
+    };
+    push('2026-09-09', (hh) => hh >= 13);
+    push('2026-09-10', (hh) => hh >= 9 && hh < 12);
+    return JSON.stringify({
+      daily: {
+        temperature_2m_max: [18, 21], temperature_2m_min: [11, 13],
+        precipitation_probability_max: [80, 80], weathercode: [61, 61],
+        sunrise: ['2026-09-09T06:30', '2026-09-10T06:32'],
+        sunset: ['2026-09-09T20:30', '2026-09-10T20:27'],
+      },
+      hourly: { time: time, precipitation_probability: pp },
+    });
+  }
+
+  function skyNet(ics) {
+    return async (url) => {
+      if (String(url).indexOf('api.open-meteo.com') >= 0) return okText(twoDayForecast());
+      return okText(ics);
+    };
+  }
+
+  const BOTH = icsWithEvents([
+    { start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today Meeting' },
+    { start: '20260910T090000Z', end: '20260910T100000Z', summary: 'Tomorrow Meeting' },
+  ]);
+
+  function sky(metro, kind) {
+    return metro.items.filter((i) => i.type === kind).map((i) => i.at_min);
+  }
+
+  test('rain markers start and stop within one day, in that order', async () => {
+    // Read straight down the response, today borrowed tomorrow's first
+    // crossing as soon as it had fewer than two of its own, and carried
+    // "it is raining" over the midnight gap: a dry 07:00 tomorrow came out
+    // as "Rain Stops 07:00" drawn six hours BEFORE the 13:00 it belonged
+    // to. A day's rain starts and stops inside that day or not at all.
+    const r = await runTransform(skyNet(BOTH), NOW).run(input());
+    const at = sky(r.metro, 'weather');
+    assertEqual(at, [13 * 60], 'today has one crossing of its own: ' + JSON.stringify(at));
+    const labels = r.metro.items.filter((i) => i.type === 'weather').map((i) => i.label);
+    assert(/Rain Starts/i.test(labels[0] || ''), 'the one marker should be the rain starting: ' + JSON.stringify(labels));
+  });
+
+  test('a board showing tomorrow gets tomorrow\'s rain, not today\'s', async () => {
+    const r = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
+    assertEqual(sky(r.metro, 'weather'), [9 * 60, 12 * 60],
+      'tomorrow rains 09:00-12:00: ' + JSON.stringify(r.metro.items.filter((i) => i.type === 'weather')));
+  });
+
+  test('a board showing tomorrow gets tomorrow\'s sunset', async () => {
+    // A couple of minutes, which is the whole point: nobody would ever
+    // spot this on the board, so it has to be spotted here.
+    const today = await runTransform(skyNet(BOTH), NOW).run(input());
+    assertEqual(sky(today.metro, 'sun'), [6 * 60 + 30, 20 * 60 + 30], 'today\'s sun');
+    const tom = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
+    assertEqual(sky(tom.metro, 'sun'), [6 * 60 + 32, 20 * 60 + 27], 'tomorrow\'s sun');
+  });
+
+  test('there is no "now" on a day that is not now', async () => {
+    // now_min is what draws the clock badge and parks a car on every line
+    // at that minute. On tomorrow's board that minute has not happened to
+    // anybody, and the marker would be claiming five people are somewhere
+    // they have not been yet.
+    const today = await runTransform(skyNet(BOTH), NOW).run(input());
+    assertEqual(today.metro.now_min, 9 * 60, 'today\'s board should carry the clock');
+    const tom = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
+    assertEqual(tom.metro.now_min, null, 'tomorrow\'s board carried a "now": ' + tom.metro.now_min);
+  });
+
+  test('the evening switch-over takes the clock off the board with the day', async () => {
+    // show_day=auto at 19:00, switching at 18:00. This is the state a wall
+    // screen is in every single evening, so it is the one that has to be
+    // right.
+    const evening = Date.parse('2026-09-09T19:00:00Z');
+    const r = await runTransform(skyNet(BOTH), evening).run(
+      baseInput(evening, {
+        use_demo_data: 'false', lat_lon: '51.05,3.72', show_day: 'auto', switch_hour: '18',
+        config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
+      }));
+    assert(r.metro.items.some((i) => i.type === 'event' && i.title === 'Tomorrow Meeting'),
+      'the board should have switched to tomorrow');
+    assertEqual(r.metro.now_min, null, 'the switched board still carried a "now": ' + r.metro.now_min);
+    assertEqual(sky(r.metro, 'weather'), [9 * 60, 12 * 60], 'and tomorrow\'s rain with it');
+  });
+
+  test('the day on the board carries its own forecast in days[0]', async () => {
+    // The header and days[0].weather are the same fact told twice, and
+    // they disagreed: a snapshot with no run of days in it left the header
+    // filled and days[0].weather null.
+    const r = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
+    assert(r.metro.days[0].weather, 'no forecast on the day being drawn');
+    assertEqual(r.metro.days[0].weather.hi, 21, 'tomorrow\'s high');
+    assertEqual(r.metro.header_weather.hi, 21, 'the header should agree with it');
+  });
 };

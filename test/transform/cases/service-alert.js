@@ -274,4 +274,273 @@ module.exports = function (test, h) {
     assertEqual((r.metro.service_alert || {}).kind, 'snow',
       'the freezing demo board should demonstrate the banner: ' + JSON.stringify(r.metro.service_alert));
   });
+
+  // -------------------------------------------------------------------
+  // Nothing in the past.
+  //
+  // A service alert is a promise about what is COMING. "Heavy Rain
+  // Expected at 09:00" read at seven in the evening is not a warning, it
+  // is a wrong statement about a morning everyone already lived through,
+  // and it is the easiest banner in the world to ship by accident: the
+  // wettest hour of the day is a fact that stops changing at noon, while
+  // the board keeps redrawing until midnight.
+  //
+  // Three ways it happens, all covered below. The forecast is fetched
+  // once and read for hours (a board on saved state can be reading one
+  // from this morning). The forecast covers the whole run of days, so the
+  // wettest hour in the response may belong to a day that is not on the
+  // board. And the board can be showing TOMORROW, where every hour is
+  // still ahead and today's are all behind.
+  // -------------------------------------------------------------------
+
+  // Hours 07:00-21:00 of one date, `by` giving the probability of any
+  // hour that is not the quiet 5%.
+  function hoursFor(date, by) {
+    const t = [], p = [];
+    for (let hh = 7; hh <= 21; hh++) {
+      t.push(date + 'T' + String(hh).padStart(2, '0') + ':00');
+      p.push((by || {})[hh] == null ? 5 : by[hh]);
+    }
+    return { t: t, p: p };
+  }
+
+  // The shape a DAY_SPAN board asks for: daily arrays with one entry per
+  // day of the run, one hourly array running across all of them.
+  function forecastDays(days) {
+    const t = [], p = [];
+    days.forEach((d) => { const h = hoursFor(d.date, d.by); t.push(...h.t); p.push(...h.p); });
+    return JSON.stringify({
+      daily: {
+        temperature_2m_max: days.map((d) => (d.hi == null ? 18 : d.hi)),
+        temperature_2m_min: days.map((d) => (d.lo == null ? 11 : d.lo)),
+        precipitation_probability_max: days.map((d) => (d.max == null ? 80 : d.max)),
+        weathercode: days.map((d) => (d.code == null ? 61 : d.code)),
+        sunrise: days.map((d) => d.date + 'T06:30'), sunset: days.map((d) => d.date + 'T20:30'),
+      },
+      hourly: { time: t, precipitation_probability: p },
+    });
+  }
+
+  const D0 = '2026-09-09', D1 = '2026-09-10';
+  const BOTH_DAYS = icsWithEvents([
+    { start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Afternoon' },
+    { start: '20260910T140000Z', end: '20260910T150000Z', summary: 'Tomorrow afternoon' },
+  ]);
+
+  function netAt(body) {
+    return async (url) => {
+      if (String(url).indexOf('api.open-meteo.com') >= 0) return body == null ? fail(500) : okText(body);
+      if (String(url).indexOf('/i18n/') >= 0) return fail(404);
+      return okText(BOTH_DAYS);
+    };
+  }
+
+  function at(hh, mm) { return Date.parse('2026-09-09T' + String(hh).padStart(2, '0') + ':' + String(mm == null ? '00' : mm) + ':00Z'); }
+
+  function inputAt(now, fields) {
+    return baseInput(now, Object.assign({
+      use_demo_data: 'false',
+      lat_lon: '51.05,3.72',
+      config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
+    }, fields));
+  }
+
+  async function alertAt(now, body, fields) {
+    const r = await runTransform(netAt(body), now).run(inputAt(now, Object.assign({}, ON, fields)));
+    return r.metro.service_alert;
+  }
+
+  test('the wettest hour of the day is not an alert once it has gone', async () => {
+    // 09:00 was the wet hour, it is now 15:00, and nothing later comes
+    // near the threshold. There is no alert to raise: the day the reader
+    // is being warned about is over.
+    const a = await alertAt(at(15), forecastDays([{ date: D0, by: { 9: 90 } }]));
+    assertEqual(a, null, 'got ' + JSON.stringify(a));
+  });
+
+  test('when the wettest hour has gone, the banner names the wettest one still to come', async () => {
+    // Not merely silence: 18:00 is over the threshold too, and it is the
+    // hour worth moving something out of. Suppressing the banner outright
+    // here would lose a real warning to a technicality about 09:00.
+    const a = await alertAt(at(15), forecastDays([{ date: D0, by: { 9: 90, 18: 75 } }]));
+    assertEqual(a, { kind: 'rain', text: 'SERVICE ALERT · Heavy Rain Expected at 18:00 (75%)' },
+      'got ' + JSON.stringify(a));
+  });
+
+  test('the hour that is happening right now is still ahead enough to warn about', async () => {
+    // The boundary. At 15:00 exactly, "expected at 15:00" is the rain
+    // starting, not rain that has been and gone.
+    const a = await alertAt(at(15), forecastDays([{ date: D0, by: { 15: 85 } }]));
+    assertEqual((a || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 15:00 (85%)', 'got ' + JSON.stringify(a));
+  });
+
+  test('a snowy morning read in the evening raises nothing', async () => {
+    // Snow outranks every other kind, which is exactly why it must be
+    // held to the same clock: the ranking would otherwise let the one
+    // banner on the board be the most confidently wrong of them.
+    const a = await alertAt(at(19), forecastDays([{ date: D0, code: 71, by: { 9: 90 } }]));
+    assertEqual(a, null, 'got ' + JSON.stringify(a));
+
+    // And it must not reach for a dry hour just to have one to name: the
+    // evening it falls back to has to be an hour it is really snowing in.
+    const dry = await alertAt(at(19), forecastDays([{ date: D0, code: 71, by: { 9: 90, 20: 30 } }]));
+    assertEqual(dry, null, 'named a 30% hour as heavy snow: ' + JSON.stringify(dry));
+
+    const late = await alertAt(at(19), forecastDays([{ date: D0, code: 71, by: { 9: 90, 20: 80 } }]));
+    assertEqual((late || {}).text, 'SERVICE ALERT · Heavy Snow Expected at 20:00 (80%)',
+      'snow still to come is still an alert: ' + JSON.stringify(late));
+  });
+
+  test('cold and heat are facts about the whole day and outlast the morning', async () => {
+    // These name no hour, so there is no hour of theirs to be in the
+    // past. A high of 36 is still the day you had at eight in the
+    // evening, and the clock must not quietly take these away too.
+    const a = await alertAt(at(20), forecastDays([{ date: D0, hi: 36, lo: 24, by: { 9: 90 } }]),
+      { alert_temp_high: '35' });
+    assertEqual(a, { kind: 'heat', text: 'SERVICE ALERT · Extreme Heat Expected (36°)' }, 'got ' + JSON.stringify(a));
+  });
+
+  test('the wettest hour of TOMORROW is not an alert about today', async () => {
+    // The forecast covers the run of days, not the day on the board. Read
+    // straight through, the 95% at 17:00 tomorrow becomes "expected at
+    // 17:00" on a board whose own day never goes above 20%.
+    const a = await alertAt(at(9), forecastDays([
+      { date: D0, max: 20, by: {} },
+      { date: D1, max: 95, by: { 17: 95 } },
+    ]));
+    assertEqual(a, null, 'got ' + JSON.stringify(a));
+  });
+
+  test('a board showing tomorrow is warned about tomorrow', async () => {
+    const a = await alertAt(at(9), forecastDays([
+      { date: D0, max: 20, by: {} },
+      { date: D1, max: 95, by: { 17: 95 } },
+    ]), { show_day: 'tomorrow' });
+    assertEqual(a, { kind: 'rain', text: 'SERVICE ALERT · Heavy Rain Expected at 17:00 (95%)' },
+      'got ' + JSON.stringify(a));
+  });
+
+  test('on a board showing tomorrow, an early hour is ahead of us, not behind', async () => {
+    // The clock only bounds the day it belongs to. 08:00 tomorrow is
+    // still to come at eight in the evening today, and dropping it as
+    // "past" would silence every morning alert on a tomorrow board.
+    const a = await alertAt(at(20), forecastDays([
+      { date: D0, max: 20, by: {} },
+      { date: D1, max: 90, by: { 8: 90 } },
+    ]), { show_day: 'tomorrow' });
+    assertEqual((a || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 08:00 (90%)', 'got ' + JSON.stringify(a));
+  });
+
+  test('the evening switch-over takes the banner to the next day with the board', async () => {
+    // show_day=auto swaps the board to tomorrow at switch_hour. The
+    // banner has to swap with it: an alert about the day that is no
+    // longer drawn is an alert about nothing on the screen.
+    const body = forecastDays([
+      { date: D0, max: 88, by: { 9: 88 } },
+      { date: D1, max: 92, by: { 16: 92 } },
+    ]);
+    const auto = { show_day: 'auto', switch_hour: '18' };
+
+    const before = await alertAt(at(9), body, auto);
+    assertEqual((before || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (88%)',
+      'before the switch the board is today: ' + JSON.stringify(before));
+
+    const after = await alertAt(at(19), body, auto);
+    assertEqual((after || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 16:00 (92%)',
+      'after the switch the board is tomorrow: ' + JSON.stringify(after));
+  });
+
+  test('a board replaying this morning\'s snapshot does not replay this morning\'s alert', async () => {
+    // The one that actually reaches a wall. The API answered at 08:00 and
+    // has been down since; the device is still drawing, and at 19:00 the
+    // saved snapshot's wettest hour is nine hours old.
+    const morning = await runTransform(netAt(forecastDays([{ date: D0, by: { 9: 90 } }])), at(8))
+      .run(inputAt(at(8), ON));
+    assertEqual((morning.metro.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (90%)',
+      'the morning board should warn about the morning');
+    const saved = JSON.parse(JSON.stringify(morning.trmnl_state));
+
+    const evening = await runTransform(netAt(null), at(19)).run(
+      Object.assign(inputAt(at(19), ON), { trmnl: Object.assign({}, inputAt(at(19), ON).trmnl, { state: saved }) }));
+    assertEqual(evening.metro.service_alert, null,
+      'the evening board replayed the morning: ' + JSON.stringify(evening.metro.service_alert));
+  });
+
+  test('a snapshot with only a wettest hour behind it is still held to the clock', async () => {
+    // A build older than the hourly detail saved one hour and one
+    // probability. There is nothing to fall back to, so the banner has to
+    // go rather than name the hour it has.
+    const saved = { weather: { hi: 18, lo: 11, condition: 'rain', icon: 'wi-day-rain.svg', rain_chance: 90,
+      unit: 'C', peak: { atMin: 9 * 60, pct: 90 } }, weatherFetchedAt: Math.floor(at(8) / 1000) };
+    const i = inputAt(at(15), ON);
+    i.trmnl.state = saved;
+    const r = await runTransform(netAt(null), at(15)).run(i);
+    assertEqual(r.metro.service_alert, null, 'got ' + JSON.stringify(r.metro.service_alert));
+
+    const early = inputAt(at(8), ON);
+    early.trmnl.state = saved;
+    const still = await runTransform(netAt(null), at(8)).run(early);
+    assertEqual((still.metro.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (90%)',
+      'the same snapshot read before the hour is a real warning: ' + JSON.stringify(still.metro.service_alert));
+  });
+
+  test('the demo board obeys the clock like a real one', async () => {
+    // The demo carries a fixed forecast, so it is the one board where a
+    // wettest hour is guaranteed to be in the past every single evening.
+    const late = await runTransform(async () => fail(500), at(20)).run(
+      baseInput(at(20), { use_demo_data: 'true', demo_set: 'simpsons', alert_enabled: 'true', alert_rain_threshold: '50' }));
+    assertEqual(late.metro.service_alert, null,
+      'the demo raised an alert about an hour that has gone: ' + JSON.stringify(late.metro.service_alert));
+  });
+
+  test('the hourly detail behind the alert is saved, per day', async () => {
+    // The banner is composed at draw time, not at fetch time, which only
+    // works if the snapshot carries enough to re-pick an hour later.
+    const r = await runTransform(netAt(forecastDays([
+      { date: D0, by: { 9: 90, 18: 75 } },
+      { date: D1, by: { 17: 95 } },
+    ])), at(8)).run(inputAt(at(8), ON));
+    const w = r.trmnl_state.weather;
+    assert(w && Array.isArray(w.perDay) && w.perDay.length === 2, 'expected two days: ' + JSON.stringify(w && w.perDay));
+    assertEqual(w.perDay[0].peak, { atMin: 9 * 60, pct: 90 }, 'day 0 wettest hour');
+    assertEqual(w.perDay[1].peak, { atMin: 17 * 60, pct: 95 }, 'day 1 wettest hour');
+    assert(w.perDay[0].hours.length === 15, 'day 0 should carry 07:00-21:00: ' + JSON.stringify(w.perDay[0].hours));
+    assertEqual(w.perDay[0].hours[11], { atMin: 18 * 60, pct: 75 }, 'the hours are the day\'s own');
+  });
+
+  test('a snapshot that outlived its own day is read as the day it describes', async () => {
+    // Fetched at 23:30 and still being drawn at 04:00, which is under the
+    // six hours that flags a forecast stale, so nothing else catches it.
+    // The snapshot's first day is YESTERDAY by then. Indexed as though it
+    // were today, its 09:00 rain becomes this morning's alert, an hour
+    // that is both in the past and on the wrong day.
+    const body = forecastDays([
+      { date: D0, by: { 9: 90 } },
+      { date: D1, by: { 16: 85 } },
+    ]);
+    const lateNight = Date.parse('2026-09-09T23:30:00Z');
+    const first = await runTransform(netAt(body), lateNight).run(inputAt(lateNight, ON));
+    const saved = JSON.parse(JSON.stringify(first.trmnl_state));
+    assertEqual(saved.weather.date, D0, 'the snapshot should record which day it starts on');
+
+    const smallHours = Date.parse('2026-09-10T04:00:00Z');
+    const i = inputAt(smallHours, ON);
+    i.trmnl.state = saved;
+    const r = await runTransform(netAt(null), smallHours).run(i);
+    assertEqual((r.metro.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 16:00 (85%)',
+      'the morning after should be warned about the morning after: ' + JSON.stringify(r.metro.service_alert));
+  });
+
+  test('a snapshot older than the run it covers says nothing rather than something wrong', async () => {
+    const body = forecastDays([{ date: D0, by: { 9: 90 } }, { date: D1, by: { 16: 85 } }]);
+    const first = await runTransform(netAt(body), at(8)).run(inputAt(at(8), ON));
+    const saved = JSON.parse(JSON.stringify(first.trmnl_state));
+
+    const twoDaysOn = Date.parse('2026-09-11T08:00:00Z');
+    const i = inputAt(twoDaysOn, ON);
+    i.trmnl.state = saved;
+    const r = await runTransform(netAt(null), twoDaysOn).run(i);
+    assertEqual(r.metro.service_alert, null,
+      'a forecast that ran out raised an alert anyway: ' + JSON.stringify(r.metro.service_alert));
+  });
 };
