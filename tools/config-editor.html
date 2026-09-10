@@ -553,9 +553,16 @@
         // imported config that sets them still round-trips: buildConfig writes back
         // whatever loadConfig read, and the swatch above shows it, there is just no
         // control to set one from scratch.
-        el("div", { class: "row" }, [
-          el("div", { class: "hint" }, [idx === 0 ? "First track: also gets any event no rule assigns. Side, colour and dash pattern are chosen automatically." : "Side, colour and dash pattern are chosen automatically; the pattern follows the order on whichever side this track lands."]),
-        ]),
+        //
+        // That used to be spelled out under every track. It is a fact about
+        // the plugin, not about this track, and repeating it once per track
+        // told the reader nothing they could act on: the swatch already shows
+        // what the track got, and the section lede says who chose it. The only
+        // thing that IS particular to a track is being first, which is the one
+        // line that stayed.
+        idx === 0 ? el("div", { class: "row" }, [
+          el("div", { class: "hint" }, ["Also gets any event no rule claims."]),
+        ]) : null,
       ]));
     });
   }

@@ -1,0 +1,181 @@
+'use strict';
+
+// settings.yml: the form every reader configures the board through.
+//
+// Nothing else in this repo reads it, so nothing else catches it being
+// wrong. It goes wrong quietly in both directions: transform.js reads a
+// setting the form never offers (dead code and a feature nobody can turn
+// on), or the form offers one transform.js never reads (a switch that
+// does nothing). Both have happened.
+//
+// The other half is the CONDITIONAL fields. A field that only applies
+// under one setting has to be hidden under the others, or the form asks
+// for an answer it will not use, which reads as a broken plugin rather
+// than an irrelevant question. Those are declared as `conditional_validation`
+// blocks naming keynames, and a keyname is exactly the kind of thing a
+// rename leaves behind pointing at nothing.
+//
+// Deliberately parsed with a tiny reader rather than a YAML library: the
+// transform suite has no dependencies, and the shape it has to understand
+// is four kinds of line.
+
+const fs = require('fs');
+const path = require('path');
+
+const SETTINGS = path.join(__dirname, '../../../plugin/src/settings.yml');
+const TRANSFORM = path.join(__dirname, '../../../plugin/src/transform.js');
+
+function parseFields(text) {
+  const lines = text.split('\n');
+  const fields = [];
+  let f = null, list = null, cond = null;
+  let inFields = false;
+  for (const line of lines) {
+    if (/^custom_fields:\s*$/.test(line)) { inFields = true; continue; }
+    if (!inFields) continue;
+    // Back out to the top level and the list is over. A list ITEM also
+    // starts in column zero, so it is anything-but-a-dash that ends it.
+    if (/^[^\s-]/.test(line)) break;
+
+    let m = /^- keyname: (\S+)/.exec(line);
+    if (m) { f = { keyname: m[1], options: [], conditions: [] }; fields.push(f); list = cond = null; continue; }
+    if (!f) continue;
+
+    if (/^  options:\s*$/.test(line)) { list = 'options'; cond = null; continue; }
+    if (/^  conditional_validation:\s*$/.test(line)) { list = 'cond'; cond = null; continue; }
+
+    if (list === 'options') {
+      m = /^  - .*: *(\S+)\s*$/.exec(line);
+      if (m) { f.options.push(m[1]); continue; }
+    }
+    if (list === 'cond') {
+      m = /^  - when: *'?([^'\s]+)'?\s*$/.exec(line);
+      if (m) { cond = { when: m[1], hidden: [] }; f.conditions.push(cond); continue; }
+      m = /^    - (\S+)\s*$/.exec(line);
+      if (m && cond) { cond.hidden.push(m[1]); continue; }
+      if (/^    hidden:\s*$/.test(line)) continue;
+    }
+
+    m = /^  (\w+): ?(.*)$/.exec(line);
+    if (m && m[1] !== 'options' && m[1] !== 'conditional_validation') {
+      f[m[1]] = m[2];
+      if (m[1] !== 'description') list = null;
+    }
+  }
+  return fields;
+}
+
+module.exports = function (test, h) {
+  const { assert, assertEqual } = h;
+
+  const FIELDS = parseFields(fs.readFileSync(SETTINGS, 'utf-8'));
+  const BY_KEY = {};
+  FIELDS.forEach((f) => { BY_KEY[f.keyname] = f; });
+  const SRC = fs.readFileSync(TRANSFORM, 'utf-8');
+
+  test('the form and the code agree on which settings exist', async () => {
+    assert(FIELDS.length > 5, 'the settings file barely parsed: ' + FIELDS.length + ' field(s)');
+
+    // Any helper that takes (input, 'keyname'), not just cf: the alert
+    // thresholds go through numSetting, and a reader that only knew about
+    // cf would call three live settings dead.
+    const read = new Set();
+    const re = /\(\s*input\s*,\s*'([a-z0-9_]+)'/g;
+    let m;
+    while ((m = re.exec(SRC))) read.add(m[1]);
+    assert(read.size > 5, 'found almost no settings being read: ' + [...read].join(', '));
+
+    // A field can be RETIRED from the form and still be read: calendar_urls
+    // was briefly its own box, and anyone who filled it in then would lose
+    // their calendars the day the code stopped looking at it. Retiring one
+    // is a decision, so it is listed here rather than passing silently.
+    const RETIRED = ['calendar_urls'];
+    const missing = [...read].filter((k) => !BY_KEY[k] && RETIRED.indexOf(k) < 0);
+    assertEqual(missing, [], 'transform.js reads settings the form never offers');
+    RETIRED.forEach((k) => {
+      assert(read.has(k), k + ' is listed as retired but nothing reads it any more');
+      assert(!BY_KEY[k], k + ' is listed as retired but the form still offers it');
+    });
+
+    // The other direction, minus the two that are display only: an
+    // author_bio is a block of text, not an answer.
+    const DISPLAY_ONLY = ['author_info'];
+    const unread = FIELDS.map((f) => f.keyname)
+      .filter((k) => DISPLAY_ONLY.indexOf(k) < 0 && !read.has(k));
+    assertEqual(unread, [], 'the form offers settings nothing reads');
+  });
+
+  test('every conditional names a field that exists, and a value that exists', async () => {
+    FIELDS.forEach((f) => {
+      f.conditions.forEach((c) => {
+        c.hidden.forEach((k) => {
+          assert(BY_KEY[k], f.keyname + ' hides "' + k + '", which is not a setting');
+          assert(k !== f.keyname, f.keyname + ' hides itself');
+        });
+        if (f.field_type === 'select') {
+          assert(f.options.indexOf(c.when) >= 0,
+            f.keyname + ' has a rule for "' + c.when + '", which is not one of its options (' + f.options.join(', ') + ')');
+        } else if (f.field_type === 'boolean') {
+          assert(c.when === 'true' || c.when === 'false',
+            f.keyname + ' is a checkbox with a rule for "' + c.when + '"');
+        }
+      });
+    });
+  });
+
+  test('a field that applies to one choice only is hidden under the others', async () => {
+    // Switch Over At is the case in hand: it means nothing unless Show is
+    // set to switch over, and a form that asks for an hour it will not
+    // read looks broken rather than irrelevant.
+    const show = BY_KEY.show_day;
+    assert(show, 'no show_day setting at all');
+    const hides = show.options.filter((o) =>
+      show.conditions.some((c) => c.when === o && c.hidden.indexOf('switch_hour') >= 0));
+    assertEqual(hides.sort(), ['today', 'tomorrow'],
+      'Switch Over At should be hidden on every Show option but the one it belongs to');
+    assert(show.options.indexOf('auto') >= 0 && hides.indexOf('auto') < 0,
+      'the switch-over option must be the one that KEEPS the hour field');
+  });
+
+  test('turning the alert banner off takes its thresholds with it', async () => {
+    const off = (BY_KEY.alert_enabled.conditions.find((c) => c.when === 'false') || {}).hidden || [];
+    ['alert_rain_threshold', 'alert_snow', 'alert_temp_low', 'alert_temp_high'].forEach((k) => {
+      assert(off.indexOf(k) >= 0, k + ' is still asked for with the banner switched off');
+    });
+  });
+
+  test('the demo switch shows exactly one of the two ways to fill the board', async () => {
+    const on = (BY_KEY.use_demo_data.conditions.find((c) => c.when === 'true') || {}).hidden || [];
+    const offCond = (BY_KEY.use_demo_data.conditions.find((c) => c.when === 'false') || {}).hidden || [];
+    assert(on.indexOf('config_json') >= 0, 'the Calendars box is offered on a board showing demo data');
+    assert(offCond.indexOf('demo_set') >= 0, 'the example picker is offered on a board showing real calendars');
+  });
+
+  test('every setting is optional and says what it does', async () => {
+    // A board has to render on a device nobody has configured yet, so
+    // there is no such thing as a required field here.
+    FIELDS.forEach((f) => {
+      if (f.field_type === 'author_bio') return;
+      assertEqual(f.optional, 'true', f.keyname + ' is not optional');
+      assert((f.description || '').length > 20, f.keyname + ' has no real description');
+      assert(f.name, f.keyname + ' has no label');
+    });
+  });
+
+  test('a default is one of the choices offered', async () => {
+    FIELDS.forEach((f) => {
+      if (f.default == null || f.field_type !== 'select') return;
+      assert(f.options.indexOf(f.default) >= 0,
+        f.keyname + ' defaults to "' + f.default + '", which is not one of ' + f.options.join(', '));
+    });
+  });
+
+  test('no em dash reaches the reader', async () => {
+    // House rule, and the form is the one file in the plugin whose text
+    // is read by everyone who installs it.
+    const bad = fs.readFileSync(SETTINGS, 'utf-8').split('\n')
+      .map((l, i) => (l.indexOf('—') >= 0 ? (i + 1) + ': ' + l.trim().slice(0, 60) : null))
+      .filter(Boolean);
+    assertEqual(bad, [], 'em dash in settings.yml');
+  });
+};
