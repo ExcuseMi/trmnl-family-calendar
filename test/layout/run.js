@@ -57,7 +57,51 @@ function frameworkAssets() {
       throw new Error('could not fetch ' + url + ' into ' + CACHE + ' (needed for real text metrics): ' + e.message);
     }
   }
-  return { css, js };
+  return { css: localizedCss(css), js };
+}
+
+// The stylesheet asks for its fonts by ABSOLUTE PATH: url("/fonts/TRMNL16-Regular.woff2").
+// Loaded over file:// that resolves to file:///fonts/..., which does not
+// exist, so every face silently failed and every text metric in this suite
+// came from whatever Chromium fell back to.
+//
+// That is not a small difference. The framework sets --label-font-family to
+// TRMNL16, --label-small to TRMNL12 and --title to TRMNL21: pixel fonts,
+// nothing like a fallback sans in width. Every label box this suite has
+// ever measured was the wrong size, consistently, which is why it looked
+// fine: the tests agreed with each other and with nothing on the device.
+//
+// So the faces are fetched from the same host and version as the CSS, and
+// a local copy of the CSS is written with the paths pointing at them.
+function localizedCss(css) {
+  const local = path.join(CACHE, 'plugins.local.css');
+  const fontDir = path.join(CACHE, 'fonts');
+  const raw = fs.readFileSync(css, 'utf-8');
+  const wanted = [...new Set((raw.match(/url\("\/fonts\/[^"]+"\)/g) || [])
+    .map((u) => u.slice(6, -2)))];
+  fs.mkdirSync(fontDir, { recursive: true });
+  const origin = CSS_URL.slice(0, CSS_URL.indexOf('/', 8));
+  for (const name of wanted) {
+    const file = path.join(fontDir, path.basename(name));
+    if (fs.existsSync(file) && fs.statSync(file).size > 100) continue;
+    try {
+      execFileSync('curl', ['-fsSL', '-o', file, origin + '/fonts/' + path.basename(name)], { stdio: 'pipe', timeout: 120000 });
+    } catch (e) {
+      // A face that will not download is worth saying out loud rather than
+      // silently measuring in a fallback, which is the bug this fixes.
+      try { fs.unlinkSync(file); } catch (e2) { /* nothing written */ }
+      console.error('could not fetch ' + name + ': text will be measured in a fallback face');
+    }
+  }
+  const stamp = crypto.createHash('sha1').update(raw.length + '|' + fontDir).digest('hex');
+  const marker = local + '.stamp';
+  let current = '';
+  try { current = fs.readFileSync(marker, 'utf-8'); } catch (e) { /* not written yet */ }
+  if (current !== stamp) {
+    fs.writeFileSync(local, raw.split('url("/fonts/').join('url("file://' + fontDir + '/'));
+    fs.writeFileSync(marker, stamp);
+  }
+  return local;
 }
 
 // ---------------------------------------------------------------- page building
