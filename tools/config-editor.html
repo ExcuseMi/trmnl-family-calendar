@@ -245,7 +245,8 @@
       "includeDescription": false,   // let rules match DESCRIPTION too
       "hideIfEmpty": false,          // keep this calendar's line when empty or unreachable
       "rules": [
-        { "match": { "type": "word", "value": "L6" },
+        { "match": { "type": "word", "value": "L6",
+                     "field": "title" },  // or location / description / categories / any
           "track": "Bart",           // a name, or a list to share the event
           "rename": false,           // don't rewrite the matched text to the track name
           "rewrite": "", "rewriteFull": false,
@@ -256,7 +257,8 @@
   ]
 }</code></pre>
         <ul class="hint">
-          <li><strong>Match types:</strong> <code>any</code>, <code>all</code>, <code>exact</code>, <code>word</code>, <code>contains</code>, <code>regex</code>, <code>status</code>, <code>weekday</code>, and <code>and</code>/<code>or</code>/<code>not</code> (with <code>matchers</code>).</li>
+          <li><strong>Match types:</strong> <code>any</code>, <code>all</code>, <code>exact</code>, <code>word</code>, <code>contains</code>, <code>regex</code>, <code>status</code>, <code>weekday</code>, <code>duration</code> (<code>min</code>/<code>max</code> minutes), <code>time</code> (<code>from</code>/<code>to</code>, "HH:MM", from inclusive and to exclusive), and <code>and</code>/<code>or</code>/<code>not</code> (with <code>matchers</code>).</li>
+          <li><strong>What a matcher reads:</strong> a text matcher takes an optional <code>field</code>: <code>title</code>, <code>location</code>, <code>description</code>, <code>categories</code> or <code>any</code>. Left out, it reads the title plus the description, which is what a matcher has always done. Naming <code>description</code> or <code>any</code> switches <code>includeDescription</code> on by itself, so a rule that reads the notes does not also have to remember the switch.</li>
           <li><strong>Order:</strong> rules are checked in order and the last match wins for each effect. A calendar's own rules beat the top-level ones.</li>
           <li><strong>Who claims an unrouted event:</strong> the calendar's own name, then the first entry in <code>tracks</code>, then the feed's <code>X-WR-CALNAME</code>. Whichever wins becomes a <em>line</em>: name a calendar after the track whose line it is, or leave it unnamed when its rules route everything, or you get an extra line named after the calendar.</li>
           <li><strong>Sides, colours and dash patterns</strong> are chosen for you: sides are balanced by event count once every calendar has loaded, busiest first, and each side's lines then take solid, dashed, dotted, dash-dot in order. <code>side</code> and <code>color</code> on a track are still read, so a configuration that already sets them keeps working, but there is no longer any reason to write one.</li>
@@ -323,10 +325,17 @@
   function newTrack() { return { _id: uid(), name: "", color: "", side: "" }; }
   function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false, keepEmpty: false }; }
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
-  function newCondition() { return { _id: uid(), type: "word", value: "", status: "confirmed", weekdays: [], negate: false }; }
+  function newCondition() { return { _id: uid(), type: "word", field: "", value: "", status: "confirmed", weekdays: [], min: "", max: "", from: "", to: "", negate: false }; }
   function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], tracks: [], rename: true, rewrite: "", rewriteFull: false, hide: false, siding: false }; }
 
-  var MATCH_TYPES = [["word", "has the word"], ["contains", "contains"], ["exact", "is exactly"], ["regex", "matches regex"], ["any", "any event"], ["status", "has status"], ["weekday", "is on weekday"]];
+  var MATCH_TYPES = [["word", "has the word"], ["contains", "contains"], ["exact", "is exactly"], ["regex", "matches regex"], ["any", "any event"], ["status", "has status"], ["weekday", "is on weekday"], ["duration", "lasts"], ["time", "starts"]];
+  // Which property the words are looked for in. Blank is the default and
+  // means what a matcher has always meant: the title, plus the description
+  // when the calendar has one. Named explicitly, a field is the only one
+  // read, which is how you say "the word Gym in the LOCATION, not in the
+  // title of somebody's gym-shopping reminder".
+  var MATCH_FIELDS = [["", "title or description"], ["title", "title"], ["location", "location"], ["description", "description"], ["categories", "category"], ["any", "anything"]];
+  var TEXT_TYPES = ["word", "contains", "exact", "regex"];
   var WEEKDAYS = [["MO", "Mon"], ["TU", "Tue"], ["WE", "Wed"], ["TH", "Thu"], ["FR", "Fri"], ["SA", "Sat"], ["SU", "Sun"]];
 
   // Which side, colour, dash pattern and width the plugin will give each track. The real
@@ -360,10 +369,25 @@
     if (c.type === "any") return { type: "any" };
     if (c.type === "status") return { type: "status", value: c.status || "confirmed" };
     if (c.type === "weekday") return c.weekdays.length ? { type: "weekday", value: c.weekdays.slice() } : null;
+    if (c.type === "duration") {
+      var d = {};
+      if (String(c.min).trim() !== "") d.min = Number(c.min);
+      if (String(c.max).trim() !== "") d.max = Number(c.max);
+      return (d.min == null && d.max == null) ? null : Object.assign({ type: "duration" }, d);
+    }
+    if (c.type === "time") {
+      var t = {};
+      if (String(c.from).trim() !== "") t.from = String(c.from).trim();
+      if (String(c.to).trim() !== "") t.to = String(c.to).trim();
+      return (t.from == null && t.to == null) ? null : Object.assign({ type: "time" }, t);
+    }
     var values = (c.value || "").split(",").map(function (v) { return v.trim(); }).filter(Boolean);
     if (!values.length) return null;
-    if (values.length === 1) return { type: c.type, value: values[0] };
-    return { type: "or", matchers: values.map(function (v) { return { type: c.type, value: v }; }) };
+    // The field rides on each matcher, so a comma-separated list still
+    // fans out into an "or" and every branch of it reads the same field.
+    var one = function (v) { var o = { type: c.type, value: v }; if (c.field) o.field = c.field; return o; };
+    if (values.length === 1) return one(values[0]);
+    return { type: "or", matchers: values.map(one) };
   }
   function conditionValue(c) {
     var inner = conditionValueInner(c);
@@ -426,15 +450,40 @@
     // value (exactly what conditionValue above builds for a comma-separated
     // list), collapses back into one multi-value condition rather than
     // being lost or shown as separate rows.
-    if (m.type === "or" && Array.isArray(m.matchers) && m.matchers.length && m.matchers.every(function (sm) { return sm && ["word", "contains", "exact"].indexOf(sm.type) !== -1 && sm.type === m.matchers[0].type && typeof sm.value === "string"; })) {
+    if (m.type === "duration") {
+      c.type = "duration";
+      c.min = typeof m.min === "number" ? String(m.min) : "";
+      c.max = typeof m.max === "number" ? String(m.max) : "";
+      return c;
+    }
+    if (m.type === "time") {
+      c.type = "time";
+      c.from = typeof m.from === "string" ? m.from : "";
+      c.to = typeof m.to === "string" ? m.to : "";
+      return c;
+    }
+    // A list only collapses back into one row when every branch reads the
+    // same field as well as the same type, or the round trip would quietly
+    // move one of them.
+    if (m.type === "or" && Array.isArray(m.matchers) && m.matchers.length && m.matchers.every(function (sm) { return sm && ["word", "contains", "exact"].indexOf(sm.type) !== -1 && sm.type === m.matchers[0].type && (sm.field || "") === (m.matchers[0].field || "") && typeof sm.value === "string"; })) {
       c.type = m.matchers[0].type;
+      c.field = fieldOf(m.matchers[0]);
       c.value = m.matchers.map(function (sm) { return sm.value; }).join(", ");
       return c;
     }
-    c.type = ["word", "contains", "exact", "regex"].indexOf(m.type) !== -1 ? m.type : "word";
+    c.type = TEXT_TYPES.indexOf(m.type) !== -1 ? m.type : "word";
+    c.field = fieldOf(m);
     c.value = typeof m.value === "string" ? m.value : "";
     return c;
   }
+  // An unknown field name is dropped rather than kept: the plugin ignores
+  // one it does not know (it falls back to the default), so keeping it in
+  // the editor would show a rule doing something it is not doing.
+  function fieldOf(m) {
+    var f = typeof m.field === "string" ? m.field.trim().toLowerCase() : "";
+    return MATCH_FIELDS.some(function (x) { return x[0] === f; }) ? f : "";
+  }
+
   function ruleFrom(rv) {
     var r = newRule();
     var m = rv.match;
@@ -573,7 +622,7 @@
     rule.conditions.forEach(function (c, i) {
       var row = el("div", { class: "cond" });
       if (i > 0) {
-        var comb = el("select", {}, [el("option", { value: "and", text: "and" }), el("option", { value: "or", text: "or" })]);
+        var comb = el("select", { class: "cond-comb" }, [el("option", { value: "and", text: "and" }), el("option", { value: "or", text: "or" })]);
         comb.value = rule.combinator;
         comb.addEventListener("change", function () { rule.combinator = comb.value; onChange(); });
         row.appendChild(comb);
@@ -581,29 +630,56 @@
       var notBtn = el("button", { class: "small" + (c.negate ? " primary" : ""), type: "button", title: "Invert this condition (does NOT match)", text: "not" });
       notBtn.addEventListener("click", function () { c.negate = !c.negate; notBtn.className = "small" + (c.negate ? " primary" : ""); onChange(); });
       row.appendChild(notBtn);
-      var type = el("select", {}, MATCH_TYPES.map(function (t) { return el("option", { value: t[0], text: t[1] }); }));
+      // Reads left to right as a sentence: "If the event LOCATION CONTAINS
+      // Elementary". The field comes before the type for that reason, and
+      // disappears entirely on the conditions that are not about words.
+      var field = el("select", { class: "cond-field", title: "Which part of the event to look in" },
+        MATCH_FIELDS.map(function (f) { return el("option", { value: f[0], text: f[1] }); }));
+      field.value = c.field || "";
+      field.addEventListener("change", function () { c.field = field.value; onChange(); });
+      row.appendChild(field);
+      var type = el("select", { class: "cond-type" }, MATCH_TYPES.map(function (t) { return el("option", { value: t[0], text: t[1] }); }));
       type.value = c.type;
       row.appendChild(type);
-      var value = el("input", { type: "text", placeholder: c.type === "regex" ? "^Piano.*" : "Dentist, or Dentist, Checkup for any of several", value: c.value, style: "width:220px" });
+      var value = el("input", { class: "cond-value", type: "text", placeholder: c.type === "regex" ? "^Piano.*" : "Dentist, or Dentist, Checkup for any of several", value: c.value, style: "width:220px" });
       value.addEventListener("input", function () { c.value = value.value; onChange(); });
-      var status = el("select", {}, ["confirmed", "tentative", "cancelled"].map(function (s) { return el("option", { value: s, text: s }); }));
+      var status = el("select", { class: "cond-status" }, ["confirmed", "tentative", "cancelled"].map(function (s) { return el("option", { value: s, text: s }); }));
       status.value = c.status;
       status.addEventListener("change", function () { c.status = status.value; onChange(); });
-      var days = el("span", {}, WEEKDAYS.map(function (w) {
+      var days = el("span", { class: "cond-days" }, WEEKDAYS.map(function (w) {
         var b = el("button", { class: "small", text: w[1], type: "button" });
         function paint() { b.className = "small" + (c.weekdays.indexOf(w[0]) !== -1 ? " primary" : ""); }
         paint();
         b.addEventListener("click", function () { var k = c.weekdays.indexOf(w[0]); if (k === -1) c.weekdays.push(w[0]); else c.weekdays.splice(k, 1); paint(); onChange(); });
         return b;
       }));
+      // How long it runs, and when it starts. Neither is a word, and both
+      // are things a calendar knows that no title reliably says: "anything
+      // over four hours is a status block" holds however the household
+      // spells it this week.
+      var minEl = el("input", { type: "number", min: "0", step: "5", placeholder: "at least", value: c.min, style: "width:96px", title: "At least this many minutes" });
+      var maxEl = el("input", { type: "number", min: "0", step: "5", placeholder: "at most", value: c.max, style: "width:96px", title: "At most this many minutes" });
+      var mins = el("span", { class: "chip", text: "min" });
+      minEl.addEventListener("input", function () { c.min = minEl.value; onChange(); });
+      maxEl.addEventListener("input", function () { c.max = maxEl.value; onChange(); });
+      var dur = el("span", { class: "cond-dur" }, [minEl, maxEl, mins]);
+      var fromEl = el("input", { type: "time", value: c.from, style: "width:110px", title: "At or after" });
+      var toEl = el("input", { type: "time", value: c.to, style: "width:110px", title: "Before" });
+      fromEl.addEventListener("input", function () { c.from = fromEl.value; onChange(); });
+      toEl.addEventListener("input", function () { c.to = toEl.value; onChange(); });
+      var when = el("span", { class: "cond-when" }, [el("span", { class: "chip", text: "from" }), fromEl, el("span", { class: "chip", text: "before" }), toEl]);
       function mode() {
-        value.hidden = !(c.type === "word" || c.type === "contains" || c.type === "exact" || c.type === "regex");
+        var isText = TEXT_TYPES.indexOf(c.type) !== -1;
+        value.hidden = !isText;
+        field.hidden = !isText;
         status.hidden = c.type !== "status";
         days.hidden = c.type !== "weekday";
+        dur.hidden = c.type !== "duration";
+        when.hidden = c.type !== "time";
       }
       type.addEventListener("change", function () { c.type = type.value; mode(); onChange(); });
       mode();
-      row.appendChild(value); row.appendChild(status); row.appendChild(days);
+      row.appendChild(value); row.appendChild(status); row.appendChild(days); row.appendChild(dur); row.appendChild(when);
       if (rule.conditions.length > 1) {
         var rm = el("button", { class: "ghost small", text: "×", title: "Remove condition" });
         rm.addEventListener("click", function () { rule.conditions.splice(i, 1); renderConditions(rule, container, onChange); onChange(); });
@@ -1069,6 +1145,7 @@
     out.push("");
     out.push("## What makes this board read well");
     out.push("- 2 to 6 lines. More than that and the panel runs out of depth and starts dropping lines.");
+    out.push("- If a feed's long blocks are all shaped the same way but named differently every week, one `duration` rule beats a list of titles: `{ \"match\": { \"type\": \"duration\", \"min\": 240 }, \"siding\": true }` says \"anything over four hours is a status block\" once and keeps saying it.");
     out.push("- A long block spent in ONE place (a school day, a work shift, a desk booking, a delivery) should be `\"siding\": true`. The line then leaves the running line for its span and rejoins, instead of spending a whole label lane on it, and the meetings inside it still branch off normally.");
     out.push("- Something several people are at should list all of them: `\"track\": [\"Bart\", \"Lisa\"]`. It is then drawn once, as an interchange joining their lines, instead of once per person.");
     out.push("- Titles are read at arm's length on a small panel. Use `rewrite` to drop codes, room numbers, \"[Teams]\" and the like. Use `hide` for things nobody reads off a wall board: birthdays, \"Free\", \"Out of office\", declined invitations.");
@@ -1079,7 +1156,8 @@
     out.push("```json");
     out.push(schemaText());
     out.push("```");
-    out.push("- Matchers: `any`, `all`, `exact`, `word`, `contains`, `regex`, `status`, `weekday`, and `and` / `or` / `not` taking `matchers`.");
+    out.push("- Matchers: `any`, `all`, `exact`, `word`, `contains`, `regex`, `status`, `weekday`, `duration` (`min`/`max` in minutes), `time` (`from`/`to` as \"HH:MM\", `from` inclusive and `to` exclusive), and `and` / `or` / `not` taking `matchers`.");
+    out.push("- A text matcher reads the title, plus the description when the calendar has one. Give it `\"field\"` to read something else: `title`, `location`, `description`, `categories` or `any`. Route on `location` when the titles are uninformative but the place is not (a school, an office, a pitch), and on `categories` when the feed sets them. Naming `description` or `any` turns `includeDescription` on by itself.");
     out.push("- Rules run in order; the last match wins for each effect. A calendar's own rules beat the top-level ones.");
     out.push("- A calendar's `name` is NOT a caption: an event that no rule routes falls back to it, and that fallback name is drawn as a LINE on the map. So name a calendar after the person whose line it is, or leave `name` off entirely when the calendar's rules route every event somewhere. A calendar called \"Deliveries\" or \"Planet Express\" with one unrouted event in it puts a \"Deliveries\" line on a board that was supposed to have one line per person.");
     out.push("- The fallback order in full: the calendar's `name`, else the first entry in `tracks`, else the feed's own name. Count the lines your configuration produces before you send it: it is one per entry in `tracks`, PLUS one for every named calendar that can still leak an unrouted event. That total must match the number of people you found.");

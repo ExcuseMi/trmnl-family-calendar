@@ -74,6 +74,10 @@ function icsWithEvents(events) {
     if (e.exdate) s += 'EXDATE:' + e.exdate + '\r\n';
     s += 'SUMMARY:' + e.summary + '\r\n';
     if (e.description) s += 'DESCRIPTION:' + e.description + '\r\n';
+    if (e.location) s += 'LOCATION:' + e.location + '\r\n';
+    // Written raw: a case testing how a list value is split needs to be
+    // able to put an escaped comma in one.
+    if (e.categories) s += 'CATEGORIES:' + e.categories + '\r\n';
     if (e.status) s += 'STATUS:' + e.status + '\r\n';
     if (e.location) s += 'LOCATION:' + e.location + '\r\n';
     s += 'END:VEVENT\r\n';

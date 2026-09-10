@@ -1447,6 +1447,20 @@ function unfoldIcs(text) {
   return text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '').split('\n');
 }
 
+// A comma-separated ICS list value, split on the separators only: a comma
+// the writer escaped belongs to the value it sits in.
+function icsList(value) {
+  var out = [], cur = '';
+  for (var i = 0; i < value.length; i++) {
+    var c = value.charAt(i);
+    if (c === '\\' && i + 1 < value.length) { cur += c + value.charAt(i + 1); i++; continue; }
+    if (c === ',') { out.push(cur); cur = ''; continue; }
+    cur += c;
+  }
+  out.push(cur);
+  return out.map(function (v) { return unescapeIcsText(v).trim(); }).filter(Boolean);
+}
+
 function unescapeIcsText(v) {
   return v.replace(/\\n/gi, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\');
 }
@@ -1586,6 +1600,10 @@ function parseIcs(text, tz, days, includeDescription) {
     else if (key === 'DTEND') cur.dtend = parseIcsDateTime(params, value, tz);
     else if (key === 'SUMMARY') cur.title = unescapeIcsText(value);
     else if (key === 'LOCATION') cur.location = unescapeIcsText(value);
+    // CATEGORIES is a LIST, and the property may appear more than once.
+    // Split before unescaping, or an escaped comma inside one category
+    // ("Kids\, school") becomes a separator and one category becomes two.
+    else if (key === 'CATEGORIES') cur.categories = (cur.categories || []).concat(icsList(value));
     else if (key === 'DESCRIPTION' && includeDescription) cur.desc = unescapeIcsText(value);
     else if (key === 'STATUS') cur.status = value.trim().toUpperCase();
     else if (key === 'RRULE') cur.rrule = value;
@@ -1648,7 +1666,8 @@ function parseIcs(text, tz, days, includeDescription) {
         if (!isDirectSpan && !isWeeklySpan) return;
         if (!ev.recurrenceId && ev.uid && overriddenDates[ev.uid + '|' + di.key]) return;
         if (ev.exdates && ev.exdates[di.key]) return;   // taken out of the series
-        allDay.push({ title: ev.title, desc: ev.desc || '', status: ev.status || '', day: dayIx });
+        allDay.push({ title: ev.title, desc: ev.desc || '', status: ev.status || '',
+          location: ev.location || '', categories: ev.categories || [], day: dayIx });
       });
       return;
     }
@@ -1675,6 +1694,7 @@ function parseIcs(text, tz, days, includeDescription) {
         desc: ev.desc || '',
         status: ev.status || '',
         location: ev.location,
+        categories: ev.categories || [],
         day: dayIx,
         startMin: startMin,
         endMin: durationMin != null ? startMin + durationMin : null,
@@ -1711,7 +1731,7 @@ function compileMatcher(spec) {
     var subs = (Array.isArray(spec.matchers) ? spec.matchers : []).map(compileMatcher).filter(Boolean);
     if (!subs.length) return null;
     var isAnd = spec.type === 'and';
-    return { rx: null, test: function (ctx) {
+    return { rx: null, usesDesc: subs.some(function (m) { return m.usesDesc; }), test: function (ctx) {
       return isAnd ? subs.every(function (m) { return m.test(ctx); }) : subs.some(function (m) { return m.test(ctx); });
     } };
   }
@@ -1723,7 +1743,7 @@ function compileMatcher(spec) {
   if (spec.type === 'not') {
     var negated = compileMatcher(spec.matcher);
     if (!negated) return null;
-    return { rx: null, test: function (ctx) { return !negated.test(ctx); } };
+    return { rx: null, usesDesc: negated.usesDesc, test: function (ctx) { return !negated.test(ctx); } };
   }
   if (spec.type === 'status') {
     var want = typeof spec.value === 'string' ? spec.value.trim().toUpperCase() : '';
@@ -1742,6 +1762,34 @@ function compileMatcher(spec) {
     if (!any) return null;
     return { rx: null, test: function (ctx) { return ctx.weekday !== null && ctx.weekday !== undefined && !!wanted[ctx.weekday]; } };
   }
+  // How long the event runs, in minutes. What it is FOR is the shape of a
+  // day rather than its words: a block that lasts all morning is a
+  // different kind of thing from a half-hour meeting, whatever either is
+  // called, and "anything over four hours is a siding" says that once
+  // instead of listing every status block a household can invent.
+  if (spec.type === 'duration') {
+    var dMin = finiteOr(spec.min, null), dMax = finiteOr(spec.max, null);
+    if (dMin == null && dMax == null) return null;
+    return { rx: null, test: function (ctx) {
+      if (ctx.durationMin == null) return false;
+      if (dMin != null && ctx.durationMin < dMin) return false;
+      if (dMax != null && ctx.durationMin > dMax) return false;
+      return true;
+    } };
+  }
+  // When it starts, as minutes past the event's own midnight. `from` is
+  // inclusive and `to` exclusive, so 07:00-09:00 and 09:00-12:00 tile
+  // without either claiming nine o'clock twice.
+  if (spec.type === 'time') {
+    var tFrom = hhmmToMin(spec.from), tTo = hhmmToMin(spec.to);
+    if (tFrom == null && tTo == null) return null;
+    return { rx: null, test: function (ctx) {
+      if (ctx.startOfDayMin == null) return false;
+      if (tFrom != null && ctx.startOfDayMin < tFrom) return false;
+      if (tTo != null && ctx.startOfDayMin >= tTo) return false;
+      return true;
+    } };
+  }
   if (typeof spec.value !== 'string') return null;
   var p = spec.value.trim();
   if (!p) return null;
@@ -1755,7 +1803,55 @@ function compileMatcher(spec) {
   } else {
     rx = new RegExp('\\b' + escapeRegExp(p) + '\\b', 'i');
   }
-  return { rx: rx, test: function (ctx) { return rx.test(ctx.title) || (!!ctx.desc && rx.test(ctx.desc)); } };
+  var field = MATCH_FIELDS[String(spec.field || '').trim().toLowerCase()] ? String(spec.field).trim().toLowerCase() : null;
+  return {
+    rx: rx,
+    // Only an EXPLICIT request for the description makes a calendar fetch
+    // it (see parseConfig): the default field already reads it when the
+    // calendar opted in, and asking for it by name is opting in.
+    usesDesc: field === 'description' || field === 'any',
+    test: function (ctx) {
+      var parts = fieldTexts(ctx, field);
+      for (var i = 0; i < parts.length; i++) if (parts[i] && rx.test(parts[i])) return true;
+      return false;
+    },
+  };
+}
+
+// Which property a text matcher reads. Absent, it reads the event's own
+// text: the title, plus the description when the calendar opted into one.
+// That is what a matcher with no field has always done and what every
+// existing config is written against, so it stays the default rather than
+// becoming "title" with a rename of the behaviour.
+var MATCH_FIELDS = { title: 1, description: 1, location: 1, categories: 1, any: 1 };
+
+// The strings one matcher tests, each on its own. Kept as a LIST rather
+// than joined: `exact` anchors to the ends of what it is given, so a join
+// would quietly stop it ever matching, and one event can carry several
+// categories, each of which is its own whole value.
+function fieldTexts(ctx, field) {
+  if (field === 'title') return [ctx.title];
+  if (field === 'description') return [ctx.desc];
+  if (field === 'location') return [ctx.location];
+  if (field === 'categories') return ctx.categories;
+  if (field === 'any') return [ctx.title, ctx.desc, ctx.location].concat(ctx.categories);
+  return [ctx.title, ctx.desc];
+}
+
+function finiteOr(v, dflt) {
+  var n = typeof v === 'string' ? Number(v.trim()) : v;
+  return typeof n === 'number' && isFinite(n) ? n : dflt;
+}
+
+// "HH:MM" (or "H:MM", or a bare hour) to minutes past midnight.
+function hhmmToMin(v) {
+  if (typeof v === 'number' && isFinite(v)) return v;
+  if (typeof v !== 'string') return null;
+  var m = /^\s*(\d{1,2})(?::(\d{2}))?\s*$/.exec(v);
+  if (!m) return null;
+  var h = +m[1], mi = m[2] ? +m[2] : 0;
+  if (h > 24 || mi > 59) return null;
+  return h * 60 + mi;
 }
 
 function compileRule(spec) {
@@ -1786,8 +1882,10 @@ function compileRule(spec) {
   // overwriting every title would be surprising — there it defaults to
   // false and must be opted into.
   var rename = track ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
-  return { match: m.test, rx: m.rx, track: track, allDay: allDay, hide: hide, siding: siding, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
+  return { match: m.test, rx: m.rx, usesDesc: !!m.usesDesc, track: track, allDay: allDay, hide: hide, siding: siding, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
 }
+
+function usesDesc(rule) { return !!(rule && rule.usesDesc); }
 
 function compileRuleList(raw) {
   var rules = [];
@@ -1933,7 +2031,11 @@ function parseConfig(raw) {
         if (typeof item.headers[k] === 'string') headers[k] = item.headers[k];
       });
     }
-    var includeDescription = item.includeDescription === true;
+    // Asking for the description by name IS opting in. Before this, a rule
+    // reading it silently matched nothing until you also found the
+    // includeDescription switch, which is a rule that looks broken.
+    var includeDescription = item.includeDescription === true
+      || globalRules.some(usesDesc) || rules.some(usesDesc);
     // The same switch on the calendar rather than the track: for the common
     // setup where one calendar IS one line, this is where the line is
     // declared, and there may be no tracks[] entry to hang it off at all.
@@ -1959,9 +2061,23 @@ function replaceMatch(text, rx, replacement) {
 // Returns { title, trackNames, allDay, hide }; trackNames is an array
 // (possibly with more than one name — a multi-track rule becomes an
 // interchange event) or null if nothing assigned one.
-function applyCalendarRules(title, desc, status, weekday, cal, globalRules, everyoneTrack) {
-  var originalTitle = title;
-  var ctx = { title: originalTitle, desc: desc || '', status: status || '', weekday: (weekday === undefined || weekday === null) ? null : weekday };
+function applyCalendarRules(ev, weekday, cal, globalRules, everyoneTrack) {
+  var originalTitle = ev.title;
+  // Everything a matcher may ask about, in one shape, so a rule reads the
+  // event rather than the four arguments somebody happened to pass down.
+  // The clock fields are minutes past the event's OWN midnight: startMin
+  // is absolute across the run of days, and "starts before nine" is a
+  // question about a morning, not about an offset from the first one.
+  var ctx = {
+    title: originalTitle,
+    desc: ev.desc || '',
+    location: ev.location || '',
+    categories: Array.isArray(ev.categories) ? ev.categories : [],
+    status: ev.status || '',
+    weekday: (weekday === undefined || weekday === null) ? null : weekday,
+    startOfDayMin: typeof ev.startMin === 'number' ? ((ev.startMin % 1440) + 1440) % 1440 : null,
+    durationMin: (typeof ev.startMin === 'number' && typeof ev.endMin === 'number') ? ev.endMin - ev.startMin : null,
+  };
   var trackNames = null;
   var renameRule = null;
   var rewriteRule = null;
@@ -2316,7 +2432,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
       // calendar borrows the feed's own name.
       if (cal.keepEmpty) registry.keep(cal.name || parsed.everyoneTrack || calLabel);
       parsedIcs.timed.forEach(function (ev) {
-        var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
+        var resolved = applyCalendarRules(ev, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
         if (resolved.hide) return;
         var trackNames = resolved.trackNames || (cal.name ? [cal.name] : null)
           || (parsed.everyoneTrack ? [parsed.everyoneTrack] : null) || (calLabel ? [calLabel] : null);
@@ -2363,7 +2479,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         });
       });
       parsedIcs.allDay.forEach(function (ev) {
-        var resolved = applyCalendarRules(ev.title, ev.desc, ev.status, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
+        var resolved = applyCalendarRules(ev, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
         if (resolved.hide) return;
         var trackNames = resolved.trackNames || (cal.name ? [cal.name] : null)
           || (parsed.everyoneTrack ? [parsed.everyoneTrack] : null) || (calLabel ? [calLabel] : null);

@@ -86,8 +86,10 @@ module.exports = function (test, h) {
     fireInput(rule.querySelector('.cond input[type=text]'), 'Piano');
     click(buttonByText(rule, '+ condition'));
     const conds = rule.querySelectorAll('.cond');
-    fireChange(conds[1].querySelector('select'), 'or');
-    fireChange(conds[1].querySelectorAll('select')[1], 'weekday');
+    // By class, not by index: the row grew a field select between these
+    // two the day matching stopped being title-only.
+    fireChange(conds[1].querySelector('.cond-comb'), 'or');
+    fireChange(conds[1].querySelector('.cond-type'), 'weekday');
     click(buttonByText(conds[1], 'Wed'));
     selectMulti(rule.querySelector('select[multiple]'), ['Sam']);
     assertEqual(jsonOut(document).rules[0].match, { type: 'or', matchers: [{ type: 'word', value: 'Piano' }, { type: 'weekday', value: ['WE'] }] });

@@ -61,7 +61,7 @@ value in a config file can know.
   "name"?: "Work",
   "rules"?: Rule[],
   "headers"?: { "Authorization": "…" },  // sent with the feed request
-  "includeDescription"?: boolean,        // let rules also match DESCRIPTION (off by default)
+  "includeDescription"?: boolean,        // let rules also match DESCRIPTION (off by default; a rule naming the description turns it on by itself)
   "hideIfEmpty"?: boolean                // false keeps this calendar's line on a day it has nothing (default true)
 }
 ```
@@ -136,10 +136,69 @@ rule wins, so a calendar's own rule overrides a global one.
 { "type": "regex",    "value": "^Piano" }    // double every backslash in JSON
 { "type": "status",   "value": "tentative" } // confirmed | tentative | cancelled
 { "type": "weekday",  "value": ["MO", "WE"] }
+{ "type": "duration", "min": 240, "max": 600 }   // minutes; either bound alone is fine
+{ "type": "time",     "from": "07:00", "to": "09:00" } // when it STARTS
 { "type": "any" }
 { "type": "and" | "or", "matchers": [Matcher, …] }
 { "type": "not", "matcher": Matcher }
 ```
+
+### `field`: which part of the event the words are looked for in
+
+The four text matchers (`word`, `contains`, `exact`, `regex`) take an
+optional `field`:
+
+| `field` | reads |
+| --- | --- |
+| *(omitted)* | the title, plus the description when the calendar has one |
+| `"title"` | the title only |
+| `"location"` | LOCATION |
+| `"description"` | DESCRIPTION |
+| `"categories"` | CATEGORIES, each category as a whole value |
+| `"any"` | all of the above |
+
+Omitting it is what a matcher has always meant, so nothing you already
+have changes. Name one when the title is not where the answer is:
+
+```json
+{ "match": { "type": "contains", "value": "Elementary", "field": "location" },
+  "track": "Kids", "rename": false }
+```
+
+That routes on the *place*, which is the case a school or an office feed
+usually is: every title is a code or a room number, and the only thing
+that reliably says whose day it is sits in LOCATION. Set `"rename": false`
+with it, or the rule will try to rewrite text that is not in the title.
+
+Two details worth knowing. `exact` anchors to whatever it is handed, so
+against `categories` it matches one whole category out of a list rather
+than the whole list. And naming `description` or `any` switches
+`includeDescription` on for that calendar by itself: a rule that reads the
+notes should not also have to remember a separate switch. A `field` the
+plugin does not recognise is ignored, and the matcher falls back to the
+default.
+
+### `duration` and `time`: the shape of the day, not its words
+
+`duration` is in minutes and takes `min` (inclusive), `max` (inclusive) or
+both. It only ever matches an event with both a start and an end.
+
+```json
+{ "match": { "type": "duration", "min": 240 }, "siding": true }
+```
+
+That is the whole "which of these is a status block" question answered
+once: anything over four hours is a block the line runs alongside, however
+the household spells it this week. It saves listing "In the office", "WFH",
+"Desk booking", "School day" and whatever gets invented next.
+
+`time` asks when an event STARTS, as "HH:MM" on its own day. `from` is
+inclusive and `to` is exclusive, so `07:00`-`09:00` and `09:00`-`12:00`
+tile without both claiming nine o'clock. Either bound alone is fine.
+
+Neither matcher takes a `value` or a `field`, and one with no bounds at all
+is dropped rather than treated as "everything", so a half-filled rule does
+nothing instead of quietly moving the whole board onto one line.
 
 Combine `and`/`or`/`not` to express "one of these, but not that one" without
 ever touching a regex. For example, hide every class code except two of your own:
