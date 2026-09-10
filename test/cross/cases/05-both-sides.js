@@ -44,12 +44,34 @@ module.exports = function (test, h) {
       'b sits between two lines with room to spare and still hung everything on one side');
   });
 
-  test('the innermost line on a side never hangs anything inward', () => {
-    // Its inward neighbour is not a line, it is the spine and the hour
-    // strip, and a label there is in the middle of the board.
-    const out = solve(both(ROOMY()));
-    assertEqual(inwardOf(out, 'a').length, 0, 'a is innermost on its side');
-    assertEqual(inwardOf(out, 'd').length, 0, 'd is innermost on its side');
+  test('the innermost line may use its inward side, and pays by sitting further out', () => {
+    // It used to be excluded, on the grounds that its inward neighbour is
+    // the spine and the hour strip. That stopped being true when the hour
+    // axis moved to the leading edge: what is between the middle and the
+    // first line is empty canvas. And the busiest line on a side is always
+    // the innermost one, so excluding it withheld the second side from the
+    // line with the most to put on it.
+    const b = both(ROOMY());
+    const plain = solve(ROOMY()), out = solve(b);
+    if (out.packed || plain.packed) return;
+    assert(inwardOf(out, 'a').length > 0, 'the innermost line still hung everything on one side');
+    assert(out.dist.a >= plain.dist.a - 0.001,
+      'it moved TOWARD the middle to make room, which is the one direction there is nothing to take');
+  });
+
+  test('nothing an innermost line writes reaches across the middle', () => {
+    // Distance is measured from the middle outward, so a label that runs
+    // past zero is on the other side of the board, among somebody else's
+    // lines.
+    const b = both(ROOMY());
+    const out = solve(b);
+    if (out.packed) return;
+    for (const [side, key] of [['A', 'a'], ['B', 'd']]) {
+      const mine = out.lanes[side].filter((l) => l.owner === key && l.side === -1);
+      if (!mine.length) continue;
+      const reach = Math.min(...mine.map((l) => l.dist)) - b.k.lineGap - b.k.maxLabelThick;
+      assert(reach >= -0.001, key + "'s inward label reaches to " + Math.round(reach) + ', past the middle');
+    }
   });
 
   test('a track keeps at least one rung on the outward side', () => {
@@ -70,14 +92,16 @@ module.exports = function (test, h) {
     if (out.packed) return;
     for (const side of ['A', 'B']) {
       const ts = b.sides[side];
-      for (let i = 1; i < ts.length; i++) {
+      for (let i = 0; i < ts.length; i++) {
         const mine = out.lanes[side].filter((l) => l.owner === ts[i].key && l.side === -1);
         if (!mine.length) continue;
         const nearest = Math.min(...mine.map((l) => l.dist));
         const reach = nearest - b.k.lineGap - b.k.maxLabelThick;
-        assert(reach >= out.bandEnd[ts[i - 1].key] - 0.001,
+        // for the innermost line the thing before it is the middle itself
+        const floor = i ? out.bandEnd[ts[i - 1].key] : 0;
+        assert(reach >= floor - 0.001,
           ts[i].key + "'s inward label reaches to " + Math.round(reach)
-          + ' but ' + ts[i - 1].key + "'s band ends at " + Math.round(out.bandEnd[ts[i - 1].key]));
+          + ' but the band before it ends at ' + Math.round(floor));
       }
     }
   });

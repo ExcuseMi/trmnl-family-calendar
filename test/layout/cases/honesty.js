@@ -79,14 +79,6 @@ module.exports = function (test, h) {
   // layout's own scoring calls "adrift" — it is scored while lanes are
   // being chosen, and anything that moves a label AFTER that (a dodge
   // around an interchange, say) has to respect the same limit.
-  // Same fault as the pierces in geometry.js, seen from the other side: on
-  // a line with three meetings at once the third caption has nowhere to sit
-  // that is both beside its own elbow and clear of the two above it, so it
-  // slides. A15 improves this board and does not cause it (five failures
-  // with both sides off, three with them on).
-  const ADRIFT_KNOWN = {
-    'overlapping-day/og-landscape': 'three overlapping meetings on one line, on a panel too shallow for three lanes: the third caption slides rather than sit on top of the second.',
-  };
   for (const f of fixtures) {
     for (const vname of ['x-landscape', 'og-landscape']) {
       test('every label stays beside its own branch: ' + f.name + '/' + vname, () => {
@@ -104,7 +96,7 @@ module.exports = function (test, h) {
           }
         }
         assert(bad.length === 0, bad.length + ' adrift label(s): ' + bad.slice(0, 4).join('; '));
-      }, ADRIFT_KNOWN[f.name + '/' + vname] && { known: ADRIFT_KNOWN[f.name + '/' + vname] });
+      });
     }
   }
 };

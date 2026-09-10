@@ -84,14 +84,12 @@ module.exports = function (test, h) {
     'five-lines/x-landscape': 'the elbow may not pass its own event, so Assembly\'s branch crosses "School Run" to reach its lane. The alternative is the ring off its own rail, which is what this used to draw.',
     'seven-lines/x-landscape': 'same as five-lines: a branch crossing a caption in a lane it passes through, rather than an elbow slid past its own event.',
     'seven-lines/og-landscape': 'seven lines on a 480px-deep board: three of them cannot be drawn at all, and the four that fit share one lane ladder, so branches cross their neighbours\' captions.',
-    // The fixture was added for A15 and it walked straight into an older
-    // fault. Work has three meetings running at once, so its second and
-    // third branches drop through the caption of the first on their way
-    // out: a line crossing its OWN line's words. Not A15's doing, and A15
-    // makes this board better rather than worse: with both sides off it
-    // fails five cases here, with them on, three.
-    'overlapping-day/x-landscape': 'a line with three overlapping meetings drops its later branches through its own first caption. Predates A15 (five failures here with both sides off, three with them on).',
-    'overlapping-day/og-landscape': 'same on the small panel, where the three lanes Work needs do not fit and the side falls back to a shared ladder.',
+    // The fixture was added for A15 and walked straight into an older
+    // fault: Work's third meeting drops its branch through the caption of
+    // its second on the way out, a line crossing its OWN line's words.
+    // Not A15's doing, and A15 is what took this board from five failing
+    // cases to this one: everything else here now passes, on both panels.
+    'double-booked/x-landscape': 'a line with three meetings at once drops its last branch through its own middle caption ("Design Review", pierced 57px by fork work). Five cases failed here before both sides were used; this is the one left.',
   };
   const PIERCE_KNOWN = {};
 

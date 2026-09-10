@@ -1926,9 +1926,15 @@
           // free on a board with room and silent on a board without: "both
           // sides, unless constricted by space".
           //
-          // Never for the innermost track on a side. Its inward neighbour
-          // is not a line, it is the spine and the hour strip, and a label
-          // there is in the middle of the board.
+          // The innermost track on a side is included, and pays the same
+          // way everybody else does: by sitting further from the middle.
+          // It was excluded on the grounds that its inward neighbour is
+          // the spine and the hour strip, which has not been true since
+          // the hour axis moved to the leading edge. What is between the
+          // middle and the first line now is empty canvas, and the busiest
+          // line on a side is ALWAYS the innermost one (sides are balanced
+          // busiest-first), so excluding it withheld the second side from
+          // exactly the line with the most to put on it.
           // Which split is CHEAPEST, not which is free. A rung costs its
           // side a fixed overhead once (the clearance off the line, plus
           // the label on the outermost one) and a lane step for each rung
@@ -1944,7 +1950,7 @@
           // 43 = 192px with one rung inward. The wider gap costs 45px and
           // buys back a 61px lane step.
           var inN = 0;
-          if (opts.bothSides && i > 0 && want > 1 && !t.shared) {
+          if (opts.bothSides && want > 1 && !t.shared) {
             var bestCost = gap + rungRoom(k, t, want, stepPx), bestN = 0;
             for (var c = 1; c <= want - 1; c++) {
               var cost = Math.max(gap, rungRoom(k, t, c, stepPx))
