@@ -307,6 +307,24 @@ is open.
   3. **The name is at the terminus.** A line that ends the day at a
      different level is named at a level it is no longer on, so this needs
      the name at both ends, or a bullet where it settles.
+  **The board that makes the case, measured.** `regroups` in the layout
+  fixtures: two parents and two children who regroup after school. Alex
+  takes Ben and Sam takes Ivy in the morning; in the evening Alex has Ivy
+  at football and homework while Sam has Ben at swimming and a bedtime
+  story. Every one of those is a shared event and every one wants its two
+  lines adjacent, and they cannot all have it: the four pairings form a
+  CYCLE (Alex-Ben, Ben-Sam, Sam-Ivy, Ivy-Alex), and a cycle cannot be laid
+  along a line without breaking one of its links.
+  So the morning is clean and every evening event reaches past the parent
+  it is not with. `cases/crossings.js` counts it off the drawn board and
+  asserts the number: FOUR, all of them after teatime, plus two pierced
+  labels that come with them (marked known in geometry.js). One swap at
+  teatime pays ONE instead: the morning wants Alex-Ben and Sam-Ivy
+  adjacent, the evening wants Alex-Ivy and Sam-Ben, and those two orders
+  differ by exchanging one adjacent pair.
+  That is the whole argument in one board. When a line can change level,
+  this test should read one crossing instead of four and the two known
+  markers should come off, and the suite will say so.
   After A15 and A17: those two decide how the cross-axis budget is spent,
   and this changes what "adjacent" means over the day, so doing it first
   means solving the same argument twice. It also subsumes the ordering half

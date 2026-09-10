@@ -172,6 +172,43 @@ const doubleBooked = base({
   ],
 });
 
+// THE DAY THAT NO SINGLE ORDER CAN DRAW (A18).
+//
+// Two parents and two children, who regroup after school. In the morning
+// Alex takes Ben and Sam takes Ivy; in the evening Alex has Ivy at
+// football and homework while Sam has Ben at swimming and a bedtime
+// story. Every one of those is a shared event, so every one of them wants
+// its two lines next to each other.
+//
+// They cannot all have it. The four pairings form a CYCLE (Alex-Ben,
+// Ben-Sam, Sam-Ivy, Ivy-Alex), and a cycle cannot be laid along a line
+// without breaking one of its links, so whichever order the board picks,
+// one pairing is left spanning the whole board and every event on it
+// crosses the two lines in between.
+//
+// One swap at teatime fixes it: the morning wants Alex-Ben and Sam-Ivy
+// adjacent, the evening wants Alex-Ivy and Sam-Ben, and those two orders
+// differ by exchanging one adjacent pair. One crossing, made on purpose,
+// in place of one per evening event for the rest of the day.
+const regroups = Object.assign(base({
+  legend: [
+    track('alex', 'Alex', 'left', 'black', -10, 4, 'solid'),
+    track('ben', 'Ben', 'left', 'gray-30', -20, 3, 'dashed'),
+    track('sam', 'Sam', 'right', 'orange-40', 10, 3, 'solid'),
+    track('ivy', 'Ivy', 'right', 'green-40', 20, 3, 'dotted'),
+  ],
+  items: [
+    ev('School Run', 'alex', 480, 510, { co_owners: ['ben'], track_width: 4 }),
+    ev('Nursery Drop', 'sam', 500, 530, { co_owners: ['ivy'], side: 'right', hue: 'orange-40', track_offset: 10 }),
+    ev('Standup', 'alex', 540, 555, { track_width: 4 }),
+    ev('Clinic', 'sam', 600, 660, { side: 'right', hue: 'orange-40', track_offset: 10 }),
+    ev('Football', 'alex', 1020, 1080, { co_owners: ['ivy'], track_width: 4 }),
+    ev('Swimming', 'sam', 1050, 1110, { co_owners: ['ben'], side: 'right', hue: 'orange-40', track_offset: 10 }),
+    ev('Homework', 'alex', 1110, 1170, { co_owners: ['ivy'], track_width: 4 }),
+    ev('Bedtime Story', 'sam', 1140, 1200, { co_owners: ['ben'], side: 'right', hue: 'orange-40', track_offset: 10 }),
+  ],
+}), {});
+
 // A full 24-hour day whose events all sit in the middle of it: the quiet
 // early morning and late evening are what the express sections compress.
 const fullDay = base({
@@ -372,6 +409,7 @@ module.exports = [
   { name: 'quiet-day', metro: quietDay },
   { name: 'tight-pair', metro: tightPair },
   { name: 'double-booked', metro: doubleBooked },
+  { name: 'regroups', metro: regroups },
   { name: 'full-day', metro: fullDay },
   { name: 'shared-siding', metro: sharedSiding },
   { name: 'five-lines', metro: fiveLines },
