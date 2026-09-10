@@ -154,6 +154,29 @@ function sourceStamp() {
   return parts.join('|');
 }
 
+// A build in a COPY of the plugin, never in the tracked one.
+//
+// `trmnlp build` reads .trmnlp.yml and src/ from wherever it is run and
+// writes _build/ there, and a build variant needs the yml PATCHED. Done in
+// place, that patch is a write to a tracked source file with a restore in a
+// finally, which is safe exactly as long as nothing else builds at the same
+// time. Three times today something did (two suites at once, then a
+// screenshot while a suite ran, then a suite I started myself after
+// deleting the lock), and every time it left "service_alert" baked into
+// plugin/.trmnlp.yml and drew boards with an alert banner nobody asked for.
+//
+// Copied, the question does not arise: each build has its own yml, its own
+// src and its own _build, so any number of runs can go at once and none of
+// them can touch the working tree. It costs a copy of 450KB of source.
+function buildDir(liquidExtra) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'metro-plugin-'));
+  fs.mkdirSync(path.join(dir, 'src'));
+  for (const f of fs.readdirSync(SRC)) fs.copyFileSync(path.join(SRC, f), path.join(dir, 'src', f));
+  const yml = fs.readFileSync(YML, 'utf-8');
+  fs.writeFileSync(path.join(dir, '.trmnlp.yml'), liquidExtra ? patchDemoMetro(yml, liquidExtra) : yml);
+  return dir;
+}
+
 function baseHtml(liquidExtra, page) {
   const key = (liquidExtra ? JSON.stringify(liquidExtra) : '') + '|' + (page || 'full');
   if (builtHtml.has(key)) return builtHtml.get(key);
@@ -166,22 +189,19 @@ function baseHtml(liquidExtra, page) {
       return hit;
     } catch (e) { /* not built yet */ }
   }
-  // The yml is a tracked source file, so it is patched, built and put back
-  // in a finally, because a failed build must not leave a test fixture
-  // behind in the working tree.
-  const orig = fs.readFileSync(YML, 'utf-8');
+  const dir = buildDir(liquidExtra);
+  let html;
   try {
-    if (liquidExtra) fs.writeFileSync(YML, patchDemoMetro(orig, liquidExtra));
     const tb = Date.now();
-    execFileSync('trmnlp', ['build'], { cwd: PLUGIN, stdio: 'pipe', timeout: 120000 });
+    execFileSync('trmnlp', ['build'], { cwd: dir, stdio: 'pipe', timeout: 120000 });
     spent.builds++;
     spent.buildMs += Date.now() - tb;
+    html = fs.readFileSync(path.join(dir, '_build', (page || 'full') + '.html'), 'utf-8');
   } catch (e) {
     throw new Error('`trmnlp build` failed (is trmnlp on PATH?): ' + (e.stderr || e.message));
   } finally {
-    if (liquidExtra) fs.writeFileSync(YML, orig);
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e2) { /* a temp dir that will not go */ }
   }
-  const html = fs.readFileSync(path.join(BUILT, (page || 'full') + '.html'), 'utf-8');
   if (!CACHE_OFF) {
     try {
       fs.mkdirSync(BUILD_CACHE, { recursive: true });
@@ -454,38 +474,11 @@ const spent = { renders: 0, renderMs: 0, hits: 0, disk: 0, builds: 0, buildMs: 0
 //
 // Under .cache, which is gitignored, beside the framework assets. Entries
 // older than a week are dropped on the way in so it cannot grow forever.
-// Two runs at once corrupt the working tree. A build variant PATCHES the
-// tracked .trmnlp.yml, builds, and puts it back in a finally; run twice
-// over, one run's restore writes back what the other had already patched,
-// and a test fixture is left in a source file for good. That happened: an
-// "ALERT · Rain" banner ended up committed-adjacent in .trmnlp.yml and the
-// next run reported six failures that were nothing but the leftover.
-// Both runs also fight over _build, so their numbers are fiction anyway.
-const LOCK = path.join(CACHE, 'run.lock');
-(function claimTheSuite() {
-  fs.mkdirSync(CACHE, { recursive: true });
-  try {
-    fs.writeFileSync(LOCK, String(process.pid), { flag: 'wx' });
-  } catch (e) {
-    let holder = '';
-    try { holder = fs.readFileSync(LOCK, 'utf-8').trim(); } catch (e2) { /* raced away */ }
-    // A crashed run leaves its lock behind, so a pid nobody is running is
-    // not a reason to refuse.
-    let alive = false;
-    try { process.kill(+holder, 0); alive = true; } catch (e2) { alive = false; }
-    if (alive) {
-      console.error('another layout run (pid ' + holder + ') is going. It patches plugin/.trmnlp.yml,'
-        + ' so two at once corrupt it. Wait for it, or kill it and delete ' + LOCK + '.');
-      process.exit(2);
-    }
-    fs.writeFileSync(LOCK, String(process.pid));
-  }
-  const drop = function () { try { fs.unlinkSync(LOCK); } catch (e) { /* already gone */ } };
-  process.on('exit', drop);
-  process.on('SIGINT', function () { drop(); process.exit(130); });
-  process.on('SIGTERM', function () { drop(); process.exit(143); });
-})();
-
+// No lock any more, and none needed: a build happens in a copy of the
+// plugin (see buildDir), so two runs at once share nothing they can write
+// to. There was one, added the first time two suites corrupted
+// plugin/.trmnlp.yml between them; isolating the build is the fix that
+// lock was standing in for, and it lets runs go in parallel instead.
 const REPORT_CACHE = path.join(CACHE, 'reports');
 const BUILD_CACHE = path.join(CACHE, 'builds');
 const CACHE_OFF = process.env.METRO_NO_CACHE === '1';
