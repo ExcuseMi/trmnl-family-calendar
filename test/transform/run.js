@@ -10,8 +10,8 @@
 // Adapted from ../../test/transform/run.js (the other plugin's own
 // harness) — same vm-sandbox-per-test-file technique, same fake-Date
 // approach for pinning "today" across a run() call, trimmed to what this
-// plugin's simpler single-day `run(input) -> {metro}` shape needs (no
-// days[], no trmnl_state, no multi-day windows).
+// plugin's simpler single-day `run(input) -> {metro, trmnl_state}` shape
+// needs (no days[], no multi-day windows).
 //
 // Run with: npm test  (from this directory) — no Docker needed.
 
@@ -43,17 +43,24 @@ function makeFakeDate(getNowMs) {
 // `fetchImpl` standing in for the real network and, if `nowMs` is given,
 // Date/Date.now() pinned for every call made against the returned `run`/
 // `parseConfig`.
+//
+// `nowMs` may also be a FUNCTION, which is how the deadline tests work:
+// transform.js budgets every fetch against `deadline - Date.now()`, so a
+// test that wants to see what happens when the budget runs out has to be
+// able to move the clock from inside a fake fetch. Waiting out the real
+// 4.2s deadline instead would put four wasted seconds into every run.
 function runTransform(fetchImpl, nowMs) {
+  const clock = typeof nowMs === 'function' ? nowMs : (nowMs != null ? () => nowMs : null);
   const sandbox = {
     fetch: fetchImpl,
     console,
-    Date: nowMs != null ? makeFakeDate(() => nowMs) : Date,
+    Date: clock ? makeFakeDate(clock) : Date,
     Math, Array, Object, JSON, String, Number, Boolean, RegExp, Promise, Map, Set,
     AbortController, setTimeout, clearTimeout, URLSearchParams, Intl,
     module: { exports: {} },
   };
   vm.createContext(sandbox);
-  vm.runInContext(TRANSFORM_SRC + '\nmodule.exports = { run, parseConfig, applyCalendarRules, parseIcs, fromEpoch };', sandbox);
+  vm.runInContext(TRANSFORM_SRC + '\nmodule.exports = { run, parseConfig, applyCalendarRules, parseIcs, fromEpoch, I18N };', sandbox);
   return sandbox.module.exports;
 }
 

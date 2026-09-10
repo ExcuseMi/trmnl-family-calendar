@@ -243,7 +243,7 @@ const REPORTER = `
 </script>
 `;
 
-function pageFor(metro, screenClasses) {
+function pageFor(metro, screenClasses, slot) {
   const fw = frameworkAssets();
   let html = swapMetro(baseHtml(), metro);
   html = html.split(CSS_URL).join('file://' + fw.css).split(JS_URL).join('file://' + fw.js);
@@ -255,6 +255,18 @@ function pageFor(metro, screenClasses) {
   const screenTag = /class="screen([^"]*)"/;
   if (!screenTag.test(html)) throw new Error('the built page has no .screen element to size');
   html = html.replace(screenTag, (m, rest) => 'class="screen' + rest + ' ' + screenClasses + '"');
+  // A half or a quadrant is a SLOT inside the screen, not a smaller screen.
+  // The framework pins .screen to the device's own size whatever the window
+  // is, so asking for a 400x240 window and calling the result a quadrant
+  // rendered a full 800x480 board and cropped the picture: every small-view
+  // case in this suite was measuring the full board and saying otherwise.
+  // `.view--full` takes its box from --full-w/--full-h, which is the one
+  // knob a real mashup slot turns, so overriding those two gives the view
+  // the slot's box and leaves the screen and its zoom alone.
+  if (slot) {
+    html = html.replace('</head>', '<style>.screen{--full-w:' + slot.w + 'px !important;'
+      + '--full-h:' + slot.h + 'px !important}</style></head>');
+  }
   return html.replace('</body>', REPORTER + '</body>');
 }
 
@@ -270,7 +282,8 @@ let renderSeq = 0;
 // most of the suite's wall time.
 const contentCache = new Map();
 function render(metro, viewport) {
-  const key = viewport.name + '|' + viewport.w + 'x' + viewport.h + '|'
+  const key = viewport.name + '|' + viewport.w + 'x' + viewport.h
+    + '|' + (viewport.slot ? viewport.slot.w + 'x' + viewport.slot.h : 'full') + '|'
     + crypto.createHash('sha1').update(JSON.stringify(metro)).digest('hex');
   if (!contentCache.has(key)) contentCache.set(key, renderUncached(metro, viewport));
   return contentCache.get(key);
@@ -278,7 +291,7 @@ function render(metro, viewport) {
 
 function renderUncached(metro, viewport) {
   const file = path.join(tmpDir, 'page' + (renderSeq++) + '.html');
-  fs.writeFileSync(file, pageFor(metro, viewport.classes));
+  fs.writeFileSync(file, pageFor(metro, viewport.classes, viewport.slot));
   const dom = execFileSync(CHROME, [
     '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
     '--window-size=' + viewport.w + ',' + viewport.h,
@@ -337,7 +350,8 @@ const VIEWPORTS = [
   { name: 'og-landscape', w: 800, h: 480, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
   { name: 'x-landscape', w: 1872, h: 1404, classes: 'screen--v2 screen--lg screen--4bit screen--density-2x' },
   { name: 'x-portrait', w: 1404, h: 1872, classes: 'screen--v2 screen--lg screen--4bit screen--density-2x screen--portrait' },
-  { name: 'og-half', w: 400, h: 480, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
+  // a slot inside the screen, not a smaller screen: see pageFor
+  { name: 'og-half', w: 800, h: 480, slot: { w: 400, h: 480 }, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
 ];
 
 // ---------------------------------------------------------------- tiny test runner

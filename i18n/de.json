@@ -14,5 +14,6 @@
   "rain_stops": "Regen endet",
   "sunrise": "Sonnenaufgang",
   "sunset": "Sonnenuntergang",
-  "feed_down": "{n} nicht verfügbar"
+  "feed_down": "{n} nicht verfügbar",
+  "weather_stale": "Vorhersage möglicherweise veraltet"
 }

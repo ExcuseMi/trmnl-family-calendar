@@ -99,4 +99,55 @@ module.exports = function (test, h) {
       assert(bad.length === 0, v.name + ': the caption has a line through it: ' + bad.join(', '));
     }
   });
+
+  // The kink's corners are drawn ROUNDED, so the trunk starts leaving its
+  // baseline a corner radius BEFORE the station's own start and does not
+  // come back until a radius after its end. A siding drawn between the bare
+  // start and end vertices therefore begins after the trunk has already
+  // lifted off, and the two do not meet: the ink's lower edge steps at the
+  // join and the main line reads as interrupted. Homer's rail visibly broke
+  // where "Desk booking" began.
+  //
+  // Stated as the join itself: where a siding starts and stops, the trunk
+  // has to still be ON the baseline, within its own stroke. That is what
+  // makes the two read as one line rather than as two that nearly meet.
+  test('a siding meets the trunk it runs beside, at both ends', () => {
+    for (const f of [solo, fixtures.find((x) => x.name === 'five-lines')]) {
+      for (const v of [ROOMY, byName('og-landscape')]) {
+        const rep = layout(f, v);
+        const bad = [];
+        for (const owner of [...new Set(pathsWhere(rep, 'track').map((p) => p.owner))]) {
+          const mine = pathsWhere(rep, 'track').filter((p) => p.owner === owner);
+          if (mine.length < 2) continue;                 // no siding on this line
+          const ends = heightsAt(rep, owner, 6).concat(heightsAt(rep, owner, rep.canvas.w - 6));
+          if (!ends.length) continue;
+          const base = ends.reduce((a, b) => a + b, 0) / ends.length;
+          // the trunk is the one that runs the width of the board; a siding
+          // is flat, on the baseline, and shorter
+          const trunk = mine.slice().sort((a, b) => b.len - a.len)[0];
+          for (const sd of mine) {
+            if (sd === trunk) continue;
+            const ys = sd.pts.map((q) => q[1]);
+            if (Math.max.apply(null, ys) - Math.min.apply(null, ys) > 2) continue;   // not flat
+            if (Math.abs(ys[0] - base) > 3) continue;                                 // not on the baseline
+            const xs = sd.pts.map((q) => q[0]);
+            const reach = (sd.width * (rep.debug.Z || 1)) / 2 + 1;
+            for (const end of [Math.min.apply(null, xs), Math.max.apply(null, xs)]) {
+              // how far the trunk is from the baseline where the siding ends
+              let best = Infinity;
+              for (const q of trunk.pts) {
+                if (Math.abs(q[0] - end) > 2) continue;
+                best = Math.min(best, Math.abs(q[1] - base));
+              }
+              if (best !== Infinity && best > reach) {
+                bad.push(owner + ': the trunk is ' + best.toFixed(1) + 'px off the baseline where its '
+                  + 'siding ends at x' + Math.round(end) + ', more than the ' + reach.toFixed(1) + 'px it is wide');
+              }
+            }
+          }
+        }
+        assert(bad.length === 0, f.name + '/' + v.name + ': ' + bad.join('; '));
+      }
+    }
+  });
 };

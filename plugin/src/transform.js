@@ -12,9 +12,11 @@
 //
 // The config parser/rule engine (parseConfig/compileMatcher/
 // applyCalendarRules below) is ported from plugin/src/transform.js's own
-// — same config shape, same semantics, minus the pieces that plugin's
-// flat agenda list needs but this metro map doesn't (multi-day windows,
-// saved-state/calendar-down alerts, X-WR-CALNAME derived names). It
+// — same config shape, same semantics, minus the multi-day windows that
+// plugin's flat agenda list needs and this single-day map doesn't. The
+// saved-state pieces (last good weather, calendar-down alerts, remembered
+// X-WR-CALNAME) came across too and live under "Deadline and saved
+// state" below. It
 // supports: string-shorthand calendars (`"https://.../a.ics"` as well as
 // `{url:...}`), non-JSON config text falling back to a newline-separated
 // URL list, per-calendar `headers` (sent alongside the default
@@ -54,8 +56,13 @@
 //   - A rule's `desc` match only sees an event's DESCRIPTION when that
 //     calendar opts in via `includeDescription: true` — off by default
 //     since most calendars don't need it parsed/matched against.
-//   - Weather needs a `lat_lon` setting; without one it stays a
-//     placeholder in both modes.
+//   - Weather needs a `lat_lon` setting; without one a real board shows
+//     no forecast at all rather than a made-up one. The DEMO boards are
+//     the exception: they carry built-in weather (DEMO_WEATHER) so the
+//     sky band can be seen without a location.
+//   - Translations are downloaded (i18n/<code>.json in this repo);
+//     English is inline and is what a device that cannot reach GitHub
+//     reads.
 //
 // Both branches converge on the SAME buildMetro() — the rest of the
 // pipeline (hour ticks, sub-spur detection, the "now" marker, tracks
@@ -81,7 +88,7 @@ function timeLabel(min) {
 }
 
 // ---------------------------------------------------------------------
-// i18n — every user-facing string the plugin renders. ENGLISH IS INLINE
+// i18n. Every user-facing string the plugin renders. ENGLISH IS INLINE
 // and is the only table shipped in this file: it is the fallback for a
 // device that cannot reach GitHub, and it is the key set every other
 // language is checked against. Every other language lives in this repo's
@@ -95,7 +102,7 @@ var I18N = {
   en: { today: 'Today', more: '+{n} more', earlier: '+{n} earlier', rain_pct: '{n}% rain',
         clear: 'Clear', partly_cloudy: 'Partly cloudy', cloudy: 'Cloudy', foggy: 'Foggy', rain: 'Rain', snow: 'Snow', storms: 'Storms',
         rain_starts: 'Rain starts', rain_stops: 'Rain stops', sunrise: 'Sunrise', sunset: 'Sunset',
-        feed_down: '{n} unavailable' },
+        feed_down: '{n} unavailable', weather_stale: 'Forecast may be out of date' },
 };
 
 // Where the translated tables live, and how long a fetched one is trusted
@@ -147,7 +154,7 @@ function mergeStrings(fetched) {
 // Fetching a language must never delay or break a render: it is budgeted
 // against the same deadline the calendars are, a failure falls back to
 // the last table this device saw (kept in trmnl_state) and then to
-// English, and nothing about it is surfaced to the reader — a board in
+// English, and nothing about it is surfaced to the reader: a board in
 // English is a board.
 async function loadStrings(locale, state, deadline) {
   var lang = langOf(locale);
@@ -191,13 +198,13 @@ function tr(strings, key, n) {
 //
 // Saved state (https://help.trmnl.com/en/articles/16777795): whatever
 // run() returns as `trmnl_state` comes back as `input.trmnl.state` on the
-// next render. It is used here for the three things a single render
-// cannot know on its own — what the weather was last time the API
-// answered, how long a feed has been failing, and what a feed that is
-// failing right now is called — plus the fetched i18n table. It is
-// UNTRUSTED input: it may be absent, a string, a stale shape from an
+// next render. It carries the things a single render cannot work out on
+// its own: what the weather was the last time the API answered, how long
+// each feed has been failing, what a feed that is failing right now is
+// called, and the last language table this device managed to download.
+// It is UNTRUSTED input: it may be absent, a string, a shape from an
 // older build, or truncated, so every field is validated on the way in
-// and a bad one is simply dropped.
+// and a bad one is dropped rather than trusted.
 // ---------------------------------------------------------------------
 
 function msUntil(deadline) {
@@ -625,7 +632,7 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     now_min: nowMin != null ? nowMin : null, // minutes since local midnight; the client decides whether/where to draw it
     orientation: (extra && extra.orientation) || 'auto', // auto | horizontal | vertical — client picks for auto from the canvas aspect
     hour12: !!(extra && extra.hour12),
-    i18n: (function (st) { return { today: tr(st, 'today'), more: tr(st, 'more'), earlier: tr(st, 'earlier'), rain_pct: tr(st, 'rain_pct'), feed_down: tr(st, 'feed_down') }; })((extra && extra.strings) || I18N.en),
+    i18n: (function (st) { return { today: tr(st, 'today'), more: tr(st, 'more'), earlier: tr(st, 'earlier'), rain_pct: tr(st, 'rain_pct'), feed_down: tr(st, 'feed_down'), weather_stale: tr(st, 'weather_stale') }; })((extra && extra.strings) || I18N.en),
     header_weather: headerWeather,
     // The forecast is the last one the API answered with rather than
     // today's, and it is old enough to say so. A board that quietly shows
@@ -936,7 +943,7 @@ var RAIN_THRESHOLD = 50; // %, precipitation_probability crossing this is what d
 // A weather SNAPSHOT is language-free and unit-tagged: the condition and
 // every milestone are i18n KEYS, the icon is a filename, and the
 // temperatures carry the unit they were fetched in. It has to be, because
-// this is what goes into trmnl_state and is replayed on a later render —
+// this is what goes into trmnl_state and is replayed on a later render,
 // which may be in a different language, or after the temperature unit
 // setting changed, and a cached "Rain starts 15:00" in French on a board
 // that is now English is worse than no weather at all.
@@ -1476,7 +1483,7 @@ function parseConfig(raw) {
   // Same reasoning as timeFormat, and the same shape: a value the config
   // sets beats the account setting, anything unrecognised is ignored
   // rather than guessed at. Deliberately not surfaced in the editor or the
-  // AI prompt — it is for a board whose reader does not use the unit their
+  // AI prompt: it is for a board whose reader does not use the unit their
   // account language implies.
   var temperatureUnit = (function () {
     var v = str(data.temperatureUnit);
@@ -1876,7 +1883,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     }
     try {
       // No time left is the same outcome as a dead feed from the board's
-      // side — the events are missing — so it starts the same clock, and
+      // side (the events are missing), so it starts the same clock and
       // clears again on the next render that does reach it.
       var budget = msUntil(deadline);
       if (budget <= 0) { failed(); return; }
@@ -2069,7 +2076,7 @@ async function run(input) {
 
   // Every exit returns through here. The runtime stores what comes back as
   // `trmnl_state` and hands it to the next render as `input.trmnl.state`, so
-  // a render that fell back to the demo must still return it — dropping it
+  // a render that fell back to the demo must still return it: dropping it
   // on the failing paths would throw away the remembered weather and the
   // "down since" clocks exactly when they matter.
   function done(metro) {
@@ -2092,7 +2099,7 @@ async function run(input) {
     } catch (e) { /* keep the illustrative fixed DEMO_NOW_MIN on failure */ }
     var demoWx = await resolveWeather(latLonRaw, demoTz, deadline, state, tempUnit, strings);
     // A demo board has no location, so it would draw no sunrise, no rain
-    // and no header weather at all — the sky band, which is half the
+    // and no header weather at all. The sky band, which is half the
     // point of the map, was invisible to anyone who had not already
     // configured a real one. The built-in board gets built-in weather;
     // it needs no network and it applies to the demo ONLY.

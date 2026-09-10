@@ -12,7 +12,7 @@ is open.
 
 ## A. The board is wrong right now
 
-- [ ] **A1. Tracks squashed into a third of the board.** Seven lines at a
+- [x] **A1. Tracks squashed into a third of the board.** Seven lines at a
   ~35px pitch with ~700px of unused depth below them. Pass 3 of the
   separation solver spends the spare cross-axis room on lane pitch FIRST
   (`STEP_CAP = laneStep * 1.35`), and lane pitch is charged per lane summed
@@ -20,7 +20,7 @@ is open.
   (`SEP_CAP`) gets a look in. Spend on separation up to what the names need,
   then on lanes.
   Repro: `demo/futurama` + the AI config, X landscape.
-- [ ] **A2. Line names sitting on their own rails.** Falls out of A1: with
+- [x] **A2. Line names sitting on their own rails.** Falls out of A1: with
   no pitch there is no room above the rail, so `fitNameLines` drops the name
   onto the line and it collides with the terminus cap ("|Leela"). Re-check
   after A1; the existing test only covers 5 lines, so it needs a 7-line
@@ -34,7 +34,7 @@ is open.
   "Delivery Run" and "Ship Inspection" are `station: true` across the whole
   crew and come out as a stack of unrelated blobs. A shared station is one
   corridor, the way a shared event is one interchange.
-- [ ] **A6. Terminator tick misplaced on a backwards branch.** "Walk
+- [x] **A6. Terminator tick misplaced on a backwards branch.** "Walk
   Nibbler" (17:30 to 18:15) puts its end tick in the wrong place.
 - [ ] **A7. Quadrant on TRMNL X: a backwards branch is mangled.** "Family
   Dinner" on the Simpsons board. Its stub runs the wrong way and detaches.
@@ -42,42 +42,55 @@ is open.
   Known, carried over: "Demo - Planet / Express Crew" touches "07:30 - 08:15
   Bender: Bend Some Girders". The name is not an obstacle to label placement.
 
+- [x] **A9. The trunk was interrupted where a siding began.** The kink's
+  corners are rounded, so the trunk leaves its baseline a corner radius
+  before the station's own start; the siding began at the bare vertex, and
+  the two did not meet.
+- [ ] **A10. A branch and a station ramp meeting at the same minute graze
+  each other.** With the car no longer a solid block the junction reads, but
+  the branch still leaves tangent to the corner rather than out of it, and a
+  spike of the flat rail pokes out from under the kink.
+- [ ] **A11. Every "small view" in the layout suite was rendering full
+  size.** Fixed in the harness (a half or a quadrant is a slot inside the
+  screen, not a smaller screen). Left here as a note: any conclusion drawn
+  from a small-view test before this is worth re-checking.
+
 ## B. The configuration that produced it
 
-- [ ] **B1. A calendar `name` silently becomes a line.** The AI named its
+- [x] **B1. A calendar `name` silently becomes a line.** The AI named its
   feeds "Crew" and "Deliveries" and got two phantom lines next to the five
   people, then pinned them on the board with `hideIfEmpty: false`. The
   prompt must say what `name` does; the editor should warn when a calendar
   name is not also a track name.
-- [ ] **B2. "Let an AI do it" belongs at the top of the editor**, right
+- [x] **B2. "Let an AI do it" belongs at the top of the editor**, right
   after Start, not after the user has configured everything by hand.
-- [ ] **B3. The prompt should carry a full worked example** of an advanced
+- [x] **B3. The prompt should carry a full worked example** of an advanced
   configuration, not only the schema.
-- [ ] **B4. Drop `timeZone` and `locale` from the prompt.** They are account
+- [x] **B4. Drop `timeZone` and `locale` from the prompt.** They are account
   settings; an assistant guessing them makes the board wrong.
-- [ ] **B5. Remove `side` and `color` everywhere.** Both are automatic. Out
+- [x] **B5. Remove `side` and `color` everywhere.** Both are automatic. Out
   of the editor UI, out of the prompt, out of the docs; `parseConfig` keeps
   reading them so existing configs do not break.
 
 ## C. Settings
 
 - [ ] **C1. Move the demo settings into a Developer group.**
-- [ ] **C2. Remove the "6am 11pm" span pill from the header.** It says
+- [x] **C2. Remove the "6am 11pm" span pill from the header.** It says
   nothing the axis does not.
-- [ ] **C3. Quadrant and the small vertical views: "+3 earlier" does not
+- [x] **C3. Quadrant and the small vertical views: "+3 earlier" does not
   fit** and collides with the clock badge. Show "+3" alone below some width.
-- [ ] **C4. Quadrant and half-horizontal (sm/md) waste a whole header band**
+- [x] **C4. Quadrant and half-horizontal (sm/md) waste a whole header band**
   on a logo and the word "Today". Collapse it on those views.
-- [ ] **C5. Temperature unit setting.** Auto (from locale) / Celsius /
+- [x] **C5. Temperature unit setting.** Auto (from locale) / Celsius /
   Fahrenheit. Overridable from the config JSON, but not surfaced in the
   editor or the AI prompt.
 
 ## D. Robustness
 
-- [ ] **D1. Timeouts and errors.** Every fetch needs its own timeout inside
+- [x] **D1. Timeouts and errors.** Every fetch needs its own timeout inside
   the serverless deadline, one slow feed must not cost the whole board, and
   a failed feed must not silently vanish.
-- [ ] **D2. Saved state** (https://help.trmnl.com/en/articles/16777795),
+- [x] **D2. Saved state** (https://help.trmnl.com/en/articles/16777795),
   as the earlier version of this plugin had it. Return `trmnl_state` and
   read `input.trmnl.state`:
   - last good weather, reused when the API fails, with a staleness flag
@@ -86,20 +99,20 @@ is open.
   - `calendarNames[url]`: the last `X-WR-CALNAME`, so a feed that fails
     keeps its name instead of becoming "Calendar 2"
   - cached i18n payload
-- [ ] **D3. i18n as JSON files in the repo**, fetched by `transform.js`, so
+- [x] **D3. i18n as JSON files in the repo**, fetched by `transform.js`, so
   a new language is a pull request. English stays inline as the fallback for
   when GitHub is unreachable.
-- [ ] **D4. Demo weather data** in the demo configs, covering every weather
+- [x] **D4. Demo weather data** in the demo configs, covering every weather
   event (rain start/stop, snow, storm, fog, sunrise, sunset) so they can be
   seen without waiting for real weather.
 - [ ] **D5. Small screens: collapse secondary metadata before geometry.**
   On a board like OG half-vertical with 6+ short events on one track, drop
   location text, then start/end times, rather than bending the baseline.
-- [ ] **D6. Optimise the logo SVG per colour variant.**
+- [x] **D6. Optimise the logo SVG per colour variant.**
 
 ## E. New features
 
-- [ ] **E1. The metro car should read as a train.** Outline it, hollow it
+- [x] **E1. The metro car should read as a train.** Outline it, hollow it
   out, or set the track's initial inside it.
 - [ ] **E2. Dynamic date range header.** Single day: `Today · Thu 10 Sep ·
   07:00 - 21:00`. Multi-day: `Thu 10 Sep - Fri 11 Sep` with a small high/low
@@ -124,6 +137,13 @@ is open.
   reclaims the space.
 
 ---
+
+## Notes
+
+- The header carries the feed-down and stale-forecast lines, so they are not
+  shown on the views that have no header (quadrant, half-horizontal on an OG
+  panel). Those are exactly the views where a missing line is hardest to
+  explain, so this wants revisiting.
 
 ## Done
 

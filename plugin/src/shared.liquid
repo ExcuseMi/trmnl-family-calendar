@@ -45,10 +45,15 @@
     <div class="metro-header-top flex flex--row flex--center-y flex--wrap gap--medium">
       <!-- The plugin's mark, inlined because the device renders this template
            on its own and cannot fetch repo files. Keep in step with
-           assets/icon.svg — same geometry, same single-fill structure; the
+           assets/icon.svg: same geometry, same single-fill structure; the
            mask id is namespaced so a mashup rendering several views cannot
-           collide on it. -->
-      <svg class="metro-mark no-shrink" viewBox="0 0 512 512" role="img" aria-label="Metro Calendar" fill="#e05b44">
+           collide on it.
+           Drawn in the theme's own ink rather than in the brand orange. The
+           panels are 1-bit and 4-bit greyscale: #e05b44 has a luma right on
+           the middle, so it dithered to a 50% checkerboard and the mark came
+           out as noise at every size it is drawn at. It is also the one
+           thing on a dark board that would have stayed light. -->
+      <svg class="metro-mark no-shrink" viewBox="0 0 512 512" role="img" aria-label="Metro Calendar" fill="currentColor">
         <mask id="metro-mark-cut">
           <rect width="512" height="512" fill="#fff"/>
           <g stroke="#000" stroke-width="38" stroke-linecap="round" fill="none">
@@ -81,6 +86,26 @@
         </span>
       {% endif %}
     </div>
+    {%- comment -%}
+      Two things the board cannot say for itself. A line missing because its
+      feed has been unreachable for hours looks exactly like a line whose
+      owner has nothing on today, and a forecast replayed from the last
+      good fetch looks exactly like a fresh one. Both are stated here
+      rather than guessed at from a gap in the map.
+    {%- endcomment -%}
+    {% if metro.calendars_down and metro.calendars_down.size > 0 %}
+      {%- comment -%}
+        Built with assign, not written inline: a "{n}" placeholder inside an
+        output tag ends the tag early and takes the whole template with it.
+      {%- endcomment -%}
+      {%- assign down_names = metro.calendars_down | join: ", " -%}
+      {%- assign feed_down_tpl = metro.i18n.feed_down | default: "{n} unavailable" -%}
+      {%- assign feed_down_msg = feed_down_tpl | replace: "{n}", down_names -%}
+      <div class="metro-alerts label label--small metro-quiet">{{ feed_down_msg }}</div>
+    {% endif %}
+    {% if metro.weather_stale %}
+      <div class="metro-alerts label label--small metro-quiet">{{ metro.i18n.weather_stale | default: "Forecast may be out of date" }}</div>
+    {% endif %}
     {% if metro.all_day and metro.all_day.size > 0 %}
       <div class="metro-allday flex flex--row flex--center-y gap--small flex--wrap">
         {% for a in metro.all_day %}
@@ -118,7 +143,16 @@
   .metro-label { line-height: 1.2; }
   .metro-hour, .metro-axis-note { white-space: nowrap; }
   .metro-header--compact .metro-window, .metro-header--compact .metro-cond { display: none; }
-  .metro-header--tiny .metro-date, .metro-header--tiny .metro-weather { display: none; }
+  /* the alert lines are the first thing to go when the header is squeezed:
+     they are an explanation, and a squeezed header has no room to explain */
+  .metro-header--compact .metro-alerts { display: none; }
+  /* A tiny view (a quadrant, a half-horizontal on an OG panel) already
+     hides the date and the weather for want of room, which leaves a band of
+     paper carrying the mark and the word "Today" and nothing else. On a
+     quadrant that band is a third of the board. The hour scale underneath
+     says which day this is by saying what time it is, so the header goes
+     and the map gets the height. */
+  .metro-header--none { display: none; }
   .metro-wicon { width: 28px; height: 28px; }
   .metro-mark { width: 30px; height: 30px; }
   .metro-header--large .metro-mark { width: 42px; height: 42px; }
@@ -415,8 +449,14 @@
       var vr = ROOT && ROOT.getBoundingClientRect ? ROOT.getBoundingClientRect() : rect;
       var vW = (vr.width || rect.width) / Z, vH = (vr.height || rect.height) / Z;
       var compact = vW < 640 * S || vH < 340 * S, tiny = vW < 430 * S || vH < 230 * S, large = vW >= 900 * S && vH >= 600 * S;
+      // A view too shallow to carry a header AND a map. A half-horizontal
+      // slot on an OG panel is 800x240: wide enough to escape `tiny`, and
+      // still spending a fifth of its height on a band that says "Today".
+      // The map wants that height more than the word does.
+      var headerless = tiny || vH < 300 * S;
       header.classList.toggle('metro-header--compact', compact);
       header.classList.toggle('metro-header--tiny', tiny);
+      header.classList.toggle('metro-header--none', headerless);
       header.classList.toggle('metro-header--large', large);
       function swap(sel, cls) { var n = header.querySelector(sel); if (n) n.className = n.className.replace(/(^|\s)(title|label)--[a-z]+/g, '') + ' ' + cls; }
       swap('.metro-title', tiny ? 'title--small' : compact ? 'title--base' : 'title--xlarge');
@@ -1967,11 +2007,29 @@
     // it keeps the baseline hierarchy — one line, one height, all day — and
     // it costs nothing in truth, since the kink already runs exactly the
     // station's span.
-    function expressThrough(p, baseC) {
+    // Where this line would run at `a` if it had not kinked out for a
+    // station: its drawn position less whatever the kink lifted it by. Taken
+    // as a constant instead, the siding was drawn at the line's FANNED
+    // position (where its name is) while the trunk either side of it ran at
+    // the line's real one, so the two met with a step in the middle of the
+    // rail: Homer's line was visibly interrupted where "Desk booking"
+    // began. It also blends correctly inside the fan, which a constant
+    // cannot do.
+    function flatCAt(p, a) { return lineCAt(p, a) - p._sign * stationRaiseAt(p, a); }
+    function expressThrough(p) {
       p._stations.forEach(function (s) {
         if (sharedStation(s)) return;
         if (s.a1 - s.a0 < CORNER * 2) return;   // too short to read as a loop
-        var q0 = toXY(s.a0, baseC), q1 = toXY(s.a1, baseC);
+        // Run it a corner PAST each end of the station. The kink's corners
+        // are drawn rounded, so the trunk leaves its baseline a corner
+        // radius before the station's own start and comes back a radius
+        // after its end: a siding drawn between the bare vertices left a
+        // notch of bare paper at each end where neither line was on the
+        // baseline, and Homer's rail read as interrupted where "Desk
+        // booking" began.
+        var e0 = clamp(s.a0 - CORNER, axisStart, axisEnd);
+        var e1 = clamp(s.a1 + CORNER, axisStart, axisEnd);
+        var q0 = toXY(e0, flatCAt(p, e0)), q1 = toXY(e1, flatCAt(p, e1));
         var ex = svgEl('path', { d: 'M ' + q0[0] + ' ' + q0[1] + ' L ' + q1[0] + ' ' + q1[1] });
         ex.setAttribute('data-metro-role', 'track'); ex.setAttribute('data-metro-owner', p.key);
         paintLine(ex, p, S, svg, 0);
@@ -2102,7 +2160,7 @@
         path.setAttribute('data-metro-role', 'track'); path.setAttribute('data-metro-owner', p.key);
         paintLine(path, p, S, svg, 0);
         p._trunkEl = path;
-        expressThrough(p, spreadC);
+        expressThrough(p);
         // a terminal bar at each end, the transit-map mark for where a line
         // starts and stops rather than simply running out of canvas
         [[nameEnd, spreadC], [far, lineCAt(p, far)]].forEach(function (at) {
@@ -2118,7 +2176,7 @@
         ln.setAttribute('data-metro-role', 'track'); ln.setAttribute('data-metro-owner', p.key);
         paintLine(ln, p, S, svg, 0);
         p._trunkEl = ln;
-        expressThrough(p, c);
+        expressThrough(p);
       }
     });
     // ---- station markers: a hollow ring at each end, sitting exactly where
@@ -2981,23 +3039,41 @@
     var stepOpts = [1, 2, 3, 4, 6, 12], hourStep = 12;
     for (var si = 0; si < stepOpts.length; si++) if (pxPerHour * stepOpts[si] >= hourW + 10 * S) { hourStep = stepOpts[si]; break; }
     var reserved = []; // axis intervals already taken by now / overflow notes
+    function takenAt(lo, hi) {
+      return reserved.some(function (r) { return lo < r[1] && r[0] < hi; });
+    }
+    // `text` may be a list, longest first. Each is tried in turn and the
+    // first that fits beside what is already on the strip wins; if none
+    // does, nothing is drawn. On a quadrant the clock badge and "+3
+    // earlier" are both pinned to the head of a strip a few hours wide, and
+    // they were written straight over each other: "+3 earlier1:32am". The
+    // count is the part that carries information, so the word goes first
+    // and the note goes only if even "+3" has nowhere to sit.
     function axisNote(text, a, align, cls) {
+      var forms = Array.isArray(text) ? text : [text];
       // no text--black appended here: the "now" note is an inverted pill,
       // and forcing the ink colour on it painted ink text on an ink badge
       var n = el('span', 'metro-gen ' + (cls || 'metro-axis-note label label--small font--bold text--black') + ' absolute');
-      n.textContent = text;
       canvas.appendChild(n);
-      var nr = measure(n);
-      var len = horizontal ? nr.w : nr.h, thick = horizontal ? nr.h : nr.w;
-      var start = align === 'start' ? a : align === 'end' ? a - len : a - len / 2;
-      start = clamp(start, 0, axisPx - len);
-      // never off the leading edge: standing up, a note is as wide as its
-      // words while the strip is only as wide as an hour label, so the
-      // clock badge hung off the side of the board
-      var xy = toXY(start, Math.max(0, bandC - thick / 2));
-      n.style.left = xy[0] + 'px'; n.style.top = xy[1] + 'px';
-      reserved.push([start - 2 * S, start + len + 2 * S]);
-      return n;
+      for (var fi = 0; fi < forms.length; fi++) {
+        n.textContent = forms[fi];
+        var nr = measure(n);
+        var len = horizontal ? nr.w : nr.h, thick = horizontal ? nr.h : nr.w;
+        var start = align === 'start' ? a : align === 'end' ? a - len : a - len / 2;
+        start = clamp(start, 0, axisPx - len);
+        var lo = start - 2 * S, hi = start + len + 2 * S;
+        if (takenAt(lo, hi) && fi < forms.length - 1) continue;
+        if (takenAt(lo, hi)) { canvas.removeChild(n); return null; }
+        // never off the leading edge: standing up, a note is as wide as its
+        // words while the strip is only as wide as an hour label, so the
+        // clock badge hung off the side of the board
+        var xy = toXY(start, Math.max(0, bandC - thick / 2));
+        n.style.left = xy[0] + 'px'; n.style.top = xy[1] + 'px';
+        reserved.push([lo, hi]);
+        return n;
+      }
+      canvas.removeChild(n);
+      return null;
     }
     if (nowA != null) {
       // The clock reads as a badge on the scale, at the head of its own
@@ -3005,8 +3081,8 @@
       // one time on the strip that is stated rather than annotated.
       axisNote(timeLabel(nowMin), nowA, 'centre', 'metro-axis-note metro-pill label label--small font--bold');
     }
-    if (earlier) axisNote(tr('earlier', earlier), axisStart + EDGE, 'start', 'metro-axis-note label label--small font--bold text--black');
-    if (later + dropped) axisNote(tr('more', later + dropped), axisEnd - EDGE, 'end', 'metro-axis-note label label--small font--bold text--black');
+    if (earlier) axisNote([tr('earlier', earlier), '+' + earlier], axisStart + EDGE, 'start', 'metro-axis-note label label--small font--bold text--black');
+    if (later + dropped) axisNote([tr('more', later + dropped), '+' + (later + dropped)], axisEnd - EDGE, 'end', 'metro-axis-note label label--small font--bold text--black');
     // Interchange capsules used to blank the hour under them, from when the
     // scale ran down the middle of the board and a capsule sat on top of
     // it. The scale is a strip along the edge now and nothing on the map

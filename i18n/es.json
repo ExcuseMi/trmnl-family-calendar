@@ -14,5 +14,6 @@
   "rain_stops": "Para la lluvia",
   "sunrise": "Amanecer",
   "sunset": "Atardecer",
-  "feed_down": "{n} no disponible"
+  "feed_down": "{n} no disponible",
+  "weather_stale": "La previsión puede estar desactualizada"
 }

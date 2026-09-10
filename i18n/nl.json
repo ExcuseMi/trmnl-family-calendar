@@ -14,5 +14,6 @@
   "rain_stops": "Regen stopt",
   "sunrise": "Zonsopgang",
   "sunset": "Zonsondergang",
-  "feed_down": "{n} niet beschikbaar"
+  "feed_down": "{n} niet beschikbaar",
+  "weather_stale": "Voorspelling mogelijk verouderd"
 }

@@ -13,13 +13,17 @@ module.exports = function (test, h) {
   const VIEWS = [
     { view: 'full', name: 'x-portrait', w: 1404, h: 1872, classes: 'screen--v2 screen--lg screen--4bit screen--density-2x screen--portrait' },
     { view: 'full', name: 'og-portrait', w: 480, h: 800, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
-    { view: 'full', name: 'x-half-vertical', w: 936, h: 1404, classes: 'screen--v2 screen--lg screen--4bit screen--density-2x' },
-    { view: 'full', name: 'og-half-vertical', w: 400, h: 480, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
-    { view: 'full', name: 'og-quadrant', w: 400, h: 240, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
+    // Halves and quadrants are SLOTS inside a whole screen. Asked for as a
+    // smaller window they rendered the whole board and cropped it, so every
+    // case below has been measuring a full-size board under a small view's
+    // name. `slot` gives the view the box a mashup would.
+    { view: 'full', name: 'x-half-vertical', w: 1872, h: 1404, slot: { w: 936, h: 1404 }, classes: 'screen--v2 screen--lg screen--4bit screen--density-2x' },
+    { view: 'full', name: 'og-half-vertical', w: 800, h: 480, slot: { w: 400, h: 480 }, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
+    { view: 'full', name: 'og-quadrant', w: 800, h: 480, slot: { w: 400, h: 240 }, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
     // the shortest board there is: five lines' worth of labels do not fit in
     // 240px of height, so this is where the layout has to CUT rather than
     // overflow. It went uncovered, and overflowed.
-    { view: 'full', name: 'og-half-horizontal', w: 800, h: 240, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
+    { view: 'full', name: 'og-half-horizontal', w: 800, h: 480, slot: { w: 800, h: 240 }, classes: 'screen--og screen--md screen--1bit screen--density-1x' },
   ];
 
   const busy = fixtures.find((f) => f.name === 'busy-day');

@@ -14,5 +14,6 @@
   "rain_stops": "Fin de la pluie",
   "sunrise": "Lever du soleil",
   "sunset": "Coucher du soleil",
-  "feed_down": "{n} indisponible"
+  "feed_down": "{n} indisponible",
+  "weather_stale": "Prévisions peut-être obsolètes"
 }
