@@ -37,6 +37,38 @@ module.exports = function (test, h) {
   function endsOf(p) { return [p.pts[0], p.pts[p.pts.length - 1]]; }
   function dist(a, b) { return Math.sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1])); }
 
+  // A TUNNEL MOUTH is not a loose end. A rail crossing a line it does not
+  // belong to is broken for it. That is how the map says "passes under",
+  // and it needs no extra drawing, because the gap simply shows the line
+  // underneath. So a rail drawn in several pieces has ends in open space
+  // BY DESIGN, and this case, written before rails tunnelled, read every
+  // one of them as a rail that went nowhere.
+  //
+  // What makes a mouth a mouth, and keeps this from waving through the
+  // defect it was written for: the SAME rail resumes on the other side,
+  // with the line it passes under lying between the two mouths. A rail
+  // that simply stops has no continuation to find, whatever is near it.
+  //
+  // The hole is the crossed line's own width plus air, so the two mouths
+  // are at most that far apart; measured generously here (a whole label
+  // gap either side) because the exact figure is the drawing's business
+  // and the load-bearing half of this test is the line in between.
+  function tunnelMouth(end, p, rails) {
+    for (const q of rails) {
+      if (q === p || q.owner !== p.owner || q.len < 1) continue;
+      for (const f of endsOf(q)) {
+        const gap = dist(end, f);
+        if (gap < 0.5 || gap > 60) continue;
+        const mid = [(end[0] + f[0]) / 2, (end[1] + f[1]) / 2];
+        for (const t of rails) {
+          if (t.owner === p.owner) continue;       // the line it passes under is somebody else's
+          for (const pt of t.pts) if (dist(pt, mid) <= gap / 2 + 1) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   for (const f of fixtures) {
     for (const vname of ['x-landscape', 'og-landscape']) {
       test('no rail ends in mid-air: ' + f.name + '/' + vname, () => {
@@ -59,6 +91,7 @@ module.exports = function (test, h) {
             }
             if (met) continue;
             if (marks.some((m) => pointIn(end, inflate(m, NEAR)))) continue;
+            if (tunnelMouth(end, p, rails)) continue;
             bad.push(p.role + '/' + p.owner + ' ends at ' + Math.round(end[0]) + ','
               + Math.round(end[1]) + ' (' + Math.round(p.len) + 'px long) touching nothing');
           }

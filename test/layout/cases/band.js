@@ -135,9 +135,17 @@ module.exports = function (test, h) {
   // The interchange capsule and the rail leaving it are one move through the
   // board. Crushed by the packed-board weight scale the rail came out barely
   // heavier than an ordinary track — a thread hanging off a fat pill.
+  //
+  // On the MOMENT-day board, because that is where a capsule is still drawn:
+  // a shared event with a span is a bundle of rails now, one per line, and
+  // has no capsule to read with. An event with no duration has no span to
+  // lie alongside anybody for, so it keeps the tie, the ring on each line,
+  // and the one bold rail out to its own lane, which is the shape this
+  // case is about.
+  const moments = fixtures.find((f) => f.name === 'moment-day');
   test('the rail leaving an interchange reads with the capsule', () => {
     for (const v of [ROOMY, byName('og-landscape'), byName('x-portrait')]) {
-      const rep = render(busy.metro, v);
+      const rep = render(moments.metro, v);
       const caps = shapes(rep, 'capsule');
       assert(caps.length > 0, v.name + ': no interchange capsule drawn');
       // shapes are measured in screen px, stroke widths come from computed

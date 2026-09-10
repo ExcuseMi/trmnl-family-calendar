@@ -103,28 +103,50 @@ module.exports = function (test, h) {
     }
   });
 
-  test('rails turn on the same minute unless one passes the other\'s rung', () => {
-    // A rail only has to turn earlier than another if its own drop passes
-    // through where that other one will lie. Staggering all of them alike
-    // spread three drops across three minutes to solve a conflict that
-    // existed between two of them, and the third had no reason to be late.
+  test('a rail turns late only because another one passes its rung', () => {
+    // A rail only has to turn after another if that other one's drop passes
+    // through where this one will lie; then the first turns first, so its
+    // vertical stands clear of where the second's horizontal begins.
+    // Staggering all of them alike spread three drops across three minutes
+    // to solve a conflict that existed between two of them, and the third
+    // had no reason to be late.
+    //
+    // Stated per RAIL rather than per pair, because the constraint chains:
+    // where Sam has to pass Kids, Kids turns after Sam, and Alex, passing
+    // nobody, turns with Sam on the first minute. Alex is then earlier
+    // than Kids without passing it, which is not a stagger, it is Kids
+    // waiting for Sam. So: every rail that does not turn on the bundle's
+    // first minute must be passed by one that turns before it, and every
+    // rail whose drop passes another's rung must turn before that one.
     for (const vname of VIEWS) {
       const rep = layout(fixtures.find((f) => f.name === 'busy-day'), byName(vname));
       for (const b of bundles(rep)) {
         const by = railsByOwner(b);
         const owners = Object.keys(by);
-        for (const a of owners) {
+        const drop = {}, rung = {}, reach = {};
+        for (const o of owners) {
+          drop[o] = dropOf(by[o]);
+          rung[o] = rungOf(by[o]);
+          const ys = by[o].flatMap((p) => p.pts.map((q) => q[1]));
+          reach[o] = [Math.min.apply(null, ys), Math.max.apply(null, ys)];
+        }
+        // does o's own drop run through where c comes to rest?
+        const passes = (o, c) => rung[c] != null && rung[c] > reach[o][0] + 1 && rung[c] < reach[o][1] - 1;
+        const first = Math.min.apply(null, owners.map((o) => drop[o]));
+        for (const c of owners) {
+          if (drop[c] - first < 1) continue;              // turned on the first minute: nothing to justify
+          const why = owners.filter((o) => o !== c && drop[o] < drop[c] - 0.5 && passes(o, c));
+          assert(why.length > 0, b.key + ' ' + vname + ': ' + c + ' turns at '
+            + Math.round(drop[c]) + ', ' + Math.round(drop[c] - first)
+            + 'px after the first rail, and no rail that turns before it passes its rung');
+        }
+        // and the other way round: a rail that WILL cross another's rung
+        // has to be out of the way before that one gets there
+        for (const o of owners) {
           for (const c of owners) {
-            if (a === c) continue;
-            const da = dropOf(by[a]), dc = dropOf(by[c]);
-            if (Math.abs(da - dc) < 1) continue;          // they share a minute: nothing to justify
-            // the earlier one must be the one that passes the other's rung
-            const early = da < dc ? a : c, late = da < dc ? c : a;
-            const rungLate = rungOf(by[late]);
-            const ys = by[early].flatMap((p) => p.pts.map((q) => q[1]));
-            const lo = Math.min.apply(null, ys), hi = Math.max.apply(null, ys);
-            assert(rungLate > lo - 1 && rungLate < hi + 1, b.key + ' ' + vname + ': ' + early
-              + ' turns before ' + late + ' but never passes its rung, so it had no reason to');
+            if (o === c || !passes(o, c)) continue;
+            assert(drop[o] < drop[c] - 0.5, b.key + ' ' + vname + ': ' + o
+              + '\'s drop passes ' + c + '\'s rung but does not turn before it, so the two cross');
           }
         }
       }
@@ -171,7 +193,12 @@ module.exports = function (test, h) {
     // sitting on it would be reading the day through its own rails.
     for (const vname of VIEWS) {
       const rep = layout(fixtures.find((f) => f.name === 'busy-day'), byName(vname));
-      const spine = rep.debug.spineC;
+      // The debug dump is in LAYOUT px and everything sampled off the page
+      // is in SCREEN px, which are the same thing only where the framework
+      // is not zooming: on an X (2x) this compared a rail's real position
+      // with a spine three hundred pixels above where it is drawn, and the
+      // case could not have failed there whatever the picture did.
+      const spine = rep.debug.spineC * (rep.debug.Z || 1);
       for (const b of bundles(rep)) {
         const by = railsByOwner(b);
         for (const owner of Object.keys(by)) {

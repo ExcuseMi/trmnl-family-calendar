@@ -404,6 +404,13 @@
     var ov = node.cloneNode(false);
     ov.removeAttribute('data-metro-role');
     ov.removeAttribute('data-metro-owner');
+    // and not a rail of a bundle either. An overlay is a clone of the rail
+    // it hollows out, so it kept the bundle tag and was reported as a
+    // second, owner-less rail lying exactly on the first: the suite read
+    // every rail's own departure point as an un-tunnelled crossing of the
+    // line it was leaving, and counted the hole as a rail inside the
+    // label. What is drawn twice must not be counted twice.
+    ov.removeAttribute('data-metro-bundle');
     ov.setAttribute('data-metro-overlay', p.key || '');
     ov.setAttribute('stroke-width', t.core);
     ov.setAttribute('stroke-linecap', t.cap);
@@ -1320,6 +1327,14 @@
     visible.forEach(function (e) {
       var p = trackByKey[e.owner];
       e._p = p;
+      // Where the drawing put this event LAST time. These live on the
+      // payload's own objects, which survive from one layout run to the
+      // next (the map re-lays itself on load, on fonts, on resize), so a
+      // board that bundled an event once and does not bundle it now would
+      // read a caption position from a picture that is no longer on the
+      // screen. Cleared before anything reads them.
+      e._bundleOut = null; e._drawnLaneC = null;
+      e._capMinA = null; e._capMaxA = null;
       e._sideKey = p._sideKey;
       e._sign = p._sign;
       e._nodeA = aFor(e.start_min);
@@ -2247,12 +2262,48 @@
     // Where each interchange bar ends up, as an obstacle for the next run:
     // it runs from the bundle out to its own lane at one minute, so it
     // blocks every rung inside that one.
+    //
+    // A shared event with a span is a BUNDLE of drops now, not one bar:
+    // each line turns down at its own minute, and a rail that has to get
+    // past where another will lie turns first, so the last drop stands a
+    // rung's width later than the first. Described as one bar the width of
+    // a stroke, the later drops fell outside what any label was routed
+    // around, and Kids' rail came down through the middle of "Groceries".
+    // How much cross axis one rung of a bundle takes, and how much AXIS the
+    // whole cascade of drops takes. Written once: the obstacle the labels
+    // are routed around, the room the siding captions keep, and the rungs
+    // themselves all have to agree about it, and three copies of the same
+    // arithmetic drift apart the first time one of them is tuned.
+    // The stretch of axis a bundle's own caption may sit in. Every rail
+    // that comes from BEYOND the caption crosses where the words go on its
+    // way to its rung, so the caption starts after the last drop (or, when
+    // it runs backwards, ends before the first). Anything that moves a
+    // caption afterwards has to honour it, or the words land back on the
+    // rails they were moved off.
+    function capClamp(e, at) {
+      if (e._capMinA != null && at < e._capMinA) return e._capMinA;
+      if (e._capMaxA != null && at > e._capMaxA) return e._capMaxA;
+      return at;
+    }
+    function capAllows(e, at) {
+      return (e._capMinA == null || at >= e._capMinA - 0.5)
+          && (e._capMaxA == null || at <= e._capMaxA + 0.5);
+    }
+    function bundlePitch(e) {
+      return LINE_GAP * 0.65 + Math.max(2, e._p.line_width) * S * weightScale;
+    }
+    function bundleSpread(e) {
+      return (horizontal && e.end_min > e.start_min && e._involved.length > 1)
+        ? (e._involved.length - 1) * bundlePitch(e) : 0;
+    }
     function collectBars() {
       var out = { A: [], B: [] };
       visible.forEach(function (e) {
         if (e._dropped || e._involved.length < 2 || !e._laneDist) return;
         var w = Math.max(e._p.line_width, 4) * 1.5 * S / 2 + 3 * S;
-        out[e._sideKey].push({ a0: e._nodeA - w, a1: e._nodeA + w, distMax: e._laneDist - LINE_GAP, bar: e });
+        // the same pitch drawSharedBundle staggers by, so the two agree
+        // about how much axis the drops take between them
+        out[e._sideKey].push({ a0: e._nodeA - w, a1: e._nodeA + w + bundleSpread(e), distMax: e._laneDist - LINE_GAP, bar: e });
       });
       return out;
     }
@@ -2879,7 +2930,7 @@
         // caption measured off the baseline sits in the gap the kink opened
         // and the raised line is written straight through it.
         var capMid = s.a0 + raise + (s.a1 - raise - (s.a0 + raise)) / 2;
-        var midC = baseC, capLo = lineCAt(p, capMid), capHi = capLo;
+        var midC = baseC, midCAlt = null, capLo = lineCAt(p, capMid), capHi = capLo;
         if (members && members.length > 1) {
           // between the lines WHERE THEY NOW ARE — they have converged for
           // the length of this siding, and the caption belongs in the space
@@ -2912,11 +2963,14 @@
             svg.appendChild(bar);
           });
         }
-        if (horizontal && sharedSiding(s) && members.length > 2) {
+        if (horizontal && sharedSiding(s) && members.length > 1) {
           // Between two of the lines it belongs to, in the widest gap the
-          // corridor has — NOT at the midpoint. With three lines in one
+          // corridor has, NOT at the midpoint. With three lines in one
           // corridor the midpoint is the middle line itself, and "Delivery
-          // Run" was written along Leela's rail.
+          // Run" was written along Leela's rail. With TWO it is the middle
+          // of a corridor that is only as wide as the two lines let it be:
+          // "School Day" is a two-line corridor, and centred in it the
+          // caption was written along both of the rails it names.
           var cs2 = members.map(function (q) { return lineCAt(q, capMid); }).sort(function (a, b) { return a - b; });
           var wide = null;
           for (var ci = 1; ci < cs2.length; ci++) {
@@ -2941,6 +2995,7 @@
             midC = p._sign > 0
               ? cs2[cs2.length - 1] + SIDING_GAP + bm.h / 2
               : cs2[0] - SIDING_GAP - bm.h / 2;
+            midCAlt = wide ? wide.at : null;
           }
         }
         if (horizontal && !sharedSiding(s)) {
@@ -2993,6 +3048,10 @@
           // captions should move is not knowable while they are being
           // built one line at a time.
           capQueue.push({ box: box, bm: bm, midC: midC, capA: capA,
+            // the lines this caption belongs to, so it can keep off their
+            // own branches when it has been pushed outside their corridor
+            mem: members && members.length > 1 ? members.map(function (q2) { return q2.key; }) : null,
+            midCAlt: midCAlt,
             limit: s.a1 - raise - bm.w });
         } else {
           // Standing up, the space the kink vacates is only a kink wide,
@@ -3032,11 +3091,72 @@
     // along is the one that yields. Sorting the other way round moves the
     // caption that cannot go anywhere, which is how it ends up back on top
     // of something.
+    // Where every bundle is going to be, decided before the captions are
+    // placed so they can keep out of its way. Only the plan: nothing is
+    // drawn until the rest of the map is (a rail has to be painted over the
+    // trunk it tunnels under, not before it).
+    visible.forEach(function (e) {
+      e._bundlePlan = null;
+      if (bundled(e)) planSharedBundle(e);
+    });
+
     capQueue.sort(function (a, b) { return (a.limit - a.capA) - (b.limit - b.capA); });
+    // A caption is not part of the lane bookkeeping, and neither is a
+    // bundle: it is drawn from the solved positions afterwards. So the two
+    // knew nothing about each other and Kids' rail came down through
+    // "Schoolfotografie". Every drop in a bundle runs between one member's
+    // line and its rung, and every rung lies between the outermost members,
+    // so the block the caption has to step past is the members' own span
+    // across, by the cascade of drops along.
+    var bundleBlocks = [];
+    visible.forEach(function (e) {
+      if (!e._bundlePlan) return;
+      var w5 = Math.max(e._p.line_width, 4) * 1.5 * S * weightScale / 2 + 3 * S;
+      var lo5 = Infinity, hi5 = -Infinity, a05 = Infinity, a15 = -Infinity;
+      e._bundlePlan.rails.forEach(function (r) {
+        var fromC5 = lineCAt(r.q, r.dropA);
+        lo5 = Math.min(lo5, fromC5, r.rungC);
+        hi5 = Math.max(hi5, fromC5, r.rungC);
+        a05 = Math.min(a05, r.dropA);
+        a15 = Math.max(a15, r.dropA);
+      });
+      // the drops across, the rungs along: a caption has to be clear of
+      // both, and the rungs run to the end of the event
+      bundleBlocks.push({ a0: a05 - w5, a1: Math.max(a15, e._endA) + w5, c0: lo5 - w5, c1: hi5 + w5 });
+    });
+    // And the RAMPS of the lines a corridor caption belongs to. A caption
+    // that cannot fit between the rails sits just outside the outermost of
+    // them, and that stretch is not closed to anything: Kids' own branch
+    // down to its lane was drawn straight through "School Day". Only its
+    // OWN lines' ramps, because a caption can only move along its siding
+    // and routing it around every branch on the board pushed it into other
+    // captions instead, which is the worse picture.
+    var rampBlocks = [];
+    visible.forEach(function (e) {
+      if (e._dropped || e._laneDist == null || e._diagFrom == null) return;
+      var w6 = Math.max(2, (e._p ? e._p.line_width : 3)) * S * weightScale / 2 + 2 * S;
+      var cA = lineCAt(trackByKey[e._laneOwner] || e._p, e._diagFrom);
+      var cB = e._drawnLaneC != null ? e._drawnLaneC : spineC + e._sign * e._laneDist;
+      rampBlocks.push({ owner: e._laneOwner || e.owner,
+        a0: Math.min(e._diagFrom, e._elbow) - w6, a1: Math.max(e._diagFrom, e._elbow) + w6,
+        c0: Math.min(cA, cB) - w6, c1: Math.max(cA, cB) + w6 });
+    });
     var capPlaced = [];
     capQueue.forEach(function (q) {
       var capW = q.bm.w, capH = q.bm.h, midC = q.midC;
       var at = q.capA, limit = q.limit;
+      // A corridor too tight to write inside offers TWO places, and neither
+      // is free on every board: just outside the outermost rail (where the
+      // next line's labels start) or along the middle of the corridor
+      // (where its own rails are). Try them in that order and take the
+      // first that has room, because a caption over a caption cannot be
+      // read at all while one with a rail behind it still can: its paper
+      // outline is there for exactly that.
+      var mids = q.midCAlt != null ? [q.midC, q.midCAlt] : [q.midC];
+      var mi = 0;
+      for (;;) {
+      midC = mids[mi];
+      at = q.capA;
       for (var tries = 0; tries < 24 && at < limit; tries++) {
         var clashAt = null;
         for (var vi = 0; vi < visible.length; vi++) {
@@ -3049,6 +3169,23 @@
           clashAt = ov._textStart + ov._textLen; break;
         }
         if (clashAt == null) {
+          for (var bi = 0; bi < bundleBlocks.length; bi++) {
+            var bb = bundleBlocks[bi];
+            if (bb.c0 > midC + capH / 2 || bb.c1 < midC - capH / 2) continue;
+            if (bb.a0 > at + capW + 4 * S || bb.a1 < at - 4 * S) continue;
+            clashAt = bb.a1; break;
+          }
+        }
+        if (clashAt == null && q.mem) {
+          for (var ri = 0; ri < rampBlocks.length; ri++) {
+            var rb = rampBlocks[ri];
+            if (q.mem.indexOf(rb.owner) < 0) continue;
+            if (rb.c0 > midC + capH / 2 || rb.c1 < midC - capH / 2) continue;
+            if (rb.a0 > at + capW + 4 * S || rb.a1 < at - 4 * S) continue;
+            clashAt = rb.a1; break;
+          }
+        }
+        if (clashAt == null) {
           for (var ci = 0; ci < capPlaced.length; ci++) {
             var cp = capPlaced[ci];
             if (Math.abs(midC - cp.midC) >= (capH + cp.h) / 2) continue;
@@ -3059,7 +3196,10 @@
         if (clashAt == null) break;
         at = clashAt + 8 * S;
       }
-      if (at > limit) at = q.capA;
+      if (at <= limit || mi >= mids.length - 1) break;
+      mi++;
+      }
+      if (at > limit) { midC = mids[0]; at = q.capA; }
       // and clear of the rule that marks now. It is the one line on the
       // board that crosses everything, drawn at a minute rather than
       // belonging to anybody, so nothing routes around it, and a caption
@@ -3215,8 +3355,11 @@
       // A shared event sends one vertical branch DOWN per line it belongs
       // to, and they land side by side as a bundle. Drawn below, not here:
       // a chain draws ONE rail for the group, which is the single bold rail
-      // this used to be.
-      if (horizontal && e._involved.length > 1) return;
+      // this used to be. A MOMENT is not drawn as a bundle (there is no
+      // span to run alongside anybody for), so it still comes through here
+      // for its rail and keeps the tie and ring that say the same thing in
+      // a mark that fits.
+      if (bundled(e)) return;
       var key = e._sideKey + '|' + e._lane + '|' + e.owner + '|' + e._dir; // direction too — a chain's bridge-drawing assumes one consistent direction
       (chains[key] = chains[key] || []).push(e);
     });
@@ -3353,6 +3496,16 @@
         // different shapes depending on the length of the meeting. The tick
         // is the mark; it is drawn per event, below.
         if (g.from < head._elbow - CORNER - 1) terminus(g.from, laneC, p);
+        // ONE mark per rail end, and the far end's is normally the last
+        // member's own end tick. A MOMENT has no end to tick: it gets the
+        // single mark at its start and nothing else, so a group that ends
+        // on one had nothing at all out there: the ramp's tail simply
+        // stopped in open space, which is the one thing "no rail ends in
+        // mid-air" is about. Where no tick will land there, the bar does.
+        var farMarked = g.members.some(function (m) {
+          return m.end_min > m.start_min && (farA - m._endA) * head._dir <= CORNER + 2 * S;
+        });
+        if (!farMarked) terminus(farA, laneC, p);
       });
     });
     placed.forEach(function (e) {
@@ -3435,7 +3588,22 @@
       }
       return segs;
     }
-    function drawSharedBundle(e) {
+    // Which shared events are drawn as a BUNDLE. Several lines arriving
+    // somewhere need somewhere to arrive: a zero-length event has no span
+    // to lie alongside each other for, so a comb of rails on one minute is
+    // a smudge with nothing to say, and it keeps the interchange tie and
+    // its ring instead. Standing up, nothing is bundled at all.
+    function bundled(e) {
+      return horizontal && !e._dropped && e._involved.length > 1 && e.end_min > e.start_min;
+    }
+    // PLANNING the bundle is separate from drawing it, and happens before
+    // the siding captions are placed. Everything downstream that has to
+    // keep out of a bundle's way (a caption sliding along its own siding, a
+    // label being nudged off a bar) reads where the rails and the words
+    // ended up, and until this ran first they were all reading a lane the
+    // bundle had left: "Schoolfotografie" was slid clear of a caption that
+    // was no longer there and onto three rails that were.
+    function planSharedBundle(e) {
       var sign = e._sign, laneC = spineC + sign * e._laneDist;
       // In the order the lines actually RUN, not by their distance from the
       // spine. Distance is unsigned, so two lines on opposite sides of the
@@ -3449,7 +3617,7 @@
       // these ones are at the same place, and reading as a group is the
       // point. Still a stroke of paper, which is the floor below which two
       // rails merge into one thick one.
-      var pitch = LINE_GAP * 0.65 + Math.max(2, e._p.line_width) * S * weightScale;
+      var pitch = bundlePitch(e);
       // One rung's worth of stagger, so the cascade steps down at the same
       // rate it steps across and the drops sit as close as the rungs do.
       // The turns are filleted tighter to match: at the full corner radius
@@ -3465,21 +3633,125 @@
       // because with an odd number of lines the midpoint IS the middle
       // line and the bundle would be laid along it.
       var cs = mem.map(function (q) { return lineCAt(q, e._nodeA); });
-      var centre = null, best = -1;
-      for (var gi2 = 1; gi2 < cs.length; gi2++) {
-        var gap2 = Math.abs(cs[gi2] - cs[gi2 - 1]);
-        if (gap2 > best) { best = gap2; centre = (cs[gi2] + cs[gi2 - 1]) / 2; }
-      }
-      // The gap the bundle sits in may straddle the spine, and that is
-      // fine: the hour band runs along the leading edge of the board, not
-      // down the middle of it (see drawTimeBand), so spineC is only the
-      // centre of the bundle of lines and nothing is drawn on it. Refusing
-      // to cross it kept "Lunch with Alex" out of the one big empty gap on
-      // the board, between the line above the middle and the line below it,
-      // and sent Work the whole way down to meet Alex instead.
-      if (centre == null) centre = laneC;
-      var rails = [];
       var span0 = (mem.length - 1) * pitch;
+      // What the bundle actually needs of the gap it takes. Not the rails:
+      // the rails AND the caption that hangs off them, which is as much a
+      // part of the drawing and is the half that does not fit. "Lunch with
+      // Alex" took the 20px between Work and Alex, the two innermost lines
+      // on the board, and wrote its caption along Alex's rail.
+      //
+      // The block is the rails, the gap a caption keeps from its rail, and
+      // the caption, and it is that block, not the rails, that is centred
+      // in the gap. Centring the RAILS put half a caption over the line
+      // below them, because the caption only ever hangs off one side.
+      var thick = e._thick || 0;
+      var block = span0 + LINE_GAP + thick;
+      var need = block + 2 * LINE_GAP;
+      // A gap is only as wide as its NARROWEST point over the stretch the
+      // bundle and its caption occupy, and lines move: Fry's line kinks out
+      // for the crew's Delivery Run right where "Good News Everyone" is
+      // written, so a gap measured at the event's own minute had closed to
+      // nothing by the middle of the caption and the words were drawn along
+      // Fry's rail. Sampled across the whole run, the way the line names
+      // are measured against the lines they sit above.
+      var runA0 = Math.min(e._nodeA, e._textStart == null ? e._nodeA : e._textStart);
+      var runA1 = Math.max(e._endA, e._textStart == null ? e._endA : e._textStart + e._textLen);
+      function bandOfLine(q) {
+        var lo4 = Infinity, hi4 = -Infinity;
+        for (var t4 = 0; t4 <= 8; t4++) {
+          var c4 = lineCAt(q, runA0 + (runA1 - runA0) * t4 / 8);
+          if (c4 < lo4) lo4 = c4;
+          if (c4 > hi4) hi4 = c4;
+        }
+        return [lo4, hi4];
+      }
+      var bandC = mem.map(bandOfLine);
+      // Where somebody else's caption already is. A gap between two lines
+      // is not empty space: it is where the inner line's own lanes live,
+      // and their captions are in it. Choosing the widest gap without
+      // looking, "Good News Everyone" moved into the gap above Amy and was
+      // written across "Lab Rotation", which had been there all along.
+      // Nothing reserved that stretch, because the bundle is drawn from the
+      // solved positions after the lanes are handed out, so the reading is
+      // done here instead, off what every other caption was actually given.
+      // The caption hangs off the outer edge of the bundle, and the lines
+      // lying BEYOND that edge reach their rungs by crossing it: their
+      // drops run straight down through where the words go. "Family
+      // Dinner" had Kids' rail standing inside its own label, and "Crew
+      // Debrief", whose caption runs backwards, had two. The rails are a
+      // bundle only once the last of them has turned, so a forward caption
+      // starts after the last drop and a backward one ends before the
+      // first. Done here, before the gap is chosen, because everything
+      // below reads the caption's position.
+      var clearA = Math.max(2, e._p.line_width) * S * weightScale / 2 + LINE_GAP * 0.5;
+      // Provisionally, because which rails cross the words depends on
+      // where the bundle ends up, and that is not decided yet. Set now so
+      // the gap search below only considers caption positions the bundle
+      // could actually use, and settled exactly once the rungs are known.
+      var ts0 = e._textStart;
+      e._capMinA = e._capMaxA = null;
+      if (e._dir > 0) e._capMinA = e._nodeA + Math.min(bundleSpread(e), Math.max(0, e._endA - e._nodeA)) + clearA;
+      else e._capMaxA = e._nodeA - clearA - e._textLen;
+      if (e._textStart != null) e._textStart = capClamp(e, e._textStart);
+      var CAP_TOUCH = 3 * S;
+      function capFreeAt(outC, at) {
+        var c0 = sign < 0 ? outC - LINE_GAP - thick : outC + LINE_GAP;
+        var c1 = c0 + thick;
+        var a1 = at + e._textLen;
+        for (var vi3 = 0; vi3 < visible.length; vi3++) {
+          var o3 = visible[vi3];
+          if (o3 === e || o3._dropped || o3._textStart == null) continue;
+          var oc3 = o3._bundleOut != null ? o3._bundleOut : spineC + o3._sign * o3._laneDist;
+          var t3 = horizontal ? o3._h : colW;
+          var oc0 = o3._sign < 0 ? oc3 - LINE_GAP - t3 : oc3 + LINE_GAP;
+          // a real overlap, not a touch: two captions whose boxes end and
+          // begin on the same pixel are not on top of each other, and read
+          // as a clash this turned the bundle out of the one gap it had
+          if (oc0 >= c1 - CAP_TOUCH || oc0 + t3 <= c0 + CAP_TOUCH) continue;
+          if (o3._textStart >= a1 - CAP_TOUCH || o3._textStart + o3._textLen <= at + CAP_TOUCH) continue;
+          return false;
+        }
+        return true;
+      }
+      // Where the caption would have to sit to use this gap, as a slide
+      // along its own rail from where the lanes put it. Null when there is
+      // nowhere inside the reach the scoring calls "beside its own branch"
+      // (`_textLen * 0.6` in layoutAttempt): a caption further off than
+      // that has stopped pointing at anything and is not a solution.
+      function slideFor(outC) {
+        var ts0 = e._textStart == null ? e._nodeA : e._textStart;
+        if (capFreeAt(outC, ts0)) return 0;
+        var want = e._dir > 0 ? e._elbow + TEXT_PAD : e._elbow - TEXT_PAD - e._textLen;
+        var reach = e._textLen * 0.55, stepA = Math.max(4 * S, e._textLen / 12);
+        for (var d5 = stepA; d5 <= reach; d5 += stepA) {
+          for (var sg5 = 1; sg5 >= -1; sg5 -= 2) {
+            var at5 = ts0 + sg5 * d5;
+            if (Math.abs(at5 - want) > reach || !capAllows(e, at5)) continue;
+            if (capFreeAt(outC, at5)) return sg5 * d5;
+          }
+        }
+        return null;
+      }
+      var centre = null, best = -1, bestSlide = 0;
+      for (var gi2 = 1; gi2 < cs.length; gi2++) {
+        var lo2 = bandC[gi2 - 1][1], hi2 = bandC[gi2][0];
+        var gap2 = hi2 - lo2;
+        // Never the gap the spine runs down. That is not one track's
+        // room, it is the seam where the two sides of the board meet:
+        // both sides' innermost lines lie along it, so it is the tightest
+        // place on the map, and the hour scale's own gutter was there
+        // before it moved out to the leading edge.
+        if (lo2 <= spineC && spineC <= hi2) continue;
+        if (gap2 < need) continue;                  // no room for the rails AND the caption
+        if (gap2 <= best) continue;                 // a wider one is already in hand
+        var mid2 = (lo2 + hi2) / 2 - sign * (LINE_GAP + thick) / 2;
+        var slide2 = slideFor(mid2 + sign * span0 / 2);
+        if (slide2 == null) continue;               // its caption cannot go there at all
+        best = gap2; centre = mid2; bestSlide = slide2;
+      }
+      if (centre != null && bestSlide && e._textStart != null) e._textStart += bestSlide;
+      if (centre == null) centre = laneC - sign * span0 / 2;
+      var rails = [];
       mem.forEach(function (q, k) {
         rails.push({ q: q, rungC: centre - span0 / 2 + k * pitch, dropA: 0 });
       });
@@ -3512,7 +3784,47 @@
           mustFollow[j].forEach(function (i) { level[j] = Math.max(level[j], level[i] + 1); });
         });
       }
-      rails.forEach(function (r, i) { r.dropA = e._nodeA + level[i] * stagger; });
+      // The whole cascade has to happen INSIDE the event. A rail that turns
+      // late still ends where the event ends, so on a short meeting with
+      // several lines in it the last rail was given a stagger it had no
+      // room for and its end tick was drawn past the event's own end.
+      // "Good News Everyone" is fifteen minutes long and five lines wide,
+      // and its last tick landed on the start of the next thing on that
+      // line. The steps close up to fit; never to nothing, because two
+      // rails that turn on the same pixel are the crossing the stagger
+      // exists to prevent.
+      var maxLevel = 0;
+      level.forEach(function (l) { maxLevel = Math.max(maxLevel, l); });
+      var room = (e._endA - e._nodeA) - bend * 2;
+      var st = maxLevel > 0 ? Math.min(stagger, Math.max(1.5 * S, room / maxLevel)) : 0;
+      rails.forEach(function (r, i) { r.dropA = e._nodeA + level[i] * st; });
+      // the caption hangs off whichever end of the bundle faces away from
+      // the spine, so it clears every rung in it rather than sitting on the
+      // middle of the comb
+      e._drawnLaneC = centre;
+      e._bundleOut = sign > 0 ? centre + span0 / 2 : centre - span0 / 2;
+      // And now exactly: only the lines lying BEYOND the caption reach
+      // their rungs across it, so only their drops are in its way. Out at
+      // its own lane the bundle is beyond every line it belongs to and
+      // nothing crosses the words at all, which is where the provisional
+      // clamp was pure cost: it pushed "Crew Debrief" half an hour down its
+      // own lane and onto "All My Circuits".
+      var lastCross = null;
+      rails.forEach(function (r) {
+        if ((lineCAt(r.q, r.dropA) - e._bundleOut) * sign <= 0.5) return;
+        if (lastCross == null || r.dropA > lastCross) lastCross = r.dropA;
+      });
+      e._capMinA = e._capMaxA = null;
+      if (lastCross != null) {
+        if (e._dir > 0) e._capMinA = lastCross + clearA;
+        else e._capMaxA = e._nodeA - clearA - e._textLen;
+      }
+      if (ts0 != null) e._textStart = capClamp(e, ts0 + bestSlide);
+      e._bundlePlan = { rails: rails, bend: bend };
+    }
+    function drawSharedBundle(e) {
+      if (!e._bundlePlan) return;
+      var rails = e._bundlePlan.rails, bend = e._bundlePlan.bend;
       rails.forEach(function (r) {
         var fromC = lineCAt(r.q, r.dropA);
         var end = Math.max(e._endA, r.dropA + bend * 2);
@@ -3558,15 +3870,9 @@
           svg.appendChild(tick);
         }
       });
-      // the label hangs off the bundle's own outermost rung, so it clears
-      // every rail in it rather than sitting on the middle of the comb
-      e._drawnLaneC = centre;
-      // the label hangs off whichever end of the bundle faces away from the
-      // spine, so it clears every rail in it
-      e._bundleOut = sign > 0 ? centre + span0 / 2 : centre - span0 / 2;
     }
     visible.forEach(function (e) {
-      if (!e._dropped && horizontal && e._involved.length > 1) drawSharedBundle(e);
+      if (bundled(e)) drawSharedBundle(e);
     });
 
     // ---- stations (rings / interchange capsules) on top of the lines
@@ -3576,8 +3882,10 @@
       // Drawn as a bundle already: every line that arrived has its own rail
       // and its own mark on it, so the tie that used to stand in for all of
       // them has nothing left to say and would be drawn straight through
-      // them.
-      if (horizontal && e._involved.length > 1) return;
+      // them. A moment was NOT drawn as one, and this is where it gets the
+      // tie and the ring that stand in for the rails it is too short to
+      // have.
+      if (bundled(e)) return;
       if (e._involved.length > 1) {
         // each involved track's actual rendered position at this axis point —
         // not just its flat baseline — since a track passing through one of
@@ -3893,9 +4201,14 @@
         }
       });
       if (!caps.length) return;
-      // the cross-axis band a label occupies, on its own side of its rail
+      // The cross-axis band a label occupies, on its own side of its rail.
+      // A bundle's caption hangs off the outer rung of the bundle, which is
+      // in a gap BETWEEN two lines rather than out at the event's own lane,
+      // so measured from the lane this looked at empty canvas: "Family
+      // Dinner" was written across "Swim Training" and neither pass knew.
       function band(e) {
-        var lineC = spineC + e._sign * e._laneDist, thick = horizontal ? e._h : colW;
+        var lineC = e._bundleOut != null ? e._bundleOut : spineC + e._sign * e._laneDist;
+        var thick = horizontal ? e._h : colW;
         return e._sign < 0 ? [lineC - LINE_GAP - thick, lineC - LINE_GAP]
                            : [lineC + LINE_GAP, lineC + LINE_GAP + thick];
       }
@@ -3939,11 +4252,46 @@
         // normally keeps from its rail: enough to step off an edge, never
         // enough to jump a bar.
         var budget = (hit.a1 - hit.a0) + TEXT_PAD * 2;
+        // ...or as far as the caption can go and still be beside its own
+        // rail. That limit is not invented here: it is the one the layout's
+        // own scoring calls "adrift" (`e._textLen * 0.6` in layoutAttempt),
+        // and a caption inside it is still pointing at its branch. Where
+        // the obstacle clips the TAIL of a long caption, stepping back
+        // before it costs a fraction of its width and reads as a caption
+        // that moved; the flat budget above refused that and left three
+        // rails down the middle of "Groceries".
+        var want = e._dir > 0 ? e._elbow + TEXT_PAD : e._elbow - TEXT_PAD - e._textLen;
+        var reach = e._textLen * 0.55;
         var after = hit.a1 + 2 * S, before = hit.a0 - 2 * S - e._textLen;
         var opts = (Math.abs(after - e._textStart) <= Math.abs(before - e._textStart)
-          ? [after, before] : [before, after]).filter(function (at) { return Math.abs(at - e._textStart) <= budget; });
+          ? [after, before] : [before, after]).filter(function (at) {
+            return Math.abs(at - e._textStart) <= budget || Math.abs(at - want) <= reach;
+          });
         for (var k = 0; k < opts.length; k++) {
+          if (!capAllows(e, opts[k])) continue;
           if (freeAt(e, opts[k], bd)) { e._textStart = opts[k]; return; }
+        }
+      });
+      // And the bundles' own captions, which the lane bookkeeping never
+      // placed where they are drawn. A bundle sits in the widest gap
+      // between the lines it joins, so its caption lands in a stretch of
+      // canvas that belongs to whichever track's lanes live in that gap,
+      // and nothing reserved it. Slid along its own rail, inside the same
+      // reach the scoring calls "beside its own branch", or left where it
+      // is if there is nowhere better: a caption over a caption is bad, a
+      // caption an hour from its own rail is worse.
+      placed.forEach(function (e) {
+        if (e._bundleOut == null || e._textStart == null) return;
+        var bd = band(e);
+        if (freeAt(e, e._textStart, bd)) return;
+        var want = e._dir > 0 ? e._elbow + TEXT_PAD : e._elbow - TEXT_PAD - e._textLen;
+        var reach = e._textLen * 0.55;
+        var stepA = Math.max(4 * S, e._textLen / 12), tries = [];
+        for (var d0 = stepA; d0 <= reach; d0 += stepA) { tries.push(e._textStart + d0); tries.push(e._textStart - d0); }
+        for (var ti2 = 0; ti2 < tries.length; ti2++) {
+          var at2 = tries[ti2];
+          if (Math.abs(at2 - want) > reach || !capAllows(e, at2)) continue;
+          if (freeAt(e, at2, bd)) { e._textStart = at2; return; }
         }
       });
       // the debug dump was taken before this pass, so anything it moved has

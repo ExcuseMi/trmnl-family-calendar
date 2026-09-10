@@ -14,14 +14,28 @@ module.exports = function (test, h) {
 
   // where a minute sits on the axis, derived from the hour labels actually
   // drawn — no need to re-implement the layout's own scale
+  //
+  // A board can carry a RUN of days, and an hour label says only the time,
+  // not which day: read in clock order, "02:00" from the second day sorted
+  // itself in front of "20:00" from the first and the scale came out
+  // backwards, so every label on the board looked as if it were drawn
+  // before its own event. Read along the axis instead, and every time the
+  // clock goes backwards a midnight has been passed.
   function axisReader(rep) {
-    const marks = rep.labels
+    const seen = rep.labels
       .filter((l) => (' ' + l.cls + ' ').indexOf(' metro-hour ') >= 0 && /^\d{1,2}:\d{2}/.test(l.text))
       .map((l) => {
         const [hh, mm] = l.text.split(':').map(Number);
-        return { min: hh * 60 + mm, x: l.x + l.w / 2 };
+        return { clock: hh * 60 + mm, x: l.x + l.w / 2 };
       })
-      .sort((a, b) => a.min - b.min);
+      .sort((a, b) => a.x - b.x);
+    const marks = [];
+    let day = 0, prev = null;
+    for (const m of seen) {
+      if (prev != null && m.clock < prev) day++;
+      prev = m.clock;
+      marks.push({ min: day * 1440 + m.clock, x: m.x });
+    }
     if (marks.length < 2) return null;
     return function (min) {
       let lo = marks[0], hi = marks[marks.length - 1];

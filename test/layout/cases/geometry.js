@@ -58,19 +58,19 @@ module.exports = function (test, h) {
   // siding's kink is deeper than the gap between two packed tracks, so its
   // caption lands on the next line's rail.
   //
-  // busy-day is the one that is NOT packed: there a single interchange bar
-  // crosses one caption, and the layout does try the alternative — the
-  // second placement pass, which knows where the bars landed, scores it at
-  // a dropped event against a crossed caption, and keeps the caption.
+  // busy-day used to be the one that was NOT packed: a single interchange
+  // bar dropped through "Piano Lesson" on its way to its own lane. There is
+  // no bar any more. A shared event is a bundle of rails, and each of them
+  // stops at its own rung between the lines rather than running out past
+  // every lane on that side, so that entry is gone, and so is crew-day's,
+  // which was the same crossing on a packed board.
   //
   // Listed per fixture so none of them can get worse without the suite
   // saying so.
   const PIERCE_KNOWN_VIEW = {
-    'busy-day/og-landscape': 'not packed: the whole-family interchange at 7pm drops its bar through "Piano Lesson", whose lane it has to cross to reach its own. The second placement pass costs a dropped event to avoid it, which is the worse board.',
     'all-day-every-track/og-landscape': 'packed: every line carries an all-day band, so the bands cannot fit and the side shares one lane ladder. Three branches cross a neighbouring caption, and a 32px siding kink on a 10px pitch puts three all-day captions on the next line\'s rail.',
     'siding-day/og-landscape': 'packed, same as above with one waypoint instead of four all-day bands: three branch crossings and one caption on a neighbouring rail.',
     'five-lines/og-landscape': 'packed: five lines on a 480px-deep board leave no room for bands, so three branches cross a neighbouring caption on the shared ladder.',
-    'crew-day/og-landscape': 'packed, and one line short of fitting at all (the Professor is dropped): three branches cross a neighbouring caption on the shared ladder.',
     // These two are the price of holding an elbow inside its own event.
     // A branch used to be allowed to slide its elbow past the end of the
     // event it belongs to in order to clear a caption in a lane it passes
@@ -238,35 +238,80 @@ module.exports = function (test, h) {
 
   // ------------------------------------------------------------ interchange capsules
 
-  // An interchange is drawn as a tie between the lines it joins, with a ring
-  // on each. The tie has to actually span them — when a track kinks out for
-  // an all-day band, the tie has to follow it there rather than reaching for
-  // a baseline nobody is sitting on.
-  test('an interchange ties together every track it spans', () => {
-    for (const name of ['busy-day', 'all-day-every-track']) {
+  // A shared event has to REACH every line it belongs to. When a track kinks
+  // out for an all-day band, whatever draws the event has to follow it there
+  // rather than reaching for a baseline nobody is sitting on. That is the
+  // bug this was written for, and it outlived the shape it was written
+  // against.
+  //
+  // There are two shapes now. An event with a SPAN is a bundle: one rail per
+  // line, each dropping from where its own line runs. A MOMENT has no span
+  // to lie alongside anybody for and keeps the tie, which must still span
+  // the lines it joins. Both say the same thing, and both are checked here
+  // against the lines as they are really drawn.
+  test('a shared event reaches every line it joins', () => {
+    for (const name of ['busy-day', 'all-day-every-track', 'moment-day']) {
       const f = fixtures.find((x) => x.name === name);
       const rep = layout(f, ROOMY);
+      const tracks = pathsWhere(rep, 'track');
+      const bundles = {};
+      for (const p of rep.paths) {
+        if (!p.bundle) continue;
+        (bundles[p.bundle] = bundles[p.bundle] || []).push(p);
+      }
       const ties = rep.paths.filter((p) => p.role === 'capsule')
         .concat(rep.rects.filter((r) => r.role === 'capsule'));
-      const lineTies = rep.ties || [];
-      const all = ties.concat(lineTies);
-      assert(all.length > 0, name + ': expected at least one interchange tie');
-      const tracks = pathsWhere(rep, 'track');
-      for (const tie of all) {
-        const x = tie.x + tie.w / 2;
-        const top = tie.y, bot = tie.y + tie.h;
-        // every track whose line runs through the tie's vertical span at
-        // this x must be met by it, not passed over
-        let met = 0;
-        for (const t of tracks) {
-          const at = t.pts.filter((p) => Math.abs(p[0] - x) <= 3);
-          if (!at.length) continue;
-          const ys = at.map((p) => p[1]);
-          const y = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
-          if (y >= top - 3 && y <= bot + 3) met++;
+      const shared = f.metro.items.filter((i) => i.type === 'event' && (i.co_owners || []).length);
+      assert(shared.length > 0, name + ': fixture has no shared events');
+      let checked = 0;
+      for (const item of shared) {
+        const key = Object.keys(bundles).find((k) => k.split('|')[0] === item.title);
+        if (key) {
+          // a bundle: every line in the event has a rail, and every rail
+          // starts on the line it came from, wherever that line is
+          const want = [item.owner].concat(item.co_owners).sort();
+          const got = [...new Set(bundles[key].map((p) => p.owner))].sort();
+          assert(got.join(',') === want.join(','), name + ': ' + item.title
+            + ' is on lines ' + want.join(',') + ' but drew rails for ' + (got.join(',') || 'nobody'));
+          for (const owner of got) {
+            const mine = tracks.filter((t) => t.owner === owner);
+            let best = Infinity;
+            for (const p of bundles[key]) {
+              if (p.owner !== owner) continue;
+              for (const q of p.pts) for (const t of mine) for (const pt of t.pts) {
+                const d = Math.hypot(pt[0] - q[0], pt[1] - q[1]);
+                if (d < best) best = d;
+              }
+            }
+            // The rail leaves its line at a point ON it, so this is a
+            // rounding error and a 2px sampling step, not a tolerance. The
+            // defect it guards against left rails a whole siding raise (32px
+            // at 1x, 64px on an X) out in mid-air.
+            assert(best <= 8, name + ': ' + item.title + "'s " + owner
+              + ' rail never comes within ' + best.toFixed(1) + 'px of ' + owner + "'s own line");
+          }
+          checked++;
+          continue;
         }
-        assert(met >= 2, name + ': a tie at x=' + Math.round(x) + ' reaches only ' + met + ' line(s)');
+        // no bundle: a moment, which has to be tied instead
+        const tie = ties.find((tie) => {
+          const x = tie.x + tie.w / 2, top = tie.y, bot = tie.y + tie.h;
+          let met = 0;
+          for (const t of tracks) {
+            const at = t.pts.filter((p) => Math.abs(p[0] - x) <= 3);
+            if (!at.length) continue;
+            const ys = at.map((p) => p[1]);
+            const y = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
+            if (y >= top - 3 && y <= bot + 3) met++;
+          }
+          return met >= 2;
+        });
+        assert(tie, name + ': ' + item.title + ' was drawn neither as a bundle of rails '
+          + 'nor as a tie reaching two of its lines');
+        checked++;
       }
+      assert(checked === shared.length, name + ': only ' + checked + ' of ' + shared.length
+        + ' shared events were drawn at all');
     }
   });
 
@@ -275,7 +320,15 @@ module.exports = function (test, h) {
   test('an all-day siding band runs the width of the visible day', () => {
     const f = fixtures.find((x) => x.name === 'all-day-every-track');
     const rep = layout(f, ROOMY);
-    const tracks = pathsWhere(rep, 'track');
+    // The line itself is the longest piece drawn for it. A siding also
+    // draws the EXPRESS half of its loop, the straight run the line would
+    // have taken from one end of the siding to the other, and that is a
+    // piece of the drawing rather than the line: it is as long as its own
+    // siding and has no business spanning the board.
+    const byOwner = {};
+    for (const t of pathsWhere(rep, 'track')) (byOwner[t.owner] = byOwner[t.owner] || []).push(t);
+    const tracks = Object.keys(byOwner)
+      .map((k) => byOwner[k].slice().sort((a, b) => b.len - a.len)[0]);
     for (const t of tracks) {
       const xs = t.pts.map((p) => p[0]);
       const span = Math.max.apply(null, xs) - Math.min.apply(null, xs);
@@ -415,37 +468,42 @@ module.exports = function (test, h) {
     });
   }
 
-  test('a shared event gets one BOLD rail, not one rail per line', () => {
-    // Drawn as a bundle of parallel rails, one per person, it was a comb of
-    // near-identical strokes that read as a smudge rather than as several
-    // lines arriving somewhere. One heavier rail says the same thing: when
-    // several people are in one place that is the weightiest thing on that
-    // stretch of the board.
+  test("a shared event's rails each wear their own line's stroke", () => {
+    // The bundle's whole job is to say WHICH lines arrived. One bold rail
+    // for the group (which is what this used to draw, and what this case
+    // used to assert) says that several people are somewhere and never
+    // which of them, and on a board where every line is told apart by
+    // weight and texture it also says "some other line". So each rail is
+    // drawn in the stroke of the line it came from, and no two lines in one
+    // bundle may come out looking like the same line.
     const f = fixtures.find((x) => x.name === 'busy-day');
     const rep = layout(f, ROOMY);
-    const shared = new Set(f.metro.items
-      .filter((i) => i.type === 'event' && (i.co_owners || []).length)
-      .map((i) => i.title));
-    assert(shared.size > 0, 'the busy day has no shared events');
-    const Z = rep.debug.Z || 1;
-    const at = eventsIn(rep).filter((e) => e.status === 'ok' && shared.has(e.title))
-      .map((e) => ({ x: (e.elbow + e.endA) / 2 * Z, y: (rep.debug.spineC + e.sign * e.laneDist) * Z }));
-    assert(at.length > 0, 'no shared event was placed');
-    const flat = pathsWhere(rep, 'branch').concat(pathsWhere(rep, 'fork'));
-    function widthNear(pt) {
-      let best = 0;
-      for (const p of flat) {
-        for (const q of p.pts) {
-          if (Math.abs(q[0] - pt.x) < 20 && Math.abs(q[1] - pt.y) < 8) best = Math.max(best, p.width);
-        }
-      }
-      return best;
+    const tracks = {};
+    for (const t of pathsWhere(rep, 'track')) tracks[t.owner] = t;
+    const bundles = {};
+    for (const p of rep.paths) {
+      if (!p.bundle) continue;
+      (bundles[p.bundle] = bundles[p.bundle] || []).push(p);
     }
-    const plain = flat.filter((p) => p.width > 0).map((p) => p.width).sort((a, b) => a - b);
-    const median = plain[Math.floor(plain.length / 2)] || 0;
-    const boldest = Math.max.apply(null, at.map(widthNear));
-    assert(boldest > median * 1.2,
-      'a shared event\'s rail should be visibly heavier than an ordinary one: '
-      + boldest.toFixed(1) + 'px vs a typical ' + median.toFixed(1) + 'px');
+    assert(Object.keys(bundles).length > 0, 'the busy day drew no bundles at all');
+    for (const key of Object.keys(bundles)) {
+      const looks = {};
+      for (const p of bundles[key]) {
+        const own = tracks[p.owner];
+        assert(own, key + ': a rail owned by ' + p.owner + ', which has no line on the board');
+        assert(p.stroke === own.stroke, key + ': ' + p.owner + "'s rail is drawn "
+          + p.stroke + ' while its line is ' + own.stroke);
+        // the treated lines are drawn wider than their nominal weight (the
+        // paper knocked out of them is what the eye weighs), so this is the
+        // drawn width against the drawn width, not against line_width
+        assert(Math.abs(p.width - own.width) < 0.6, key + ': ' + p.owner + "'s rail is "
+          + p.width.toFixed(1) + 'px on a ' + own.width.toFixed(1) + 'px line');
+        looks[p.owner] = p.stroke + '/' + p.width.toFixed(1) + '/' + p.dash;
+      }
+      const seen = Object.keys(looks).map((o) => looks[o]);
+      assert(new Set(seen).size === seen.length, key
+        + ': two lines in one bundle are drawn identically (' + seen.join(' , ')
+        + '), so the bundle cannot say who is there');
+    }
   });
 };

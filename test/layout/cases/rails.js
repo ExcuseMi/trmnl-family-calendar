@@ -11,10 +11,31 @@ module.exports = function (test, h) {
 
   const ROOMY = VIEWPORTS.find((v) => v.name === 'x-landscape');
 
-  // axis px per minute in the BUSY stretch — the quiet ends run compressed,
-  // so the whole-day average would understate the scale events are drawn at
+  // Axis px per minute in the BUSY stretch. The scale is not linear: the
+  // quiet ends of the day are compressed to a fifth so the whole day can be
+  // on the board at all, so the width over the window is the average of a
+  // fast stretch and a slow one, and it understates the scale the events
+  // are actually drawn at by about a third: an honest 90-minute rail read
+  // as a rail a third too long.
+  //
+  // Measured off the hour labels, which are drawn at their real positions:
+  // the widest gap per minute between two of them is the full-rate scale.
   function scale(rep) {
-    const [from, to] = rep.debug.busy || rep.debug.win;
+    const hours = rep.labels
+      .filter((l) => (' ' + l.cls + ' ').indexOf(' metro-hour ') >= 0 && /^\d{1,2}:\d{2}/.test(l.text))
+      .map((l) => {
+        const [hh, mm] = l.text.split(':').map(Number);
+        return { clock: hh * 60 + mm, x: l.x + l.w / 2 };
+      })
+      .sort((a, b) => a.x - b.x);
+    let best = 0;
+    for (let i = 1; i < hours.length; i++) {
+      let mins = hours[i].clock - hours[i - 1].clock;
+      if (mins <= 0) mins += 1440;                        // past a midnight
+      best = Math.max(best, (hours[i].x - hours[i - 1].x) / mins);
+    }
+    if (best > 0) return best;
+    const [from, to] = rep.debug.win;
     return rep.canvas.w / (to - from);
   }
 
@@ -25,12 +46,21 @@ module.exports = function (test, h) {
     const byTitle = {};
     f.metro.items.filter((i) => i.type === 'event').forEach((e) => { byTitle[e.title] = e; });
 
-    // the flat run of each branch, in axis px
+    // The longest FLAT run inside each branch, in axis px. Measured as the
+    // whole path it would charge a rail for its own drop; measured only on
+    // paths that are flat end to end it skipped every rail of a bundle,
+    // which is one path carrying a drop, a bend and then its rung: a rail
+    // drawn 120px past its own end went through unnoticed.
     const flats = pathsWhere(rep, 'branch').map((p) => {
-      const xs = p.pts.map((q) => q[0]), ys = p.pts.map((q) => q[1]);
-      return { len: Math.max.apply(null, xs) - Math.min.apply(null, xs),
-               flat: Math.max.apply(null, ys) - Math.min.apply(null, ys) < 2 };
-    }).filter((r) => r.flat && r.len > 1);
+      let best = 0, from = null;
+      for (let i = 1; i < p.pts.length; i++) {
+        if (Math.abs(p.pts[i][1] - p.pts[i - 1][1]) < 0.5) {
+          if (from == null) from = p.pts[i - 1][0];
+          best = Math.max(best, Math.abs(p.pts[i][0] - from));
+        } else from = null;
+      }
+      return { len: best };
+    }).filter((r) => r.len > 1);
 
     assert(flats.length > 0, 'no flat spur runs found at all');
 
@@ -70,9 +100,18 @@ module.exports = function (test, h) {
     // tick nor a ramp corner at its start
     const Z = rep.debug.Z || 1;
     const corners = pathsWhere(rep, 'fork').map((r) => r.pts[r.pts.length - 1]).filter(Boolean);
+    // The START's own mark is a hollow DOT, not a tick. A tick is a bar
+    // drawn across the line and the start of a rail is usually a bend, so
+    // one there read as the line overshooting its own rail. Events after
+    // the first in a group ride a rail that is already lying flat and have
+    // no ramp of their own, so the dot is the only thing marking them:
+    // counting ticks and ramp corners alone, "Client Workshop" read as an
+    // event nothing pointed at while its dot was sitting on its own minute.
+    const dots = rep.circles.filter((c) => c.role === 'stop-start');
     const unmarked = placed.filter((e) => {
       const a = e.nodeA * Z;
       if (ticks.some((t) => Math.abs(t.x + t.w / 2 - a) < 8)) return false;
+      if (dots.some((d) => Math.abs(d.x + d.w / 2 - a) < 8)) return false;
       if (corners.some((c) => Math.abs(c[0] - a) < 40)) return false;
       return !interchange.has(e.title);
     });
@@ -134,6 +173,27 @@ module.exports = function (test, h) {
       // the debug attribute reports layout px; the drawn report is in screen
       // px, which on a 2x-density panel the framework zooms by Z
       const Z = rep.debug.Z || 1;
+      // A STUB is a piece of rail with nothing before it: the lane spine
+      // started a corner radius early so an arriving diagonal would have
+      // flat line to land on, and with nothing arriving it poked out past
+      // the corner into minutes before the event began.
+      //
+      // Where the lane already carries the rail of an EARLIER event on the
+      // same line, what sits before the drop is that rail, not a stub:
+      // "Client Workshop" was flagged for Quick Sync's rail, which ends 20
+      // minutes and 20px before it. The two are the same length and in the
+      // same place, so the drawing cannot tell them apart. The DATA can.
+      // Every event's rail runs from where it leaves the trunk to its own
+      // end (or a corner past its elbow, whichever is further), so a lane
+      // mate whose rail reaches into the window owns the line there.
+      const all = eventsIn(rep).filter((o) => o.status === 'ok');
+      const corner = rep.debug.corner || 0;
+      const laneMateRail = (e, from, to) => all.some((o) => {
+        if (o === e || o.sign !== e.sign || Math.abs(o.laneDist - e.laneDist) > 1) return false;
+        const lo = Math.min(o.diagFrom, o.elbow) * Z;
+        const hi = Math.max(o.endA, o.elbow + corner) * Z;
+        return hi > from - 1 && lo < to + 1;
+      });
       const bad = [];
       for (const e of drops) {
         const laneY = (rep.debug.spineC + e.sign * e.laneDist) * Z;
@@ -143,6 +203,7 @@ module.exports = function (test, h) {
         // that and it starts flagging the tail of the PREVIOUS event's rail
         // in the same lane, which is simply two rails near each other.
         const from = (e.elbow - 12) * Z, to = (e.elbow * Z) - 3;
+        if (laneMateRail(e, from, to)) continue;
         for (const p of lines) {
           for (const pt of p.pts) {
             if (pt[0] >= from && pt[0] <= to && Math.abs(pt[1] - laneY) < 4) {
