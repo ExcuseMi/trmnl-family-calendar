@@ -43,7 +43,10 @@ No server of your own.
    with the
    [Configuration editor](https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html),
    which also previews the map at every device size, or write it by hand
-   (see [CONFIG.md](CONFIG.md)). Each demo board is a worked example:
+   (see [CONFIG.md](CONFIG.md)). No ICS links yet? The editor's **Start**
+   section has three presets (*Family of 4*, *Work vs Personal Split*,
+   *Solo Freelancer Track*): pick one, draw the map, then swap the
+   placeholder links for your own. Each demo board is also a worked example:
    [demo/simpsons/config.json](demo/simpsons/config.json),
    [demo/futurama/config.json](demo/futurama/config.json),
    [demo/friends/config.json](demo/friends/config.json).

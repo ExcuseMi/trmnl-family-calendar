@@ -119,7 +119,7 @@
 
   <section class="station" id="station-start">
     <h2>Start <small>load something, or begin from scratch</small></h2>
-    <p class="lede">Already have a configuration in TRMNL? Paste it here. You can also paste plain ICS links, one per line, or load the demo to see how a finished setup looks.</p>
+    <p class="lede">Already have a configuration in TRMNL? Paste it here. You can also paste plain ICS links, one per line, load the demo to see how a finished setup looks, or pick a preset below if you have no links yet.</p>
     <div class="card plain">
       <textarea id="importIn" rows="4" placeholder='{"tracks": [...], "calendars": [...]}&#10;or just&#10;https://calendar.example.com/work.ics&#10;https://calendar.example.com/family.ics'></textarea>
       <div class="toolbar">
@@ -127,6 +127,17 @@
         <button id="loadDemo">Load the demo configuration</button>
         <span id="importStatus" class="status"></span>
       </div>
+      <div class="toolbar" style="margin-top:12px">
+        <label for="presetPick" style="font-size:12.5px; font-weight:600">No links yet? Start from a preset:</label>
+        <select id="presetPick">
+          <option value="">Pick a preset…</option>
+          <option value="family4">Family of 4</option>
+          <option value="worksplit">Work vs Personal Split</option>
+          <option value="solo">Solo Freelancer Track</option>
+        </select>
+        <span id="presetStatus" class="status"></span>
+      </div>
+      <p class="hint">A preset is a complete working configuration with placeholder <code>calendar.example.com</code> links, so you can draw a board before you have any ICS links at all: load one, look at the map, then swap the links for your own. Each teaches something different, and loading one replaces whatever is in the editor.</p>
     </div>
   </section>
 
@@ -712,10 +723,173 @@
   document.getElementById("addTrack").addEventListener("click", function () { state.tracks.push(newTrack()); renderAll(); });
   document.getElementById("addCalendar").addEventListener("click", function () { state.calendars.push(newCalendar()); renderAll(); });
   document.getElementById("addGlobalRule").addEventListener("click", function () { state.rules.push(newRule()); renderGlobalRules(); });
+
+  // ------------------------------------------------------------ presets
+  //
+  // Three complete, working configurations for the person who has not got a
+  // single ICS link yet: pick one, draw the map, then swap
+  // calendar.example.com for the real feeds. They go in through loadConfig,
+  // the same door an import uses, so what the editor shows afterwards IS the
+  // preset and the JSON box round-trips it unchanged.
+  //
+  // Deliberately three different SHAPES, not three casts of characters, and
+  // between them they cover what turns a list into a board: one event shared
+  // by several tracks (Family), a long block drawn as a station instead of
+  // eating a label lane (Work vs Personal), a feed whose noise is hidden
+  // (Family's school menu, Work's cancelled holds), and one feed fanned out
+  // into three lines on a title prefix that is then stripped off (Solo).
+  //
+  // Rules for anything added here:
+  //  * no "side" and no "color" on a track. Both are the plugin's job now,
+  //    the pickers are gone from this page, and a preset that set them would
+  //    quietly teach the setting back.
+  //  * every calendar is either unnamed or named after one of its tracks,
+  //    or the editor's own name warning fires on a config we shipped.
+  //  * only fields this page round-trips: no "allDay" (the rule editor has
+  //    no such switch) and no empty "rewrite" (an empty one exports as
+  //    nothing at all), or the preset and the JSON box would disagree.
+  var PRESETS = [
+    {
+      id: "family4",
+      label: "Family of 4",
+      note: "One calendar per person, plus a shared feed: dinner and the school run are drawn once, across everyone on them.",
+      config: {
+        tracks: [{ name: "Sam" }, { name: "Alex" }, { name: "Mia" }, { name: "Noah" }],
+        calendars: [
+          { url: "https://calendar.example.com/sam.ics", name: "Sam" },
+          { url: "https://calendar.example.com/alex.ics", name: "Alex" },
+          { url: "https://calendar.example.com/mia.ics", name: "Mia" },
+          // the toddler has nothing most days; keep the line so the board
+          // reads the same shape every morning
+          { url: "https://calendar.example.com/noah.ics", name: "Noah", hideIfEmpty: false },
+          // shared household feed: unnamed, so the odd thing no rule routes
+          // falls back to the first track instead of drawing a fifth line
+          {
+            url: "https://calendar.example.com/family-shared.ics",
+            rules: [
+              { match: { type: "contains", value: "Family Dinner" }, track: ["Sam", "Alex", "Mia", "Noah"], rename: false },
+              { match: { type: "contains", value: "School Run" }, track: ["Alex", "Mia", "Noah"], rename: false }
+            ]
+          },
+          {
+            url: "https://calendar.example.com/school.ics",
+            rules: [
+              { match: { type: "contains", value: "Lunch Menu" }, hide: true },
+              { match: { type: "word", value: "Y4" }, track: "Mia", rename: false },
+              { match: { type: "word", value: "Y2" }, track: "Noah", rename: false }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      id: "worksplit",
+      label: "Work vs Personal Split",
+      note: "Two lines for one person. The office day is a station the work line runs through, and cancelled holds are hidden everywhere.",
+      config: {
+        tracks: [{ name: "Work" }, { name: "Personal" }],
+        rules: [
+          { match: { type: "status", value: "cancelled" }, hide: true }
+        ],
+        calendars: [
+          {
+            url: "https://calendar.example.com/work.ics",
+            name: "Work",
+            rules: [
+              { match: { type: "any" }, track: "Work" },
+              // nine to five in one place: a siding on the line, not a lane
+              { match: { type: "contains", value: "Office day" }, station: true }
+            ]
+          },
+          {
+            url: "https://calendar.example.com/personal.ics",
+            name: "Personal",
+            rules: [{ match: { type: "any" }, track: "Personal" }],
+            hideIfEmpty: false
+          }
+        ]
+      }
+    },
+    {
+      id: "solo",
+      label: "Solo Freelancer Track",
+      note: "One work feed fanned out into a line per client on the title prefix, which is then stripped so the board reads “Sprint review” and not “Acme: Sprint review”.",
+      config: {
+        tracks: [{ name: "Studio" }, { name: "Acme" }, { name: "Globex" }],
+        calendars: [
+          {
+            url: "https://calendar.example.com/freelance.ics",
+            name: "Studio",
+            rules: [
+              { match: { type: "regex", value: "^Acme:" }, track: "Acme", rename: false },
+              { match: { type: "regex", value: "^Globex:" }, track: "Globex", rename: false },
+              // routed on the prefix, so the prefix has done its job: keep
+              // the rest of the title ($1) and drop the client name
+              { match: { type: "regex", value: "^[A-Za-z]+:\\s*(.+)$" }, rewrite: "$1" }
+            ]
+          },
+          // gym, dentist, the rest of a life: unnamed and unrouted, so it
+          // lands on the first track, which is this one person's own line
+          { url: "https://calendar.example.com/personal.ics" }
+        ]
+      }
+    }
+  ];
+
+  // What the editor held the last time this page put something in it. Used
+  // only to tell "the user has work in here" from "this is exactly what we
+  // loaded a moment ago", so flipping between presets does not nag.
+  var lastLoaded = null;
+  function markLoaded() {
+    lastLoaded = { json: document.getElementById("jsonOut").value, paste: document.getElementById("importIn").value };
+  }
+  // Another load (a paste, the demo) means the dropdown is no longer telling
+  // the truth about what is in the editor, so it goes back to its prompt.
+  function clearPresetPick() {
+    document.getElementById("presetPick").value = "";
+    setStatus("presetStatus", "", "");
+  }
+  function editorHasWork() {
+    var paste = document.getElementById("importIn").value.trim();
+    var has = !!paste || state.rules.length > 0
+      || state.tracks.some(function (t) { return t.name.trim(); })
+      || state.calendars.some(function (c) { return c.url.trim() || c.name.trim() || c.rules.length; });
+    if (!has) return false;
+    if (!lastLoaded) return true;
+    return document.getElementById("jsonOut").value !== lastLoaded.json
+      || document.getElementById("importIn").value !== lastLoaded.paste;
+  }
+  document.getElementById("presetPick").addEventListener("change", function () {
+    var sel = document.getElementById("presetPick");
+    var id = sel.value;
+    if (!id) return;
+    var preset = null;
+    PRESETS.forEach(function (p) { if (p.id === id) preset = p; });
+    if (!preset) { sel.value = ""; return; }
+    // A preset replaces everything, and there is no undo anywhere else on
+    // this page: the state is one object rebuilt from scratch on every load,
+    // so an undo stack would be a new kind of state to keep correct for one
+    // button. A confirm is the honest version, and it only appears when
+    // there is something to lose (an untouched page, or a preset nobody has
+    // edited yet, swaps silently).
+    if (editorHasWork() && !window.confirm("Loading “" + preset.label + "” replaces everything in the editor. Continue?")) {
+      sel.value = "";
+      setStatus("presetStatus", "Left as it was.", "");
+      return;
+    }
+    loadConfig(JSON.parse(JSON.stringify(preset.config)));
+    document.getElementById("importIn").value = JSON.stringify(preset.config, null, 2);
+    sel.value = id;
+    markLoaded();
+    setStatus("importStatus", "", "");
+    setStatus("presetStatus", preset.label + " loaded. " + preset.note + " Swap the example.com links for your own.", "ok");
+  });
   document.getElementById("loadImport").addEventListener("click", function () {
     var raw = document.getElementById("importIn").value.trim();
     if (!raw) { setStatus("importStatus", "Paste a configuration first.", "err"); return; }
     loadConfig(parseImport(raw));
+    clearPresetPick();
+    markLoaded();
     setStatus("importStatus", "Loaded " + state.calendars.filter(function (c) { return c.url; }).length + " calendar(s), " + state.tracks.length + " tracks.", "ok");
   });
   document.getElementById("loadDemo").addEventListener("click", function () {
@@ -723,6 +897,8 @@
     realFetch("../demo-config.json").then(function (r) { return r.json(); }).then(function (d) {
       loadConfig(d);
       document.getElementById("importIn").value = JSON.stringify(d, null, 2);
+      clearPresetPick();
+      markLoaded();
       setStatus("importStatus", "Demo loaded. Scroll down and draw the map.", "ok");
     }).catch(function (e) { setStatus("importStatus", "Couldn't load demo-config.json: " + e.message, "err"); });
   });

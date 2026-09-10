@@ -170,3 +170,22 @@ regex feature `and`/`or`/`not` can't express.
 [demo-config.json](demo-config.json) is a complete working example with a
 work calendar, per-track calendars, a school calendar split by class code,
 and a shared family calendar.
+
+The [configuration editor](https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html)
+carries three more, in
+the **Start** section's preset dropdown, for when you have no ICS links yet:
+
+- **Family of 4**: one calendar per person plus a shared household feed.
+  Dinner and the school run are `track` lists, so they are drawn once as an
+  interchange rather than once per person; the school feed's menu postings
+  are hidden, and the quiet toddler's line is kept with `hideIfEmpty`.
+- **Work vs Personal Split**: two lines for one person. The office day is a
+  `station` the work line runs through instead of a label lane of its own,
+  and a top-level rule hides cancelled holds in every calendar.
+- **Solo Freelancer Track**: one work feed fanned out into a line per
+  client on the title prefix, which a `rewrite` then strips, so the board
+  reads "Sprint review" and not "Acme: Sprint review".
+
+Each loads into the editor exactly as an import does, with placeholder
+`calendar.example.com` links to swap for your own, and none of them sets
+`side` or `color`.
