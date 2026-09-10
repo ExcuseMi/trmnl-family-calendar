@@ -110,6 +110,27 @@ is open.
   be built as its own arc from a point ON the trunk, and then the branch
   starts where it leaves and nothing is redrawn. Worth doing before A10,
   which is the same elbow seen from the other side.
+- [ ] **A15. A track should carry events on BOTH sides of its line.**
+  Every lane a track owns sits OUTWARD of it, so a line at the edge of the
+  bundle has all of its labels on one side and the gap between it and its
+  neighbour goes unused. On the everyday board, Work has six events stacked
+  above it and nothing below, while the space south of its rail is empty.
+  Reported as: "if Work would have some events to the south of its track,
+  there would be more room to play with"; "a track should have events on
+  both sides, unless constricted by space".
+  The change is in the pure solver, which is where it can be driven
+  cheaply: `buildSide` walks a side outward emitting `n` rungs per track
+  beyond its baseline, and a rung is `{dist, owner}` whose position is
+  `spineC + sign * dist`. Both-sided means splitting a track's allocation
+  into inward and outward rungs, charging the band for both, and giving a
+  rung a SIDE so `placeSide` knows whether the label hangs above or below
+  its rail. Inward rungs live in the gap between this track and the one
+  before it, so two tracks are now competing for one space and the solver
+  has to hand it out rather than both assuming it.
+  Do it against `test/cross`, not against renders: the fit, the ordering
+  and the monotonicity are all arithmetic, and that suite answers in
+  milliseconds.
+
 - [~] **A14. The cross-axis solver gives up too early and then wastes what
   it saved.** Two of the three parts are done. The solver is a pure
   function now, lifted out of the closure between `CROSS_SOLVER_BEGIN/END`

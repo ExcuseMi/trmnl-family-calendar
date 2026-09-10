@@ -540,6 +540,14 @@
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
     var SIDING_RAISE = 32 * S; // how far a track's own line kinks out to siding level; for a short siding a smaller raise also means a shallower, less jarring kink instead of a deep sideways "V"
     var SIDING_GAP = 4 * S; // clear space kept between the raised line itself and the near edge of its caption
+    // Paper between the rails where a group of lines runs together. Three
+    // px was asked for and three px is not legible: at these stroke weights
+    // the rails merged into one thick line and the bundle could not be seen
+    // at all. This board already has the rule, in the spread suite: two
+    // strokes with less than a STROKE of paper between them read as one
+    // line, not as two. LINE_GAP is what the rest of the map keeps between
+    // a line and its neighbour, so it is what a bundle keeps too.
+    var CORRIDOR_GAP = LINE_GAP;
 
     function toXY(a, c) { return horizontal ? [a, c] : [c, a]; }
 
@@ -655,59 +663,191 @@
       return far;
     }
 
-    // ---- time window: first fit to where the day's actual content is (so a
-    // quiet day doesn't stretch its few events across a mostly-empty
-    // DAY_START..DAY_END canvas), then squeeze further around "now" if that
-    // range is still too dense for the canvas to show hour-by-hour.
-    var nowMin = (typeof METRO.now_min === 'number') ? METRO.now_min : null;
-    var CONTENT_PAD = 75;   // minutes of breathing room kept on each side of the actual content
-    var MIN_SPAN = 6 * 60;  // never fit tighter than this, even on a nearly-empty day
-    var contentTimes = [];
-    METRO.items.forEach(function (i) { if (i.type === 'event') { contentTimes.push(i.start_min); contentTimes.push(i.end_min); } });
-    // an all-day-derived siding is deliberately full-day-wide — it must
-    // not drag the content-fit window out to match it, or a single
-    // all-day event would defeat the whole "narrow around what's actually
-    // busy" feature for everyone else on a quiet day
-    SIDINGS.forEach(function (st) { if (st.all_day) return; contentTimes.push(st.start_min); contentTimes.push(st.end_min); });
-    if (nowMin != null) contentTimes.push(nowMin);
-    var winStart = DAY_START, winEnd = DAY_END;
-    if (contentTimes.length) {
-      var lo = Math.min.apply(null, contentTimes) - CONTENT_PAD;
-      var hi = Math.max.apply(null, contentTimes) + CONTENT_PAD;
-      if (hi - lo < MIN_SPAN) { var mid = (lo + hi) / 2; lo = mid - MIN_SPAN / 2; hi = mid + MIN_SPAN / 2; }
-      winEnd = clamp(Math.ceil(hi / 30) * 30, DAY_START + MIN_SPAN, DAY_END);
-      winStart = clamp(Math.floor(lo / 30) * 30, DAY_START, winEnd - MIN_SPAN);
-    }
-    var totalHours = (winEnd - winStart) / 60;
-    var minPxPerHour = (horizontal ? 46 : 38) * S * (crossPx < 260 * S ? 1.8 : 1); // little cross room = few lanes = fewer hours
-    if (axisPx / totalHours < minPxPerHour) {
-      var visHours = clamp(Math.floor(axisPx / minPxPerHour), 3, totalHours);
-      var anchor = nowMin != null ? nowMin - 60 : winStart;
-      var squeezedStart = clamp(Math.floor(anchor / 60) * 60, winStart, winEnd - visHours * 60);
-      winEnd = squeezedStart + visHours * 60;
-      winStart = squeezedStart;
-    }
-    // ---- express sections -----------------------------------------------
-    // The whole day is on the board, but the quiet ends of it are run at
-    // speed. Cropping the early morning and late evening away (which is what
-    // the window above does on its own) loses the shape of the day: you
-    // cannot see that nothing happens before eight, only that the board
-    // starts there. Compressing instead keeps the whole day present and
-    // still gives the busy hours the room they need.
+    // ==== TIME_AXIS_BEGIN ====
+    // The time axis: how many days the board draws, and how much of its
+    // length each minute of them is worth.
     //
-    // aFor() is piecewise from here on: minutes inside the busy stretch get
-    // the full scale, minutes outside it get EXPRESS_RATE of it. Everything
-    // downstream asks aFor() for positions, so the rest of the map needs to
-    // know nothing about this.
+    // PURE, and lifted out for the same reason the cross solver was: this
+    // is the piece with the most arithmetic and the fewest opinions, and
+    // asking it about a board used to mean rendering one. `test/axis` runs
+    // it directly.
+    //
+    // Everything is in ABSOLUTE minutes across the run of days transform
+    // sent: day n is [n*1440, (n+1)*1440). Positions come back in UNITS,
+    // not pixels: one unit is one minute of the busy part of a day, and
+    // the caller scales units to the axis it has. That keeps the model
+    // free of the canvas.
+    //
+    // Two ideas, and the second is the whole reason a night is affordable:
+    //
+    //   The board draws as many DAYS as it can give a readable day to, up
+    //   to what it was sent. It is decided here rather than in transform
+    //   because it depends on the canvas, and the canvas is here.
+    //
+    //   A minute outside the busy part of a day is worth `expressRate` of
+    //   one inside it. Cropping the quiet hours away loses the shape of a
+    //   day: you cannot see that nothing happens before eight, only that
+    //   the board starts at eight. Compressing keeps the whole day present.
+    //   A night between two days is the same idea with nothing in it at
+    //   all, which is what makes a three-day board fit at all.
+    var TimeAxis = (function () {
+      var DAY = 1440;
+
+      // The busy stretch of one day: what is actually on it, padded, and
+      // clamped to the day. Null when the day is empty, which is a day
+      // that is all night.
+      function busyOf(k, dayIx, content) {
+        var lo = null, hi = null;
+        for (var i = 0; i < content.length; i++) {
+          var c = content[i];
+          if (c.end_min <= dayIx * DAY || c.start_min >= (dayIx + 1) * DAY) continue;
+          var s = Math.max(c.start_min, dayIx * DAY), e = Math.min(c.end_min, (dayIx + 1) * DAY);
+          if (lo == null || s < lo) lo = s;
+          if (hi == null || e > hi) hi = e;
+        }
+        if (lo == null) return null;
+        lo = Math.max(dayIx * DAY, lo - k.contentPad);
+        hi = Math.min((dayIx + 1) * DAY, hi + k.contentPad);
+        // never so tight that the day reads as an hour: a day with one
+        // meeting on it is still a day
+        if (hi - lo < k.minDaySpan) {
+          var mid = (lo + hi) / 2;
+          lo = Math.max(dayIx * DAY, mid - k.minDaySpan / 2);
+          hi = Math.min((dayIx + 1) * DAY, mid + k.minDaySpan / 2);
+        }
+        return { from: lo, to: hi };
+      }
+
+      // The compression profile for a run of `count` days: alternating
+      // express and full-rate stretches, in order, covering the whole run.
+      // Adjacent express stretches are merged, so the tail of one day and
+      // the head of the next are ONE night rather than two half-nights
+      // with a seam down the middle.
+      function segmentsFor(k, count, content) {
+        var segs = [];
+        function push(from, to, rate) {
+          if (to - from < 0.5) return;
+          var last = segs[segs.length - 1];
+          if (last && last.rate === rate && Math.abs(last.to - from) < 0.5) { last.to = to; return; }
+          segs.push({ from: from, to: to, rate: rate });
+        }
+        for (var d = 0; d < count; d++) {
+          var b = busyOf(k, d, content);
+          var d0 = d * DAY, d1 = (d + 1) * DAY;
+          if (!b) { push(d0, d1, k.expressRate); continue; }
+          // A stretch too short to be worth compressing is not compressed:
+          // a seam in the scale that saves four pixels is a seam for
+          // nothing.
+          if (b.from - d0 < k.minExpress) b.from = d0;
+          if (d1 - b.to < k.minExpress) b.to = d1;
+          push(d0, b.from, k.expressRate);
+          push(b.from, b.to, 1);
+          push(b.to, d1, k.expressRate);
+        }
+        return segs;
+      }
+
+      function unitsOf(segs) {
+        var u = 0;
+        for (var i = 0; i < segs.length; i++) u += (segs[i].to - segs[i].from) * segs[i].rate;
+        return u;
+      }
+
+      // input: { days: n available, content: [{start_min,end_min}], axisPx, k }
+      function fit(input) {
+        var k = input.k, avail = Math.max(1, input.days);
+        var content = input.content || [];
+        // As many days as the board can give a readable one to. Counted
+        // down rather than up, so a board that can hold three holds three.
+        var best = null;
+        for (var count = avail; count >= 1; count--) {
+          // a day with nothing on it at the end of the run is not worth
+          // the axis: three days of which the third is empty is a two-day
+          // board with a night stuck on the end
+          if (count > 1 && !busyOf(k, count - 1, content)) continue;
+          var segs = segmentsFor(k, count, content);
+          var units = unitsOf(segs);
+          var busy = 0;
+          for (var i = 0; i < segs.length; i++) if (segs[i].rate === 1) busy += segs[i].to - segs[i].from;
+          var pxPerBusyHour = units > 0 ? (input.axisPx / units) * 60 : 0;
+          // What has to be legible is not the same question on a run as on
+          // a single day. Reading one day, the eye goes to a time and
+          // expects to find it; reading three, it compares days and then
+          // goes to a time within one. The axis only has to separate
+          // events from each other, because what carries a label is the
+          // lane, not the hour. So a run is allowed a tighter hour than a
+          // single day, and never tighter than the floor at which a short
+          // meeting stops having room for its own two marks.
+          var floor = count > 1 ? k.minPxPerHourRun : k.minPxPerHour;
+          best = { count: count, segs: segs, units: units, busy: busy, pxPerBusyHour: pxPerBusyHour };
+          if (pxPerBusyHour >= floor) break;
+        }
+        var boundaries = [];
+        for (var b2 = 1; b2 < best.count; b2++) boundaries.push({ min: b2 * DAY, day: b2 });
+        return {
+          dayCount: best.count,
+          winStart: 0, winEnd: best.count * DAY,
+          segments: best.segs, units: best.units,
+          busyMin: best.busy, pxPerBusyHour: best.pxPerBusyHour,
+          boundaries: boundaries,
+        };
+      }
+
+      // Where a minute sits, in units from the start of the run. Outside
+      // the run it clamps, so a stray event cannot drag anything off the
+      // end of the board.
+      function posOf(model, m) {
+        var u = 0;
+        for (var i = 0; i < model.segments.length; i++) {
+          var s = model.segments[i];
+          if (m <= s.from) return u;
+          if (m >= s.to) { u += (s.to - s.from) * s.rate; continue; }
+          return u + (m - s.from) * s.rate;
+        }
+        return u;
+      }
+
+      // Is this minute in a compressed stretch? The drawing marks those
+      // differently, and asking the model is the only way to be sure the
+      // mark and the scale agree.
+      function isExpress(model, m) {
+        for (var i = 0; i < model.segments.length; i++) {
+          var s = model.segments[i];
+          if (m >= s.from && m <= s.to) return s.rate !== 1;
+        }
+        return false;
+      }
+
+      return { fit: fit, posOf: posOf, isExpress: isExpress, busyOf: busyOf };
+    })();
+    // ==== TIME_AXIS_END ====
+
+    // ---- the visible run --------------------------------------------
+    // Which days the board draws, and what each minute of them is worth,
+    // are both TimeAxis's call: it is the only place that knows the canvas
+    // and the content at once. What used to be here was a content fit
+    // followed by a squeeze around now, both written for a single day and
+    // both clamped to one midnight.
+    var nowMin = (typeof METRO.now_min === 'number') ? METRO.now_min : null;
     var EXPRESS_RATE = 0.22;         // how much axis a quiet minute is worth
     var MIN_EXPRESS_MIN = 45;        // shorter than this is not worth compressing
-    var busyFrom = winStart, busyTo = winEnd;
-    var dayFrom = DAY_START, dayTo = DAY_END;
-    if (busyFrom - dayFrom < MIN_EXPRESS_MIN) busyFrom = dayFrom;
-    if (dayTo - busyTo < MIN_EXPRESS_MIN) busyTo = dayTo;
-    var headMin = busyFrom - dayFrom, tailMin = dayTo - busyTo, busyMin = busyTo - busyFrom;
+    // The run of days transform sent, and everything on it. The model
+    // decides how many of them the board can actually draw; this is only
+    // what it chooses from.
+    var DAY_RUN = (METRO.days && METRO.days.length) ? METRO.days : [{ index: 0, start_min: 0, end_min: 1440 }];
+    var axisContent = [];
+    METRO.items.forEach(function (i) {
+      if (i.type !== 'event' || i.start_min == null) return;
+      axisContent.push({ start_min: i.start_min, end_min: i.end_min == null ? i.start_min : i.end_min });
+    });
+    // an all-day siding is deliberately day-wide: it must not decide what
+    // the busy part of a day is, or one holiday would say the whole day is
+    // busy and there would be nothing left to compress
+    SIDINGS.forEach(function (st) {
+      if (st.all_day) return;
+      axisContent.push({ start_min: st.start_min, end_min: st.end_min });
+    });
     var winLabel = ROOT.querySelector('.metro-window');
-    if (winLabel) winLabel.textContent = timeLabel(dayFrom) + ' ' + timeLabel(dayTo);
     // ---- line names: every line begins at its own named terminus, and the
     // axis body starts after a column wide enough to hold them. Naming the
     // start of each line is what a transit map does, and it means the map
@@ -789,20 +929,47 @@
       ? (horizontal ? Math.max(8 * S, hourW / 2) : 2 * S + nameH + 6 * S)
       : 0;
     var axisStart = NODE_R + 2 * S + nameCol, axisEnd = axisPx - NODE_R - 2 * S; // rings at the window edges stay whole; tracks still run full bleed
-    // weighted minutes: a quiet one counts for less axis than a busy one
-    var weighted = busyMin + (headMin + tailMin) * EXPRESS_RATE;
-    var pxPerMin = (axisEnd - axisStart) / (weighted || 1);
+    // The scale, from the model. It decided how many days fit and what each
+    // minute of them is worth; all that is left here is turning its units
+    // into this canvas's pixels.
+    var AXIS = TimeAxis.fit({
+      days: DAY_RUN.length,
+      content: axisContent,
+      axisPx: axisEnd - axisStart,
+      k: {
+        contentPad: 75, minDaySpan: 6 * 60, minExpress: MIN_EXPRESS_MIN,
+        expressRate: EXPRESS_RATE,
+        // little cross room means few lanes means fewer hours are readable
+        minPxPerHour: (horizontal ? 46 : 38) * S * (crossPx < 260 * S ? 1.8 : 1),
+        minPxPerHourRun: (horizontal ? 26 : 22) * S * (crossPx < 260 * S ? 1.8 : 1),
+      },
+    });
+    var dayCount = AXIS.dayCount;
+    var pxPerMin = (axisEnd - axisStart) / (AXIS.units || 1);
     function aFor(min) {
-      var m = clamp(min, dayFrom, dayTo);
-      var w = 0;
-      if (m <= busyFrom) w = (m - dayFrom) * EXPRESS_RATE;
-      else if (m <= busyTo) w = headMin * EXPRESS_RATE + (m - busyFrom);
-      else w = headMin * EXPRESS_RATE + busyMin + (m - busyTo) * EXPRESS_RATE;
-      return axisStart + w * pxPerMin;
+      return axisStart + TimeAxis.posOf(AXIS, clamp(min, 0, dayCount * 1440)) * pxPerMin;
     }
     // the scale of the busy stretch — what the hour labels are spaced by
     var pxPerHour = 60 * pxPerMin;
-    function isExpress(min) { return min < busyFrom || min > busyTo; }
+    function isExpress(min) { return TimeAxis.isExpress(AXIS, min); }
+    // what the rest of the file still calls the window: the run the board
+    // decided to draw
+    var dayFrom = 0, dayTo = dayCount * 1440;
+    if (winLabel) winLabel.textContent = timeLabel(dayFrom) + ' ' + timeLabel(dayTo);
+    // The header names what the board is showing. On a run that is a
+    // RANGE, and the word "Today" goes: a board carrying Tuesday and
+    // Wednesday that says "Today" is naming one of them and ignoring the
+    // other. One day keeps the word, because there it is exactly right.
+    (function nameTheRun() {
+      if (dayCount < 2) return;
+      var first = DAY_RUN[0], last = DAY_RUN[dayCount - 1];
+      var pill = ROOT.querySelector('.metro-date');
+      if (pill && first && last && first.date_label && last.date_label) {
+        pill.textContent = first.date_label + ' \u2013 ' + last.date_label;
+      }
+      var title = ROOT.querySelector('.metro-title');
+      if (title) title.remove();
+    })();
 
     // ---- sidings: convert each track's raw minute ranges to clamped
     // axis-unit segments now that aFor()/axisStart/axisEnd exist.
@@ -845,7 +1012,13 @@
         if (mem.some(function (m) { return m.p._sign !== mem[0].p._sign; })) return;
         mem.sort(function (a, b) { return Math.abs(a.p.track_offset) - Math.abs(b.p.track_offset); });
         var half = (mem.length - 1) / 2;
+        var tracks = mem.map(function (m) { return m.p; });
         mem.forEach(function (m, i) {
+          // the whole group, so sidingGeom can space them as a set rather
+          // than as a chain of pairs: closing each line on its neighbour
+          // leaves the far ones further apart than the near ones, and what
+          // this has to draw is a bundle of parallel rails
+          m.s.mem = tracks;
           m.s.toward = i <= half ? 1 : -1;
           // Who this one is closing on, so the kink can be capped at half
           // the gap between them. Unclamped they each moved a full siding
@@ -861,41 +1034,115 @@
     // 45° kink sidingPath() actually draws (not a flat step), so an
     // event whose ring lands inside the kink itself — not just the flat
     // middle — still sits exactly on the drawn line, not floating off it
+    // How a line leaves its baseline for a corridor, and comes back.
+    //
+    // It used to be a straight 45 degree ramp with a filleted corner at each
+    // end: the raise simply equalled the distance travelled along the axis.
+    // That reads as a chamfer, a corner cut off, rather than as a line
+    // choosing to run beside another one. Smoothstep leaves the baseline
+    // horizontal, turns in the middle and arrives horizontal again, which is
+    // how a track actually diverges.
+    //
+    // It is the SINGLE source of truth for where a line is: sidingPath
+    // samples this function rather than assuming a shape, so the drawn path
+    // and every ring, tick and caption placed with lineCAt agree by
+    // construction, whatever easing this returns.
+    function rampEase(u) {
+      u = u < 0 ? 0 : (u > 1 ? 1 : u);
+      return u * u * (3 - 2 * u);
+    }
+    // How far a siding moves its line (rr, across) and how long it takes to
+    // get there (rampA, along). These used to be ONE number: the ramp was
+    // 45 degrees, so the depth and the run were equal by construction.
+    //
+    // A corridor cannot work that way. What the reader has to see is two
+    // lines CLOSING, and with bands they can be most of the canvas apart,
+    // while the event itself might be an hour wide. Tied together, the depth
+    // was capped at half the event's own length and a shared dinner came out
+    // as a shallow dip in two rails that never came near each other.
+    // Separated, the turn takes as long as a turn should take and goes as
+    // far as it needs to go.
+    //
+    // A siding of one line's own keeps the old proportions: it is stepping
+    // aside, not meeting anybody, and a fixed step is exactly right for it.
+    function sidingGeom(p, s) {
+      var span = s.a1 - s.a0;
+      // A third of the span to turn in, a third running, a third to turn
+      // back. At half the span the two turns met in the middle and the
+      // corridor was a funnel: the lines came together and left again
+      // without ever running alongside, which is the one thing the drawing
+      // is for.
+      var rampA = Math.min(SIDING_RAISE, span / 3);
+      var rr = rampA;
+      var tw = packedFallback ? 1 : s.toward;
+      var shift = 0;
+      if (s.mem && s.mem.length > 1 && !packedFallback) {
+        // The group leaves its baselines and runs as a BUNDLE just outside
+        // the outermost of them: parallel rails, CORRIDOR_GAP of paper
+        // between each pair, in the same order they already run in so no
+        // line ever has to pass another.
+        //
+        // Placed outside rather than between: at three px there is no room
+        // between them to be, and a bundle struck through the middle of the
+        // group would put the shared event on top of whichever line is in
+        // the middle of it.
+        var mem = s.mem.slice().sort(function (a, b) { return a._c - b._c; });
+        if (p._sign < 0) mem.reverse();          // work outward, whichever way that is
+        var w = mem.map(function (q) { return Math.max(2, q.line_width) * S * weightScale; });
+        // Centred on where the group already sits, so it moves as little
+        // as it can. Placed beyond the outermost line instead, the bundle
+        // was faithful to the sketch and unusable on a real board: the
+        // innermost line had to fall the whole depth of the map to reach
+        // it, and the drop crossed every lane on the way down.
+        var pitch = [], total = 0;
+        for (var k = 1; k < mem.length; k++) {
+          var g2 = CORRIDOR_GAP + (w[k - 1] + w[k]) / 2;
+          pitch.push(g2); total += g2;
+        }
+        var centre = (mem[0]._c + mem[mem.length - 1]._c) / 2;
+        var pos = [], acc = centre - p._sign * total / 2;
+        for (var k2 = 0; k2 < mem.length; k2++) {
+          if (k2) acc += p._sign * pitch[k2 - 1];
+          pos.push(acc);
+        }
+        var mine = -1;
+        for (var m = 0; m < mem.length; m++) if (mem[m] === p) mine = m;
+        if (mine >= 0) {
+          var delta = pos[mine] - p._c;
+          rr = Math.abs(delta);
+          tw = (delta * p._sign) < 0 ? -1 : 1;
+          // TWO SHAPES ONLY, the same rule every branch on this board
+          // follows: a shallow move takes the eased ramp, anything deeper
+          // goes fully vertical at its own minute, nothing in between. A
+          // line dropping out of the bundle's order is always the second.
+          if (rr > rampA) rampA = Math.min(CORNER, span / 3);
+          // STAGGERED, so the drops nest instead of stacking on one minute.
+          // The line nearest the bundle turns first and the one furthest
+          // from it turns last, which means every vertical sits to the
+          // right of the point where the lines below it have already left.
+          // Nothing crosses anything, by construction rather than by
+          // checking afterwards.
+          shift = (mem.length - 1 - mine) * Math.min(CORNER * 1.4, span / (mem.length * 3));
+        }
+      }
+      return { rampA: rampA, rr: rr, tw: tw, shift: shift };
+    }
     function sidingRaiseAt(p, a) {
       var segs = p._sidings;
       for (var i = 0; i < segs.length; i++) {
         var s = segs[i];
         if (a < s.a0 || a > s.a1) continue;
-        var rr = Math.min(SIDING_RAISE, (s.a1 - s.a0) / 2);
-        // Not on a PACKED board: the tracks are already a track-step apart
-        // there, so converging them buys nothing and only takes room the map
-        // has none of. Read here rather than baked into `toward`, because
-        // whether the bands fit is not known until they have been solved.
-        var tw = packedFallback ? 1 : s.toward;
-        // A shared siding's two lines close on each other, so each may move
-        // at most half the gap between them, less the air they need to stay
-        // two lines. Uncapped they moved a full raise each and, where the
-        // board puts them closer together than that, swapped places.
-        if (s.closingOn && tw < 0) {
-          // How far this line may close on its partner. Half the gap between
-          // them is not enough on its own: the INNER line's band holds its
-          // own lanes, and the outer line moving into that band puts a
-          // shared corridor on top of somebody's private spurs — Bart's
-          // "Field Trip" ended up inside the corridor School Day opened
-          // between him and Lisa. Coming inward, stop at the partner's band
-          // edge; going outward, at half the gap, so neither passes the
-          // other.
-          var gapC = Math.abs(s.closingOn._c - p._c);
-          var room = s.toward < 0 && s.closingOn._bandEnd != null
-            ? p._dist - s.closingOn._bandEnd - LINE_GAP
-            : (gapC - 2 * LINE_GAP) / 2;
-          rr = Math.min(rr, Math.max(0, room));
-        }
+        var g = sidingGeom(p, s);
+        // this line's own share of the span: a member of a bundle turns
+        // later than the one outside it, so its shared section is shorter
+        // at both ends and its vertical stands clear of theirs
+        var b0 = s.a0 + g.shift, b1 = s.a1 - g.shift;
+        if (a < b0 || a > b1 || b1 - b0 <= 0) continue;
         // signed: +1 kinks away from the spine (the ordinary siding), -1
         // toward it, which is how a shared siding brings its lines together
-        if (a < s.a0 + rr) return (a - s.a0) * tw;
-        if (a > s.a1 - rr) return (s.a1 - a) * tw;
-        return rr * tw;
+        if (a < b0 + g.rampA) return g.rr * rampEase((a - b0) / g.rampA) * g.tw;
+        if (a > b1 - g.rampA) return g.rr * rampEase((b1 - a) / g.rampA) * g.tw;
+        return g.rr * g.tw;
       }
       return 0;
     }
@@ -933,8 +1180,8 @@
     all.forEach(function (e) {
       // an event on a line this canvas had no room for is counted, not drawn
       if (!trackByKey[e.owner]) { later++; return; }
-      if (e.start_min < winStart) earlier++;
-      else if (e.start_min >= winEnd) later++;
+      if (e.start_min < dayFrom) earlier++;
+      else if (e.start_min >= dayTo) later++;
       else visible.push(e);
     });
 
@@ -1052,7 +1299,7 @@
       return box;
     }
 
-    var alerts = METRO.items.filter(function (i) { return (i.type === 'weather' || i.type === 'sun') && i.at_min >= winStart && i.at_min <= winEnd; })
+    var alerts = METRO.items.filter(function (i) { return (i.type === 'weather' || i.type === 'sun') && i.at_min >= dayFrom && i.at_min <= dayTo; })
       .sort(function (a, b) { return a.at_min - b.at_min; });
     var showAlertLabels = crossPx >= 200 * S && alerts.length > 0;
     var alertBand = 0;
@@ -1207,8 +1454,18 @@
       var lanes = [];
       function laneDist(k) { return slots[k].dist; }
       function lane(k) { return lanes[k] || (lanes[k] = { items: [] }); }
+      // An obstacle may name a RANGE of lane distances rather than only a
+      // ceiling. A corridor occupies a band in the middle of a side: the
+      // lanes inside it are as usable as they ever were, and blocking them
+      // too (which is all a ceiling can do) took out the whole side and
+      // collapsed the board.
       (obstacles || []).forEach(function (o) {
-        for (var k = 0; k < maxLanes && laneDist(k) <= o.distMax; k++) lane(k).items.push({ a0: o.a0, a1: o.a1, owner: null, kind: 'obstacle', d: laneDist(k), bar: o.bar });
+        for (var k = 0; k < maxLanes; k++) {
+          var d = laneDist(k);
+          if (d > o.distMax) break;
+          if (o.distMin != null && d < o.distMin) continue;
+          lane(k).items.push({ a0: o.a0, a1: o.a1, owner: null, kind: 'obstacle', d: d, bar: o.bar });
+        }
       });
       function itemOverlaps(item, seg) { return item.a0 < seg[1] && seg[0] < item.a1; }
       // does a diagonal from (a0,d0) to (a1,d1) run through a lane's own flat
@@ -1586,6 +1843,7 @@
       return used;
     }
 
+
     // ==== CROSS_SOLVER_BEGIN ====
     // The cross-axis solver: where every line sits across the board, and
     // which rungs each of them gets to hang labels on.
@@ -1887,11 +2145,25 @@
         depth: crossPx, bandLo: bandLo,
       };
     }
+    // What a track's band has to reserve for kinks. A siding of a track's
+    // OWN steps the line aside by a fixed raise, into the room its lanes
+    // would otherwise use, so the band pays for it. A CORRIDOR does not:
+    // it is centred on the group, so it mostly moves lines into the space
+    // between them, and its real depth is nothing like a fixed raise.
+    // Charged as if it were one, every track carrying a shared event
+    // inflated its band by a kink it never makes, and a four-line day that
+    // had a band each was tipped into the packed fallback by three family
+    // dinners.
+    function ownSidings(p) {
+      var n = 0;
+      p._sidings.forEach(function (s) { if (!s.mem || s.mem.length < 2) n++; });
+      return n;
+    }
     function crossTracks(sideKey) {
-      return sides[sideKey].map(function (p) { return { key: p.key, sidings: p._sidings.length }; });
+      return sides[sideKey].map(function (p) { return { key: p.key, sidings: ownSidings(p) }; });
     }
     // the same shape CrossSolver reads, so the two cannot drift
-    function laneBase(p) { return CrossSolver.laneBase(crossConsts(), { sidings: p._sidings.length }); }
+    function laneBase(p) { return CrossSolver.laneBase(crossConsts(), { sidings: ownSidings(p) }); }
 
     // pass 1: what does each track want on its own, with room to spare?
     step = laneStep;
@@ -1934,8 +2206,29 @@
     spineC = cross.spineC;
     needA = cross.needA; needB = cross.needB;
     recomputeTrackDists();
-    usedA = placeSide('A', cross.lanes.A, obstacles.A.concat(barBlocks.A));
-    usedB = placeSide('B', cross.lanes.B, obstacles.B.concat(barBlocks.B));
+    // A corridor was planned before any of this, and it sweeps a band of
+    // the cross axis for the hours it lasts. That band is closed to lanes,
+    // so no label is dropped into the space the lines are about to move
+    // through and no branch is routed across it. Only the band: the lanes
+    // inside and beyond it are still free.
+    function corridorBlocks(sideKey) {
+      var out = [];
+      if (packedFallback) return out;
+      sides[sideKey].forEach(function (p) {
+        p._sidings.forEach(function (s) {
+          if (!s.mem || s.mem.length < 2) return;
+          var g = sidingGeom(p, s);
+          if (!(g.rr > 0)) return;
+          var here = p._dist, there = p._dist + g.tw * g.rr;
+          out.push({ a0: s.a0, a1: s.a1,
+            distMin: Math.min(here, there) - LINE_GAP,
+            distMax: Math.max(here, there) + LINE_GAP });
+        });
+      });
+      return out;
+    }
+    usedA = placeSide('A', cross.lanes.A, obstacles.A.concat(barBlocks.A, corridorBlocks('A')));
+    usedB = placeSide('B', cross.lanes.B, obstacles.B.concat(barBlocks.B, corridorBlocks('B')));
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0, adrift = 0;
     visible.forEach(function (e) {
@@ -2026,13 +2319,54 @@
     function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA)]; }); }
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal,
-      corner: CORNER, minDiag: MIN_DIAG, win: [dayFrom, dayTo], busy: [busyFrom, busyTo], spineC: spineC, step: step, laneStep: laneStep, colW: colW,
+      corner: CORNER, minDiag: MIN_DIAG, win: [dayFrom, dayTo],
+      days: dayCount, segments: AXIS.segments.map(function (sg) { return [Math.round(sg.from), Math.round(sg.to), sg.rate]; }),
+      boundaries: AXIS.boundaries.map(function (b) { return b.min; }), spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
       colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
       events: eventsDump()
     }));
+
+    // ---- midnight: where one day ends and the next begins ---------------
+    //
+    // A run of days drawn as one continuous axis needs to say where the
+    // days actually break, or a board showing Tuesday and Wednesday reads
+    // as one very long Tuesday. The mark is a DOUBLE BAR across the whole
+    // map, which is what a transit map uses for the end of a line, with
+    // the day it opens named on it.
+    //
+    // Drawn behind the lines rather than over them, because a line that
+    // runs through midnight really does run through it: a sleeper event
+    // crossing the boundary is one event, and a bar painted over it would
+    // cut it in half and say otherwise.
+    (function drawMidnights() {
+      if (!AXIS.boundaries.length) return;
+      var lo = bandLo, hi = crossPx;
+      AXIS.boundaries.forEach(function (b) {
+        var a = aFor(b.min);
+        [-1.5 * S, 1.5 * S].forEach(function (off) {
+          var p0 = toXY(a + off, lo), p1 = toXY(a + off, hi);
+          var bar = svgEl('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
+            'stroke-width': 1.5 * S });
+          bar.style.stroke = INK;
+          bar.setAttribute('data-metro-role', 'midnight');
+          svg.appendChild(bar);
+        });
+        // the day it opens, named on the bar, so the reader is told what
+        // they have crossed into rather than only that they crossed
+        var d = DAY_RUN[b.day];
+        if (!d || !d.date_label) return;
+        var lab = el('span', 'metro-gen metro-axis-note label label--small font--bold text--black absolute');
+        lab.textContent = d.date_label;
+        canvas.appendChild(lab);
+        var lm = measure(lab);
+        var lxy = toXY(a + 4 * S, lo + 2 * S);
+        lab.style.left = clamp(lxy[0], 0, Math.max(0, W - lm.w)) + 'px';
+        lab.style.top = lxy[1] + 'px';
+      });
+    })();
 
     // ---- the day as a river, drawn behind everything --------------------
     // The hour axis runs down the middle of the bundle, and it is the one
@@ -2076,7 +2410,7 @@
 
     // ---- draw: now line + alert lines first (under everything)
     var nowA = null;
-    if (nowMin != null && nowMin >= winStart && nowMin <= winEnd) nowA = aFor(nowMin);
+    if (nowMin != null && nowMin >= dayFrom && nowMin <= dayTo) nowA = aFor(nowMin);
     // No rule across the board at "now". It was the one line drawn at a
     // minute rather than belonging to anybody, so nothing routed around it
     // and it cut through captions the whole width of the map. What time it
@@ -2104,11 +2438,34 @@
       var lo = Math.min(fromA, toA), hi = Math.max(fromA, toA);
       var marks = [lo, hi];
       p._sidings.forEach(function (s) {
-        var rr = Math.min(SIDING_RAISE, (s.a1 - s.a0) / 2);
-        [s.a0, s.a0 + rr, s.a1 - rr, s.a1].forEach(function (a) { if (a > lo && a < hi) marks.push(a); });
+        var gg = sidingGeom(p, s), ra = gg.rampA, b0 = s.a0 + gg.shift, b1 = s.a1 - gg.shift;
+        [b0, b0 + ra, b1 - ra, b1].forEach(function (a) { if (a > lo && a < hi) marks.push(a); });
       });
       marks.sort(function (a, b) { return a - b; });
-      return marks.map(function (a) { return [a, baseC + sign * sidingRaiseAt(p, a)]; });
+      // Walk the breakpoints, and SAMPLE anywhere the line is changing
+      // height rather than drawing a straight line between the ends of the
+      // move. The samples are what make the eased ramp a curve, and taking
+      // them from sidingRaiseAt is what keeps the curve and the markers on
+      // it in agreement: there is no second description of the shape to get
+      // out of step. One layout px is below the resolution of either panel,
+      // and roundedPath leaves a step that small alone rather than filleting
+      // it, so the polyline is the curve.
+      var step = Math.max(1, S);
+      var out = [];
+      for (var i = 0; i < marks.length; i++) {
+        var a = marks[i];
+        if (i && a - marks[i - 1] < 0.01) continue;   // a boundary two sidings share
+        if (i) {
+          var prev = marks[i - 1];
+          if (Math.abs(sidingRaiseAt(p, a) - sidingRaiseAt(p, prev)) > 0.01) {
+            for (var t = prev + step; t < a - 0.01; t += step) {
+              out.push([t, baseC + sign * sidingRaiseAt(p, t)]);
+            }
+          }
+        }
+        out.push([a, baseC + sign * sidingRaiseAt(p, a)]);
+      }
+      return out;
     }
     // Now the bands are solved, so how close the lines run is known. A name
     // set above its line is a name's height clear of it; where the tracks
@@ -2397,7 +2754,7 @@
     LEGEND.forEach(function (p) {
       var baseC = spineC + p._c;
       p._sidings.forEach(function (s) {
-        var raise = Math.min(SIDING_RAISE, (s.a1 - s.a0) / 2);
+        var geom = sidingGeom(p, s), raise = geom.rampA;
         var members = s.group ? capGroups[s.group] : null;
         var ownsCaption = !members || members[0] === p;
         // No marker at the kink boundaries. A hollow diamond there claimed
@@ -2508,9 +2865,25 @@
             var g2 = cs2[ci] - cs2[ci - 1];
             if (!wide || g2 > wide.gap) wide = { gap: g2, at: (cs2[ci] + cs2[ci - 1]) / 2 };
           }
-          midC = (wide && wide.gap >= bm.h + 2 * SIDING_GAP)
-            ? wide.at
-            : cs2[cs2.length - 1] + SIDING_GAP + bm.h / 2;
+          if (wide && wide.gap >= bm.h + 2 * SIDING_GAP) {
+            midC = wide.at;
+          } else {
+            // The corridor is too tight to write inside: at three px between
+            // the rails there is no gap left in it at all. Everywhere else
+            // on this board belongs to somebody's lane, and stepping just
+            // past the outermost rail is where the next line's labels
+            // start, which is how "Family Dinner" landed on "Book Club".
+            //
+            // So it sits just OUTSIDE the outermost rail, in the space the
+            // group vacated to get here: those lines have left, and the
+            // corridor's own band is closed to lanes for exactly these
+            // hours, so nothing else can be there. Set on the bundle
+            // instead it masked the one thing the drawing is for, and the
+            // rails could not be told apart from a single thick line.
+            midC = p._sign > 0
+              ? cs2[cs2.length - 1] + SIDING_GAP + bm.h / 2
+              : cs2[0] - SIDING_GAP - bm.h / 2;
+          }
         }
         if (horizontal && !sharedSiding(s)) {
           // The main line runs straight through a solo siding, so the
@@ -2781,6 +3154,11 @@
     var chains = {};
     placed.forEach(function (e) {
       if (e._merge) return;
+      // A shared event sends one vertical branch DOWN per line it belongs
+      // to, and they land side by side as a bundle. Drawn below, not here:
+      // a chain draws ONE rail for the group, which is the single bold rail
+      // this used to be.
+      if (horizontal && e._involved.length > 1) return;
       var key = e._sideKey + '|' + e._lane + '|' + e.owner + '|' + e._dir; // direction too — a chain's bridge-drawing assumes one consistent direction
       (chains[key] = chains[key] || []).push(e);
     });
@@ -2934,10 +3312,214 @@
       e._rampEl = drawRamp(p, loop, e._diagFrom - e._dir * RAMP_LEAD, 'branch', p.key);
     });
 
+    // ---- a shared event: one vertical branch down per line, side by side
+    //
+    // Several people in one place is several LINES arriving at it, so the
+    // drawing is several rails, not one. Each line sends a branch straight
+    // down from where it runs to its own rung of a bundle below them all,
+    // and the rungs are a stroke of paper apart so they read as separate
+    // rails rather than as one thick one.
+    //
+    // Two orderings make it work, and both come from what has to not cross:
+    //
+    //   RUNGS keep the order the lines already run in. The line nearest the
+    //   bundle takes the deepest rung and the furthest takes the shallowest,
+    //   so no two rails have to swap places on the way down.
+    //
+    //   DROPS are staggered, nearest first. A shallower branch turning down
+    //   later stops above the deeper rail that is already lying there, so it
+    //   never crosses it. Nothing needs checking afterwards; the geometry
+    //   cannot produce a crossing.
+    //
+    // This is the comb that was rejected once, and the reason it read as a
+    // smudge then was that the rails were drawn on top of each other at one
+    // minute with no space between them. Staggered and spaced, it reads as
+    // what it is: four lines arriving at the same place.
+    // Split a straight run across the cross axis at every OTHER line it
+    // passes, leaving a hole wide enough for that line and the air around
+    // it. Returned in travel order, so the last piece is the one that
+    // arrives.
+    function tunnelSegments(a, fromC, toC, own, self0) {
+      var lo = Math.min(fromC, toC), hi = Math.max(fromC, toC);
+      var cuts = [];
+      function cut(c, w) {
+        if (c <= lo + 1 || c >= hi - 1) return;
+        var half = w / 2 + LINE_GAP * 0.6;
+        cuts.push([c - half, c + half]);
+      }
+      // every LINE it passes
+      LEGEND.forEach(function (q) {
+        if (q === own) return;
+        cut(lineCAt(q, a), Math.max(2, q.line_width) * S * weightScale);
+      });
+      // and every RAIL. A spur lying in a lane is as much a drawn line as a
+      // trunk is, and a vertical crossing one without breaking reads as a
+      // junction that is not there: Kids' rail ran straight through Book
+      // Club's. The rule is the crossing, not what is being crossed.
+      visible.forEach(function (o) {
+        if (o._dropped || o._laneDist == null) return;
+        if (o === self0) return;
+        var from = Math.min(o._lineFrom, o._lineTo), to = Math.max(o._lineFrom, o._lineTo);
+        if (a < from - 1 || a > to + 1) return;
+        var oc = o._drawnLaneC != null ? o._drawnLaneC : spineC + o._sign * o._laneDist;
+        cut(oc, Math.max(2, (o._p ? o._p.line_width : 3)) * S * weightScale);
+      });
+      cuts.sort(function (x, y) { return x[0] - y[0]; });
+      var segs = [], at = lo;
+      cuts.forEach(function (g) {
+        if (g[0] > at + 1) segs.push([at, g[0]]);
+        at = Math.max(at, g[1]);
+      });
+      if (at < hi - 1) segs.push([at, hi]);
+      if (!segs.length) segs.push([lo, hi]);
+      if (toC < fromC) {
+        segs = segs.map(function (g) { return [g[1], g[0]]; }).reverse();
+      }
+      return segs;
+    }
+    function drawSharedBundle(e) {
+      var sign = e._sign, laneC = spineC + sign * e._laneDist;
+      // In the order the lines actually RUN, not by their distance from the
+      // spine. Distance is unsigned, so two lines on opposite sides of the
+      // board both read as "near" and the rungs came out in the wrong
+      // order: Work dropped to the lower rung while Alex climbed to the
+      // upper one, and the two rails crossed on the way.
+      var mem = e._involved.slice().sort(function (a, b) {
+        return lineCAt(a, e._nodeA) - lineCAt(b, e._nodeA);
+      });
+      // Tighter than the gap the map keeps between two unrelated lines:
+      // these ones are at the same place, and reading as a group is the
+      // point. Still a stroke of paper, which is the floor below which two
+      // rails merge into one thick one.
+      var pitch = LINE_GAP * 0.65 + Math.max(2, e._p.line_width) * S * weightScale;
+      // One rung's worth of stagger, so the cascade steps down at the same
+      // rate it steps across and the drops sit as close as the rungs do.
+      // The turns are filleted tighter to match: at the full corner radius
+      // two verticals this close would round into each other.
+      var stagger = pitch;
+      var bend = Math.min(CORNER, pitch * 0.7);
+      // Where the bundle sits: the WIDEST gap between two of the lines that
+      // are in it. Put beyond the outermost of them, the line at the far
+      // end travelled the whole depth of the board while the nearest one
+      // barely moved, which reads as one line visiting another rather than
+      // as several arriving somewhere. In the gap, everybody comes about
+      // as far as everybody else. The widest gap and not the midpoint,
+      // because with an odd number of lines the midpoint IS the middle
+      // line and the bundle would be laid along it.
+      var cs = mem.map(function (q) { return lineCAt(q, e._nodeA); });
+      var centre = null, best = -1;
+      for (var gi2 = 1; gi2 < cs.length; gi2++) {
+        var gap2 = Math.abs(cs[gi2] - cs[gi2 - 1]);
+        if (gap2 > best) { best = gap2; centre = (cs[gi2] + cs[gi2 - 1]) / 2; }
+      }
+      // The gap the bundle sits in may straddle the spine, and that is
+      // fine: the hour band runs along the leading edge of the board, not
+      // down the middle of it (see drawTimeBand), so spineC is only the
+      // centre of the bundle of lines and nothing is drawn on it. Refusing
+      // to cross it kept "Lunch with Alex" out of the one big empty gap on
+      // the board, between the line above the middle and the line below it,
+      // and sent Work the whole way down to meet Alex instead.
+      if (centre == null) centre = laneC;
+      var rails = [];
+      var span0 = (mem.length - 1) * pitch;
+      mem.forEach(function (q, k) {
+        rails.push({ q: q, rungC: centre - span0 / 2 + k * pitch, dropA: 0 });
+      });
+      // When two rails have to turn at DIFFERENT minutes, and when they can
+      // share one.
+      //
+      // A rail only has to get out of another's way if its own drop passes
+      // through where that other one is going to lie. Then it must turn
+      // FIRST, so its vertical stands to the left of where the other rail's
+      // horizontal begins and the two never meet. Rails that pass nothing
+      // of each other's are under no such constraint and turn together, on
+      // the same minute, which is both tidier and truer: they left their
+      // lines at the same time.
+      //
+      // Staggering all of them alike, which is what this did, spread three
+      // drops across three minutes to solve a conflict that only existed
+      // between two of them.
+      var froms = rails.map(function (r) { return lineCAt(r.q, e._nodeA); });
+      var mustFollow = rails.map(function () { return []; });
+      rails.forEach(function (r, i) {
+        var lo3 = Math.min(froms[i], r.rungC), hi3 = Math.max(froms[i], r.rungC);
+        rails.forEach(function (o, j) {
+          if (i === j) return;
+          if (o.rungC > lo3 + 0.5 && o.rungC < hi3 - 0.5) mustFollow[j].push(i);
+        });
+      });
+      var level = rails.map(function () { return 0; });
+      for (var pass3 = 0; pass3 < rails.length; pass3++) {
+        rails.forEach(function (o, j) {
+          mustFollow[j].forEach(function (i) { level[j] = Math.max(level[j], level[i] + 1); });
+        });
+      }
+      rails.forEach(function (r, i) { r.dropA = e._nodeA + level[i] * stagger; });
+      rails.forEach(function (r) {
+        var fromC = lineCAt(r.q, r.dropA);
+        var end = Math.max(e._endA, r.dropA + bend * 2);
+        // A rail reaching a bundle below has to get past whatever lines run
+        // between it and there. On a transit map the one that gives way is
+        // BROKEN at the crossing: it reads as passing under, and the line
+        // on top stays whole. The trunk is already painted by the time a
+        // branch is drawn over it, so a gap in the branch is the whole
+        // trick — what shows through the gap is the trunk itself.
+        var segs = tunnelSegments(r.dropA, fromC, r.rungC, r.q, e);
+        segs.forEach(function (sg, si) {
+          var last = si === segs.length - 1;
+          var pts = last
+            ? [toXY(r.dropA, sg[0]), toXY(r.dropA, r.rungC), toXY(end, r.rungC)]
+            : [toXY(r.dropA, sg[0]), toXY(r.dropA, sg[1])];
+          var el = svgEl('path', { d: roundedPath(pts, last ? bend : 0) });
+          el.setAttribute('data-metro-role', 'branch');
+          el.setAttribute('data-metro-owner', r.q.key);
+          // which bundle this rail belongs to, so the suite can ask about
+          // one shared event's rails as a set rather than guessing from
+          // position which branches are together
+          el.setAttribute('data-metro-bundle', e.title + '|' + e.start_min);
+          // in the line's OWN stroke, so the reader can see which lines
+          // arrived: one bold rail for the group said that several people
+          // were there and never which
+          paintLine(el, r.q, S, svg, null);
+        });
+        // where it leaves its own line, and where its rail stops
+        var dot = svgEl('circle', { cx: toXY(r.dropA, fromC)[0], cy: toXY(r.dropA, fromC)[1],
+          r: markOut(r.q, NODE_R * 0.62), 'stroke-width': NODE_STROKE * 0.8 });
+        dot.style.stroke = colorFor(r.q.hue); dot.style.fill = PAPER;
+        dot.setAttribute('data-metro-role', 'stop-start');
+        dot.setAttribute('data-metro-owner', r.q.key);
+        svg.appendChild(dot);
+        if (e.end_min > e.start_min) {
+          var half = markOut(r.q, NODE_R);
+          var t0 = toXY(end, r.rungC - half), t1 = toXY(end, r.rungC + half);
+          var tick = svgEl('line', { x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
+            'stroke-width': NODE_STROKE, 'stroke-linecap': 'round' });
+          tick.style.stroke = colorFor(r.q.hue);
+          tick.setAttribute('data-metro-role', 'stop');
+          tick.setAttribute('data-metro-owner', r.q.key);
+          svg.appendChild(tick);
+        }
+      });
+      // the label hangs off the bundle's own outermost rung, so it clears
+      // every rail in it rather than sitting on the middle of the comb
+      e._drawnLaneC = centre;
+      // the label hangs off whichever end of the bundle faces away from the
+      // spine, so it clears every rail in it
+      e._bundleOut = sign > 0 ? centre + span0 / 2 : centre - span0 / 2;
+    }
+    visible.forEach(function (e) {
+      if (!e._dropped && horizontal && e._involved.length > 1) drawSharedBundle(e);
+    });
+
     // ---- stations (rings / interchange capsules) on top of the lines
     visible.forEach(function (e) {
       if (e._dropped) return;
       var p = e._p;
+      // Drawn as a bundle already: every line that arrived has its own rail
+      // and its own mark on it, so the tie that used to stand in for all of
+      // them has nothing left to say and would be drawn straight through
+      // them.
+      if (horizontal && e._involved.length > 1) return;
       if (e._involved.length > 1) {
         // each involved track's actual rendered position at this axis point —
         // not just its flat baseline — since a track passing through one of
@@ -3317,7 +3899,11 @@
     visible.forEach(function (e) {
       if (e._dropped) return;
       var sign = e._sign, b = e._box;
-      var lineC = spineC + sign * e._laneDist;
+      // A shared event is a BUNDLE of rails, not one, so its label hangs
+      // off the outermost of them. Measured from the lane the event was
+      // given, the label sat on the rails that landed beyond it: the lane
+      // is where the bundle STARTS, not where it ends.
+      var lineC = e._bundleOut != null ? e._bundleOut : spineC + sign * e._laneDist;
       var duck = 0;
       if (e === carRider && horizontal
           && carA + CAR_CLEAR > e._textStart && carA - CAR_CLEAR < e._textStart + e._textLen) {
@@ -3388,7 +3974,15 @@
     // reaches it, so an interchange was taking an hour off the clock for no
     // reason: 9am and 4pm both went missing on a board with a morning
     // briefing and an afternoon debrief.
-    for (var h = Math.ceil(winStart / 60); h * 60 <= winEnd; h++) {
+    // What has already been written on the strip, so nothing is written
+    // twice in the same place. A compressed stretch fits several hours
+    // into the width of one label, and every one of them used to be
+    // drawn: the small hours came out as "00:0002:0004:0006:00" run
+    // together. The scale is not linear any more, so the spacing cannot
+    // be decided by counting hours; it has to be decided by asking where
+    // the last one actually landed.
+    var hourTaken = [];
+    for (var h = Math.ceil(dayFrom / 60); h * 60 <= dayTo; h++) {
       if (h % hourStep !== 0) continue;
       var a = aFor(h * 60);
       var start = clamp(a - hourW / 2, 0, axisPx - hourW);
@@ -3396,6 +3990,8 @@
       // still not over the clock badge or the "+n more" notes, which share
       // the strip with it
       if (reserved.some(function (r) { return overlaps(ext, r); })) continue;
+      if (hourTaken.some(function (r) { return overlaps(ext, r); })) continue;
+      hourTaken.push([ext[0] - 2 * S, ext[1] + 2 * S]);
       // no opaque background: the hour labels sit ON the strip, the way a
       // scale's numbers sit on its rule.
       var lab = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute');

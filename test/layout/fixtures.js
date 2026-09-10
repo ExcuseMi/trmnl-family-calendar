@@ -24,15 +24,58 @@ const TRACKS = [
   track('kids', 'Kids', 'right', 'purple-40', 30, 3, 'dotted'),
 ];
 
+// The day window is DERIVED, the way transform.js derives it, not written
+// down. Hardcoded at 07:00-21:00 it happened to end on the same minute as
+// busy-day's last event, so the padding the client keeps after the last
+// thing was clamped away and "Book Club" was drawn hard against the end of
+// the axis with nowhere for its label to go. A fixture that carries a
+// payload transform could never have produced is a fixture testing a board
+// that cannot happen.
+function dayWindow(m) {
+  var times = [];
+  (m.items || []).forEach(function (i) {
+    if (i.type !== 'event') return;
+    times.push(i.start_min); times.push(i.end_min);
+  });
+  (m.sidings || []).forEach(function (st) {
+    if (st.all_day) return;                 // a full-day band must not drag the window out
+    times.push(st.start_min); times.push(st.end_min);
+  });
+  if (!times.length) return null;
+  // an hour before the first thing, 90 minutes after the last, on the hour,
+  // never less than eight hours: transform.js's DAY_LO / DAY_HI
+  var lo = Math.max(0, Math.floor((Math.min.apply(null, times) - 60) / 60) * 60);
+  var hi = Math.min(24 * 60, Math.ceil((Math.max.apply(null, times) + 90) / 60) * 60);
+  if (hi - lo < 8 * 60) hi = Math.min(24 * 60, lo + 8 * 60);
+  return { lo: lo, hi: hi };
+}
+
+function hhmm(m) {
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+
 function base(over) {
-  return Object.assign({
-    day_start_min: 420, day_end_min: 1260, secondary_threshold_min: 30,
-    window_label: '07:00 21:00', date_label: 'Tue, Sep 8', now_min: 870,
+  over = over || {};
+  var m = Object.assign({
+    secondary_threshold_min: 30,
+    date_label: 'Tue, Sep 8', now_min: 870,
     orientation: 'auto', hour12: false,
     i18n: { today: 'Today', more: '+{n} more', earlier: '+{n} earlier', rain_pct: '{n}% rain' },
     header_weather: { hi: 21, lo: 13, condition: 'Rain', rain_chance: 60, icon: '' },
     legend: TRACKS, all_day: [], sidings: [], items: [],
   }, over);
+  var w = dayWindow(m);
+  if (m.day_start_min == null) m.day_start_min = w ? w.lo : 420;
+  if (m.day_end_min == null) m.day_end_min = w ? w.hi : 1260;
+  if (m.window_label == null) m.window_label = hhmm(m.day_start_min) + ' ' + hhmm(m.day_end_min);
+  // the run of days the payload offers. One, unless the fixture says
+  // otherwise: a single day is a run of one, and the client takes the same
+  // path for it as for three.
+  if (m.days == null) {
+    m.days = [{ index: 0, start_min: 0, end_min: 1440, date_label: m.date_label,
+      weekday_label: 'Tuesday', weather: { hi: 21, lo: 13, condition: 'Rain', rain_chance: 60, icon: '' } }];
+  }
+  return m;
 }
 
 // A full, busy day on four tracks: back-to-back work meetings that have to
@@ -264,6 +307,45 @@ const momentDay = base({
   ],
 });
 
+// Three days, because a run is the shape this plugin was built without and
+// every part of it has to survive one: a night between two days, an event
+// on each of them, and a board that has to decide how many of the three it
+// can actually draw.
+function shift(items, day) {
+  return items.map(function (i) {
+    return Object.assign({}, i, { start_min: i.start_min + day * 1440, end_min: i.end_min + day * 1440 });
+  });
+}
+const DAY0 = [
+  ev('Team Standup', 'work', 540, 555, { track_width: 4 }),
+  ev('Client Workshop', 'work', 600, 690, { location: 'Room 4B', track_width: 4 }),
+  ev('Yoga', 'alex', 450, 510, { side: 'right', hue: 'orange-40', track_offset: 10 }),
+  ev('Family Dinner', 'alex', 1110, 1170, { co_owners: ['sam', 'kids'], side: 'right', hue: 'orange-40', track_offset: 10 }),
+];
+const DAY1 = [
+  ev('Sprint Review', 'work', 570, 660, { track_width: 4 }),
+  ev('Dentist', 'alex', 780, 825, { side: 'right', hue: 'orange-40', track_offset: 10 }),
+  ev('Swim Training', 'sam', 1020, 1080, { location: 'City Pool', side: 'right', hue: 'green-40', track_style: 'dashed', track_offset: 20 }),
+];
+const DAY2 = [
+  ev('Retro', 'work', 600, 660, { track_width: 4 }),
+  ev('Piano Lesson', 'kids', 990, 1035, { side: 'right', hue: 'purple-40', track_style: 'dotted', track_offset: 30 }),
+];
+const threeDay = Object.assign(base({
+  now_min: 600,
+  items: DAY0.concat(shift(DAY1, 1), shift(DAY2, 2)),
+}), {
+  days: [
+    { index: 0, start_min: 0, end_min: 1440, date_label: 'Tue 8 Sep', weekday_label: 'Tuesday',
+      weather: { hi: 21, lo: 13, condition: 'Rain', rain_chance: 60, icon: '' } },
+    { index: 1, start_min: 1440, end_min: 2880, date_label: 'Wed 9 Sep', weekday_label: 'Wednesday',
+      weather: { hi: 18, lo: 11, condition: 'Cloudy', rain_chance: 20, icon: '' } },
+    { index: 2, start_min: 2880, end_min: 4320, date_label: 'Thu 10 Sep', weekday_label: 'Thursday',
+      weather: { hi: 24, lo: 15, condition: 'Clear', rain_chance: 5, icon: '' } },
+  ],
+  day_start_min: 0, day_end_min: 4320,
+});
+
 module.exports = [
   { name: 'busy-day', metro: busyDay },
   { name: 'all-day-every-track', metro: allDayEveryTrack },
@@ -276,4 +358,5 @@ module.exports = [
   { name: 'crew-day', metro: crewDay },
   { name: 'seven-lines', metro: sevenLines },
   { name: 'moment-day', metro: momentDay },
+  { name: 'three-day', metro: threeDay },
 ];

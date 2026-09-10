@@ -181,6 +181,9 @@ const REPORTER = `
       paths.push({
         role: el.getAttribute('data-metro-role') || 'other',
         owner: el.getAttribute('data-metro-owner') || null,
+        // set on the rails of one shared event, so a case can ask about a
+        // bundle as a set instead of guessing which branches belong together
+        bundle: el.getAttribute('data-metro-bundle') || null,
         stroke: cs.stroke,
         // the drawn stroke, so a test can ask whether a ramp is in its
         // line's own style rather than only where it goes
