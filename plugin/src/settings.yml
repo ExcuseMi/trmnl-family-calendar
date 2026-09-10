@@ -34,14 +34,14 @@ custom_fields:
 - keyname: author_info
   name: About This Plugin
   field_type: author_bio
-  description: 'Everyone''s day as a metro map. Each calendar is a line, events branch off it as stations, a long block in one place becomes a siding beside the line, and several people in one place become an interchange. The map picks its own shape for the screen it is on.<br /><br />You are looking at an example board until you turn <strong>Use Demo Data</strong> off below and paste your own calendar links in. Runs on TRMNL <strong>Serverless</strong>.'
+  description: Everyone's day as a metro map. Each calendar is a line, events branch off it as stations, a long block in one place becomes a siding beside the line, and several people in one place become an interchange. The map picks its own shape for the screen it is on.<br /><br />You are looking at an example board until you turn <strong>Use Demo Data</strong> off below and paste your own calendar links in. Runs on TRMNL <strong>Serverless</strong>.
   github_url: https://github.com/ExcuseMi/trmnl-metro-calendar-plugin
   category: calendar
   help_text: TRMNL X Ready · English, français, español, Deutsch, Nederlands
 - keyname: use_demo_data
   field_type: boolean
   name: Use Demo Data
-  description: 'On, the board shows a built-in example day so you can see what it does before setting anything up. Turn it off and the Calendars box appears.'
+  description: On, the board shows a built-in example day so you can see what it does before setting anything up. Turn it off and the Calendars box appears.
   default: true
   optional: true
   conditional_validation:
@@ -54,11 +54,11 @@ custom_fields:
 - keyname: demo_set
   field_type: select
   name: Demo Board
-  description: 'Which demo day to show. Each one is a real config in this project''s <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/</a> folder, so whichever you like the look of is also a worked example to copy.'
+  description: Which demo day to show. Each one is a real config in this project's <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/</a> folder, so whichever you like the look of is also a worked example to copy.
   options:
-  - 'Springfield, a family of five (shared school day, family dinner)': simpsons
-  - 'Planet Express, a work crew (one team calendar, a delivery three of them are on all day)': futurama
-  - 'Apartment 20, two flatmates (a day at a desk, an evening they are both at)': friends
+  - Springfield, a family of five (shared school day, family dinner): simpsons
+  - Planet Express, a work crew (one team calendar, a delivery three of them are on all day): futurama
+  - Apartment 20, two flatmates (a day at a desk, an evening they are both at): friends
   default: simpsons
   optional: true
 - keyname: config_json
@@ -75,7 +75,7 @@ custom_fields:
   options:
   - Today: today
   - Tomorrow: tomorrow
-  - 'Today, then tomorrow from the evening on': auto
+  - Today, then tomorrow from the evening on: auto
   default: today
   optional: true
   conditional_validation:
@@ -89,7 +89,7 @@ custom_fields:
   field_type: number
   name: Switch Over At
   group: The Day
-  description: 'The hour the board moves on to tomorrow, on a 24-hour clock. Blank means 18, so six in the evening.'
+  description: The hour the board moves on to tomorrow, on a 24-hour clock. Blank means 18, so six in the evening.
   placeholder: '18'
   optional: true
 - keyname: time_format
@@ -107,7 +107,7 @@ custom_fields:
   field_type: lat_lon
   name: Location
   group: Weather
-  description: 'Drives the weather in the header, sunrise and sunset, and the rain start/stop markers along the map. Leave it blank and the board keeps its placeholder weather.'
+  description: Drives the weather in the header, sunrise and sunset, and the rain start/stop markers along the map. Leave it blank and the board keeps its placeholder weather.
   optional: true
 - keyname: temperature_unit
   field_type: select
@@ -138,27 +138,27 @@ custom_fields:
   field_type: number
   name: Rain Chance At Or Above (%)
   group: Weather
-  description: 'The wettest hour still to come is called out once its chance of rain reaches this. Blank for no rain alert.'
+  description: The wettest hour still to come is called out once its chance of rain reaches this. Blank for no rain alert.
   default: 70
   optional: true
 - keyname: alert_snow
   field_type: boolean
   name: Alert On Snow
   group: Weather
-  description: 'Call out a day whose forecast is snow, whatever the rain chance says.'
+  description: Call out a day whose forecast is snow, whatever the rain chance says.
   default: true
   optional: true
 - keyname: alert_temp_low
   field_type: number
   name: Cold At Or Below
   group: Weather
-  description: 'In whichever unit the board is showing. Blank for no cold alert.'
+  description: In whichever unit the board is showing. Blank for no cold alert.
   optional: true
 - keyname: alert_temp_high
   field_type: number
   name: Heat At Or Above
   group: Weather
-  description: 'In whichever unit the board is showing. Blank for no heat alert.'
+  description: In whichever unit the board is showing. Blank for no heat alert.
   optional: true
 name: Metro Calendar
 description: Everyone's day as a metro map
