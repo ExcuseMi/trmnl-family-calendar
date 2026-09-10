@@ -83,4 +83,23 @@ module.exports = function (test, h) {
     assert(boxOf(cards[0]).checked, 'the keep-empty box should be ticked for the imported calendar');
     assert(!boxOf(cards[1]).checked, 'the other calendar should be left alone');
   });
+  // What comes back out of a chat window is not what went in: the answer is
+  // wrapped in a code fence, every bracket escaped for markdown, every line
+  // ended with a backslash. The box people paste into is the same box, so it
+  // has to read that too. (The plugin's own parser does the same thing; the
+  // two are tested apart because a config that only loads in the tool and
+  // not on the device is worse than one that loads in neither.)
+  test('a configuration copied out of a chat window imports', () => {
+    const cfg = { tracks: [{ name: 'Fry' }], calendars: [{ url: 'https://a.example/x.ics' }] };
+    const pretty = JSON.stringify(cfg, null, 1);
+    const mangled = 'Here you go:\n\n```json\n'
+      + pretty.replace(/([[\]{}])/g, '\\$1').split('\n').join('\\\n')
+      + '\n```\n\nPaste that into TRMNL.';
+    const { document } = loadEditor();
+    document.getElementById('importIn').value = mangled;
+    click(document.getElementById('loadImport'));
+    assertEqual(jsonOut(document).tracks, cfg.tracks, 'the tracks did not survive the paste');
+    assertEqual(jsonOut(document).calendars, cfg.calendars, 'the calendars did not survive the paste');
+  });
+
 };

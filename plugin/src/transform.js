@@ -1108,6 +1108,44 @@ function compileRuleList(raw) {
   return rules;
 }
 
+// A backslash means something in JSON and something else in markdown, and a
+// chat window that escapes its answer for markdown hands back an escaped
+// bracket around every array and a stray one at the end of every line. JSON
+// allows a backslash only before one of nine characters, so any other one
+// was put there by markdown and comes back out. Runs left to right, so a real
+// escaped backslash is consumed as itself and cannot eat the character
+// after it.
+function unescapeMarkdown(whole, ch) {
+  return '"\\/bfnrtu'.indexOf(ch) >= 0 ? whole : ch;
+}
+
+// Whatever an assistant or a chat client did to the JSON on its way here.
+// Every substitution below is one that has actually come back from a chat
+// window: the answer fenced as markdown, quotes turned typographic, spaces
+// turned non-breaking, a trailing comma. This runs only after strict
+// JSON.parse has already refused the text, so it can afford to be blunt.
+function tidyConfigText(raw) {
+  var t = String(raw == null ? '' : raw).replace(/^\uFEFF/, '')
+    .replace(/[\u200B-\u200D\u2060]/g, '')
+    .trim();
+  var fence = /```[a-zA-Z0-9]*[ \t]*\r?\n([\s\S]*?)```/.exec(t);
+  if (fence) t = fence[1].trim();
+  t = t.replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/\u00A0/g, ' ')
+    .replace(/\\(\r?\n)/g, '$1')
+    .replace(/\\(.)/g, unescapeMarkdown)
+    .replace(/,(\s*[}\]])/g, '$1');
+  return t.trim();
+}
+
+// Did this text mean to be a configuration? A link list never opens with a
+// brace or a code fence, so anything that does is a config, working or not.
+function looksLikeConfigJson(raw) {
+  var t = String(raw == null ? '' : raw).replace(/^\uFEFF/, '').trim();
+  return t.charAt(0) === '{' || t.charAt(0) === '[' || t.indexOf('```') === 0;
+}
+
 // Parses the "Calendar Config (JSON)" setting text into
 // { calendars, tracks, timeZone, globalRules, everyoneTrack }. Never
 // throws: invalid JSON falls back to treating the text as a plain
@@ -1119,7 +1157,23 @@ function parseConfig(raw) {
     try {
       data = JSON.parse(raw);
     } catch (e) {
-      data = { calendars: raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean) };
+      // Strict JSON said no. A config that came out of a chat window is
+      // usually still a config: it arrives wrapped in a ```json fence, with
+      // typographic quotes the chat client substituted, or with a trailing
+      // comma. Tidy it and try once more before deciding this is a list of
+      // links.
+      var tidy = tidyConfigText(raw);
+      try {
+        data = JSON.parse(tidy);
+      } catch (e2) {
+        // Only text that never claimed to be JSON becomes a link list. Text
+        // that opens with a brace is a broken config, and reading its lines
+        // as URLs would draw a board of nonsense rather than fall back to
+        // the demo.
+        data = looksLikeConfigJson(raw)
+          ? {}
+          : { calendars: raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean) };
+      }
     }
   }
   if (!data || typeof data !== 'object') data = {};

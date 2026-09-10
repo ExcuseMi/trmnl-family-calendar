@@ -488,8 +488,29 @@
     if (!state.calendars.length) state.calendars.push(newCalendar());
     renderAll();
   }
+  // Whatever a chat window did to the JSON on its way here: a ```json fence
+  // around the answer, typographic quotes, non-breaking spaces, a trailing
+  // comma. Only ever runs after strict JSON.parse has refused the text.
+  function tidyConfigText(raw) {
+    var t = String(raw == null ? "" : raw).replace(/^\uFEFF/, "")
+      .replace(/[\u200B-\u200D\u2060]/g, "")
+      .trim();
+    var fence = /```[a-zA-Z0-9]*[ \t]*\r?\n([\s\S]*?)```/.exec(t);
+    if (fence) t = fence[1].trim();
+    return t.replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+      .replace(/\u00A0/g, " ")
+      // a chat window that escapes its answer for markdown puts a backslash
+      // before every bracket and at the end of every line; JSON allows one
+      // only before nine characters, so the rest were markdown's
+      .replace(/\\(\r?\n)/g, "$1")
+      .replace(/\\(.)/g, function (whole, ch) { return '"\\/bfnrtu'.indexOf(ch) >= 0 ? whole : ch; })
+      .replace(/,(\s*[}\]])/g, "$1")
+      .trim();
+  }
   function parseImport(raw) {
     try { var d = JSON.parse(raw); if (d && typeof d === "object") return d; } catch (e) {}
+    try { var t = JSON.parse(tidyConfigText(raw)); if (t && typeof t === "object") return t; } catch (e2) {}
     return { calendars: raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean) };
   }
 
@@ -777,11 +798,20 @@
     out.push("You are configuring a TRMNL e-ink plugin called Metro Calendar. It draws ONE day as a transit map: one line per person, their events branching off it as stations, and the things several people are at drawn as interchanges. Your job is to read the calendars below and produce the best configuration JSON for it.");
     out.push("");
     out.push("## What to do");
-    out.push("1. Read every calendar listed under \"Calendars\" below. Where the events are given, use them; where only a URL is given, fetch it if you can, and say so if you cannot.");
+    out.push("1. Read every calendar listed under \"Calendars\" below. Some are listed with their events already read out for you; use those as given. Any calendar listed WITHOUT its events you must fetch yourself, over the network, from the URL shown. Do not guess what is in a feed from its URL, its file name, or the name of the show or family it seems to belong to: a configuration written against guessed events routes real events nowhere. If you cannot fetch a feed, or you are not sure the fetch returned the real calendar, STOP and reply with one line saying which URLs you could not read and nothing else. A refusal that names the problem is useful. An invented configuration is not.");
     out.push("2. Work out who the people are. A line per person is the point of this board. Look for name prefixes (\"Fry: ...\"), class or group codes (\"L6\", \"K3\"), separate feeds per person, or a shared feed everybody is in.");
     out.push("3. Write rules that route each event to the right line, then strip whatever routed it out of the title, so the board reads \"Coffee\" and not \"Fry: Coffee\".");
     out.push("4. Optimise for a small screen. Fewer, clearer lines beat completeness.");
-    out.push("5. Reply with ONE JSON object and nothing else. No explanation, no code fence.");
+    out.push("5. Reply with the configuration and nothing else, in the exact shape set out under \"How to reply\".");
+    out.push("");
+    out.push("## How to reply");
+    out.push("This answer gets copied out of your reply and pasted straight into a settings box. Nothing reads it but a JSON parser, so anything you add to it breaks it.");
+    out.push("- Send ONE JSON object, wrapped in a single fenced code block that opens with three backticks and the word json and closes with three backticks. The fence keeps your client from reformatting what is inside it.");
+    out.push("- Nothing outside the fence. No preamble, no summary, no notes after it.");
+    out.push("- Nothing inside the fence but JSON. No comments, no trailing commas, no ... placeholders.");
+    out.push("- Do NOT escape the JSON for markdown. Brackets, braces and underscores are written plain. A backslash appears only where JSON itself requires one, inside a string.");
+    out.push("- Straight ASCII quotes only. No typographic quotes, no non-breaking spaces, no line-continuation backslashes at the ends of lines.");
+    out.push("- Every string that needs a backslash (a regex) must survive being read as JSON: write a regex backslash as two.");
     out.push("");
     out.push("## What makes this board read well");
     out.push("- 2 to 6 lines. More than that and the panel runs out of depth and starts dropping lines.");

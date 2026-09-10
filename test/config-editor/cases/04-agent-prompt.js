@@ -85,6 +85,34 @@ module.exports = function (test, h) {
       'the config in the prompt is not the one the tool produces');
   });
 
+  // The answer is pasted into a settings box by hand, so how it is written
+  // matters as much as what it says. Unfenced JSON comes back out of a chat
+  // window escaped for markdown, with a backslash before every bracket, and
+  // the parser on the other end is a JSON parser and nothing else.
+  test('the prompt pins down the shape of the reply', () => {
+    const document = withOneCalendar();
+    click(document.getElementById('makePrompt'));
+    const p = document.getElementById('promptOut').value;
+    assert(p.indexOf('## How to reply') >= 0, 'the prompt never says how to reply');
+    assert(/fenced code block/.test(p), 'it does not ask for a fenced block, which is what stops the escaping');
+    assert(/escape the JSON for markdown/.test(p), 'it does not forbid markdown escaping');
+    assert(/Straight ASCII quotes/.test(p), 'it does not forbid typographic quotes');
+    assert(/No comments, no trailing commas/.test(p), 'it does not forbid comments and trailing commas');
+  });
+
+  // An assistant that cannot reach the network will happily write a
+  // configuration from what a URL looks like it contains. That config parses,
+  // loads, and routes nothing: every rule matches an event that was guessed.
+  // A refusal is the better answer and the prompt has to ask for one.
+  test('the prompt forces the calendars to be read, or the job refused', () => {
+    const document = withOneCalendar();
+    click(document.getElementById('makePrompt'));
+    const p = document.getElementById('promptOut').value;
+    assert(/must fetch yourself/.test(p), 'fetching an unread feed is not made compulsory');
+    assert(/Do not guess what is in a feed/.test(p), 'guessing from the URL is not ruled out');
+    assert(/STOP/.test(p), 'it does not tell the assistant to stop when it cannot read a feed');
+  });
+
   test('with nothing configured the prompt still generates', () => {
     const { document } = loadEditor();
     click(document.getElementById('makePrompt'));
