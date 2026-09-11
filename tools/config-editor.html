@@ -27,9 +27,24 @@
   .mc-top nav a { text-decoration: none; border-bottom: 2px solid transparent; }
   .mc-top nav a:hover { border-bottom-color: var(--ink); }
 
-  /* ---- the page is one metro line: each section is a station on it */
-  .line { max-width: 1040px; margin: 0 auto; padding: 24px 28px 80px 28px; position: relative; }
-  .line::before { content: ""; position: absolute; left: 41px; top: 40px; bottom: 60px; width: 6px; background: var(--ink); border-radius: 3px; }
+  /* ---- two columns: what you do on the left, what it draws on the right.
+     The drawing is the point of this page, so it stays in view rather than
+     sitting below whatever you happen to be filling in. Narrow enough and
+     they stack, which is the same page with more scrolling. */
+  /* main.line, not .line: a LINE CARD also carries the class "line", and a
+     page-level `display: grid` landing on one turned every card into a
+     two-column grid -- the swatch, the name, the arrows and Remove each on
+     a row of their own, with the hint beside them in the second column. */
+  main.line { max-width: 1480px; margin: 0 auto; padding: 24px 28px 80px 28px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(420px, 1fr); gap: 30px; align-items: start; }
+  .col-steps { position: relative; min-width: 0; }
+  .col-preview { position: sticky; top: 104px; min-width: 0; }
+  @media (max-width: 1180px) {
+    main.line { grid-template-columns: minmax(0, 1fr); max-width: 1040px; }
+    .col-preview { position: static; }
+  }
+
+  /* ---- the left column is one metro line: each section is a station on it */
+  .col-steps::before { content: ""; position: absolute; left: 15px; top: 16px; bottom: 40px; width: 6px; background: var(--ink); border-radius: 3px; }
   .station { position: relative; padding-left: 52px; margin: 0 0 40px; scroll-margin-top: 96px; }
   .station > h2 { position: relative; margin: 0 0 4px; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; }
   .station > h2::before { content: ""; position: absolute; left: -46px; top: 5px; width: 14px; height: 14px; border-radius: 50%; background: var(--paper); border: 5px solid var(--ink); box-sizing: content-box; }
@@ -37,12 +52,43 @@
   .station > p.lede { margin: 0 0 14px; color: var(--mute); max-width: 720px; }
   .station.terminus > h2::before { width: 26px; height: 6px; border-radius: 3px; left: -52px; top: 10px; }
 
+  /* ---- the preview is not a station: it is the panel the stations draw into */
+  .panel { border: 4px solid var(--ink); border-radius: 14px; padding: 14px 16px 16px; background: var(--paper); scroll-margin-top: 96px; }
+  .panel > h2 { margin: 0 0 4px; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; }
+  .panel > h2 small { font-weight: 600; text-transform: none; color: var(--mute); font-size: 12.5px; margin-left: 8px; letter-spacing: 0; }
+  .panel > p.lede { margin: 0 0 12px; color: var(--mute); }
+
+  /* ---- ONE THING AT A TIME.
+     The page used to open as the whole form: paste box, AI, lines, calendars,
+     rules, preview, JSON, all at once, with the examples a small row inside
+     the first of them. Somebody arriving has not decided to configure
+     anything yet -- they are deciding whether this is worth configuring --
+     and a board they have watched draw answers that better than seven
+     sections they have not filled in. So: the examples, then a choice of how
+     to do it for real, and only then the parts that belong to that choice. */
+  [data-stage="demo"] #station-start, [data-stage="demo"] #station-agent,
+  [data-stage="demo"] #station-lines, [data-stage="demo"] #station-calendars,
+  [data-stage="demo"] #station-rules, [data-stage="demo"] #station-output,
+  [data-stage="ai"] #station-demo, [data-stage="ai"] #station-lines,
+  [data-stage="ai"] #station-calendars, [data-stage="ai"] #station-rules,
+  [data-stage="build"] #station-demo { display: none; }
+  button.big { padding: 11px 22px; font-size: 15px; }
+  .choice[hidden] { display: none; }
+  .choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 12px; }
+  .choice button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; border-radius: 12px; padding: 12px 14px; }
+  .choice .note { font-weight: 400; font-size: 12.5px; line-height: 1.35; color: var(--mute); }
+  .choice button:hover .note, .choice button:focus-visible .note { color: var(--ink); }
+
   /* ---- cards: a card is a branch off the line */
   .card { border: 2px solid var(--ink); border-radius: 12px; padding: 14px 16px; margin: 0 0 12px; background: var(--paper); position: relative; }
   .card::before { content: ""; position: absolute; left: -52px; top: 26px; width: 40px; height: 2px; background: var(--ink); }
   .card.plain::before { display: none; }
-  .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .card-head .title-input { flex: 1 1 auto; min-width: 0; border: none; border-bottom: 2px solid transparent; font-weight: 800; font-size: 17px; padding: 2px 0; background: transparent; }
+  /* Wraps, and the name keeps a floor. In a column narrow enough -- which
+     the left column of a two-column page is -- `min-width: 0` let the name
+     field collapse to nothing while the buttons kept their width, so a line
+     card was a swatch, three buttons and no way to see or type the name. */
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .card-head .title-input { flex: 1 1 160px; min-width: 120px; border: none; border-bottom: 2px solid transparent; font-weight: 800; font-size: 17px; padding: 2px 0; background: transparent; }
   .card-head .title-input:hover, .card-head .title-input:focus { border-bottom-color: var(--ink); outline: none; }
   .card-head .title-input::placeholder { color: #999; font-weight: 800; }
   .swatch { display: inline-block; width: 46px; height: 12px; flex: 0 0 auto; }
@@ -135,8 +181,9 @@
     .mc-top h1 { font-size: 19px; }
     .mc-top .top-actions { margin-left: auto; }
     .mc-top nav { margin-left: 0; width: 100%; flex-wrap: wrap; gap: 10px 14px; }
-    .line { max-width: none; padding: 18px 14px 60px; }
-    .line::before { display: none; }
+    main.line { max-width: none; padding: 18px 14px 60px; }
+    .col-steps::before { display: none; }
+    .panel { padding: 12px; border-width: 3px; }
     .station { padding-left: 0; scroll-margin-top: 130px; }
     .station > h2 { font-size: 18px; }
     .station > h2::before, .station.terminus > h2::before, .card::before { display: none; }
@@ -160,20 +207,72 @@
     <button id="undoBtn" class="small" disabled>Undo</button>
   </div>
   <nav aria-label="Sections of this page">
+    <a href="#station-demo">Examples</a>
     <a href="#station-agent">AI</a>
+    <a href="#station-start">Paste</a>
     <a href="#station-lines">Lines</a>
     <a href="#station-calendars">Calendars</a>
-    <a href="#station-preview">Preview</a>
     <a href="#station-output">JSON</a>
     <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin">GitHub</a>
   </nav>
 </header>
 
-<main class="line">
+<main class="line" id="page" data-stage="demo">
+
+ <div class="col-steps" id="colSteps">
+
+  <!-- WHAT IT DOES, BEFORE WHAT YOU HAVE TO DO. The three examples used to be
+       a row inside Start, under a paste box; they are the first thing now,
+       because a board somebody has watched draw is what decides whether the
+       rest of this page is worth their evening. -->
+  <section class="station" id="station-demo">
+    <h2>Examples of what this can do <small>no links, no setup</small></h2>
+    <p class="lede">Three complete boards, each a real working configuration with placeholder links. Pick one and draw it: what comes back is the plugin's own layout code on a device-sized canvas, so it is what the panel would show.</p>
+    <div class="card plain">
+      <div style="font-size:12.5px; font-weight:600" id="presetsLabel">Pick an example:</div>
+      <!-- The three presets are drawn from the PRESETS list below, so their names
+           and the line that says what each one teaches are written once. A preset
+           is one click, and says what it is before you spend the click. -->
+      <div class="presets" id="presets" role="group" aria-labelledby="presetsLabel"></div>
+      <div class="toolbar">
+        <button id="renderExample" class="primary big">Render the example</button>
+        <span id="presetStatus" class="status" role="status" aria-live="polite"></span>
+      </div>
+    </div>
+    <div class="card plain">
+      <div class="toolbar"><button id="goReal" class="big">I'm ready to do this for real</button></div>
+      <div id="realChoice" class="choice" hidden>
+        <button id="chooseAi" type="button">
+          <strong>Let an AI write it</strong>
+          <span class="note">You get a prompt describing the plugin and your calendars. Paste it into an assistant, paste the answer back. Quickest if your calendars mix several people.</span>
+        </button>
+        <button id="chooseManual" type="button">
+          <strong>Fill it in myself</strong>
+          <span class="note">One line per person, one calendar per feed, rules only if a calendar holds more than one person's day.</span>
+        </button>
+      </div>
+      <p class="hint" id="realHint" hidden>Either way the example is cleared first, so you start on your own calendars rather than editing Springfield.</p>
+    </div>
+  </section>
+
+  <section class="station" id="station-agent">
+    <h2>Let an AI do it <small>optional, and it reads your calendars</small></h2>
+    <p class="lede">Generates a prompt describing this plugin, its configuration format and what makes a board read well, together with your ICS links and whatever the tool has already read from them. Paste it into an AI assistant and it returns a configuration you paste back into <em>Paste what you have</em>, just below, which loads the whole thing at once.</p>
+    <div class="card plain">
+      <div class="toolbar">
+        <button id="makePrompt" class="primary">Generate prompt</button>
+        <button id="copyPrompt">Copy prompt</button>
+        <span id="promptStatus" class="status" role="status" aria-live="polite"></span>
+      </div>
+      <label for="promptOut" class="sr-only">The generated prompt</label>
+      <textarea id="promptOut" rows="6" readonly placeholder="Put your ICS links in the box below, then generate."></textarea>
+      <p class="hint">Draw the map first if you can: the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. Otherwise it is told to fetch the links itself, which not every assistant can do.</p>
+    </div>
+  </section>
 
   <section class="station" id="station-start">
-    <h2>Start <small>load something, or begin from scratch</small></h2>
-    <p class="lede">Already have a configuration in TRMNL? Paste it here. You can also paste plain ICS links, one per line, load the demo to see how a finished setup looks, or pick a preset below if you have no links yet.</p>
+    <h2>Paste what you have <small>a configuration, or just ICS links</small></h2>
+    <p class="lede">Already have a configuration in TRMNL, or an answer back from an assistant? Paste it here. Plain ICS links, one per line, work too: that is the whole setup for a line per calendar.</p>
     <div class="card plain">
       <label for="importIn" class="sr-only">Paste a configuration, or one ICS link per line</label>
       <textarea id="importIn" rows="4" placeholder='{"lines": [...], "calendars": [...]}&#10;or just&#10;https://calendar.example.com/work.ics&#10;https://calendar.example.com/family.ics'></textarea>
@@ -182,30 +281,7 @@
         <button id="loadDemo">Load the demo configuration</button>
         <span id="importStatus" class="status" role="status" aria-live="polite"></span>
       </div>
-      <div style="margin-top:14px">
-        <div style="font-size:12.5px; font-weight:600" id="presetsLabel">No links yet? Start from one of these:</div>
-        <!-- The three presets are drawn from the PRESETS list below, so their names
-             and the line that says what each one teaches are written once. A preset
-             is one click, and says what it is before you spend the click. -->
-        <div class="presets" id="presets" role="group" aria-labelledby="presetsLabel"></div>
-        <span id="presetStatus" class="status" role="status" aria-live="polite"></span>
-      </div>
-      <p class="hint">A preset is a complete working configuration with placeholder <code>calendar.example.com</code> links, so you can draw a board before you have any ICS links at all: load one, look at the map, then swap the links for your own. Loading one replaces whatever is in the editor, and the Undo button at the top of the page puts it back.</p>
-    </div>
-  </section>
-
-  <section class="station" id="station-agent">
-    <h2>Let an AI do it <small>optional, and it reads your calendars</small></h2>
-    <p class="lede">Generates a prompt describing this plugin, its configuration format and what makes a board read well, together with your ICS links and whatever the tool has already read from them. Paste it into an AI assistant and it returns a configuration you can paste back into <em>Start</em> above. Start here if you have no configuration yet: there is no point filling in every line and rule by hand and only then being offered a machine to write them.</p>
-    <div class="card plain">
-      <div class="toolbar">
-        <button id="makePrompt" class="primary">Generate prompt</button>
-        <button id="copyPrompt">Copy prompt</button>
-        <span id="promptStatus" class="status" role="status" aria-live="polite"></span>
-      </div>
-      <label for="promptOut" class="sr-only">The generated prompt</label>
-      <textarea id="promptOut" rows="6" readonly placeholder="Paste your ICS links into Start above (or add calendars below), then generate."></textarea>
-      <p class="hint">Draw the map first if you can (<em>Preview</em>, further down): the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. Otherwise it is told to fetch the links itself, which not every assistant can do.</p>
+      <p class="hint">Loading replaces whatever is in the editor, and the Undo button at the top of the page puts it back. To go back to the three examples, use <a href="#station-demo" data-goto-stage="demo">Examples</a> in the bar above.</p>
     </div>
   </section>
 
@@ -230,39 +306,6 @@
     <div class="toolbar"><button id="addGlobalRule">+ Add a rule</button></div>
   </section>
 
-  <section class="station" id="station-preview">
-    <h2>Preview <small>the plugin's own layout code, on a device-sized canvas</small></h2>
-    <p class="lede">Runs the real <code>transform.js</code> against your calendars (fetched from this browser), then draws the map exactly as the device would. Feeds that refuse browser requests can be pasted or uploaded instead.</p>
-    <div class="card plain">
-      <div class="preview-controls">
-        <div class="field"><label for="pDevice">Device</label>
-          <select id="pDevice">
-            <option value="og">TRMNL OG · 800×480 · 1-bit</option>
-            <option value="ogv2">TRMNL OG V2 · 800×480 · 2-bit</option>
-            <option value="x">TRMNL X · 1872×1404 · landscape</option>
-            <option value="xp">TRMNL X · 1404×1872 · portrait</option>
-            <option value="hh">OG half (horizontal)</option>
-            <option value="hv">OG half (vertical)</option>
-            <option value="q">OG quadrant</option>
-          </select></div>
-        <div class="field"><label for="pLocale">Language</label>
-          <select id="pLocale"><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option><option value="de">Deutsch</option><option value="nl">Nederlands</option><option value="en-US">English (US, 12h)</option></select></div>
-        <div class="field"><label for="pTime">Clock</label>
-          <select id="pTime"><option value="auto">Auto</option><option value="24h">24-hour</option><option value="12h">12-hour</option></select></div>
-        <div class="field"><label for="pNow">Now</label><input type="time" id="pNow"></div>
-        <div class="field"><label for="pLatLon">Location (lat, lon) for weather</label><input type="text" id="pLatLon" placeholder="50.8503, 4.3517" style="width:170px"></div>
-        <div class="field"><label for="pTz">Time zone</label><input type="text" id="pTz" placeholder="from your config / browser" style="width:170px"></div>
-      </div>
-      <p class="hint" style="margin:8px 0 0"><strong>Now</strong> is the hour the board is drawn at, so you can look at this evening before it happens. <strong>Location</strong> and <strong>Time zone</strong> are your TRMNL account's settings on the device; here they only affect this preview.</p>
-      <div class="toolbar" style="margin-top:12px;">
-        <button id="runPreview" class="primary">Draw the map</button>
-        <span id="previewStatus" class="status" role="status" aria-live="polite"></span>
-      </div>
-      <div id="sources" class="sources" style="margin-top:12px;"></div>
-      <div id="stage" class="stage" hidden><div id="stageNote" class="stage-note" hidden></div><div id="stageInner" class="stage-inner"></div></div>
-      <details class="adv" style="margin-top:10px;"><summary>Raw run() output</summary><label for="resultJson" class="sr-only">The JSON the plugin's run() returned</label><textarea id="resultJson" rows="10" readonly style="margin-top:8px;"></textarea></details>
-    </div>
-  </section>
 
   <section class="station terminus" id="station-output">
     <h2>Your configuration <small>paste this into TRMNL</small></h2>
@@ -273,7 +316,7 @@
         <button id="copyJson" class="primary">Copy JSON</button>
         <span id="copyStatus" class="status" role="status" aria-live="polite"></span>
       </div>
-      <p class="hint" id="outEmpty" hidden>There is nothing to paste yet: add at least one calendar with an ICS link, or load a preset in <a href="#station-start">Start</a>.</p>
+      <p class="hint" id="outEmpty" hidden>There is nothing to paste yet: add at least one calendar with an ICS link, or go back to <a href="#station-demo" data-goto-stage="demo">the examples</a> and load one.</p>
       <ol class="steps hint">
         <li>In TRMNL open the plugin's settings and turn <strong>Use Demo Data</strong> off.</li>
         <li>Paste the JSON into <strong>Calendars</strong>. That box takes either a plain list of ICS links, one per line, or a configuration like this one; it reads whichever it is given.</li>
@@ -324,6 +367,52 @@
       </div>
     </details>
   </section>
+
+ </div><!-- /col-steps -->
+
+ <aside class="col-preview" aria-label="Preview">
+  <section class="panel" id="station-preview">
+    <h2>Preview <small>the real layout code, at device size</small></h2>
+    <!-- THE DRAW BUTTON AND THE MAP FIRST. In a column this narrow the six
+         settings were most of the panel, and the thing the panel exists for
+         was below the fold: the map is what anybody came here to look at, and
+         the settings are what you reach for once it has drawn something you
+         want to see differently. -->
+    <div class="toolbar">
+      <button id="runPreview" class="primary big">Draw the map</button>
+      <span id="previewStatus" class="status" role="status" aria-live="polite"></span>
+    </div>
+    <div id="stage" class="stage" hidden><div id="stageNote" class="stage-note" hidden></div><div id="stageInner" class="stage-inner"></div></div>
+    <p class="hint" id="stageEmpty" style="margin-top:12px">Nothing drawn yet. Pick one of the examples and press <strong>Render the example</strong>, or press <strong>Draw the map</strong> once you have a calendar in.</p>
+    <div id="sources" class="sources" style="margin-top:12px;"></div>
+    <details class="adv" id="previewSettings"><summary>Device, language, and the hour it is drawn at</summary>
+      <div class="adv-body">
+        <div class="preview-controls">
+          <div class="field"><label for="pDevice">Device</label>
+            <select id="pDevice">
+              <option value="og">TRMNL OG &middot; 800&times;480 &middot; 1-bit</option>
+              <option value="ogv2">TRMNL OG V2 &middot; 800&times;480 &middot; 2-bit</option>
+              <option value="x">TRMNL X &middot; 1872&times;1404 &middot; landscape</option>
+              <option value="xp">TRMNL X &middot; 1404&times;1872 &middot; portrait</option>
+              <option value="hh">OG half (horizontal)</option>
+              <option value="hv">OG half (vertical)</option>
+              <option value="q">OG quadrant</option>
+            </select></div>
+          <div class="field"><label for="pLocale">Language</label>
+            <select id="pLocale"><option value="en">English</option><option value="fr">Fran&ccedil;ais</option><option value="es">Espa&ntilde;ol</option><option value="de">Deutsch</option><option value="nl">Nederlands</option><option value="en-US">English (US, 12h)</option></select></div>
+          <div class="field"><label for="pTime">Clock</label>
+            <select id="pTime"><option value="auto">Auto</option><option value="24h">24-hour</option><option value="12h">12-hour</option></select></div>
+          <div class="field"><label for="pNow">Now</label><input type="time" id="pNow"></div>
+          <div class="field"><label for="pLatLon">Location (lat, lon) for weather</label><input type="text" id="pLatLon" placeholder="50.8503, 4.3517" style="width:170px"></div>
+          <div class="field"><label for="pTz">Time zone</label><input type="text" id="pTz" placeholder="from your config / browser" style="width:170px"></div>
+        </div>
+        <p class="hint" style="margin:8px 0 0"><strong>Now</strong> is the hour the board is drawn at, so you can look at this evening before it happens. <strong>Location</strong> and <strong>Time zone</strong> are your TRMNL account's settings on the device; here they only affect this preview.</p>
+      </div>
+    </details>
+    <details class="adv"><summary>Raw run() output</summary><label for="resultJson" class="sr-only">The JSON the plugin's run() returned</label><textarea id="resultJson" rows="10" readonly style="margin-top:8px;"></textarea></details>
+    <p class="hint" style="margin-top:10px">This runs the plugin's real <code>transform.js</code> against your calendars, fetched from this browser, and then draws the map exactly as the device would. A feed that refuses browser requests can be pasted or uploaded instead: the device itself has no such limit.</p>
+  </section>
+ </aside>
 
 </main>
 
@@ -1083,6 +1172,46 @@
     });
   }
 
+  // ------------------------------------------------------------ stages
+  //
+  // Three of them. "demo" is the page as it opens: the examples and nothing
+  // to fill in. "ai" is the prompt and the paste box, because the whole point
+  // of the prompt is that it writes the parts you would otherwise type. And
+  // "build" is the form. Loading a configuration from the paste box goes
+  // straight to "build" whatever stage it was in: somebody with a config in
+  // their hand has answered the question the earlier stages ask.
+  //
+  // Gating is CSS on a data attribute, so every section stays in the page and
+  // stays addressable. A section that is not in the DOM cannot be linked to,
+  // cannot be read out to a screen reader that is walking the document, and
+  // loses whatever was typed in it the moment it is hidden.
+  function setStage(name) {
+    var page = document.getElementById("page");
+    if (!page) return;
+    page.setAttribute("data-stage", name);
+  }
+  function stage() {
+    var page = document.getElementById("page");
+    return page ? page.getAttribute("data-stage") : "build";
+  }
+  // Start again on somebody's own calendars, not on an edited Springfield.
+  function clearForReal() {
+    snapshot("clear the example");
+    state.lines = [newLine()];
+    state.calendars = [newCalendar()];
+    state.rules = [];
+    state.timeZone = ""; state.locale = ""; state.timeFormat = ""; state.temperatureUnit = "";
+    document.getElementById("importIn").value = "";
+    icsOverrides = {};
+    icsFromExample = {};
+    selectedPreset = "";
+    lastLoaded = null;
+    paintPresets();
+    renderAll();
+    setStatus("importStatus", "", "");
+    setStatus("presetStatus", "", "");
+  }
+
   function renderAll() { renderLines(); renderCalendars(); renderGlobalRules(); renderJson(); renderSources(); }
 
   document.getElementById("addLine").addEventListener("click", function () { state.lines.push(newLine()); renderAll(); });
@@ -1115,11 +1244,74 @@
   //    survive a load now, where before they were silently dropped. Neither
   //    has a control yet, so a preset still cannot be the only place they
   //    are taught -- a user who wants one reaches for the JSON box.
+  // AN EXAMPLE HAS TO DRAW SOMETHING.
+  //
+  // The presets point at calendar.example.com, which is the right thing for a
+  // configuration somebody is about to edit and the wrong thing for a button
+  // called "Render the example": the browser cannot fetch any of it, so the
+  // first thing a visitor did produced an empty board and seven red boxes
+  // saying the feeds could not be read. So each preset carries what its feeds
+  // SAY, and loading one puts that straight into the same override the paste
+  // and upload boxes fill. No network, no links, and the example is on TODAY,
+  // which is the day the board is about to be read on.
+  function two(n) { return (n < 10 ? "0" : "") + n; }
+  function ymd(d) { return "" + d.getFullYear() + two(d.getMonth() + 1) + two(d.getDate()); }
+  function atHour(d, hhmm) {
+    var p = String(hhmm).split(":");
+    return ymd(d) + "T" + two(parseInt(p[0], 10)) + two(parseInt(p[1], 10)) + "00";
+  }
+  function sampleIcs(rows) {
+    var now = new Date();
+    var out = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//trmnl-metro-calendar//example//EN"];
+    (rows || []).forEach(function (r, i) {
+      out.push("BEGIN:VEVENT", "UID:example-" + i + "-" + ymd(now) + "@metro");
+      out.push("SUMMARY:" + r.t);
+      if (r.allDay) out.push("DTSTART;VALUE=DATE:" + ymd(now),
+        "DTEND;VALUE=DATE:" + ymd(new Date(now.getTime() + 86400000)));
+      else out.push("DTSTART:" + atHour(now, r.from), "DTEND:" + atHour(now, r.to));
+      if (r.where) out.push("LOCATION:" + r.where);
+      if (r.status) out.push("STATUS:" + r.status);
+      out.push("END:VEVENT");
+    });
+    out.push("END:VCALENDAR");
+    return out.join("\r\n") + "\r\n";
+  }
+
   var PRESETS = [
     {
       id: "family4",
       label: "Family of 4",
       note: "One calendar per person, plus a shared feed: dinner and the school run are drawn once, across everyone on them.",
+      // What its feeds say, so the example draws a full board with no network
+      // and no links. See sampleIcs: these become today's events.
+      sample: {
+        "https://calendar.example.com/sam.ics": [
+          { t: "Standup", from: "08:00", to: "08:30", where: "Office" },
+          { t: "Lunch with Jo", from: "12:30", to: "13:00" },
+          { t: "Client call", from: "15:00", to: "16:00" }
+        ],
+        "https://calendar.example.com/alex.ics": [
+          { t: "Physio", from: "09:30", to: "10:30" },
+          { t: "Deep work", from: "14:00", to: "15:30" }
+        ],
+        "https://calendar.example.com/mia.ics": [
+          { t: "Football practice", from: "16:30", to: "17:30" }
+        ],
+        // Noah has nothing today on purpose: hideIfEmpty:false is what keeps
+        // his line on the board, and an example that never exercises it
+        // teaches nothing.
+        "https://calendar.example.com/noah.ics": [],
+        "https://calendar.example.com/family-shared.ics": [
+          { t: "School Run", from: "08:15", to: "08:45" },
+          { t: "Family Dinner", from: "18:00", to: "19:00" }
+        ],
+        "https://calendar.example.com/school.ics": [
+          { t: "Y4 Swimming", from: "09:00", to: "09:30" },
+          { t: "Y2 Assembly", from: "11:00", to: "11:30" },
+          { t: "Lunch Menu: pasta", from: "12:00", to: "12:30" }
+        ],
+        "https://calendar.example.com/holidays.ics": []
+      },
       config: {
         lines: [{ name: "Sam" }, { name: "Alex" }, { name: "Mia" }, { name: "Noah" }],
         calendars: [
@@ -1148,7 +1340,9 @@
               // the parents still go to work, and `holiday` with a line says
               // so at their heads rather than in the header
               { match: { type: "contains", value: "Half Term" },
-                holiday: true, line: ["Mia", "Noah"], rename: false }
+                holiday: true, line: ["Mia", "Noah"], rename: false },
+              // routed on the year group, so the year group has done its job
+              { match: { type: "regex", value: "^(?:Y4|Y2)\\s+" }, rewrite: "" }
             ]
           },
           // a subscribed national calendar. `holiday` with nobody named
@@ -1163,6 +1357,19 @@
       id: "worksplit",
       label: "Work vs Personal Split",
       note: "Two lines for one person. The office day is long enough that the layout runs the work line alongside it rather than branching for it, and cancelled holds are hidden everywhere.",
+      sample: {
+        "https://calendar.example.com/work.ics": [
+          { t: "In the office", from: "09:00", to: "17:00", where: "Desk 4B" },
+          { t: "Standup", from: "08:30", to: "09:00" },
+          { t: "1:1 with Priya", from: "11:00", to: "11:30" },
+          // the rule that hides cancelled holds, with something to hide
+          { t: "Sprint review", from: "15:00", to: "16:00", status: "CANCELLED" }
+        ],
+        "https://calendar.example.com/personal.ics": [
+          { t: "Swim", from: "07:00", to: "07:45" },
+          { t: "Book club", from: "19:30", to: "21:00" }
+        ]
+      },
       config: {
         lines: [{ name: "Work" }, { name: "Personal" }],
         rules: [
@@ -1189,6 +1396,18 @@
       id: "solo",
       label: "Solo Freelancer Line",
       note: "One work feed fanned out into a line per client on the title prefix, which is then stripped so the board reads “Sprint review” and not “Acme: Sprint review”.",
+      sample: {
+        "https://calendar.example.com/freelance.ics": [
+          { t: "Acme: Sprint review", from: "09:00", to: "10:00" },
+          { t: "Globex: Design crit", from: "11:00", to: "12:00" },
+          { t: "Acme: Invoicing", from: "14:00", to: "14:30" },
+          { t: "Studio admin", from: "16:00", to: "17:00" }
+        ],
+        "https://calendar.example.com/personal.ics": [
+          { t: "Gym", from: "07:30", to: "08:15" },
+          { t: "Dentist", from: "18:00", to: "18:45" }
+        ]
+      },
       config: {
         lines: [{ name: "Studio" }, { name: "Acme" }, { name: "Globex" }],
         calendars: [
@@ -1268,11 +1487,19 @@
     snapshot("load " + preset.label);
     loadConfig(JSON.parse(JSON.stringify(preset.config)));
     document.getElementById("importIn").value = JSON.stringify(preset.config, null, 2);
+    // The feeds, served from here rather than fetched: see sampleIcs.
+    if (preset.sample) {
+      Object.keys(preset.sample).forEach(function (u) {
+        icsOverrides[u] = sampleIcs(preset.sample[u]);
+        icsFromExample[u] = true;
+      });
+      renderSources();
+    }
     selectedPreset = preset.id;
     paintPresets();
     markLoaded();
     setStatus("importStatus", "", "");
-    setStatus("presetStatus", preset.label + " loaded. " + preset.note + " Swap the example.com links for your own.", "ok");
+    setStatus("presetStatus", preset.label + " loaded, with example feeds of its own, so it draws without any links. " + preset.note, "ok");
   }
   // What a load found, in one line: how much came in, anything that had to be
   // repaired before it could be read, and anything left out on the way.
@@ -1300,6 +1527,9 @@
     loadConfig(res.data);
     clearPresetPick();
     markLoaded();
+    // A configuration in hand answers the question the earlier stages ask,
+    // so the form it describes is what the page should be showing.
+    setStage("build");
     reportLoad(res);
   });
   document.getElementById("loadDemo").addEventListener("click", function () {
@@ -1314,7 +1544,8 @@
       document.getElementById("importIn").value = JSON.stringify(d, null, 2);
       clearPresetPick();
       markLoaded();
-      setStatus("importStatus", "Demo loaded. Scroll down to Preview and draw the map.", "ok");
+      setStage("build");
+      setStatus("importStatus", "Demo loaded. Press Draw the map to see it.", "ok");
     }).catch(function (e) {
       setStatus("importStatus", "Could not load demo-config.json (" + e.message + ")."
         + (location.protocol === "file:"
@@ -1590,6 +1821,7 @@
 
   // ------------------------------------------------------------ ICS sources for the preview
   var icsOverrides = {}; // url -> ICS text (fetched, pasted or uploaded)
+  var icsFromExample = {}; // url -> true for the ones an example brought with it
   var fetchErrors = {};  // url -> why the last draw could not read it
   function fetchIcs(url) {
     var u = url.indexOf("webcal://") === 0 ? "https://" + url.slice(9) : url;
@@ -1598,17 +1830,37 @@
   function renderSources() {
     var wrap = document.getElementById("sources");
     wrap.innerHTML = "";
-    state.calendars.filter(function (c) { return c.url.trim(); }).forEach(function (c) {
+    var cals = state.calendars.filter(function (c) { return c.url.trim(); });
+    // A FEED THAT WORKED NEEDS NO CARD.
+    //
+    // One card per calendar, under the map, in a column: six feeds that all
+    // read fine pushed the board they drew off the top of the panel to say
+    // six times that nothing was wrong. Only a feed that FAILED has anything
+    // to tell you, so the rest fold away behind one line.
+    var okCount = cals.filter(function (c) { return !fetchErrors[c.url.trim()]; }).length;
+    var fold = null;
+    if (okCount) {
+      var det = el("details", { class: "adv" }, [
+        el("summary", { text: okCount === 1 ? "The feed this was drawn from" : "The " + okCount + " feeds this was drawn from" }),
+      ]);
+      fold = el("div", { class: "adv-body" });
+      det.appendChild(fold);
+    }
+    cals.forEach(function (c) {
       var url = c.url.trim();
       var status = el("span", { class: "status" });
       var failed = fetchErrors[url];
       var ta = el("textarea", { rows: "3", "aria-label": "ICS text for " + (c.name.trim() || url),
         placeholder: "If the feed cannot be fetched from the browser (CORS), paste its .ics text here, or upload the file." });
       ta.value = icsOverrides[url] || "";
-      ta.hidden = !ta.value && !failed;
+      // An example's feeds come with the example, so their boxes stay shut:
+      // opening one per calendar filled the panel with generated ICS nobody
+      // asked to read, under the map they came here to look at.
+      ta.hidden = !failed && (!ta.value || !!icsFromExample[url]);
       if (failed) { status.textContent = failed; status.className = "status err"; }
+      else if (icsFromExample[url]) { status.textContent = "Example feed."; status.className = "status"; }
       else if (icsOverrides[url]) { status.textContent = "Read."; status.className = "status ok"; }
-      ta.addEventListener("input", function () { if (ta.value.trim()) icsOverrides[url] = ta.value; else delete icsOverrides[url]; });
+      ta.addEventListener("input", function () { delete icsFromExample[url]; if (ta.value.trim()) icsOverrides[url] = ta.value; else delete icsOverrides[url]; });
       var paste = el("button", { class: "small", text: "Paste / upload instead" });
       var file = el("input", { type: "file", accept: ".ics,text/calendar", hidden: "hidden" });
       file.addEventListener("change", function () {
@@ -1618,12 +1870,15 @@
         rd.readAsText(f);
       });
       paste.addEventListener("click", function () { ta.hidden = false; file.click(); });
-      wrap.appendChild(el("div", { class: "card" + (failed ? " failed" : "") }, [
+      (failed ? wrap : fold).appendChild(el("div", { class: "card" + (failed ? " failed" : "") }, [
         el("div", { class: "toolbar" }, [el("strong", { text: c.name.trim() || url }), el("span", { class: "hint", text: c.name.trim() ? url : "" }), paste, file, status]),
         ta,
       ]));
       c._status = status;
     });
+    // The ones that worked go last, folded: a failure is what somebody has
+    // to act on, so it is the thing at the top.
+    if (fold && fold.parentNode) wrap.appendChild(fold.parentNode);
   }
 
   // ------------------------------------------------------------ preview
@@ -1762,12 +2017,22 @@
       }
       var screen = el("div", { class: "screen screen--no-bleed " + dev.classes, style: "width:" + (dev.w / dev.zoom) + "px;height:" + (dev.h / dev.zoom) + "px;overflow:hidden;" }, [content]);
       var trmnl = el("div", { class: "trmnl environment device" }, [screen]);
+      // MEASURE THE ROOM WITH THE ROOM ON THE PAGE.
+      //
+      // The stage is hidden until something is drawn in it, and a hidden
+      // element has no width, so this fell back to a hardcoded 900 and drew
+      // a full-size 800px board: fine in a page-wide column, and cut off at
+      // the edge of the panel the moment the preview moved into one. Clear
+      // last draw's width too, or every draw after the first measures the
+      // board it drew before instead of the space it has.
+      document.getElementById("stage").hidden = false;
+      document.getElementById("stageEmpty").hidden = true;
+      inner.style.width = "";
       var scale = Math.min(1, (inner.clientWidth || 900) / dev.w);
       trmnl.style.transform = "scale(" + scale + ")";
       inner.style.height = Math.round(dev.h * scale) + "px";
       inner.style.width = Math.round(dev.w * scale) + "px";
       inner.appendChild(trmnl);
-      document.getElementById("stage").hidden = false;
       // The layout engine, exactly as it ships, with our data in place of
       // the Liquid tag. The tag is matched BY SHAPE, not by a copy of its
       // text: it was renamed once already ({{ metro | json }} became
@@ -1876,6 +2141,49 @@
     n.addEventListener("input", refreshStale);
   });
 
+  // ------------------------------------------------------------ the walk through
+  document.getElementById("renderExample").addEventListener("click", function () {
+    // Nothing picked yet is not a reason to make somebody pick: the first
+    // example is a family of four, which is what most of the people reading
+    // this page have. Draw it.
+    if (!selectedPreset) loadPreset(PRESETS[0].id);
+    document.getElementById("runPreview").click();
+    show("station-preview", "nearest");
+  });
+  document.getElementById("goReal").addEventListener("click", function () {
+    document.getElementById("realChoice").hidden = false;
+    document.getElementById("realHint").hidden = false;
+    document.getElementById("chooseAi").focus();
+  });
+  // Not every document has a viewport to scroll: jsdom has no layout at all,
+  // so this is a nicety and never a step anything else depends on.
+  function show(id, block) {
+    var target = document.getElementById(id);
+    if (target && target.scrollIntoView) target.scrollIntoView({ block: block || "start" });
+  }
+  function intoStage(name, focusId) {
+    clearForReal();
+    setStage(name);
+    show(focusId);
+  }
+  document.getElementById("chooseAi").addEventListener("click", function () { intoStage("ai", "station-agent"); });
+  document.getElementById("chooseManual").addEventListener("click", function () { intoStage("build", "station-lines"); });
+  // The bar at the top points at sections a stage may be hiding. A nav link
+  // that scrolls to nothing is worse than no nav link, so following one puts
+  // the page in a stage that has what it points at.
+  document.querySelectorAll('.mc-top nav a[href^="#station-"]').forEach(function (a) {
+    a.addEventListener("click", function () {
+      var id = a.getAttribute("href").slice(1);
+      if (id === "station-demo") { setStage("demo"); return; }
+      if (id === "station-agent" && stage() === "demo") { setStage("ai"); return; }
+      var sec = document.getElementById(id);
+      if (sec && window.getComputedStyle && getComputedStyle(sec).display === "none") setStage("build");
+    });
+  });
+  document.querySelectorAll("[data-goto-stage]").forEach(function (a) {
+    a.addEventListener("click", function () { setStage(a.getAttribute("data-goto-stage")); });
+  });
+
   // ------------------------------------------------------------ init
   state.lines.push(newLine());
   state.calendars.push(newCalendar());
@@ -1883,6 +2191,12 @@
   paintUndo();
   renderAll();
   document.getElementById("pNow").value = (function () { var d = new Date(); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); })();
+  // ?example opens the page as it opens for everybody and draws the first
+  // example, which is the one state of this page that takes two clicks to
+  // reach and so is the one nobody screenshots.
+  if (/[?&]example\b/.test(location.search)) {
+    document.getElementById("renderExample").click();
+  }
   // ?demo opens the page with the demo configuration loaded and drawn (also handy for screenshots)
   if (/[?&]demo\b/.test(location.search)) {
     var params = new URLSearchParams(location.search);
