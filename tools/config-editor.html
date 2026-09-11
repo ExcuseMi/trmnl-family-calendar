@@ -2847,8 +2847,11 @@
         if (failures.length) msg += " " + plural(failures.length, "feed", "feeds") + " of " + urls.length + " could not be read: each one says why below, and takes a paste or an upload instead.";
         else if (urls.length && !events) msg += " An empty board with feeds that did read means nothing in them falls on this day, or a rule hides all of it.";
         setStatus("previewStatus", msg, failures.length ? "err" : "ok");
-        renderSources();
+        // Recorded BEFORE the panel is redrawn: the line above the feeds says
+        // whether a board was drawn from them, and painted first it still
+        // described feeds this page had merely read.
         drawnSig = sigAtStart;
+        renderSources();
         refreshStale();
         done();
       });

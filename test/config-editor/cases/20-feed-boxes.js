@@ -15,8 +15,12 @@
 // until asked for, and the instruction was to press a button they could not
 // see, under a heading saying the feeds had already been read.
 
+const fs = require('fs');
+const path = require('path');
+
 module.exports = function (test, h) {
   const { loadEditor, click, assert } = h;
+  const REPO_ROOT = path.join(__dirname, '../../..');
 
   function withTwoLinks() {
     const { document } = loadEditor();
@@ -32,6 +36,28 @@ module.exports = function (test, h) {
     assert(!/drawn from/.test(line),
       'nothing has been drawn, and the panel says these are the feeds it was drawn from: ' + line);
     assert(/none read yet/.test(line), 'the line does not say the feeds still need reading: ' + line);
+  });
+
+  // And once a board HAS been drawn from them, it says that instead: the
+  // line was painted a moment before the draw recorded itself, so a board
+  // freshly on screen was described as feeds the page had merely read.
+  test('after a draw the fold says the board was drawn from them', async () => {
+    const ICS = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n';
+    const { document } = loadEditor((url) => {
+      const u = String(url);
+      if (/shared\.liquid$/.test(u)) {
+        return Promise.resolve({ ok: true, status: 200,
+          text: () => Promise.resolve(fs.readFileSync(path.join(REPO_ROOT, 'plugin/src/shared.liquid'), 'utf-8')) });
+      }
+      if (/crew\.ics$/.test(u)) return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(ICS) });
+      return Promise.reject(new Error('Failed to fetch'));
+    });
+    document.getElementById('importIn').value = 'https://a.example/crew.ics';
+    click(document.getElementById('loadImport'));
+    click(document.getElementById('runPreview'));
+    await h.flush();
+    assert(/drawn from/.test(summary(document)),
+      'a board has just been drawn from this feed and the fold does not say so: ' + summary(document));
   });
 
   test('the fold counts the feeds that have been read', () => {
