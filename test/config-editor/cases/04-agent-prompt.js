@@ -49,6 +49,12 @@ module.exports = function (test, h) {
     const p = document.getElementById('promptOut').value;
     assert(p.indexOf('https://a.example/crew.ics') >= 0, 'the URL is missing');
     assert(/Fetch this URL yourself/.test(p), 'an unread feed should tell the assistant to fetch it');
+    // A browser cannot read most calendar feeds -- no CORS header -- so an
+    // assistant that cannot fetch either has to be able to say what WILL
+    // work, or the user gets a refusal with no way forward.
+    assert(/CORS/.test(p), 'the prompt does not say why the tool could not read the feed');
+    assert(/Paste \/ upload instead/.test(p),
+      'the prompt does not name the control that gets the events in by hand');
   });
 
   test('a feed the tool has read is digested into the prompt', () => {

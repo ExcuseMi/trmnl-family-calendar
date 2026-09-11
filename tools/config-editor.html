@@ -1438,7 +1438,7 @@
     out.push("");
     out.push("## What makes this board read well");
     out.push("- 2 to 6 lines. More than that and the panel runs out of depth and starts dropping lines.");
-    out.push("- Do NOT try to mark long blocks in any way. A block spent in ONE place (a school day, a work shift, a desk booking, a delivery) is recognised by the layout from its length alone: the line leaves the running line for its span and rejoins, instead of spending a whole label lane on it, and the meetings inside it still branch off normally. There is no setting for this and none is needed.");
+    out.push("- Do NOT try to mark long blocks in any way. A block spent in ONE place (a school day, a work shift, a desk booking, a delivery) is recognised by the layout from its length alone. One person's block is drawn ON their line, along the stretch of it the block covers, with its caption tied back to the line by a thin leader -- it costs no label lane at all. A block several people share draws their lines running together for its span instead, which is what several people being in one place looks like. Either way the meetings inside it still branch off normally. There is no setting for this and none is needed.");
     out.push("- Something several people are at should list all of them: `\"track\": [\"Bart\", \"Lisa\"]`. It is then drawn once, as an interchange joining their lines, instead of once per person.");
     out.push("- Titles are read at arm's length on a small panel. Use `rewrite` to drop codes, room numbers, \"[Teams]\" and the like. Use `hide` for things nobody reads off a wall board: birthdays, \"Free\", \"Out of office\", declined invitations.");
     out.push("- Prefer `word` or `contains` matchers over `regex`. Use `regex` only when the pattern really needs it.");
@@ -1467,7 +1467,7 @@
     out.push("```json");
     out.push(prettyCompact(WORKED_EXAMPLE));
     out.push("```");
-    out.push("Reading it back: `Homer` is named after its track, so the one thing in it no rule catches still lands on Homer's line rather than inventing one. The school feed routes on the class codes and then strips them, so the board reads \"Maths\" and not \"L6 Maths\". The seven-hour `\"School Day\"` needs no rule of its own to be drawn as a siding: the layout runs it alongside Bart's and Lisa\'s lines instead of eating a label lane each, because of how long it is. `\"Family Dinner\"` lists all four tracks, so it is drawn once as an interchange. The staff meeting nobody in the house attends is hidden.");
+    out.push("Reading it back: `Homer` is named after its track, so the one thing in it no rule catches still lands on Homer's line rather than inventing one. The school feed routes on the class codes and then strips them, so the board reads \"Maths\" and not \"L6 Maths\". The seven-hour `\"School Day\"` needs no rule of its own: because of how long it is, the layout draws Bart's and Lisa\'s lines running together for its span rather than spending a label lane on it twice. `\"Family Dinner\"` lists all four tracks, so it is drawn once as an interchange. The staff meeting nobody in the house attends is hidden.");
     out.push("");
     out.push("## Calendars");
     if (!urls.length) out.push("(none added yet)");
@@ -1483,7 +1483,14 @@
         out.push("  Events (title [times] (days) xcount @ location):");
         out.push.apply(out, dig.rows.length ? dig.rows : ["    - (no events in this feed)"]);
       } else {
-        out.push("  Not read by the tool. Fetch this URL yourself.");
+        // A browser cannot read most calendar feeds: they send no CORS
+        // header, so the tool's own fetch is refused and the events never
+        // reach this digest. That is not a fault to hide from the
+        // assistant, but it does mean the instruction to go and fetch the
+        // URL is often the only route left -- and plenty of assistants
+        // cannot either. Say what the reliable route is, so a refusal comes
+        // back with a way forward attached instead of just a dead end.
+        out.push("  Not read by the tool: the browser could not fetch it, which is usual — most calendar feeds send no CORS header. Fetch this URL yourself if you can. If you cannot, say so and say that pasting the .ics text into the editor beside this calendar (\"Paste / upload instead\") will put its events straight into this prompt.");
       }
     });
     if (cfg.calendars && cfg.calendars.length && (cfg.tracks.length || (cfg.rules || []).length
