@@ -212,6 +212,20 @@ module.exports = function (test, h) {
 
   // ------------------------------------------------------------ the simple setup
 
+  test('a config that names no calendars rides the demo, weather and all', async () => {
+    // The box is filled in and describes nothing: valid JSON with an empty
+    // list. This used to drop to the built-in Springfield day with no
+    // weather and no real feeds -- a visibly worse board than the one the
+    // reader had a moment ago, which reads as a different fault than the
+    // one they actually have.
+    const r = await runTransform(serveDemoFiles(), NOW).run(baseInput(NOW, {
+      use_demo_data: 'false',
+      config_json: '{"lines": [], "calendars": []}',
+    }));
+    assert(r.data.legend.length > 0, 'an unusable config produced an empty board');
+    assert(r.data.header_weather, 'it fell through to the board with no weather');
+  });
+
   test('a plain list of ICS links needs no JSON and no editor', async () => {
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(baseInput(NOW, {

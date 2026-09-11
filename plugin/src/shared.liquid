@@ -910,14 +910,49 @@
     var droppedLines = 0;
     (function fitLines() {
       if (LEGEND.length < 2) return;
-      // a line, the room its kink wants, and one lane deep enough for a
-      // two-row label (the time tag above the title)
-      var perLine = LINE_STEP + LANE_BASE + hourH * 2.6;
+      // WHAT A LINE ACTUALLY COSTS, which is not what this charged.
+      //
+      // It charged every line a LANE_BASE -- the clearance between a line
+      // and the first RUNG hanging off it -- on top of a two-row label. But
+      // most lines have no rung: their events are marks on the line itself,
+      // and what those need is the label's own thickness with the usual 6px
+      // of paper each side, which is exactly what `markRoom` charges in the
+      // solver. Charging the rung clearance as well over-states a line by a
+      // third.
+      //
+      // It showed on the 800x480 panel, where the two disagreed out loud:
+      // this reckoned 75px a line and dropped Maggie for want of room, then
+      // the solver laid the remaining four out at 59.8px each and left 86px
+      // of board unused underneath them. A line was thrown away on an
+      // estimate the very next pass undercut.
+      //
+      // `hourH * 2.6` stays as the stand-in for a two-row label, because
+      // `maxLabelThick` is measured inside the tier loop and this runs
+      // before it. On that panel it estimates 31 where the board measured
+      // 28, which is the right direction to be wrong in.
+      var perLine = LINE_STEP + hourH * 2.6 + 2 * LINE_GAP;
       var room = crossPx - bandLo - 2 * EDGE;
       // One line is a valid board. On a quadrant there is honestly room for
       // one person's day and a count of what else is on, and that beats five
       // lines whose labels run off the top and bottom.
       var maxLines = Math.max(1, Math.floor(room / perLine));
+      // CRAMMING IS ONLY WORTH PAYING FOR IF IT SAVES SOMEBODY.
+      //
+      // The tight figure above is what a line costs when its events sit on
+      // it as marks, and packing to it is right when it means the whole
+      // family fits. It is not right when somebody is being left off
+      // anyway: then the board is already an incomplete answer, and
+      // spending the slack on more lines rather than on the ones it keeps
+      // buys nothing at all. Seven lines on an 800x480 panel went from four
+      // comfortable to five that overlapped their own names and ran a rail
+      // through a caption -- and the seventh person was still missing.
+      //
+      // So the generous figure is used only when it seats everyone; short
+      // of that the board falls back to charging each kept line the full
+      // lane it may well need.
+      if (maxLines < LEGEND.length) {
+        maxLines = Math.max(1, Math.floor(room / (perLine + LANE_BASE)));
+      }
       if (LEGEND.length <= maxLines) return;
       var load = {};
       LEGEND.forEach(function (p) { load[p.key] = 0; });

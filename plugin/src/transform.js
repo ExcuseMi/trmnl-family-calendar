@@ -3029,7 +3029,20 @@ async function run(input) {
   // too, so both paths read the same settings from the same place. (Demo
   // mode may still fall back to the built-in day further down; that fallback
   // keeps whatever locale and clock were resolved here.)
-  var effectiveCfg = (useDemo || !configRaw) ? parseConfig(JSON.stringify(demoCfg)) : parseConfig(configRaw);
+  // RIDE THE DEMO UNTIL SOMEBODY FILLS IN SOME DATA.
+  //
+  // An empty box already took the demo path. A box with something in it
+  // that yields no calendars -- JSON with an empty `calendars`, a paste
+  // that survived the tidier but described nothing, a list of blank lines
+  // -- did not: it fell through to the built-in Springfield day with no
+  // weather and no real feeds, which is a visibly worse board and reads as
+  // a different fault than the one the reader has.
+  //
+  // There is no third state. Either the config names calendars to draw or
+  // it does not, and until it does the demo is the honest thing to show.
+  var typedCfg = configRaw ? parseConfig(configRaw) : null;
+  var noUsableConfig = !typedCfg || !typedCfg.calendars.length;
+  var effectiveCfg = (useDemo || noUsableConfig) ? parseConfig(JSON.stringify(demoCfg)) : typedCfg;
   var locale = effectiveCfg.locale || userLocale(input);
 
   // Read before anything else needs it, and written back on every exit
@@ -3064,7 +3077,7 @@ async function run(input) {
     return { data: metro, trmnl_state: state };
   }
 
-  if (useDemo || !configRaw) {
+  if (useDemo || noUsableConfig) {
     // Demo mode has no config.timeZone of its own — resolve straight to
     // the account's own zone/offset (still falling back to UTC) so the
     // "now" marker and any real weather fetch land on the viewer's
@@ -3124,10 +3137,9 @@ async function run(input) {
     return done(buildFromDemo(demoWx.weather, demoNowMin, demoExtra));
   }
 
+  // Reached only with calendars to draw: `noUsableConfig` above sends an
+  // empty or unusable config to the demo path, weather and all.
   var parsed = effectiveCfg; // never throws — falls back to a bare URL list on invalid JSON
-  if (!parsed.calendars.length) {
-    return done(buildFromDemo(null, null, extra)); // nothing usable in the config — degrade to demo rather than error the render
-  }
 
   try {
     var configTz = resolveTz(parsed.timeZone, input);
