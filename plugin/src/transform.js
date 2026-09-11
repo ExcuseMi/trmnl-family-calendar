@@ -3004,8 +3004,12 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
 // ---------------------------------------------------------------------
 
 async function run(input) {
+  // The demo is not something anybody has to switch on: an empty Calendars
+  // box rides it already, further down. This is the developer's override --
+  // run the example day even over a set of real feeds -- so it is off unless
+  // the form says otherwise.
   var useDemoRaw = cf(input, 'use_demo_data').trim().toLowerCase();
-  var useDemo = useDemoRaw !== 'false'; // default true (demo) unless explicitly turned off
+  var useDemo = useDemoRaw === 'true';
   var configRaw = cf(input, 'config_json').trim();
   // ONE field for both shapes. parseConfig reads whatever is in it: JSON if
   // it parses as JSON, otherwise one ICS link per line, which is the whole

@@ -144,11 +144,23 @@ module.exports = function (test, h) {
     });
   });
 
-  test('the demo switch shows exactly one of the two ways to fill the board', async () => {
-    const on = (BY_KEY.use_demo_data.conditions.find((c) => c.when === 'true') || {}).hidden || [];
-    const offCond = (BY_KEY.use_demo_data.conditions.find((c) => c.when === 'false') || {}).hidden || [];
-    assert(on.indexOf('config_json') >= 0, 'the Calendars box is offered on a board showing demo data');
-    assert(offCond.indexOf('demo_set') >= 0, 'the example picker is offered on a board showing real calendars');
+  // THE DEMO IS NOT A SETUP STEP.
+  //
+  // It used to be: Use Demo Data shipped on, and it hid the Calendars box
+  // until you found it and turned it off. But an empty box already rides
+  // the demo, so the switch was asking people to turn off the thing that
+  // was going to happen anyway. It is a developer's override now -- run the
+  // example over real feeds -- and it lives with the other developer
+  // settings, off, out of the way of anyone setting the board up.
+  test('nobody has to find a switch to see the board work', async () => {
+    const demo = BY_KEY.use_demo_data;
+    assertEqual(demo.group, 'Developer', 'the demo override is still sitting in the setup path');
+    assertEqual(demo.default, 'false', 'the demo override ships on, so it hides the box it should leave open');
+    assertEqual(BY_KEY.demo_set.group, 'Developer', 'the example picker is not with its switch');
+    const on = (demo.conditions.find((c) => c.when === 'true') || {}).hidden || [];
+    assert(on.indexOf('config_json') < 0, 'the demo override still hides the Calendars box');
+    const offCond = (demo.conditions.find((c) => c.when === 'false') || {}).hidden || [];
+    assert(offCond.indexOf('demo_set') >= 0, 'the example picker is asked for with the override off');
   });
 
   test('every setting is optional and says what it does', async () => {

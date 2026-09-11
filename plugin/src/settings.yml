@@ -34,33 +34,10 @@ custom_fields:
 - keyname: author_info
   name: About This Plugin
   field_type: author_bio
-  description: Everyone's day as a metro map. Each calendar is a <strong>line</strong>, each event is a <strong>stop</strong> on it, and an event several people share is an <strong>interchange</strong> where their lines converge. A long block like a school day or a shift runs along the main line itself, so you can see who is where and for how long. The map lays itself out to whatever screen it lands on.<br /><br />You are riding a demo board until you turn <strong>Use Demo Data</strong> off below and paste your own calendar links in. Runs on TRMNL <strong>Serverless</strong>.
+  description: Everyone's day as a metro map. Each calendar is a <strong>line</strong>, each event is a <strong>stop</strong> on it, and an event several people share is an <strong>interchange</strong> where their lines converge. A long block like a school day or a shift runs along the main line itself, so you can see who is where and for how long. The map lays itself out to whatever screen it lands on.<br /><br />Until you paste your own calendar links into <strong>Calendars</strong> below, the board rides a built-in example day, so there is nothing to switch on to see it work. Runs on TRMNL <strong>Serverless</strong>.
   github_url: https://github.com/ExcuseMi/trmnl-metro-calendar-plugin
   category: calendar
   help_text: TRMNL X Ready · English, français, español, Deutsch, Nederlands
-- keyname: use_demo_data
-  field_type: boolean
-  name: Use Demo Data
-  description: Leave this on and the board runs a built-in example day, so you can see what it draws before setting anything up. Switch it off and the <strong>Calendars</strong> box below opens for your own feeds.
-  default: true
-  optional: true
-  conditional_validation:
-  - when: 'true'
-    hidden:
-    - config_json
-  - when: 'false'
-    hidden:
-    - demo_set
-- keyname: demo_set
-  field_type: select
-  name: Demo Board
-  description: Which example day to run. Each one is a real config from this project's <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/</a> folder, so whichever board you like the look of is also a worked example to copy into <strong>Calendars</strong>.
-  options:
-  - Springfield, a family of five (a school day two of them share, dinner as an interchange): simpsons
-  - Planet Express, a work crew (one team calendar, a delivery three of them are on all day): futurama
-  - Apartment 20, two flatmates (a long day at a desk, an evening they are both at): friends
-  default: simpsons
-  optional: true
 - keyname: config_json
   field_type: text
   name: Calendars
@@ -163,6 +140,28 @@ custom_fields:
   name: Heat At Or Above
   group: Weather
   description: In whichever unit the board is showing, so 30 in Celsius or 86 in Fahrenheit. Blank for no heat alert.
+  optional: true
+- keyname: use_demo_data
+  field_type: boolean
+  name: Force Demo Data
+  group: Developer
+  description: The board already runs a built-in example day whenever <strong>Calendars</strong> is empty, so nobody needs this to see what it draws. Turn it on to keep the example running over a set of real feeds, which is what you want when you are working on the plugin itself and do not want to watch your own family go past.
+  default: false
+  optional: true
+  conditional_validation:
+  - when: 'false'
+    hidden:
+    - demo_set
+- keyname: demo_set
+  field_type: select
+  name: Demo Board
+  group: Developer
+  description: Which example day the demo runs, both when it is forced above and when it steps in for an empty <strong>Calendars</strong> box. Each one is a real config from this project's <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/</a> folder, so whichever board you like the look of is also a worked example to copy into <strong>Calendars</strong>.
+  options:
+  - Springfield, a family of five (a school day two of them share, dinner as an interchange): simpsons
+  - Planet Express, a work crew (one team calendar, a delivery three of them are on all day): futurama
+  - Apartment 20, two flatmates (a long day at a desk, an evening they are both at): friends
+  default: simpsons
   optional: true
 name: Metro Calendar
 description: Everyone's day as a metro map

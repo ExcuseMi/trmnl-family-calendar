@@ -3,7 +3,7 @@
 # transform_runtime is disabled, so this hand-feeds what transform.js's
 # demo data produces. Regenerate the `data:` block after changing the demo
 # data (timestamp 1788870600 = Tue 8 Sep 2026 14:30 Europe/Brussels):
-#   node -e "require('./src/transform.js')({trmnl:{system:{timestamp_utc:1788870600},user:{time_zone_iana:'Europe/Brussels'},plugin_settings:{custom_fields_values:{use_demo_data:'true'}}}}).then(r=>console.log(JSON.stringify(r.data,null,2)))"
+#   node -e "require('./src/transform.js')({trmnl:{system:{timestamp_utc:1788870600},user:{locale:'en',time_zone_iana:'Europe/Brussels'},plugin_settings:{custom_fields_values:{use_demo_data:'true'}}}}).then(r=>console.log(JSON.stringify(r.data,null,2)))"
 watch:
 - .trmnlp.yml
 - src
@@ -78,7 +78,7 @@ variables:
           "name": "Maggie",
           "side": "left",
           "hue": null,
-          "track_offset": -10,
+          "line_offset": -10,
           "line_width": null,
           "line_style": null,
           "initial": "M",
@@ -89,7 +89,7 @@ variables:
           "name": "Homer",
           "side": "left",
           "hue": null,
-          "track_offset": -20,
+          "line_offset": -20,
           "line_width": null,
           "line_style": null,
           "initial": "H",
@@ -100,7 +100,7 @@ variables:
           "name": "Bart",
           "side": "right",
           "hue": null,
-          "track_offset": 10,
+          "line_offset": 10,
           "line_width": null,
           "line_style": null,
           "initial": "B",
@@ -111,7 +111,7 @@ variables:
           "name": "Lisa",
           "side": "right",
           "hue": null,
-          "track_offset": 20,
+          "line_offset": 20,
           "line_width": null,
           "line_style": null,
           "initial": "L",
@@ -122,7 +122,7 @@ variables:
           "name": "Marge",
           "side": "right",
           "hue": null,
-          "track_offset": 30,
+          "line_offset": 30,
           "line_width": null,
           "line_style": null,
           "initial": "M",
@@ -130,6 +130,7 @@ variables:
         }
       ],
       "all_day": [],
+      "holidays": [],
       "events": [
         {
           "type": "event",
@@ -138,12 +139,7 @@ variables:
           "end_min": 495,
           "location": "Sector 7-G",
           "owner": "p0",
-          "co_owners": [],
-          "side": "left",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": -20
+          "co_owners": []
         },
         {
           "type": "event",
@@ -155,12 +151,7 @@ variables:
           "co_owners": [
             "p2",
             "p3"
-          ],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 30
+          ]
         },
         {
           "type": "event",
@@ -171,12 +162,7 @@ variables:
           "owner": "p2",
           "co_owners": [
             "p3"
-          ],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 10
+          ]
         },
         {
           "type": "event",
@@ -185,12 +171,7 @@ variables:
           "end_min": 600,
           "location": null,
           "owner": "p1",
-          "co_owners": [],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 30
+          "co_owners": []
         },
         {
           "type": "event",
@@ -199,12 +180,7 @@ variables:
           "end_min": 570,
           "location": null,
           "owner": "p3",
-          "co_owners": [],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 20
+          "co_owners": []
         },
         {
           "type": "event",
@@ -213,12 +189,7 @@ variables:
           "end_min": 620,
           "location": null,
           "owner": "p0",
-          "co_owners": [],
-          "side": "left",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": -20
+          "co_owners": []
         },
         {
           "type": "event",
@@ -227,12 +198,7 @@ variables:
           "end_min": 690,
           "location": null,
           "owner": "p4",
-          "co_owners": [],
-          "side": "left",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": -10
+          "co_owners": []
         },
         {
           "type": "event",
@@ -241,12 +207,7 @@ variables:
           "end_min": 780,
           "location": "Kwik-E-Mart",
           "owner": "p1",
-          "co_owners": [],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 30
+          "co_owners": []
         },
         {
           "type": "event",
@@ -255,12 +216,7 @@ variables:
           "end_min": 870,
           "location": null,
           "owner": "p4",
-          "co_owners": [],
-          "side": "left",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": -10
+          "co_owners": []
         },
         {
           "type": "event",
@@ -269,12 +225,7 @@ variables:
           "end_min": 900,
           "location": null,
           "owner": "p0",
-          "co_owners": [],
-          "side": "left",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": -20
+          "co_owners": []
         },
         {
           "type": "event",
@@ -283,12 +234,7 @@ variables:
           "end_min": 990,
           "location": "Room 12",
           "owner": "p2",
-          "co_owners": [],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 10
+          "co_owners": []
         },
         {
           "type": "event",
@@ -297,12 +243,7 @@ variables:
           "end_min": 1020,
           "location": "Springfield Elementary",
           "owner": "p1",
-          "co_owners": [],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 30
+          "co_owners": []
         },
         {
           "type": "event",
@@ -311,12 +252,7 @@ variables:
           "end_min": 1020,
           "location": null,
           "owner": "p3",
-          "co_owners": [],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 20
+          "co_owners": []
         },
         {
           "type": "event",
@@ -325,12 +261,7 @@ variables:
           "end_min": 1080,
           "location": null,
           "owner": "p2",
-          "co_owners": [],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 10
+          "co_owners": []
         },
         {
           "type": "event",
@@ -339,12 +270,7 @@ variables:
           "end_min": 1110,
           "location": "Moe's",
           "owner": "p0",
-          "co_owners": [],
-          "side": "left",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": -20
+          "co_owners": []
         },
         {
           "type": "event",
@@ -353,12 +279,7 @@ variables:
           "end_min": 1170,
           "location": null,
           "owner": "p3",
-          "co_owners": [],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 20
+          "co_owners": []
         },
         {
           "type": "event",
@@ -372,12 +293,7 @@ variables:
             "p2",
             "p3",
             "p4"
-          ],
-          "side": "right",
-          "hue": null,
-          "track_width": null,
-          "track_style": null,
-          "track_offset": 30
+          ]
         }
       ],
       "weather": [
