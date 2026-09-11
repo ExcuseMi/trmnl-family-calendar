@@ -2166,9 +2166,15 @@ function makeTrackRegistry(parsed) {
   // middle of somebody else's, and only the minute says whether two lines
   // could exchange places between one and the next instead of crossing.
   var groups = [];
+  // who takes part in a shared event at all, which is who has anywhere to
+  // lean to and therefore anything to cross on the way
+  var sharer = {};
   function pairKey(a, b) { return a < b ? a + '\u0000' + b : b + '\u0000' + a; }
   function link(names, weight, atMin) {
-    if (names.length > 1) groups.push({ names: names.slice(), at: atMin == null ? 0 : atMin });
+    if (names.length > 1) {
+      groups.push({ names: names.slice(), at: atMin == null ? 0 : atMin });
+      for (var m = 0; m < names.length; m++) sharer[names[m]] = true;
+    }
     for (var i = 0; i < names.length; i++) {
       for (var j = i + 1; j < names.length; j++) {
         var k = pairKey(names[i], names[j]);
@@ -2247,9 +2253,43 @@ function makeTrackRegistry(parsed) {
     }
     return cost;
   }
-  // The old objective, kept as the tie-break: among orders that cross the
-  // same number of times, the one that puts the closest pairs next to each
-  // other is the one worth drawing.
+  // WHAT A TRUNK HAS TO CROSS TO REACH THE MIDDLE.
+  //
+  // Every line in a shared event leans in towards the others, and the
+  // middle of the board is where they meet. On the way it crosses every
+  // band between it and there, and a band is not empty space: it is that
+  // line's own branches, their rails and their names. Maggie's descent to
+  // Family Dinner is drawn straight through "Moe's Tavern", because Homer
+  // sits between her and the middle with five events in his band.
+  //
+  // Nothing in the score could see it. `interference` counts a line caught
+  // INSIDE a group it is not part of, and neither of them is: the only
+  // event spanning the two of them is the dinner, and it contains
+  // everybody. So their order fell through to the affinity tie-break,
+  // which knows only how often two people share a day, and that is equal
+  // for the pair.
+  //
+  // So a line pays for the branches it makes somebody else cross. The
+  // chain is the board laid flat -- outermost, inward, the middle, outward,
+  // outermost -- so the cut `finalize` makes is near the centre of it, and
+  // "between this line and the middle" is the run of chain positions
+  // between it and there. The busy lines end up at the ends and the quiet
+  // ones near the middle, which is where the convergences are.
+  function crossLoad(seq) {
+    var mid = (seq.length - 1) / 2, cost = 0;
+    for (var i = 0; i < seq.length; i++) {
+      if (!sharer[seq[i]]) continue;
+      var lo = Math.min(i, mid), hi = Math.max(i, mid);
+      for (var j = 0; j < seq.length; j++) {
+        if (j > lo && j < hi) cost += counts[seq[j]] || 0;
+      }
+    }
+    return Math.round(cost * 2);
+  }
+  // The old objective, kept as the last tie-break: among orders that cross
+  // the same number of times and make each other's trunks cross the same
+  // amount of ink, the one that puts the closest pairs next to each other
+  // is the one worth drawing.
   function adjAffinity(seq) {
     var sum = 0;
     for (var i = 1; i < seq.length; i++) sum += affinityOf(seq[i - 1], seq[i]);
@@ -2305,18 +2345,21 @@ function makeTrackRegistry(parsed) {
     // crossings are few, so they are collected as they are found and the
     // weave decides between those at the end.
     var TIED_CAP = 24;
-    var best = { cost: interference(chain), aff: adjAffinity(chain) };
+    var best = { cost: interference(chain), load: crossLoad(chain), aff: adjAffinity(chain) };
     var tied = [chain.slice()];
     // Heap's algorithm: every order, once, with no allocation per order.
     var work = names.slice(), c = new Array(work.length).fill(0), i = 0;
     function consider(cand) {
       var cost = interference(cand);
       if (cost > best.cost) return;
-      var aff = adjAffinity(cand);
-      if (cost < best.cost || aff > best.aff) {
-        best = { cost: cost, aff: aff };
+      var load = crossLoad(cand), aff = adjAffinity(cand);
+      var better = cost < best.cost
+        || load < best.load
+        || (load === best.load && aff > best.aff);
+      if (better) {
+        best = { cost: cost, load: load, aff: aff };
         tied = [cand.slice()];
-      } else if (aff === best.aff && tied.length < TIED_CAP) {
+      } else if (load === best.load && aff === best.aff && tied.length < TIED_CAP) {
         tied.push(cand.slice());
       }
     }

@@ -1975,6 +1975,15 @@
       }
       evs.forEach(function (e, idx) {
         e._dropped = false;
+        // AN EVENT DRAWN ON THE LINE ASKS THE LADDER FOR NOTHING. It has no
+        // rail out to a lane, so a rung is no use to it, and made to take
+        // one it was dropped outright the first time its own line's descent
+        // swept that rung: Moe's Tavern, a mark on Homer's way to dinner,
+        // vanished from the board. Its name is placed against the mark by
+        // `placeOnTrackCaptions`, after the trunks are final. The rung the
+        // solver reserves on the inward side is still the ROOM that makes
+        // that possible; this just stops the ladder handing it out.
+        if (e._onTrack) return;
         var best = null;
         // a backward branch (label before its ring) reads out of order, so
         // it's only on the table when a forward label can't fit before the
@@ -2092,7 +2101,7 @@
       lastPlaceCrossings = 0;
       lastPlaceDrift = 0;
       evs.forEach(function (e) {
-        if (e._dropped) return;
+        if (e._dropped || e._onTrack) return;   // no rung taken, none to count
         used = Math.max(used, e._lane + 1);
         if (e._crossing) lastPlaceCrossings++;
         // How far a label ended up from the rail it names. A lane that is
@@ -3528,6 +3537,27 @@
     buildTrunks();
 
     {
+      // A MARK ON THE TRUNK NAMES ITSELF THE SAME WAY A CONVERGENCE DOES.
+      //
+      // Neither has a rail hanging off it to carry a name, so neither can
+      // be placed by the lane ladder, and both are decided after the trunks
+      // are: they are the only captions on the board that can SEE where the
+      // lines went. The search below tries the same distance out on either
+      // side of the line before it tries sliding along it, which is the
+      // order that matters: a name that has slid an hour from its own ring
+      // has stopped pointing at it, while the same name on the other side
+      // of the line is still beside it.
+      visible.forEach(function (e) {
+        if (!e._onTrack || e._dropped) return;
+        e._routeEdge = lineCAt(e._p, e._nodeA);
+        e._capOut = LINE_GAP + Math.max(NODE_R * 1.2,
+          Math.max(2, e._p.line_width) * S * weightScale / 2);
+        e._capLead = true;
+        e._labelSign = e._sign;
+        e._textStart = e._nodeA + TEXT_PAD;
+        shared.push(e);
+      });
+
       // WHERE A CONVERGENCE'S NAME GOES, given everything else on the board.
       //
       // Hung off the corridor and nothing else, it was written across
@@ -3553,7 +3583,7 @@
         // every branch rail and every caption the lane machinery already
         // placed, which by now is all of them except these
         visible.forEach(function (o) {
-          if (o._dropped || o._routeShared) return;
+          if (o._dropped || o._routeShared || o._onTrack) return;
           var oc = spineC + o._sign * o._laneDist;
           if (isFinite(o._lineFrom) && isFinite(o._lineTo)) {
             busy.push({ a0: Math.min(o._lineFrom, o._lineTo), a1: Math.max(o._lineFrom, o._lineTo),
