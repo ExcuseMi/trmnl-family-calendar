@@ -588,6 +588,22 @@ is open.
   label) gets worse, and that is the price. Rules 27 and 28 need amending
   and two new rules writing; the full wording is in the plan.
 
+- [ ] **E14b. Two boards still reuse a drop column at a morning convergence.**
+  `five-lines` turns Bart and Lisa 1px apart leaving the school run;
+  `crew-day` gives Amy and Fry the same column leaving the delivery. Both are
+  pinned known in `test/layout/cases/fan-out.js`.
+
+  Not the run home, which is fixed: these lines have most of the day still to
+  come, so the hold they are leaving is not their last and the stagger that
+  was extended to the last hold does not reach them. The stagger itself is
+  applied (`prev.trail`, `routeSpan`), so the likely cause is that these two
+  are not in one bundle at all -- two events at the same minute, each
+  staggering its own members correctly and neither knowing about the other.
+
+  If that is right the fix is a board-wide pass rather than a per-event one:
+  collect every turn the board is about to draw and space them, instead of
+  each convergence spacing only its own.
+
 - [ ] **E13. Standing up, captions are never slid or laddered along the axis.**
   Found by `test/layout/cases/standing.js`, which is the first case file to
   check a portrait board at all: 17 of its 28 cases are marked known.
@@ -689,6 +705,48 @@ is open.
   true` is already kept as an undocumented alias for configs written before
   the rename, so there is a precedent for reading the old key and ignoring
   it.
+
+- [x] **E15. A public holiday belongs to the day, not to a line.** Built.
+  People subscribe to "Holidays in Belgium", to Apple's equivalent, to a
+  school's term dates. The plugin had no concept of them: they arrived as
+  ordinary all-day entries, were routed by whichever rule happened to
+  match, and either landed at ONE line's head (as if that person alone
+  were off) or, where the feed carried a name nothing routed, put a whole
+  extra LINE on the board named after a country, with both ends drawn as
+  open chevrons. A yearly recurrence -- how most such feeds write Christmas
+  Day -- was dropped entirely, since only FREQ=WEEKLY was ever evaluated.
+
+  A holiday has no hour and no owner, so it is a property of THE DAY and is
+  stated where the board already says which day it is: in the header,
+  beside the date, with rule 28's concentric rings. `data.holidays`,
+  declared with `"holiday": true` on a calendar (the whole setup for a
+  subscription) or on a rule (for a feed carrying both kinds). Inside a
+  range it reads "Spring Break, Day 3 of 5", which is the only thing
+  telling the Monday of a half term from the Thursday. One name, not a
+  list: two on the row came out as "Christmas D" and "School Holid", each
+  cut mid word with the ordinal wrapped underneath.
+
+  It is the one option costed that the MAP does not pay for: a band on the
+  scale puts an hourless thing on a scale of hours, a row at every head
+  says something about people it is not about, and a line of its own costs
+  a band of cross axis and can be kept on a cramped panel while a real
+  person is dropped. Rules 58 to 63; `CONFIG.md`, "Public holidays".
+
+  Found on the way: every all-day entry reached `buildFromConfig` having
+  lost the day it belonged to, so all of them read as day 0. Tomorrow's
+  holiday was declared on today's board, and a board set to tomorrow threw
+  every all-day entry away. Fixed with the rest;
+  `test/transform/cases/holidays.js` covers both directions.
+
+  Not done, and deliberately: the demo boards show no holiday, because
+  adding one means changing an ICS file that live devices fetch from
+  `main`. It wants a commit and a push before a plugin push, not a quiet
+  edit. And the plain "one ICS link per line" setup cannot say `holiday`
+  at all: it has no JSON to say it in. Auto-detecting one from the feed's
+  name was costed and refused, because it is wrong both ways round (a
+  calendar literally called "Holidays" that is one person's leave; a
+  school feed that is a holiday feed and says nothing) with no way to turn
+  it off.
 
 - [ ] **E14. The two biggest text tiers ignore the device's font setting.**
   Carried over from the old tracker. The device's Font Family setting

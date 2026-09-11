@@ -1450,12 +1450,37 @@
       // run home was handed a stretch of axis that was not free.
       var prev = i ? hs[i - 1] : null;
       // The staggered exit and entry a corridor hands out, so several lines
-      // leaving one place do not all turn on the same minute. NOT on the
-      // run home: there is no next hold to be on time for, the minutes left
-      // after a late dinner are the scarce thing on that stretch, and
-      // `settleHomeRun` has already given each line a different height to
-      // finish at, so the corners are not on top of each other anyway.
-      if (prev && prev.trail && i < hs.length) from += prev.trail;
+      // leaving one place do not all turn on the same minute.
+      //
+      // ON THE RUN HOME TOO. This used to stop at the last hold, reasoning
+      // that there is no next hold to be on time for and that
+      // `settleHomeRun` has already given each line a different HEIGHT to
+      // finish at, so the corners could not be on top of each other. They
+      // are not on top of each other in height and they were exactly on top
+      // of each other in X, which is the axis that decides whether a reader
+      // can tell them apart: four lines leaving Family Dinner all turned
+      // down on the same minute and came out as one column with a comb of
+      // stubs hanging off it. And since dinner is the last thing those
+      // lines do, the run home is the ONLY exit they have -- the one place
+      // the stagger was skipped was the one place it was needed.
+      //
+      // SCALED, NOT CLAMPED. The minutes after a late event really are
+      // scarce, which is what the old note was protecting. Clamping each
+      // rank to what is left puts the last two back on the same column, so
+      // the whole fan shrinks in proportion instead: everybody keeps a
+      // distinct channel, just a narrower one.
+      if (prev && prev.trail) {
+        var step = prev.step || 0;
+        if (i >= hs.length && prev.trailMax > 0) {
+          var room = Math.max(0, (to - from) * 0.4);
+          // Eight pixels is a FLOOR, not a target: under it two elbows
+          // touch and the channels stop being channels, so a fan that
+          // cannot fit at the floor overruns its share of the evening
+          // rather than collapsing. Illegible is the worse failure.
+          if (prev.trailMax > room) step = Math.max(8 * S, step * (room / prev.trailMax));
+        }
+        from += (prev.rank || 0) * step;
+      }
       if (i < hs.length && hs[i].lead) to = Math.max(from + 1, to - hs[i].lead);
       // ...and past the previous stop's own name, when that is the way we
       // are going. A move the other way passes nothing and waits for nothing.
@@ -4370,7 +4395,12 @@
         want.forEach(function (w) {
           var keep = (w.q._route || []).slice();
           keep.push({ a0: e._nodeA, a1: e._endA, lvl: w.lvl, shared: true,
-                      lead: w.rank * STAGGER, trail: w.rank * STAGGER });
+                      lead: w.rank * STAGGER, trail: w.rank * STAGGER,
+                      rank: w.rank, step: STAGGER,
+                      // how far the LAST of them is staggered, so a run home
+                      // with little axis left can shrink the whole fan in
+                      // proportion instead of clamping ranks onto each other
+                      trailMax: (want.length - 1) * STAGGER });
           keep.sort(function (a, b) { return a.a0 - b.a0; });
           w.q._route = keep;
           w.q._octs = null;                       // the spans are memoised off it
