@@ -42,77 +42,22 @@ module.exports = function (test, h) {
   // that label to reach any lane further out, and swapping the pair — which
   // fixes the tightest version — reorders long runs badly enough to cost
   // more events than it saves.
-  const OVERLAP_KNOWN = {
-    // Weave-specific, and measured as such: with the exchange switched off
-    // this board passes. Marge and Homer swapping puts THREE of Bart's
-    // shared events in one band (the school run and both evening ones),
-    // and two of those captions wrap to two lines, so the labels in
-    // adjacent lanes clip by 6px. The lane pitch is sized from
-    // maxLabelThick, which is measured per tier inside layoutAttempt,
-    // while the bands are solved before a tier is chosen: a wrapped
-    // caption can end up thicker than the pitch that was solved for it.
-    // That ordering predates the weave; the weave is what puts two of them
-    // side by side.
-    regroups: 'the exchange gathers three of Bart\'s shared events into one band and two of their captions wrap, so adjacent lanes clip by 6px. Passes with the weave off.',
-  };
-  // Emptied: the last entry was two 15-minute meetings 20 minutes apart on
-  // one line, where the second had to climb through the first one's label.
-  // The rule that hands the inner lane to the LATER of a tight pair missed
-  // them by half a pixel, because it measured the gap between the rings
-  // without the corner radius the diagonal starts before its ring.
-  // What is left is the 800x480 panel, and it is one situation with two
-  // faces. That board has about a line-height of depth per line, so as soon
-  // as a couple of lines carry a long event the bands do not fit and the
-  // layout falls back to PACKING: one lane ladder shared by the whole side,
-  // which is exactly the trade the fallback exists to make: packing still
-  // reads correctly there, just with the crossings bands would prevent. A
-  // branch reaching a rung then passes a neighbouring line's caption, and a
-  // long event's caption wants a rung on the inward side that a packed
-  // board has not got, so it lands on the next line's rail.
+  // EMPTIED. Every entry that used to sit in these two tables described the
+  // branch-and-lane model: a rail crossing a neighbour's caption on a
+  // shared ladder, an elbow that could not slide past its own event, a
+  // branch dropping through its own line's words on the way out to a lane.
   //
-  // busy-day used to be the one that was NOT packed: a single interchange
-  // bar dropped through "Piano Lesson" on its way to its own lane. There is
-  // no bar any more. A shared event is a bundle of rails, and each of them
-  // stops at its own rung between the lines rather than running out past
-  // every lane on that side, so that entry is gone, and so is crew-day's,
-  // which was the same crossing on a packed board.
+  // There are no branches any more. A solo event is a stop ON its line -- a
+  // dot, an end tick, and a name beside it -- so there is no rail to cross
+  // anything with and no ladder to share, and all ten of these started
+  // passing at once. The runner treats a known issue that passes as a
+  // failure precisely so they cannot be left lying around pretending the
+  // board still has faults it grew out of.
   //
-  // Listed per fixture so none of them can get worse without the suite
-  // saying so.
-  const PIERCE_KNOWN_VIEW = {
-    'all-day-every-track/og-landscape': 'packed: every line carries an all-day event, so the bands cannot fit and the side shares one lane ladder. Three branches cross a neighbouring caption, and there is no room on a 10px pitch for the inward rung an all-day caption wants, so three of them land on the next line\'s rail.',
-    'long-event-day/og-landscape': 'packed, same as above with two long events instead of four: three branch crossings and one caption on a neighbouring rail.',
-    'five-lines/og-landscape': 'packed: five lines on a 480px-deep board leave no room for bands, so three branches cross a neighbouring caption on the shared ladder.',
-    // These two are the price of holding an elbow inside its own event.
-    // A branch used to be allowed to slide its elbow past the end of the
-    // event it belongs to in order to clear a caption in a lane it passes
-    // through, which drew a ring hanging clear of a stub of rail with the
-    // end tick jammed against it ("Walk Nibbler", and "Assembly" here at
-    // 19px past its own end). Held inside the event, the branch has
-    // nowhere left to go: the caption above it ("School Run", a caption
-    // longer than the gap between the two events) is in the only lane it
-    // can cross. A thin line between two words is the better of the two
-    // pictures, and it is the one the reader can still read.
-    'five-lines/x-landscape': 'the elbow may not pass its own event, so Assembly\'s branch crosses "School Run" to reach its lane. The alternative is the ring off its own rail, which is what this used to draw.',
-    'seven-lines/x-landscape': 'same as five-lines: a branch crossing a caption in a lane it passes through, rather than an elbow slid past its own event.',
-    'seven-lines/og-landscape': 'seven lines on a 480px-deep board: three of them cannot be drawn at all, and the four that fit share one lane ladder, so branches cross their neighbours\' captions.',
-    // The fixture was added for A15 and walked straight into an older
-    // fault: Work's third meeting drops its branch through the caption of
-    // its second on the way out, a line crossing its OWN line's words.
-    // Not A15's doing, and A15 is what took this board from five failing
-    // cases to this one: everything else here now passes, on both panels.
-    // The regroups board is built to be undrawable in one order (see
-    // cases/crossings.js), and A18 draws it: Marge and Homer exchange
-    // places at teatime, and not one shared event crosses a line any more.
-    // What is left is not the ordering, it is the crowd. Four shared
-    // events land in the two hours after school, each with a rail and a
-    // caption of its own, so a rail passes another's words. That is the
-    // gap-reservation problem (A17) and the crowding one (D5), on a board
-    // deliberately built to be busy at one end of the day.
-    'regroups/x-landscape': 'four shared events in the two hours after school, each with a rail and a caption of its own, so a rail passes another\'s words. The crossings this board was built to show are gone (see cases/crossings.js).',
-    'regroups/og-landscape': 'same crowd on the small panel.',
-    'double-booked/x-landscape': 'a line with three meetings at once drops its last branch through its own middle caption ("Design Review", pierced 57px by fork work). Five cases failed here before both sides were used; this is the one left.',
-  };
+  // Anything genuinely known goes back in here with the board it happens
+  // on and the reason, the way these did.
+  const OVERLAP_KNOWN = {};
+  const PIERCE_KNOWN_VIEW = {};
   const PIERCE_KNOWN = {};
 
 
