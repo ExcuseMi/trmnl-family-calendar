@@ -64,9 +64,13 @@ module.exports = function (test, h) {
     }
     assert(bad.length === 0, bad.length + ' caption(s) with a time cut off: ' + bad.slice(0, 6).join('; '));
   });
+  // tight-pair came off this list when the caption pass started drawing the
+  // board from both ends of the day and keeping the better one: two
+  // meetings a few minutes apart stopped stacking on one column. The rest
+  // still stack, because E13 is about sliding them ALONG the axis and that
+  // is still not done.
   const OVERLAP_KNOWN = new Set(['all-day-every-track', 'busy-day', 'crew-day',
-    'double-booked', 'five-lines', 'long-event-day', 'regroups', 'seven-lines',
-    'tight-pair']);
+    'double-booked', 'five-lines', 'long-event-day', 'regroups', 'seven-lines']);
   const PIERCE_KNOWN = new Set(['all-day-every-track', 'busy-day', 'crew-day',
     'five-lines', 'long-event-day', 'regroups', 'seven-lines', 'three-day']);
 

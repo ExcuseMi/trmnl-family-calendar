@@ -2345,6 +2345,17 @@
     // from scratch and lost them again. Only ever raised, and only when a
     // re-solve actually recovered an event.
     var laneFloor = {};
+    // WHICH END OF THE DAY THE CAPTIONS ARE PLACED FROM.
+    //
+    // The caption pass is greedy: names are placed in order against one
+    // growing list of obstacles, and each one taken narrows what is left for
+    // the rest. So the order decides who ends up with the bad spot, and on a
+    // crowded line the first-come order is not always the one that leaves
+    // the fewest faults. There is no way to know which is better except to
+    // draw both, and the tier loop already draws a board more than once and
+    // keeps the best by score, so this joins that: 0 places from the start
+    // of the day, 1 from the end.
+    var capOrder = 0;
     // An interchange is drawn as a heavy bar straight down the board at one
     // minute: the capsule across the lines, then the spur dropping from it
     // to its own lane. WHICH lanes that bar crosses is not known until the
@@ -4759,7 +4770,7 @@
       });
       return out;
     }
-    function attempt(tier) {
+    function attemptOnce(tier) {
       // EVERY TIER IS ASKED THE SAME QUESTION, FROM THE SAME PLACE.
       //
       // `laneFloor` and `inwardNeed` are things the board LEARNED by being
@@ -4788,6 +4799,31 @@
       if (q2 <= q1) return q2;
       barBlocks = { A: [], B: [] };
       return layoutAttempt(tier);
+    }
+
+    // AND THE SAME BOARD WITH THE CAPTIONS PLACED FROM THE OTHER END.
+    //
+    // Caption placement is greedy: each name takes the best spot left, so
+    // whoever is asked first gets it, and on a crowded line that decides who
+    // is left with a spot that overlaps somebody or has a rail through it. A
+    // greedy pass cannot see that giving the first name its second choice
+    // would leave the next two clean, and no amount of tuning the prices
+    // teaches it that -- measured twice, in E19, both times sideways.
+    //
+    // What it can do is draw the board the other way round and keep the one
+    // that scores better, which is exactly what the tier loop already does
+    // with text sizes. A board with nothing wrong needs no second opinion,
+    // so a perfect score returns immediately and the ordinary case costs
+    // nothing.
+    function attempt(tier) {
+      capOrder = 0;
+      var qForward = attemptOnce(tier);
+      if (qForward === 0) return qForward;
+      capOrder = 1;
+      var qBack = attemptOnce(tier);
+      if (qBack < qForward) return qBack;   // the board is drawn this way already
+      capOrder = 0;
+      return attemptOnce(tier);
     }
 
     // Try the biggest text first and step down only while it improves the
@@ -5173,7 +5209,11 @@
         // the day took the spot.
         shared.sort(function (a, b) {
           var sa = a._routeShared ? 0 : 1, sb = b._routeShared ? 0 : 1;
-          return sa !== sb ? sa - sb : a._nodeA - b._nodeA;
+          // Convergences keep their claim on the board whichever way round
+          // the rest are placed: their names are pinned to a pill, not
+          // searched for, so they are obstacles rather than competitors.
+          if (sa !== sb) return sa - sb;
+          return capOrder ? b._nodeA - a._nodeA : a._nodeA - b._nodeA;
         });
         shared.forEach(function (e) {
           // A CONVERGENCE'S NAME IS PLACED ALREADY, AND IT IS PINNED.

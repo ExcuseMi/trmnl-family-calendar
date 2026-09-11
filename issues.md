@@ -512,8 +512,9 @@ is open.
 
 ## E. New features
 
-- [ ] **E19. The caption overlaps cannot be priced away: placement is
-  greedy, so every local improvement reshuffles somebody else.** The remaining overlap failures (long-event-day,
+- [x] **E19. The caption overlaps cannot be priced away: placement is
+  greedy, so every local improvement reshuffles somebody else.** Fixed, by
+  drawing the board both ways round rather than by pricing. The remaining overlap failures (long-event-day,
   double-booked, crew-day) are all the same shape: on a crowded line every
   candidate position for a caption is bad, and the search buys the least-bad
   one. `costAt` prices everything by area, charging a caption over a rail at
@@ -544,12 +545,27 @@ is open.
   the lines' own distances are solved before the caption pass. Nothing moves
   the rails.)
 
-  So it is not a weights problem and not an ordering problem. A greedy
-  search cannot see that giving caption A its second-best spot leaves B and
-  C clean. Fixing it means a pass with a global view: place all of a side's
-  captions together, or iterate the whole pass to a fixed point and keep the
-  best board seen rather than the last one. Worth doing with the
-  measurements above in hand; not worth another round of tuning.
+  So it is not a weights problem. A greedy search cannot see that giving
+  caption A its second-best spot leaves B and C clean.
+
+  WHAT FIXED IT. The order is the one lever that changes every choice at
+  once, and there is no way to know which order is better except to draw
+  both. The tier loop already draws a board more than once and keeps the
+  best by score, so the caption pass joined that: `capOrder` 0 places names
+  from the start of the day, 1 from the end, and `attempt` keeps whichever
+  board scores better. A board with nothing wrong returns on the first
+  draw, so the ordinary case costs nothing.
+
+  All fourteen "no two text labels overlap" cases pass, where three failed.
+  `no two captions overlap standing up: tight-pair/x-portrait` came off the
+  E13 known list with it. Four failures remain and they are the trade the
+  quality score asks for, which weighs an overlap at 120 against a crossing
+  at 40: three captions with a rail through them (long-event-day and
+  five-lines on OG, crew-day on X) and one long-block caption touching a
+  neighbour by 46x13px on OG. A caption with a rail behind it is read
+  through, because every caption carries a paper outline; a caption under
+  another caption is gone. Worth revisiting only with a placer that has a
+  global view of a whole side at once.
 
   One thing that did come out of it: with captions placed differently,
   `no two captions overlap standing up: tight-pair/x-portrait` passes. It is
