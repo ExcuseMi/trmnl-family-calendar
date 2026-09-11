@@ -3770,29 +3770,61 @@
         }
         shared.sort(function (a, b) { return a._nodeA - b._nodeA; });
         shared.forEach(function (e) {
-          // On a slope, the name goes on the slope: anchored just past the
-          // end tick and running outward at the rail's own angle.
+          // EVERY SHAPE THE NAME CAN TAKE, AND THE CHEAPEST ONE WINS.
+          //
+          // A name against a trunk has more than one place to be, and which
+          // one is right is not a property of the event: it is a property of
+          // what else is on the paper at that minute. So they are all
+          // costed in the same currency and the board picks.
+          //
+          //   - LYING DOWN beside the line, stepped outward a row at a time
+          //     and slid along, which is the ordinary caption.
+          //   - ON THE SLOPE, at the trunk's own angle, where the trunk is
+          //     on the move. A horizontal name beside a climbing rail
+          //     points at paper.
+          //   - ON THE DIAGONAL ANYWAY, at 45, where the trunk is level.
+          //     The wedge between two lines is the one piece of this board
+          //     no lane can reach, and a name that is willing to lean can
+          //     live there while a name that insists on lying flat cannot.
+          //
+          // The last of those is why this is a search and not a rule. On a
+          // busy afternoon the flat rows are all taken and the wedge is
+          // empty, and nothing short of costing them together finds that.
           var m = e._onTrack ? slopeAt(e._p, (e._nodeA + e._endA) / 2) : 0;
-          if (Math.abs(m) > 0.3) {
-            var bestA = null;
-            [1, -1].forEach(function (sg) {
-              var away = sg * e._sign;
-              [e._endA + TEXT_PAD, e._nodeA + TEXT_PAD].forEach(function (at) {
-                var run = angledRun(e, at, away, m), cost = 0, off = false;
-                run.forEach(function (bx) {
-                  cost += costAt(bx);
-                  if (bx.c0 < bandLo || bx.c1 > crossPx - EDGE || bx.a1 > axisEnd - EDGE) off = true;
+          var bestA = null;
+          if (e._onTrack) {
+            // the trunk's own slope where it has one, and both 45s where it
+            // does not, because a level trunk still has two wedges beside it
+            var slopes = Math.abs(m) > 0.3 ? [m] : [1, -1];
+            slopes.forEach(function (mm) {
+              [1, -1].forEach(function (sg) {
+                var away = sg * e._sign;
+                [e._endA + TEXT_PAD, e._nodeA + TEXT_PAD].forEach(function (at) {
+                  var run = angledRun(e, at, away, mm), cost = 0, off = false;
+                  run.forEach(function (bx) {
+                    cost += costAt(bx);
+                    if (bx.c0 < bandLo || bx.c1 > crossPx - EDGE || bx.a1 > axisEnd - EDGE) off = true;
+                  });
+                  if (off) return;
+                  // A leaning name is a little harder to read than a flat
+                  // one, so it has to be BETTER, not merely equal: charged a
+                  // token amount so the board only leans when leaning buys
+                  // something.
+                  cost += e._h * e._textLen * 0.02;
+                  if (!bestA || cost < bestA.cost) {
+                    bestA = { cost: cost, at: at, away: away, run: run, m: mm };
+                  }
                 });
-                if (off) return;
-                if (!bestA || cost < bestA.cost) bestA = { cost: cost, at: at, away: away, run: run };
               });
             });
-            if (bestA) {
+            // On a slope there is nothing to compare against: a flat name
+            // beside a climbing rail is not one of the options.
+            if (bestA && Math.abs(m) > 0.3) {
               e._textStart = bestA.at;
               e._labelSign = bestA.away;
               e._routeEdge = lineCAt(e._p, bestA.at);
-              e._capOut = capPerp(e, m);
-              e._capAngle = Math.atan(m) * 180 / Math.PI;
+              e._capOut = capPerp(e, bestA.m);
+              e._capAngle = Math.atan(bestA.m) * 180 / Math.PI;
               bestA.run.forEach(function (bx) { busy.push(bx); });
               return;
             }
@@ -3817,6 +3849,16 @@
                 if (cost === 0) { oi = outs.length; sg = -3; break; }
               }
             }
+          }
+          // ...and now the flat answer against the leaning one.
+          if (bestA && (!best || bestA.cost < best.cost)) {
+            e._textStart = bestA.at;
+            e._labelSign = bestA.away;
+            e._routeEdge = lineCAt(e._p, bestA.at);
+            e._capOut = capPerp(e, bestA.m);
+            e._capAngle = Math.atan(bestA.m) * 180 / Math.PI;
+            bestA.run.forEach(function (bx) { busy.push(bx); });
+            return;
           }
           if (!best) return;
           e._textStart = best.at; e._capOut = best.out; e._labelSign = best.sign;
