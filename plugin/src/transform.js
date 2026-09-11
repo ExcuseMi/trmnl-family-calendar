@@ -72,9 +72,21 @@ var DAY_START_MIN = 7 * 60;
 var DAY_END_MIN = 21 * 60;
 var SECONDARY_THRESHOLD_MIN = 30;
 var TRACK_STEP = 10; // px between adjacent track offsets
-var LINE_STYLES = ['solid', 'dashed', 'dotted', 'dashdot']; // per side, in track order — pattern (not just hue) tells lines apart on a 1-bit panel
-// -40 steps: dark enough to read as a line on grayscale panels (the framework's scale runs 10 = darkest … 75 = lightest)
-var HUE_CYCLE = ['blue-40', 'orange-40', 'purple-40', 'red-40', 'cyan-40', 'pink-40', 'lime-40', 'violet-40', 'yellow-40', 'green-40'];
+// TWO TREATMENTS, NOT FOUR.
+//
+// Dotted and dashdot were a way of telling five lines apart without colour,
+// and on e-ink they cost more than they bought: a dotted rail is mostly
+// paper, so it reads as faint however dark the ink is, and four textures
+// running across one board is noise rather than information. Solid and
+// dashed, handed out two lines at a time so that the pattern changes only
+// when the grey has already been used, gives four distinguishable lines
+// beside the anchor without any of them looking broken.
+var LINE_STYLES = ['solid', 'solid', 'dashed', 'dashed'];
+// Black and one dark grey, alternating. The framework's scale runs 10
+// (darkest) to 75 (lightest); both of these are inked enough to read as a
+// line on a grayscale panel and they are far enough apart to tell from each
+// other at a glance.
+var HUE_CYCLE = ['gray-20', 'gray-45'];
 var HUE_NAMES = ['blue', 'green', 'orange', 'purple', 'red', 'cyan', 'pink', 'lime', 'violet', 'yellow'];
 
 function pad2(n) {
@@ -702,11 +714,11 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
 // LINE_STYLES, so a device that loses the network does not also change
 // colour — and no grey is pinned, so a theme still gets to repaint them.
 var DEMO_TRACKS = [
-  { key: 'homer', name: 'Homer', side: 'left', hue: 'black', track_offset: -10, line_width: 6, line_style: 'solid' },
-  { key: 'lisa', name: 'Lisa', side: 'left', hue: 'red-40', track_offset: -20, line_width: 5.5, line_style: 'dashed' },
-  { key: 'marge', name: 'Marge', side: 'right', hue: 'orange-40', track_offset: 10, line_width: 5, line_style: 'dotted' },
-  { key: 'bart', name: 'Bart', side: 'right', hue: 'purple-40', track_offset: 20, line_width: 4.5, line_style: 'dashdot' },
-  { key: 'maggie', name: 'Maggie', side: 'right', hue: 'cyan-40', track_offset: 30, line_width: 4, line_style: 'dashed' },
+  { key: 'homer', name: 'Homer', side: 'left', hue: 'black', track_offset: -10, line_width: 3, line_style: 'solid' },
+  { key: 'lisa', name: 'Lisa', side: 'left', hue: 'gray-45', track_offset: -20, line_width: 3, line_style: 'solid' },
+  { key: 'marge', name: 'Marge', side: 'right', hue: 'gray-20', track_offset: 10, line_width: 3, line_style: 'dashed' },
+  { key: 'bart', name: 'Bart', side: 'right', hue: 'gray-45', track_offset: 20, line_width: 3, line_style: 'dashed' },
+  { key: 'maggie', name: 'Maggie', side: 'right', hue: 'gray-20', track_offset: 30, line_width: 3, line_style: 'solid' },
 ];
 
 // A deliberately busy day in Springfield: two meetings starting minutes
@@ -2444,7 +2456,11 @@ function makeTrackRegistry(parsed) {
       t.side = side;
       t.track_offset = TRACK_STEP * (idx + 1) * (side === 'left' ? -1 : 1);
       t.hue = (configured && hueTokenForColor(configured.color)) || (name === anchor ? 'black' : HUE_CYCLE[pos % HUE_CYCLE.length]);
-      t.line_width = name === anchor ? 6 : 4.5;
+      // UNIFORM. Weight used to be the third thing separating lines, on
+      // top of hue and pattern, and it made the board look like some
+      // people's days mattered more than others. The anchor is told apart
+      // by being black, not by being fat.
+      t.line_width = 3;
       t.initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
     });
     // Dash patterns are handed out GLOBALLY, in the order the lines appear on

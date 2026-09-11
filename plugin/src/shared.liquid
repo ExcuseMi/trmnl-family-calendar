@@ -1187,7 +1187,49 @@
       // it was at the moment the reason for it ends, and arrives at the
       // next one exactly when it is needed: what is between them is
       // straight track, which is the only thing straight track should mean.
-      var where = prevEnd == null ? -1 : 1;
+      // ...BUT A LINE ON ITS OWN BASELINE HAS NOTHING TO LEAVE.
+      //
+      // "As soon as it is over" is about a level a line was borrowing: it
+      // came up to share the school run, the school run ended, and staying
+      // up there says the two of them spent the morning together. That is
+      // right, and it is only about leaving a BORROWED level.
+      //
+      // Applied to a line already at home it did the opposite of what it
+      // means. Homer finishes at the reactor at three, dinner is at seven,
+      // and the descent began the moment the reactor was over: four hours
+      // of 45 degree diagonal straight through Maggie, Bart, Lisa and
+      // Marge, and the intersection says nothing about anybody's day. The
+      // baseline is the one thing on this map that means "this is where
+      // this person is". A line sits on it and approaches the enclosure
+      // when the enclosure is near, which is the same rule the FIRST hold
+      // of the day has always used.
+      var where = prevEnd == null || prevLvl === 0 ? -1 : 1;
+      // LATE DIVERGENCE, AS A HARD CAP.
+      //
+      // Arriving on time is not enough on its own: how early the line has
+      // to set off is decided by the geometry, and a 45 dropping four
+      // bands needs four bands of axis to do it in. Homer left the reactor
+      // at three and was still descending at half past six.
+      //
+      // So the room is capped rather than the angle: a line may begin
+      // deflecting toward an enclosure three quarters of an hour before it,
+      // and no earlier. Given that much room a small step is still a
+      // comfortable 45; a big drop cannot be, and `octSpan` falls through
+      // to the other legal angle and takes it as a 90. Both are octilinear
+      // and both say the same thing -- this line is going somewhere now --
+      // where four hours of shallow diagonal says it all afternoon.
+      //
+      // Measured in UNCOMPRESSED minutes (`pxPerHour` is the scale of the
+      // busy stretch), so the cap means the same thing over a quiet morning
+      // as over a crowded evening.
+      //
+      // Only from the baseline. Leaving a level the line had BORROWED is
+      // the other rule -- it goes as soon as the reason for it is over --
+      // and a line that lingers at the school run until teatime is saying
+      // it was still there.
+      if (i < hs.length && prevLvl === 0) {
+        from = Math.max(from, to - pxPerHour * 0.75);
+      }
       // GOING HOME IS OPTIONAL. A line has to START the day on its own
       // lane, because that is where its name is written and the reader
       // needs the two to agree. It does not have to END there: after the
@@ -4371,6 +4413,7 @@
           }
           return out;
         }
+        var ANGLED_CAPTIONS = false;
         shared.sort(function (a, b) { return a._nodeA - b._nodeA; });
         shared.forEach(function (e) {
           // EVERY SHAPE THE NAME CAN TAKE, AND THE CHEAPEST ONE WINS.
@@ -4412,7 +4455,21 @@
           // The wedge beside a bundle is the same free paper as the wedge
           // beside a trunk. It was excluded only because the lean arrived
           // as a fix for marks.
-          if (e._onTrack || e._routeEdge != null) {
+          // LABELS ARE HORIZONTAL. FULL STOP.
+          //
+          // A name set at 45 reads well on its own and badly on a board:
+          // a dozen of them lean past each other, cross the baselines of
+          // the tracks either side, and turn the map into a thicket. On
+          // e-ink, where there is no colour to separate them and no
+          // antialiasing worth the name, it is worse still. Every caption
+          // lies down, above or below its line, and says which mark it
+          // belongs to with a short stem rather than with its angle.
+          //
+          // The search below is left in place and switched off rather than
+          // cut out: the wedge beside a sloping trunk is still the only
+          // free paper on a crowded board, and if this is ever revisited it
+          // will be revisited with that argument, not with a blank file.
+          if (ANGLED_CAPTIONS && (e._onTrack || e._routeEdge != null)) {
             // OCTAGONAL ANGLES ONLY.
             //
             // This used the trunk's own slope where it had one, and a
@@ -5523,6 +5580,19 @@
     // downstream reading `lineCAt` rather than assuming a baseline. So a
     // solo event becomes a siding at its own lane's depth, and its spur is
     // not drawn.
+    // TRACKS STAY NEAR THEIR BASELINES.
+    //
+    // Route mode sends the LINE ITSELF to wherever its events are, which is
+    // a lovely idea on a line with two events and a mess on a line with
+    // six: Homer left his baseline at two in the afternoon and arrived at
+    // seven having crossed Maggie, Bart, Lisa and Marge on the way, and
+    // nothing about that intersection tells the reader anything. A line's
+    // baseline is the one thing on this map that says "this is where this
+    // person is", and a line that is never on it has given that up.
+    //
+    // So a solo event goes back to being a spur off a line that stays put,
+    // and the only thing that moves a line off its baseline is an
+    // enclosure: a convergence, where the lines really do have to meet.
     var ROUTE_MODE = true;
 
     Object.keys(chains).forEach(function (key) {
