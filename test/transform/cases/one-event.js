@@ -100,6 +100,77 @@ module.exports = function (test, h) {
       'Bo shares an event with each of the others, so Bo belongs between them; got ' + board.join(' '));
   });
 
+  test('the order is the one that crosses least, not the one greed reaches first', async () => {
+    // Every line sitting between two people who share an event is a line
+    // their lines have to cross to reach each other, and since a shared
+    // event MOVES the trunks rather than dropping a rail from each, that
+    // crossing is real ink. So the order to draw is the one with fewest of
+    // them, and a household is small enough to find it exactly.
+    //
+    // These four events are a set greed gets wrong: it takes the strongest
+    // pair first and extends from the ends, which here reaches an order
+    // costing two crossings when one is available. The test does not name
+    // the right answer -- it works out the best any order could do and
+    // insists on it, because there is usually more than one and naming one
+    // of them would be testing this run rather than the rule.
+    const at = (h) => ['20260907T' + h + '0000Z', '20260907T' + (h + 1) + '0000Z'];
+    const who = { a: 'Ada', b: 'Bo', c: 'Cy', d: 'Di', e: 'Ed' };
+    const shared = [
+      { at: 9, with: ['b', 'e'], title: 'Morning Stand' },
+      { at: 11, with: ['c', 'd', 'e'], title: 'Late Review' },
+      { at: 13, with: ['b', 'd'], title: 'Lunch Run' },
+      { at: 16, with: ['c', 'e'], title: 'Evening Call' },
+    ];
+    const feeds = async (url) => {
+      const me = String(url).match(/\/(\w)\.ics/)[1];
+      // one of their own each, so nobody's line is dropped for being empty:
+      // a shared event belongs to its primary owner, and the others would
+      // have nothing of their own to keep them on the board
+      const mine = [{ start: at(19)[0], end: at(19)[1], summary: 'Errand ' + me }];
+      shared.forEach((g) => {
+        if (g.with.indexOf(me) >= 0) mine.push({ start: at(g.at)[0], end: at(g.at)[1], summary: g.title });
+      });
+      return okText(icsWithEvents(mine));
+    };
+    const r = await runTransform(feeds, NOW).run(baseInput(NOW, cfgWith({
+      tracks: Object.keys(who).map((k) => ({ name: who[k] })),
+      calendars: Object.keys(who).map((k) => ({
+        url: 'https://example.com/' + k + '.ics',
+        rules: [{ match: { type: 'any' }, track: who[k] }],
+      })),
+    })));
+    const board = r.metro.legend.slice().sort((x, y) => x.track_offset - y.track_offset).map((t) => t.name);
+    assertEqual(board.length, 5, 'five lines: ' + board.join(' '));
+    // The groups as the BOARD has them, not as this test declared them:
+    // what matters is that the order is the best one for the events that
+    // actually came out shared, and reading them back is also the only way
+    // the two halves of the check can be talking about the same thing.
+    const byKey = {};
+    r.metro.legend.forEach((l) => { byKey[l.key] = l.name; });
+    const groups = r.metro.items
+      .filter((e) => e.type === 'event' && e.co_owners && e.co_owners.length)
+      .map((e) => [e.owner].concat(e.co_owners).map((k) => byKey[k]).filter(Boolean));
+    assert(groups.length >= 3, 'only ' + groups.length + ' shared event(s) came out; nothing to order for');
+    const cost = (seq) => groups.reduce((sum, g) => {
+      const ix = g.map((n) => seq.indexOf(n)).sort((x, y) => x - y);
+      let between = 0;
+      for (let i = ix[0] + 1; i < ix[ix.length - 1]; i++) if (ix.indexOf(i) < 0) between++;
+      return sum + between;
+    }, 0);
+    let floor = Infinity;
+    const walk = (seq, k) => {
+      if (k === seq.length) { floor = Math.min(floor, cost(seq)); return; }
+      for (let i = k; i < seq.length; i++) {
+        const t = seq[k]; seq[k] = seq[i]; seq[i] = t;
+        walk(seq, k + 1);
+        const u = seq[k]; seq[k] = seq[i]; seq[i] = u;
+      }
+    };
+    walk(board.slice(), 0);
+    assertEqual(cost(board), floor,
+      'the board crosses ' + cost(board) + ' times where ' + floor + ' was available: ' + board.join(' '));
+  });
+
   test('the day stretches to fit what is on it, with room after the last event', async () => {
     // A fixed 7am-to-9pm day cut the ends off and left a late event's label
     // nothing to run into. The window now reaches an hour before the first

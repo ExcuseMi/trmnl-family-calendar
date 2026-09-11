@@ -572,7 +572,21 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
   });
   tracks = tracks.filter(function (t) { return activeKeys[t.key]; });
   tracks.forEach(function (t) { delete t.keep_empty; }); // bookkeeping, not payload
+  // Renumbering closes the gaps left by the lines just dropped, and it has
+  // to keep the ORDER `finalize` chose. Done in whatever sequence the array
+  // happened to be in, it did not: the chain built to keep the people who
+  // share a day beside each other was handed out again by registration
+  // order, so the Simpsons came out Maggie-Homer-Marge-Bart-Lisa when the
+  // chain said Maggie-Lisa-Bart-Homer-Marge. Every ordering decision this
+  // file makes was being thrown away one function later.
+  //
+  // Sorted by the offset finalize gave them, innermost first on each side,
+  // the renumbering closes the gaps and changes nothing else.
   var sideIdx = { left: 0, right: 0 };
+  tracks.sort(function (a, b) {
+    if (a.side !== b.side) return a.side === 'left' ? -1 : 1;
+    return Math.abs(a.track_offset) - Math.abs(b.track_offset);
+  });
   tracks.forEach(function (t) { t.track_offset = TRACK_STEP * (++sideIdx[t.side]) * (t.side === 'left' ? -1 : 1); });
   trackByKey = {};
   tracks.forEach(function (t) { trackByKey[t.key] = t; });
@@ -2176,8 +2190,14 @@ function makeTrackRegistry(parsed) {
   // the lines are laid out in: a family that eats dinner together should not
   // have to read across two other people's days to see that they did.
   var affinity = {};
+  // ...and the GROUPS themselves, with the minute each happened. Pair counts
+  // say who belongs together; only the groups say who is stranded in the
+  // middle of somebody else's, and only the minute says whether two lines
+  // could exchange places between one and the next instead of crossing.
+  var groups = [];
   function pairKey(a, b) { return a < b ? a + '\u0000' + b : b + '\u0000' + a; }
-  function link(names, weight) {
+  function link(names, weight, atMin) {
+    if (names.length > 1) groups.push({ names: names.slice(), at: atMin == null ? 0 : atMin });
     for (var i = 0; i < names.length; i++) {
       for (var j = i + 1; j < names.length; j++) {
         var k = pairKey(names[i], names[j]);
@@ -2224,8 +2244,134 @@ function makeTrackRegistry(parsed) {
     return chain;
   }
 
-  function finalize() {
+  // FEWEST CROSSINGS, NOT MOST AFFINITY.
+  //
+  // A chain built strongest-link-first keeps the strongest pairs together
+  // and can still leave somebody stranded in the middle of a group they are
+  // not in. Every line sitting between two people who share an event is a
+  // line their lines have to cross to reach each other, and now that a
+  // shared event MOVES the trunks rather than dropping a rail from each,
+  // that crossing is real ink on the board.
+  //
+  // It can also be counted -- for each shared event, how many non-members
+  // sit between its outermost members -- and a household is small enough
+  // that counting it for every possible order is cheaper than being clever
+  // about it. Eight lines is 40320 orders and the board caps at seven.
+  function interference(seq, from, to) {
+    var pos = {}, cost = 0;
+    for (var i = 0; i < seq.length; i++) pos[seq[i]] = i;
+    for (var g = 0; g < groups.length; g++) {
+      if (from != null && g < from) continue;
+      if (to != null && g >= to) continue;
+      var names = groups[g].names, lo = Infinity, hi = -1, inside = {};
+      for (var n = 0; n < names.length; n++) {
+        var ix = pos[names[n]];
+        if (ix == null) continue;
+        if (ix < lo) lo = ix;
+        if (ix > hi) hi = ix;
+        inside[ix] = true;
+      }
+      if (hi < 0) continue;
+      for (var k = lo + 1; k < hi; k++) if (!inside[k]) cost++;
+    }
+    return cost;
+  }
+  // The old objective, kept as the tie-break: among orders that cross the
+  // same number of times, the one that puts the closest pairs next to each
+  // other is the one worth drawing.
+  function adjAffinity(seq) {
+    var sum = 0;
+    for (var i = 1; i < seq.length; i++) sum += affinityOf(seq[i - 1], seq[i]);
+    return sum;
+  }
+  // A WEAVE IS WORTH ONE CROSSING AND CAN SAVE SEVERAL.
+  //
+  // Two lines that need different neighbours in the morning and the evening
+  // cannot both be had from one fixed order: somebody reads across somebody
+  // else all day. Letting the pair exchange places once, between two events,
+  // costs the single crossing where they change over and buys back every
+  // crossing after it. Only adjacent pairs, because that is the only
+  // exchange the drawing knows how to make.
+  var WEAVE_COST = 1;
+  function weaveCost(seq) {
+    var base = interference(seq);
+    var best = { cost: base, weave: null };
+    if (seq.length < 3 || groups.length < 2) return best;
+    var ordered = groups.map(function (g, i) { return i; })
+      .sort(function (a, b) { return groups[a].at - groups[b].at; });
+    var byTime = ordered.map(function (i) { return groups[i]; });
+    var saved = groups;
+    groups = byTime;
+    for (var k = 0; k + 1 < seq.length; k++) {
+      var swapped = seq.slice();
+      var t = swapped[k]; swapped[k] = swapped[k + 1]; swapped[k + 1] = t;
+      for (var m = 1; m < byTime.length; m++) {
+        var c = interference(seq, 0, m) + interference(swapped, m, null) + WEAVE_COST;
+        if (c < best.cost) best = { cost: c, weave: { pair: k, after: m } };
+      }
+    }
+    groups = saved;
+    return best;
+  }
+  function bestOrder() {
+    var names = order.slice();
     var chain = affinityChain();
+    if (names.length < 3 || names.length > 8 || !groups.length) return chain;
+    // Scored on what the board will actually DRAW, which is the order as
+    // it stands. A weave is worked out by the client, from the positions it
+    // ends up with, and nothing here can promise one -- so an order that is
+    // only good once somebody weaves it is not good, and letting the weave
+    // into the main score picked those orders and left the board crossing
+    // twice where once was available.
+    //
+    // It earns its place as a TIE-BREAK: among orders that cross the same
+    // number of times, the one a weave could still improve is the better
+    // bet, because the client may well take it.
+    // The weave is NOT in the inner loop. Working it out means trying every
+    // adjacent pair against every point in the day, and doing that for all
+    // forty thousand orders is a billion operations on a server with a
+    // four-second budget for the whole board. The orders that tie on
+    // crossings are few, so they are collected as they are found and the
+    // weave decides between those at the end.
+    var TIED_CAP = 24;
+    var best = { cost: interference(chain), aff: adjAffinity(chain) };
+    var tied = [chain.slice()];
+    // Heap's algorithm: every order, once, with no allocation per order.
+    var work = names.slice(), c = new Array(work.length).fill(0), i = 0;
+    function consider(cand) {
+      var cost = interference(cand);
+      if (cost > best.cost) return;
+      var aff = adjAffinity(cand);
+      if (cost < best.cost || aff > best.aff) {
+        best = { cost: cost, aff: aff };
+        tied = [cand.slice()];
+      } else if (aff === best.aff && tied.length < TIED_CAP) {
+        tied.push(cand.slice());
+      }
+    }
+    consider(work);
+    while (i < work.length) {
+      if (c[i] < i) {
+        var j = i % 2 ? c[i] : 0;
+        var tmp = work[j]; work[j] = work[i]; work[i] = tmp;
+        consider(work);
+        c[i]++; i = 0;
+      } else { c[i] = 0; i++; }
+    }
+    // Among the orders that cross least and keep the closest pairs
+    // together, take the one a weave could still improve: the client works
+    // weaves out for itself from the positions it is given, and an order it
+    // can repair is a better bet than one it cannot.
+    var pick = tied[0], pickWoven = weaveCost(pick).cost;
+    for (var t = 1; t < tied.length; t++) {
+      var w = weaveCost(tied[t]).cost;
+      if (w < pickWoven) { pick = tied[t]; pickWoven = w; }
+    }
+    return pick;
+  }
+
+  function finalize() {
+    var chain = bestOrder();
     var total = chain.reduce(function (a, n) { return a + counts[n]; }, 0);
 
     // Cut the chain once. Everything before the cut goes left, everything
@@ -2481,7 +2627,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         // toward side balancing — they have a ring there too, but it's not
         // "their" event the way the primary owner's is
         var interchangeWith = trackNames.slice(1).map(function (n) { return registry.add(n, 0.5).key; });
-        if (trackNames.length > 1) registry.link(trackNames);
+        if (trackNames.length > 1) registry.link(trackNames, null, ev.startMin);
         events.push({
           track: primary.key,
           interchange_with: interchangeWith.length ? interchangeWith : undefined,
@@ -2540,7 +2686,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
       if (!ev.interchange_with || !ev.interchange_with.length) return;
       var names = [ev.track].concat(ev.interchange_with)
         .map(function (k) { return keyToName[k]; }).filter(Boolean);
-      if (names.length > 1) registry.link(names);
+      if (names.length > 1) registry.link(names, null, ev.start_min);
     });
   }
   // ---- which day the board draws
