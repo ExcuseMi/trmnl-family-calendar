@@ -165,17 +165,23 @@ module.exports = function (test, h) {
     { start: '20260909T070000Z', end: '20260909T073000Z', summary: 'Gym' },
   ]);
 
-  test('a long block becomes a siding without being named or declared', async () => {
+  test('a long block travels as an ordinary event, not a payload of its own', async () => {
     // "Anything over four hours is a status block, not a meeting" is the
     // rule, and nobody has to write it down: the config used to carry
     // `siding: true` and no longer can, because the shape of a day is a
-    // fact about the calendar rather than a setting.
+    // fact about the calendar rather than a setting. It is not something
+    // transform.js writes down either. A long block used to be split out
+    // into a `sidings` array and disappear from the timeline; it is an
+    // event like any other now, and the client reads the clock to decide
+    // how to draw it.
     const r = await board(LONG_DAY, {
       calendars: [{ url: 'https://example.com/a.ics', name: 'Alex' }],
     });
-    const sidings = r.metro.sidings.map((s) => s.title).sort();
-    assertEqual(sidings, ['In the office'], 'got ' + JSON.stringify(sidings));
-    assertEqual(eventItems(r.metro).map((e) => e.title).sort(), ['Gym', 'Standup']);
+    assertEqual(r.metro.sidings, undefined, 'nothing is split out of the timeline any more');
+    assertEqual(eventItems(r.metro).map((e) => e.title).sort(), ['Gym', 'In the office', 'Standup']);
+    const long = eventItems(r.metro).filter((e) => e.title === 'In the office')[0];
+    assertEqual([long.start_min, long.end_min], [510, 900], 'the block keeps its own span');
+    assertEqual(long.co_owners, [], 'one person is at the office, so there is nobody to converge with');
   });
 
   test('duration takes a ceiling as well as a floor', async () => {
@@ -185,28 +191,32 @@ module.exports = function (test, h) {
         { match: { type: 'duration', max: 30 }, track: 'Quick', rename: false },
       ] }],
     });
-    // "In the office" is not in the list because it is a siding, not an
-    // event: seven hours is the shape of a day. The rule under test still
-    // sends both of the short ones to Quick.
-    assertEqual(tracksOf(r.metro), ['Gym@Quick', 'Standup@Quick']);
+    // "In the office" is in the list, on the line it came in on: six and a
+    // half hours is over the ceiling, so the rule never touches it. It used
+    // to be missing here because a long block was split off the timeline
+    // before the rules ran, which made this case quietly agree with a
+    // filter instead of with the matcher it is about.
+    assertEqual(tracksOf(r.metro), ['Gym@Quick', 'In the office@Alex', 'Standup@Quick']);
   });
 
   test('a rule can ask when the day it belongs to starts', async () => {
     // from is inclusive and to is exclusive, so two windows can be written
-    // back to back without both claiming the hour they meet at.
+    // back to back without both claiming the hour they meet at. "In the
+    // office" starts at exactly 08:30 and stays on Alex, which is the
+    // exclusive end of the window being right about its own boundary.
     const r = await board(LONG_DAY, {
       tracks: [{ name: 'Alex' }, { name: 'Early' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [
         { match: { type: 'time', to: '08:30' }, track: 'Early', rename: false },
       ] }],
     });
-    assertEqual(tracksOf(r.metro), ['Gym@Early', 'Standup@Alex']);
+    assertEqual(tracksOf(r.metro), ['Gym@Early', 'In the office@Alex', 'Standup@Alex']);
   });
 
   test('the shape matchers compose with the word ones', async () => {
     // The point of and/or/not: "a short one, but not that one". Written
-    // against `hide` rather than against a siding, because a siding is no
-    // longer something a rule can ask for.
+    // against `hide` rather than against a long block, because how a long
+    // block is drawn is not something a rule can ask for.
     const r = await board(LONG_DAY, {
       calendars: [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [
         { match: { type: 'and', matchers: [
@@ -215,8 +225,9 @@ module.exports = function (test, h) {
         ] }, hide: true },
       ] }],
     });
-    assertEqual(eventItems(r.metro).map((e) => e.title).sort(), ['Gym'],
-      'Standup was short and unnamed, so it went; Gym was short and named, so it stayed');
+    assertEqual(eventItems(r.metro).map((e) => e.title).sort(), ['Gym', 'In the office'],
+      'Standup was short and unnamed, so it went; Gym was short and named, so it stayed; '
+      + 'In the office is over the ceiling, so the matcher never saw it');
   });
 
   test('a duration or time matcher with nothing to compare is dropped, not always-true', async () => {

@@ -31,17 +31,23 @@ module.exports = function (test, h) {
     }
   });
 
-  test('every lane rung sits outside the line that owns it', () => {
-    // A lane is where a label hangs off its own track. A rung inside the
-    // baseline would put the label between the line and the spine, which
-    // is where the hour axis is.
-    const b = board(['work:3'], ['kids:2|siding']);
+  test('every lane rung sits on the side of its own line that it says it does', () => {
+    // A lane is where a label hangs off its own track, and a track hangs
+    // them on BOTH sides of its line (A15): the gap between two lines is
+    // where the outer one's inward labels belong. So the claim is not that
+    // every rung is outward, it is that `side` and the geometry agree --
+    // an outward rung past the line, an inward one between the line and
+    // whatever is inside it, and never a rung that claims one and draws
+    // the other.
+    const b = board(['work:3'], ['kids:2|long']);
     const out = solve(b);
     for (const side of ['A', 'B']) {
       for (const l of out.lanes[side]) {
         if (!l.owner) continue;
-        assert(l.dist > out.dist[l.owner], 'a rung for ' + l.owner + ' at ' + l.dist
-          + ' is inside its own line at ' + out.dist[l.owner]);
+        const inward = l.side === -1;
+        assert(inward ? l.dist < out.dist[l.owner] : l.dist > out.dist[l.owner],
+          'a rung for ' + l.owner + ' at ' + l.dist + ' says side ' + l.side
+          + ' and its own line is at ' + out.dist[l.owner]);
       }
     }
   });
@@ -73,7 +79,7 @@ module.exports = function (test, h) {
     // It is called several times per render, once per text tier, and a
     // solver that drifted would make the tier ladder compare boards that
     // differ for no reason.
-    const spec = () => board(['w:3', 'a:1|siding'], ['s:2', 'k:4']);
+    const spec = () => board(['w:3', 'a:1|long'], ['s:2', 'k:4']);
     assertEqual(solve(spec()), solve(spec()));
   });
 };

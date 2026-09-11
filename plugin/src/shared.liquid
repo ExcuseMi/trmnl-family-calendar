@@ -1544,6 +1544,40 @@
     recomputeTrackDists();
 
     var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped, demand, alloc, sep, packedFallback;
+    // WHICH LABELS HAVE SOMEBODY ELSE'S LINE THROUGH THEM, by track.
+    //
+    // Read off the drawing rather than predicted: what puts a line through
+    // "PTA Meeting" is Bart's trunk leaning up across Marge's only lane on
+    // its way to dinner, and no amount of arithmetic on label sizes can see
+    // that, because it is not a label. Every other line is sampled across
+    // the words, which is the same question the pierce test asks.
+    function piercedBy() {
+      var by = {};
+      if (!horizontal) return by;
+      visible.forEach(function (e) {
+        if (e._dropped || e._textStart == null || e._laneDist == null) return;
+        var lineC = e._routeEdge != null ? e._routeEdge
+          : e._bundleOut != null ? e._bundleOut : spineC + e._sign * e._laneDist;
+        var ls = (e._bundleOut != null || e._labelSign == null) ? e._sign : e._labelSign;
+        var c0 = ls < 0 ? lineC - LINE_GAP - e._h : lineC + LINE_GAP, c1 = c0 + e._h;
+        var a0 = e._textStart, a1 = a0 + e._textLen, stepA = Math.max(2 * S, (a1 - a0) / 12);
+        var hit = false;
+        LEGEND.forEach(function (q) {
+          if (hit || q === e._p) return;
+          for (var a = a0; a <= a1; a += stepA) {
+            var c = lineCAt(q, a);
+            if (c > c0 && c < c1) { hit = true; return; }
+          }
+        });
+        if (hit) { var k = e._laneOwner || e.owner; by[k] = (by[k] || 0) + 1; }
+      });
+      return by;
+    }
+    function pierceTotal(by) { var n = 0; Object.keys(by).forEach(function (k) { n += by[k]; }); return n; }
+    // Which tracks were found to need the gap beside their own line. Empty
+    // on the first solve, because it can only be answered by a board that
+    // has been drawn; `settleSides` fills it in and solves again.
+    var inwardNeed = {};
     // An interchange is drawn as a heavy bar straight down the board at one
     // minute: the capsule across the lines, then the spur dropping from it
     // to its own lane. WHICH lanes that bar crosses is not known until the
@@ -2191,7 +2225,16 @@
           }
           // ...and one rung inward regardless for a long event's name. Not
           // a cost question: there is nowhere else for it to be.
-          inN = Math.max(inN, Math.min(want, longIn(t)));
+          //
+          // And one for a track whose labels were found, on a board that
+          // was actually drawn, to have somebody else's line through them
+          // with no rung outward that avoids it. That is not knowable from
+          // sizes -- it is another track's trunk leaning across this one's
+          // lanes on its way to a convergence -- so it is measured from the
+          // drawing and fed back in. Scarce on purpose: a side whose every
+          // track asks for the gap at once does not fit and the whole board
+          // drops to the packed fallback.
+          inN = Math.max(inN, Math.min(want, longIn(t) + (t.needIn ? 1 : 0)));
           inward[t.key] = inN;
           // What is left after the inward rungs have taken their share of
           // the gap; never less than the gap itself, so a track that wants
@@ -2631,7 +2674,8 @@
     }
     function crossTracks(sideKey) {
       return sides[sideKey].map(function (p) {
-        return { key: p.key, long: longOnTrack(p), shared: sharedCount(p) };
+        return { key: p.key, long: longOnTrack(p), shared: sharedCount(p),
+                 needIn: inwardNeed[p.key] ? 1 : 0 };
       });
     }
     // How many shared events this track is part of. A corridor is planned
@@ -2860,8 +2904,45 @@
       });
       return out;
     }
-    usedA = placeSide('A', cross.lanes.A, obstacles.A.concat(barBlocks.A, corridorBlocks('A')));
-    usedB = placeSide('B', cross.lanes.B, obstacles.B.concat(barBlocks.B, corridorBlocks('B')));
+    function placeBoth() {
+      usedA = placeSide('A', cross.lanes.A, obstacles.A.concat(barBlocks.A, corridorBlocks('A')));
+      usedB = placeSide('B', cross.lanes.B, obstacles.B.concat(barBlocks.B, corridorBlocks('B')));
+    }
+    placeBoth();
+    // SOLVE, LOOK, SOLVE AGAIN: which side of its own line a track's labels
+    // belong on.
+    //
+    // The bands are solved from SIZES -- how many labels a track has, how
+    // thick the thickest is -- and sizes cannot see the thing that actually
+    // decides this. Marge has one lane, south of her line, and at four in
+    // the afternoon Bart's and Lisa's trunks lean up across it on their way
+    // to dinner: "PTA Meeting" is drawn with two lines through it, and no
+    // rung further out escapes them either, because what is in the way is
+    // not a label, it is a trunk sweeping every lane between where it was
+    // and where it is going.
+    //
+    // The board knows once it has been drawn, though. So: place it, count
+    // the labels with somebody else's line through them, hand the tracks
+    // that have any a rung on their own inward side, and solve again. Kept
+    // ONLY if fewer labels are pierced, because the gap comes out of the
+    // same depth every band is drawn in: handed out as a blanket rule this
+    // dropped the whole board into the packed fallback with six events
+    // lost, which is a far worse picture than a line behind some words.
+    (function settleSides() {
+      if (!horizontal || cross.packed) return;
+      var before = piercedBy(), n0 = pierceTotal(before);
+      var ask = Object.keys(before).filter(function (k) { return !inwardNeed[k]; });
+      if (!n0 || !ask.length) return;
+      var keep = cross;
+      ask.forEach(function (k) { inwardNeed[k] = 1; });
+      var re = solveCross(null);
+      if (re && !re.packed) {
+        cross = re; applyCross(); recomputeTrackDists(); placeBoth();
+        if (pierceTotal(piercedBy()) < n0) return;
+      }
+      ask.forEach(function (k) { inwardNeed[k] = 0; });
+      cross = keep; applyCross(); recomputeTrackDists(); placeBoth();
+    })();
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0, adrift = 0;
     visible.forEach(function (e) {
@@ -3329,6 +3410,7 @@
       if (ti > bestTier + 1) break; // two smaller steps without improvement — stop
     }
     if (bestTier !== ti) attempt(tiers[bestTier]);
+
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
     buildTrunks();
 

@@ -1,11 +1,11 @@
-// ONE EVENT, DRAWN ONCE — and the lines that share it laid out together.
+// ONE EVENT, DRAWN ONCE, and the lines that share it laid out together.
 //
 // Two calendars can describe the same thing. Bart's "L6 School Day" and
 // Lisa's "L2 School Day" both rename to "School Day", run the same hours,
-// and are the same school day; they arrived as two events and were drawn as
-// two sidings with two captions, on lines that could be at opposite ends of
-// the board. These check that they arrive as one, and that sharing an event
-// is what decides which lines end up next to each other.
+// and are the same school day; they arrived as two events and were drawn
+// twice, with two captions, on lines that could be at opposite ends of the
+// board. These check that they arrive as one, and that sharing an event is
+// what decides which lines end up next to each other.
 
 module.exports = function (test, h) {
   const { runTransform, icsWithEvents, okText, baseInput, eventItems, assert, assertEqual } = h;
@@ -52,11 +52,17 @@ module.exports = function (test, h) {
       'two o\'clock and four o\'clock are not the same lesson');
   });
 
-  // Long enough to be a siding, which is now the only thing that makes one:
-  // the config cannot declare it any more.
+  // Six and a half hours, which is the length that makes a block a long one.
+  // Nothing declares that: the config cannot ask for it and transform.js
+  // does not label it, so the only way a long block could be treated
+  // differently here is by accident.
   const LONG = [['20260907T083000Z', '20260907T150000Z'], ['20260907T083000Z', '20260907T150000Z']];
 
-  test('the same siding on two calendars keeps a kink on each line but is one siding', async () => {
+  test('the same long event on two calendars is one event with a co-owner', async () => {
+    // Deduping has to work the same for a school day as for a swim class.
+    // It did not: a long block was split off into a payload of its own
+    // BEFORE the two copies could be recognised as one thing, so both
+    // children were drawn separately and the school was captioned twice.
     const r = await runTransform(twoFeeds('School Day', 'School Day', LONG[0], LONG[1]), NOW)
       .run(baseInput(NOW, cfgWith({
         tracks: [{ name: 'Ada' }, { name: 'Bo' }],
@@ -65,11 +71,11 @@ module.exports = function (test, h) {
           { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, track: 'Bo' }] },
         ],
       })));
-    const st = (r.metro.sidings || []).filter((s) => s.title === 'School Day');
-    assertEqual(st.length, 2, 'both children really are at school, so both lines kink');
-    assert(st[0].group && st[0].group === st[1].group,
-      'but it is one siding: the two entries must share a group, so the caption is drawn once');
-    assert(st[0].owner !== st[1].owner, 'the two kinks belong to different lines');
+    const st = eventItems(r.metro).filter((s) => s.title === 'School Day');
+    assertEqual(st.length, 1, 'one school day, not one per child');
+    assertEqual(st[0].co_owners.length, 1, 'both children really are at school, so both lines are on it');
+    assert(st[0].co_owners[0] !== st[0].owner, 'the two of them are different lines');
+    assertEqual([st[0].start_min, st[0].end_min], [8 * 60 + 30, 15 * 60], 'and it keeps the hours it ran');
   });
 
   test('lines that share an event are laid out next to each other', async () => {

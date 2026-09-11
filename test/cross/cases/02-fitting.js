@@ -53,32 +53,32 @@ module.exports = function (test, h) {
   test('when bands cannot fit at their tightest, the board packs', () => {
     // Better a correct packed map than a beautiful one with a track
     // hanging off the bottom edge.
-    const out = solve(board(['a:2|siding', 'b:2|siding', 'c:2'], ['d:2|siding', 'e:2'], { depth: 401 }));
-    assert(out.packed, 'five lines with sidings on an 800x480 panel should have packed');
+    const out = solve(board(['a:2|long', 'b:2|long', 'c:2'], ['d:2|long', 'e:2'], { depth: 401 }));
+    assert(out.packed, 'five lines each wanting the gap beside them, on an 800x480 panel, should have packed');
     assert(out.fits, 'the packed board does not fit either: needA ' + Math.round(out.needA)
       + ' + needB ' + Math.round(out.needB) + ' against ' + Math.round(out.room));
   });
 
   test('asked for more than the canvas holds, it says so rather than pretending', () => {
     // Upstream, fitLines decides how many lines the board carries and drops
-    // the quietest until each survivor has room for its line, its siding
+    // the quietest until each survivor has room for its line, its inward
     // and one lane. The solver is not given that power, so all it can do
     // about an impossible board is report it: a caller that ignored `fits`
     // would draw a track hanging off the edge.
-    const out = solve(board(['a:2|siding', 'b:2|siding', 'c:2'], ['d:2|siding', 'e:2'], { depth: 200 }));
-    assert(!out.fits, 'five lines with sidings on a 200px canvas claimed to fit');
+    const out = solve(board(['a:2|long', 'b:2|long', 'c:2'], ['d:2|long', 'e:2'], { depth: 200 }));
+    assert(!out.fits, 'five lines each wanting the gap beside them, on a 200px canvas, claimed to fit');
     assert(out.needA + out.needB > out.room, 'fits is false but the numbers say otherwise');
   });
 
   test('a packed board pools its rungs instead of owning them', () => {
-    const out = solve(board(['a:2|siding', 'b:2|siding', 'c:2'], ['d:2|siding', 'e:2'], { depth: 200 }));
+    const out = solve(board(['a:2|long', 'b:2|long', 'c:2'], ['d:2|long', 'e:2'], { depth: 200 }));
     assert(out.packed, 'expected a packed board');
     for (const side of ['A', 'B'])
       for (const l of out.lanes[side]) assertEqual(l.owner, null, 'a packed rung claims an owner');
   });
 
   test('packing gives the next rung to the side that wants it more', () => {
-    const out = solve(board(['a:6|siding', 'b:6|siding'], ['c:1|siding'], { depth: 210 }));
+    const out = solve(board(['a:6|long', 'b:6|long'], ['c:1|long'], { depth: 210 }));
     assert(out.packed, 'expected a packed board');
     assert(out.lanes.A.length >= out.lanes.B.length, 'the side wanting 12 rungs got '
       + out.lanes.A.length + ' and the side wanting 1 got ' + out.lanes.B.length);
@@ -86,7 +86,7 @@ module.exports = function (test, h) {
 
   test('a board that fits says so, and stays inside the canvas', () => {
     for (const depth of [200, 300, 500, 900, 1400]) {
-      const out = solve(board(['a:2', 'b:1|siding'], ['c:3'], { depth: depth }));
+      const out = solve(board(['a:2', 'b:1|long'], ['c:3'], { depth: depth }));
       if (!out.fits) continue;
       assert(out.needA + out.needB <= out.room + 0.001, 'at depth ' + depth
         + ' it claims to fit but needs ' + Math.round(out.needA + out.needB) + ' of ' + Math.round(out.room));

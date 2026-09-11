@@ -16,11 +16,11 @@ module.exports = function (test, h) {
   const { solve, board, laneCount, assert } = h;
 
   // The board that was reported: an X quadrant, five lines, three of them
-  // carrying a siding. Constants read off a real render of it.
-  const QUAD = { S: 1, depth: 643, maxLabelThick: 42.19, sidingCapH: 30, nameH: 22,
+  // carrying a long event. Constants read off a real render of it.
+  const QUAD = { S: 1, depth: 643, maxLabelThick: 42.19, nameH: 22,
     minDiag: 16.4, bandLo: 28, laneBasePacked: 14 + Math.min(24, 643 * 0.025) };
   function quad(over) {
-    return board(['hom:1|siding', 'mag:1'], ['mar:1', 'bar:1|siding', 'lis:3|siding'],
+    return board(['hom:1|long', 'mag:1'], ['mar:1', 'bar:1|long', 'lis:3|long'],
       Object.assign({}, QUAD, over || {}));
   }
 

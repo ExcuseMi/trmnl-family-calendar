@@ -30,7 +30,7 @@ module.exports = function (test, h) {
     const n = 1 + Math.floor(r() * 7);
     const A = [], B = [];
     for (let i = 0; i < n; i++) {
-      const spec = 't' + i + ':' + Math.floor(r() * 5) + (r() < 0.3 ? '|siding' : '');
+      const spec = 't' + i + ':' + Math.floor(r() * 5) + (r() < 0.3 ? '|long' : '');
       (r() < 0.5 ? A : B).push(spec);
     }
     return board(A, B, { S: S, depth: depth, maxLabelThick: Math.round((20 + r() * 40) * S) });
@@ -72,15 +72,19 @@ module.exports = function (test, h) {
     }
   });
 
-  test('a rung always sits outside the line that owns it, on any board', () => {
+  test('a rung always sits where it says it does, on any board', () => {
+    // Outward past its own line, or inward between that line and whatever
+    // is inside it, and never one while claiming the other.
     for (const seed of SEEDS) {
       const b = randomBoard(seed);
       const out = solve(b);
       for (const side of ['A', 'B']) {
         for (const l of out.lanes[side]) {
           if (!l.owner) continue;
-          assert(l.dist > out.dist[l.owner], 'seed ' + seed + ': rung for ' + l.owner
-            + ' at ' + Math.round(l.dist) + ' inside its line at ' + Math.round(out.dist[l.owner]));
+          const inward = l.side === -1;
+          assert(inward ? l.dist < out.dist[l.owner] : l.dist > out.dist[l.owner],
+            'seed ' + seed + ': rung for ' + l.owner + ' at ' + Math.round(l.dist)
+            + ' says side ' + l.side + ' and its line is at ' + Math.round(out.dist[l.owner]));
         }
       }
     }

@@ -114,10 +114,10 @@ module.exports = function (test, h) {
     assert(got.family4.shared, 'Family of 4 should draw one event across several tracks');
     assert(got.family4.hides, 'Family of 4 should hide the school feed\'s noise');
     assert(got.family4.keepEmpty, 'Family of 4 should keep the quiet line on the board');
-    // Work vs Personal used to be "the one with a siding in it". A siding is
-    // no longer something a config can ask for -- the layout reads it off
-    // the clock -- so what this preset teaches is the GLOBAL rule, applied
-    // to every calendar rather than to one feed.
+    // Work vs Personal used to be "the one with a siding in it". How a long
+    // block is drawn is no longer something a config can ask for -- the
+    // layout reads it off the clock -- so what this preset teaches is the
+    // GLOBAL rule, applied to every calendar rather than to one feed.
     assert(got.worksplit.global, 'Work vs Personal should show a rule applied to every calendar');
     assert(!got.family4.global && !got.solo.global, 'and it should be the only one that does');
     assert(got.solo.strips, 'Solo Freelancer should route on a title prefix and then strip it');

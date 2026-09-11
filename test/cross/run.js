@@ -50,7 +50,7 @@ function consts(over) {
   const k = {
     trackStep: 20 * S, lineGap: 6 * S, laneGap: 12 * S,
     minDiag: Math.max(10 * S, 6 * 2.4 * S + 2 * S),
-    nodeR: 6 * S, sidingRaise: 32 * S, sidingGap: 4 * S, sidingCapH: 30 * S,
+    nodeR: 6 * S,
     maxLabelThick: maxLabelThick,
     laneStep: maxLabelThick + 6 * S + 12 * S,
     laneBasePacked: 14 * S + Math.min(24 * S, depth * 0.025),
@@ -61,7 +61,14 @@ function consts(over) {
   return k;
 }
 
-// A board: `spec` is a list like ['a:2', 'b:1|siding'] per side.
+// A board: `spec` is a list like ['a:2', 'b:1|long'] per side. The flag says
+// what the track carries beyond a count of lanes: `long` is a long event
+// drawn ON the line, whose name has nowhere to go but the gap beside it, and
+// `needin` is a track the DRAWING found to have somebody else's trunk
+// through its labels with no rung outward that escapes (shared.liquid's
+// settleSides measures that and feeds it back in). Both ask the solver for a
+// rung on the inward side; neither is free, and which of them a board can
+// afford is what these cases are about.
 function board(aSpec, bSpec, over) {
   const sides = { A: [], B: [] };
   const demand = {};
@@ -69,7 +76,7 @@ function board(aSpec, bSpec, over) {
     for (const s of spec) {
       const [key, rest] = s.split(':');
       const [lanes, flag] = (rest || '1').split('|');
-      sides[side].push({ key: key, sidings: flag === 'siding' ? 1 : 0 });
+      sides[side].push({ key: key, long: flag === 'long' ? 1 : 0, needIn: flag === 'needin' ? 1 : 0 });
       demand[key] = Number(lanes);
     }
   }

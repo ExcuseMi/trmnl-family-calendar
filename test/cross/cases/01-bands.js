@@ -13,7 +13,7 @@ module.exports = function (test, h) {
     for (const b of [
       board(['a:1', 'b:1', 'c:1'], ['d:1']),
       board(['a:3', 'b:1'], ['c:2', 'd:2']),
-      board(['a:2|siding', 'b:2'], ['c:1|siding']),
+      board(['a:2|long', 'b:2'], ['c:1|long']),
       board(['a:1'], ['b:1', 'c:1', 'd:1', 'e:1']),
     ]) {
       const out = solve(b);
@@ -30,7 +30,7 @@ module.exports = function (test, h) {
   });
 
   test('a track\'s rungs all lie inside its own band', () => {
-    const b = board(['a:3', 'b:2'], ['c:2|siding', 'd:1']);
+    const b = board(['a:3', 'b:2'], ['c:2|long', 'd:1']);
     const out = solve(b);
     if (out.packed) return;
     for (const side of ['A', 'B']) {
@@ -54,16 +54,37 @@ module.exports = function (test, h) {
     }
   });
 
-  test('a track carrying a siding is given the room its kink needs', () => {
-    // The line leaves its baseline by a full raise for the length of the
-    // siding. A first lane placed as if it had not would be drawn straight
-    // through the kink.
-    const plain = solve(board(['a:1'], []));
-    const kinked = solve(board(['a:1|siding'], []));
-    const gapPlain = plain.lanes.A[0].dist - plain.dist.a;
-    const gapKinked = kinked.lanes.A[0].dist - kinked.dist.a;
-    assert(gapKinked - gapPlain >= 30, 'a siding bought only ' + Math.round(gapKinked - gapPlain)
-      + 'px of extra room, and the kink alone is a 32px raise plus its clearance');
+  test("a long event's name gets the gap beside its own line", () => {
+    // A long event is drawn ON the line, so it has no branch running out to
+    // a lane and its name has to sit against the line itself. Outward is
+    // where that line's branches already write, so it goes inward, into the
+    // gap between this line and whatever is inside it -- and the gap has to
+    // widen to hold it, which is the whole claim. It used to be the room a
+    // 32px kink needed, back when a long block moved the line instead.
+    // On a board with lines either side of it, so the widening is the
+    // thing being measured. Alone on a roomy canvas the line does not have
+    // to move at all: the gap beside it was already a caption deep, and the
+    // rung simply goes there.
+    const plain = solve(board(['a:1', 'b:1'], ['c:1']));
+    const long = solve(board(['a:1|long', 'b:1'], ['c:1']));
+    const inward = long.lanes.A.filter((l) => l.side === -1 && l.owner === 'a');
+    assert(inward.length === 1, 'a long event got ' + inward.length + ' rungs inward, not one');
+    assert(inward[0].dist < long.dist.a, 'the rung is meant to be between the line and the spine');
+    assert(long.dist.a - plain.dist.a >= 30, 'the line moved out only '
+      + Math.round(long.dist.a - plain.dist.a) + 'px, which is not a caption');
+  });
+
+  test('a track the drawing found pierced is given the same gap', () => {
+    // The other way into the inward side, and the one no arithmetic on
+    // sizes could ever reach: Marge has one lane, south of her line, and at
+    // four in the afternoon two trunks lean up across it on their way to
+    // dinner. shared.liquid draws the board, counts the labels with
+    // somebody else's line through them, and asks again with this set.
+    const plain = solve(board(['a:2'], []));
+    const asked = solve(board(['a:2|needin'], []));
+    const inward = asked.lanes.A.filter((l) => l.side === -1 && l.owner === 'a');
+    assert(inward.length >= 1, 'a track that asked for its inward side got no rung there');
+    assert(asked.dist.a >= plain.dist.a, 'the gap it writes in has to be paid for');
   });
 
   test('the innermost line on each side sits half a pitch off the spine', () => {

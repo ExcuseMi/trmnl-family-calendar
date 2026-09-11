@@ -53,9 +53,9 @@ module.exports = function (test, h) {
 
   test('an old config\'s "siding" rule imports without it, and without breaking', () => {
     // `siding` (and the `station` it shipped as) used to be a rule option
-    // and is not one any more: a long block is a siding because it is long,
-    // which the layout reads off the clock. A config saved back then is
-    // still a config -- it loads, the key is dropped the way any
+    // and is not one any more: a long block is a long block because it is
+    // long, which the layout reads off the clock. A config saved back then
+    // is still a config -- it loads, the key is dropped the way any
     // unrecognised key is, and the rule keeps whatever else it asked for.
     const { document } = loadEditor();
     document.getElementById('importIn').value = JSON.stringify({

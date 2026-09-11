@@ -116,7 +116,7 @@ module.exports = function (test, h) {
     let saved = 0;
     for (const spec of [[['a', 2], ['b', 3], ['c', 2]], [['a', 1], ['b', 4]],
       [['a', 3], ['b', 3], ['c', 3]], [['a', 2], ['b', 1], ['c', 5]]]) {
-      const tracks = spec.map(([key]) => ({ key: key, sidings: 0 }));
+      const tracks = spec.map(([key]) => ({ key: key, long: 0, needIn: 0 }));
       const lanes = (t) => spec.find(([key]) => key === t.key)[1];
       for (const sep of [0, 20, 60]) {
         const plain = h.buildSide(k, tracks, lanes, k.laneStep, sep, {});

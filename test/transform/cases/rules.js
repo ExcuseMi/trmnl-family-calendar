@@ -7,14 +7,23 @@ module.exports = function (test, h) {
     return { config_json: JSON.stringify(json) };
   }
 
-  test('a rule can turn a timed event into an all-day one, which this plugin then drops (no all-day lane yet)', async () => {
+  test('a rule can turn a timed event into an all-day one, which then runs the whole day', async () => {
+    // The event says 14:00 to 15:00; the rule says the training is a
+    // whole-day thing. The rule wins, and the hour it came in with is
+    // gone. There was a stretch when the plugin had nowhere to put an
+    // all-day event and quietly dropped it, so the one assertion worth
+    // making is that it is still on the board.
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Staff Training Day' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const { run } = runTransform(fetchImpl, NOW);
     const r = await run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'Training' }, allDay: true }] }],
     })));
-    assertEqual(eventItems(r.metro).length, 0);
+    const items = eventItems(r.metro);
+    assertEqual(items.map((e) => e.title), ['Staff Training Day']);
+    assertEqual(items[0].all_day, true, 'the rule promoted it');
+    assertEqual([items[0].start_min, items[0].end_min], [r.metro.day_start_min, r.metro.day_end_min],
+      'and it no longer keeps the hour it arrived with');
   });
 
   test('a rule can hide an event by title match', async () => {
@@ -277,46 +286,65 @@ module.exports = function (test, h) {
     assertEqual(r.metro.legend.map((p) => p.name), ['Nala'], 'legacy people[] should still seed the track registry (Familie has no events today, so no empty track)');
   });
 
-  test('a "siding" rule routes a timed event into metro.sidings instead of the timeline', async () => {
+  test('a long block carries its location and earns its owner a legend entry', async () => {
+    // Eleven hours at a desk. This used to need `siding: true` in the
+    // config and came back in a `sidings` array of its own; it is an
+    // ordinary event now, and nothing about it is declared anywhere. What
+    // is worth holding on to is that it is still a whole event: the
+    // location is what the caption says where, and a track whose only
+    // entry today is a block like this one still counts as active, so it
+    // gets a line and a name.
     const ev = { start: '20260907T080000Z', end: '20260907T190000Z', summary: 'Desk booking', location: 'BE-Ghent A01' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      calendars: [{ url: 'https://example.com/a.ics', name: 'Ward', rules: [{ match: { type: 'word', value: 'Desk' }, siding: true }] }],
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Ward' }],
     })));
-    assertEqual(eventItems(r.metro).length, 0, 'a siding event should not appear on the timeline as a normal branch');
-    assertEqual(r.metro.sidings.length, 1);
-    const st = r.metro.sidings[0];
-    assertEqual(st.title, 'Desk booking');
-    assertEqual(st.location, 'BE-Ghent A01');
-    assertEqual(st.start_min, 8 * 60);
-    assertEqual(st.end_min, 19 * 60);
+    const items = eventItems(r.metro);
+    assertEqual(items.length, 1, 'a long block belongs on the timeline like anything else');
+    assertEqual(items[0].title, 'Desk booking');
+    assertEqual(items[0].location, 'BE-Ghent A01');
+    assertEqual(items[0].start_min, 8 * 60);
+    assertEqual(items[0].end_min, 19 * 60);
     const wardTrack = r.metro.legend.find((p) => p.name === 'Ward');
-    assertEqual(st.owner, wardTrack.key, 'a siding-only track should still get a legend entry (it is "active")');
+    assertEqual(items[0].owner, wardTrack.key, 'a track carrying only a long block is still "active"');
   });
 
-  test('an all-day event renders as a full-day siding on its track, not a header strip entry', async () => {
+  test('an all-day event runs the whole day on its own line, not a header strip entry', async () => {
+    // It used to appear as small text under the date, which said nothing
+    // about whose day it was, and for a while after that as a full-day
+    // siding. Now it is an item like any other, spanning the visible
+    // window, with `all_day` set so the client knows not to let a span it
+    // chose itself drag the content-fit window out to match.
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Staff Training Day' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'Training' }, allDay: true }] }],
     })));
-    assertEqual(r.metro.all_day, [], 'no longer duplicated into the header strip');
-    assertEqual(r.metro.sidings.length, 1, 'renders as a full-day siding on its track instead');
-    const st = r.metro.sidings[0];
+    assertEqual(r.metro.all_day, [], 'never duplicated into the header strip');
+    assertEqual(r.metro.sidings, undefined, 'and not split into a payload of its own either');
+    const items = eventItems(r.metro);
+    assertEqual(items.length, 1, 'it is an item on the timeline');
+    const st = items[0];
     assertEqual(st.title, 'Staff Training Day');
     assertEqual(st.start_min, r.metro.day_start_min);
     assertEqual(st.end_min, r.metro.day_end_min);
     assertEqual(st.all_day, true, 'flagged so the client does not widen the content-fit window to match it');
+    const calTrack = r.metro.legend.find((p) => p.name === 'Cal');
+    assertEqual(st.owner, calTrack.key, 'on somebody\'s line, which is the whole point of drawing it there');
   });
 
-  test('a real meeting during a siding\'s span still renders normally alongside it', async () => {
-    const evStation = { start: '20260907T080000Z', end: '20260907T190000Z', summary: 'Desk booking' };
+  test('a real meeting inside a long block\'s span still renders normally alongside it', async () => {
+    // A standup at nine while somebody is at a desk from eight to seven.
+    // Both are events, they overlap, and neither swallows the other: the
+    // long one used to be filtered off the timeline, and the fear on the
+    // other side of that was that the short one would go with it.
+    const evLong = { start: '20260907T080000Z', end: '20260907T190000Z', summary: 'Desk booking' };
     const evMeeting = { start: '20260907T090000Z', end: '20260907T093000Z', summary: 'Standup' };
-    const fetchImpl = async () => okText(icsWithEvents([evStation, evMeeting]));
+    const fetchImpl = async () => okText(icsWithEvents([evLong, evMeeting]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      calendars: [{ url: 'https://example.com/a.ics', name: 'Ward', rules: [{ match: { type: 'word', value: 'Desk' }, siding: true }] }],
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Ward' }],
     })));
-    assertEqual(r.metro.sidings.length, 1);
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Standup']);
+    assertEqual(eventItems(r.metro).map((e) => e.title), ['Desk booking', 'Standup'],
+      'in start order, both on the timeline');
   });
 };

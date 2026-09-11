@@ -85,16 +85,17 @@ module.exports = function (test, h) {
     eventItems(r.metro).forEach((e) => { owners[e.title] = e.owner; });
     const bartKey = r.metro.legend.filter((t) => t.name === 'Bart').map((t) => t.key)[0];
     const lisaKey = r.metro.legend.filter((t) => t.name === 'Lisa').map((t) => t.key)[0];
-    // the class code routes the entry and is then stripped from the title —
+    // the class code routes the entry and is then stripped from the title:
     // "L6 School Day" belongs to Bart and reads as "School Day"
     // day 0 only: the payload carries the whole run the board may draw, and
     // a weekly school day recurs on every one of them
-    const schoolDays = (r.metro.sidings || [])
-      .filter((s) => s.title === 'School Day' && s.start_min < 1440)
-      .map((s) => s.owner).sort();
-    assert(schoolDays.length === 2, 'expected a School Day siding for each child, got ' + schoolDays.length);
-    assert(schoolDays.indexOf(bartKey) >= 0, 'no School Day on Bart');
-    assert(schoolDays.indexOf(lisaKey) >= 0, 'no School Day on Lisa');
+    const schoolDays = eventItems(r.metro)
+      .filter((s) => s.title === 'School Day' && s.start_min < 1440);
+    assert(schoolDays.length === 1, 'one school day, shared, not one per child: got ' + schoolDays.length);
+    const atSchool = [schoolDays[0].owner].concat(schoolDays[0].co_owners).sort();
+    assert(atSchool.length === 2, 'expected exactly the two schoolchildren on it, got ' + atSchool.join(','));
+    assert(atSchool.indexOf(bartKey) >= 0, 'no School Day on Bart');
+    assert(atSchool.indexOf(lisaKey) >= 0, 'no School Day on Lisa');
     assert(owners['Field Trip'] === bartKey, 'the L6 field trip should sit on Bart, got ' + owners['Field Trip']);
   });
 
@@ -156,19 +157,24 @@ module.exports = function (test, h) {
     assert(names.join(',') === SETS.simpsons.tracks.join(','), 'got ' + names.join(', '));
   });
 
-  test('the Planet Express delivery is one siding on three lines', async () => {
+  test('the Planet Express delivery is one long event on three lines', async () => {
     // the shape two children at one school get, with a third line in the
-    // corridor: one caption, three kinks, and the three of them adjacent
+    // corridor: one event, one caption, three lines, and the three of them
+    // adjacent. It used to arrive as three separate siding entries tied
+    // together by a shared group id, which is what made a single caption
+    // something a test had to check for; one item cannot be captioned
+    // twice, so what is left to protect is that it IS one item and that it
+    // still names all three of the crew.
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(baseInput(NOW, { use_demo_data: 'true', demo_set: 'futurama' }));
-    const run3 = (r.metro.sidings || []).filter((s) => s.title === 'Delivery Run' && s.start_min < 1440);
-    assert(run3.length === 3, 'expected the delivery on three lines, got ' + run3.length);
-    const groups = [...new Set(run3.map((s) => s.group))];
-    assert(groups.length === 1 && groups[0], 'the three kinks should share one group id, got ' + JSON.stringify(groups));
+    const runs = eventItems(r.metro).filter((s) => s.title === 'Delivery Run' && s.start_min < 1440);
+    assert(runs.length === 1, 'expected one Delivery Run, got ' + runs.length);
+    const crew = [runs[0].owner].concat(runs[0].co_owners);
+    assert(crew.length === 3, 'expected the delivery on three lines, got ' + crew.length);
     const key = {};
     r.metro.legend.forEach((t, i) => { key[t.key] = i; });
-    const at = run3.map((s) => key[s.owner]).sort((a, b) => a - b);
-    assert(at[2] - at[0] === 2, 'the three lines on one siding should end up adjacent, got positions ' + at.join(','));
+    const at = crew.map((k) => key[k]).sort((a, b) => a - b);
+    assert(at[2] - at[0] === 2, 'the three lines on one delivery should end up adjacent, got positions ' + at.join(','));
   });
 
   test('every demo board names files that exist, and only its own', async () => {
