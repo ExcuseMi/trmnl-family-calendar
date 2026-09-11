@@ -1900,8 +1900,14 @@
     // the answer is "I cannot read these, paste the .ics text". True, and
     // a wasted round trip. The tool knows before the copy button is
     // pressed, so it says so.
-    var read = Object.keys(icsOverrides).length;
-    var urlCount = state.calendars.filter(function (c) { return c.url.trim(); }).length;
+    // COUNTED OFF THE CONFIGURATION, NOT OFF EVERY FEED EVER READ.
+    //
+    // icsOverrides outlives the configuration that filled it: load an
+    // example, then paste your own single link, and seven example feeds are
+    // still in there. Counting its keys reported "the events from all 7
+    // calendars" over a prompt carrying one calendar and no events at all.
+    var read = readUrls().length;
+    var urlCount = configuredUrls().length;
     if (!urlCount) {
       setStatus("promptStatus", "Ready, and it asks for your calendar links, because there are none in here yet. "
         + "Quicker: paste them above and press Load first.", "");
@@ -1940,9 +1946,21 @@
   // server behind trmnl.bettens.dev. Empty hides the option.
   var RELAY = "https://trmnl.bettens.dev/metro-calendar/ics";
   var relayPending = null;
+  // The feeds this configuration actually has, each one once: two calendar
+  // cards may carry the same link, and counted twice it would be offered to
+  // the relay twice and reported as a total that matches nothing on the page.
+  function configuredUrls() {
+    var seen = {}, out = [];
+    state.calendars.forEach(function (c) {
+      var u = c.url.trim();
+      if (u && !seen[u]) { seen[u] = true; out.push(u); }
+    });
+    return out;
+  }
+  function feedRead(u) { return !!icsOverrides[u]; }
+  function readUrls() { return configuredUrls().filter(feedRead); }
   function unreadUrls() {
-    return state.calendars.map(function (c) { return c.url.trim(); })
-      .filter(function (u) { return u && !icsOverrides[u]; });
+    return configuredUrls().filter(function (u) { return !feedRead(u); });
   }
   function hideRelayOffer() { document.getElementById("relayOffer").hidden = true; }
   // Shows the offer and returns true when it took over; false means there
