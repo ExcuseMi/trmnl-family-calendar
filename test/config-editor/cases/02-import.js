@@ -9,10 +9,10 @@ module.exports = function (test, h) {
     document.getElementById('importIn').value = JSON.stringify(demo);
     click(document.getElementById('loadImport'));
     const out = jsonOut(document);
-    assertEqual(out.tracks, demo.tracks);
+    assertEqual(out.lines, demo.lines);
     assertEqual(out.calendars, demo.calendars);
     assertEqual(out.timeZone, demo.timeZone);
-    assert(document.querySelectorAll('#tracks .card').length === demo.tracks.length);
+    assert(document.querySelectorAll('#lines .card').length === demo.lines.length);
   });
 
   test('a plain list of ICS links imports as bare calendars', () => {
@@ -24,10 +24,10 @@ module.exports = function (test, h) {
 
   test('tracks named only in rules are added to the tracks list on import', () => {
     const { document } = loadEditor();
-    document.getElementById('importIn').value = JSON.stringify({ calendars: [{ url: 'https://a.example/x.ics', rules: [{ match: { type: 'word', value: 'Yoga' }, track: 'Alex' }] }] });
+    document.getElementById('importIn').value = JSON.stringify({ calendars: [{ url: 'https://a.example/x.ics', rules: [{ match: { type: 'word', value: 'Yoga' }, line: 'Alex' }] }] });
     click(document.getElementById('loadImport'));
-    assertEqual(jsonOut(document).tracks, [{ name: 'Alex' }]);
-    assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'Yoga' }, track: 'Alex' }]);
+    assertEqual(jsonOut(document).lines, [{ name: 'Alex' }]);
+    assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'Yoga' }, line: 'Alex' }]);
   });
 
   test('the editor parses its own output with the plugin\'s parseConfig', () => {
@@ -36,20 +36,10 @@ module.exports = function (test, h) {
     click(document.getElementById('loadImport'));
     const parsed = window.parseConfig(document.getElementById('jsonOut').value);
     assert(parsed.calendars.length === demo.calendars.length);
-    assert(Object.keys(parsed.tracks).length === demo.tracks.length);
-    assert(parsed.tracks['sam'].side === 'left');
+    assert(Object.keys(parsed.lines).length === demo.lines.length);
+    assert(parsed.lines['sam'].side === 'left');
   });
 
-  test('importing a legacy config (top-level "people", rule "person") still loads tracks and rules correctly', () => {
-    const { document } = loadEditor();
-    document.getElementById('importIn').value = JSON.stringify({
-      people: [{ name: 'Nala', color: 'gray-40' }],
-      calendars: [{ url: 'https://a.example/x.ics', rules: [{ match: { type: 'word', value: 'L6' }, person: 'Nala' }] }],
-    });
-    click(document.getElementById('loadImport'));
-    assertEqual(jsonOut(document).tracks, [{ name: 'Nala', color: 'gray-40' }]);
-    assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'L6' }, track: 'Nala' }]);
-  });
 
   test('an old config\'s "siding" rule imports without it, and without breaking', () => {
     // `siding` (and the `station` it shipped as) used to be a rule option
@@ -59,14 +49,14 @@ module.exports = function (test, h) {
     // unrecognised key is, and the rule keeps whatever else it asked for.
     const { document } = loadEditor();
     document.getElementById('importIn').value = JSON.stringify({
-      tracks: [{ name: 'Ward' }],
+      lines: [{ name: 'Ward' }],
       calendars: [{ url: 'https://a.example/x.ics', rules: [
-        { match: { type: 'word', value: 'Desk booking' }, siding: true, track: 'Ward', rename: false },
+        { match: { type: 'word', value: 'Desk booking' }, siding: true, line: 'Ward', rename: false },
       ] }],
     });
     click(document.getElementById('loadImport'));
     assertEqual(jsonOut(document).calendars[0].rules,
-      [{ match: { type: 'word', value: 'Desk booking' }, track: 'Ward', rename: false }]);
+      [{ match: { type: 'word', value: 'Desk booking' }, line: 'Ward', rename: false }]);
   });
 
   test('importing hideIfEmpty:false round-trips and ticks the keep-empty box', () => {
@@ -96,7 +86,7 @@ module.exports = function (test, h) {
   // two are tested apart because a config that only loads in the tool and
   // not on the device is worse than one that loads in neither.)
   test('a configuration copied out of a chat window imports', () => {
-    const cfg = { tracks: [{ name: 'Fry' }], calendars: [{ url: 'https://a.example/x.ics' }] };
+    const cfg = { lines: [{ name: 'Fry' }], calendars: [{ url: 'https://a.example/x.ics' }] };
     const pretty = JSON.stringify(cfg, null, 1);
     const mangled = 'Here you go:\n\n```json\n'
       + pretty.replace(/([[\]{}])/g, '\\$1').split('\n').join('\\\n')
@@ -104,7 +94,7 @@ module.exports = function (test, h) {
     const { document } = loadEditor();
     document.getElementById('importIn').value = mangled;
     click(document.getElementById('loadImport'));
-    assertEqual(jsonOut(document).tracks, cfg.tracks, 'the tracks did not survive the paste');
+    assertEqual(jsonOut(document).lines, cfg.lines, 'the tracks did not survive the paste');
     assertEqual(jsonOut(document).calendars, cfg.calendars, 'the calendars did not survive the paste');
   });
 

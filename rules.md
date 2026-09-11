@@ -49,7 +49,7 @@ Where the two disagree, this one is newer.
     first and each new hold cuts the ones already there.
 11. **A siding takes the line with it and leaves nothing behind.** There is no
     express running straight through at the baseline. A person at school is at
-    school; a second copy of them at their desk reads as the track being
+    school; a second copy of them at their desk reads as the line being
     permanently split.
 12. **Only 0, 45 and 90 degrees.** A line runs straight, and where it changes
     lane it does it in one deliberate 45 with the two knees rounded, then runs
@@ -61,8 +61,8 @@ Where the two disagree, this one is newer.
     always a straight 45 between the two arcs. Allowed half, the arcs meet and
     the move becomes a smooth S.
 15. **A line leaves a hold as soon as it is over and arrives at the next one
-    when it is needed.** What is between them is straight track, which is the
-    only thing straight track should mean.
+    when it is needed.** What is between them is straight line, which is the
+    only thing straight line should mean.
 16. **Going home is for clearance, not for tidiness.** Between two holds a
     line heads back toward its own lane so that it has room around it and its
     events have space of their own to hang captions in. It does not have to
@@ -307,6 +307,44 @@ a state a line is in, not a place it goes at a time.
     scores as occupied when the board decides which lines to keep, or the
     one line with something to say about today would be the first dropped.
 
+## 9. Holidays
+
+A public holiday is not one person's state. It has no hour and no owner:
+it is what THE DAY is, the way the date is which day it is.
+
+58. **A holiday is stated in the header, beside the date.** The three other
+    places costed all charge the map for it. A band or a marker on the hour
+    scale puts a thing with no hour on a scale of hours, which is what
+    rule 54 already refuses for an all-day event, and it prints the board's
+    own window back as the holiday's hours. A row at a line's head says
+    that line's owner is on holiday, which on Christmas Day is true of
+    everybody and so says nothing about anybody. A line of its own is the
+    worst of the three: a line costs a band of the cross axis, it gets a
+    name and a texture like a person, and on a cramped panel it can be kept
+    while a real one is dropped. The header is the one part of the board
+    already answering "what day is this", and it has the room on a row it
+    draws anyway.
+59. **It costs nothing on a day without one.** Like the service banner: no
+    holiday, no element, and the same board as before. That is the other
+    half of the reason it is in the header rather than on the map.
+60. **Inside a range it says which day of it this is.** "Spring Break" runs
+    a week and the board draws one day. Day 3 of 5 is the only thing
+    telling the Monday from the Thursday, and it is the fact a household
+    wants, because it answers when the thing ends. A one-day holiday has no
+    ordinal, and "Day 1 of 1" is a sentence about nothing.
+61. **A holiday opens nobody's ends.** Rule 55's chevrons say THIS LINE's
+    day is a slice of something longer, which is a claim about a person.
+    On a public holiday every line still starts and ends on that day.
+62. **It is named once, however many feeds carry it.** Two people in a
+    house subscribe to the same national calendar; the day did not happen
+    twice. Two names at most on the row: a day carrying three is a feed
+    listing observances, and naming the day is the header's job where
+    enumerating it is not.
+63. **It rides with the date.** Where the panel is too small for a header
+    the holiday goes with it. A board that has already stopped saying which
+    day it is has not got room to say what the day is, and a second home
+    for it would be a second thing to keep in step.
+
 ---
 
 ## Rules that are stated but not kept
@@ -327,13 +365,13 @@ Known gaps, so nobody reads this as a description of a board that exists:
   vertical: Bart and Lisa go straight up out of the school run into the
   school day. The rule says hold short instead, and nothing does.
 - **16/17** is newly written and newly implemented; the clearance it keeps is
-  a fixed fraction of a track step rather than anything measured against the
+  a fixed fraction of a line step rather than anything measured against the
   events that need the space.
 - **E10** in `issues.md`: an event during a diagonal run should be a mark on
   the run, not a branch drawn beside it. Tried once, reverted. Rule 24 makes
   it matter more: where the gate leaves no 45, the branch takes a right
   angle, and a mark on the diagonal would be the better drawing.
-- **E11** in `issues.md`: a long event should be a band along the main track
+- **E11** in `issues.md`: a long event should be a band along the main line
   rather than a siding that moves it, and should become a branch only when a
-  shared event needs the track. Rules 9 to 11 and 26 describe the siding
+  shared event needs the line. Rules 9 to 11 and 26 describe the siding
   model that is there now.

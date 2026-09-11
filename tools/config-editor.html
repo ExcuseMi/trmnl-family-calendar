@@ -161,7 +161,7 @@
   </div>
   <nav aria-label="Sections of this page">
     <a href="#station-agent">AI</a>
-    <a href="#station-tracks">Tracks</a>
+    <a href="#station-lines">Lines</a>
     <a href="#station-calendars">Calendars</a>
     <a href="#station-preview">Preview</a>
     <a href="#station-output">JSON</a>
@@ -176,7 +176,7 @@
     <p class="lede">Already have a configuration in TRMNL? Paste it here. You can also paste plain ICS links, one per line, load the demo to see how a finished setup looks, or pick a preset below if you have no links yet.</p>
     <div class="card plain">
       <label for="importIn" class="sr-only">Paste a configuration, or one ICS link per line</label>
-      <textarea id="importIn" rows="4" placeholder='{"tracks": [...], "calendars": [...]}&#10;or just&#10;https://calendar.example.com/work.ics&#10;https://calendar.example.com/family.ics'></textarea>
+      <textarea id="importIn" rows="4" placeholder='{"lines": [...], "calendars": [...]}&#10;or just&#10;https://calendar.example.com/work.ics&#10;https://calendar.example.com/family.ics'></textarea>
       <div class="toolbar">
         <button id="loadImport" class="primary" title="Ctrl-Enter (Cmd-Enter on a Mac) in the box above does the same">Load into the editor</button>
         <button id="loadDemo">Load the demo configuration</button>
@@ -196,7 +196,7 @@
 
   <section class="station" id="station-agent">
     <h2>Let an AI do it <small>optional, and it reads your calendars</small></h2>
-    <p class="lede">Generates a prompt describing this plugin, its configuration format and what makes a board read well, together with your ICS links and whatever the tool has already read from them. Paste it into an AI assistant and it returns a configuration you can paste back into <em>Start</em> above. Start here if you have no configuration yet: there is no point filling in every track and rule by hand and only then being offered a machine to write them.</p>
+    <p class="lede">Generates a prompt describing this plugin, its configuration format and what makes a board read well, together with your ICS links and whatever the tool has already read from them. Paste it into an AI assistant and it returns a configuration you can paste back into <em>Start</em> above. Start here if you have no configuration yet: there is no point filling in every line and rule by hand and only then being offered a machine to write them.</p>
     <div class="card plain">
       <div class="toolbar">
         <button id="makePrompt" class="primary">Generate prompt</button>
@@ -209,16 +209,16 @@
     </div>
   </section>
 
-  <section class="station" id="station-tracks">
-    <h2>Tracks <small>one line on the map per track</small></h2>
-    <p class="lede">Every track is a line. Which side of the map it runs on, and what colour and dash pattern it gets, are all chosen for you: sides are balanced once the map is drawn, busiest track first and evenly split. The first track is also who gets any event no rule claims.</p>
-    <div id="tracks"></div>
-    <div class="toolbar"><button id="addTrack">+ Add a track</button></div>
+  <section class="station" id="station-lines">
+    <h2>Lines <small>one line on the map per person</small></h2>
+    <p class="lede">One line per person. Which side of the map a line runs on, and what colour and dash pattern it gets, are all chosen for you: sides are balanced once the map is drawn, busiest line first and evenly split. The first line is also who gets any event no rule claims.</p>
+    <div id="lines"></div>
+    <div class="toolbar"><button id="addLine">+ Add a line</button></div>
   </section>
 
   <section class="station" id="station-calendars">
     <h2>Calendars <small>the ICS feeds the events come from</small></h2>
-    <p class="lede">Each calendar needs its ICS link. Pick whose line its events go on, ctrl-clicking (cmd-clicking on a Mac) for more than one; open <em>Rules</em> when one calendar mixes several tracks or you want to rename or hide things.</p>
+    <p class="lede">Each calendar needs its ICS link. Pick whose line its events go on, ctrl-clicking (cmd-clicking on a Mac) for more than one; open <em>Rules</em> when one calendar mixes several lines or you want to rename or hide things.</p>
     <div id="calendars"></div>
     <div class="toolbar"><button id="addCalendar">+ Add a calendar</button></div>
   </section>
@@ -287,10 +287,10 @@
     <details class="adv" style="margin-top:14px;">
       <summary>Every option, if you would rather write it by hand</summary>
       <div class="adv-body">
-        <p class="hint">The same shape this page produces. <code>tracks</code> and <code>rules</code> are both optional: a bare list of <code>calendars</code> already draws one line per calendar.</p>
+        <p class="hint">The same shape this page produces. <code>lines</code> and <code>rules</code> are both optional: a bare list of <code>calendars</code> already draws one line per calendar.</p>
 <pre class="hint" style="overflow-x:auto"><code id="schemaRef">{
   "timeFormat": "12h" | "24h" | "auto",
-  "tracks": [
+  "lines": [
     { "name": "Sam",
       "hideIfEmpty": false }         // keep the line on a day it has nothing
   ],
@@ -304,8 +304,8 @@
       "rules": [
         { "match": { "type": "word", "value": "L6",
                      "field": "title" },  // or location / description / categories / any
-          "track": "Bart",           // a name, or a list to share the event
-          "rename": false,           // don't rewrite the matched text to the track name
+          "line": "Bart",            // a name, or a list to share the event
+          "rename": false,           // don't rewrite the matched text to the line name
           "rewrite": "", "rewriteFull": false,
           "hide": false,
           "allDay": false }
@@ -316,11 +316,10 @@
           <li><strong>Match types:</strong> <code>any</code>, <code>all</code>, <code>exact</code>, <code>word</code>, <code>contains</code>, <code>regex</code>, <code>status</code>, <code>weekday</code>, <code>duration</code> (<code>min</code>/<code>max</code> minutes), <code>time</code> (<code>from</code>/<code>to</code>, "HH:MM", from inclusive and to exclusive), and <code>and</code>/<code>or</code>/<code>not</code> (with <code>matchers</code>).</li>
           <li><strong>What a matcher reads:</strong> a text matcher takes an optional <code>field</code>: <code>title</code>, <code>location</code>, <code>description</code>, <code>categories</code> or <code>any</code>. Left out, it reads the title plus the description, which is what a matcher has always done. Naming <code>description</code> or <code>any</code> switches <code>includeDescription</code> on by itself, so a rule that reads the notes does not also have to remember the switch.</li>
           <li><strong>Order:</strong> rules are checked in order and the last match wins for each effect. A calendar's own rules beat the top-level ones.</li>
-          <li><strong>Who claims an unrouted event:</strong> the calendar's own name, then the first entry in <code>tracks</code>, then the feed's <code>X-WR-CALNAME</code>. Whichever wins becomes a <em>line</em>: name a calendar after the track whose line it is, or leave it unnamed when its rules route everything, or you get an extra line named after the calendar.</li>
-          <li><strong>Sides, colours and dash patterns</strong> are chosen for you: sides are balanced by event count once every calendar has loaded, busiest first, and each side's lines then take solid, dashed, dotted, dash-dot in order. <code>side</code> and <code>color</code> on a track are still read, so a configuration that already sets them keeps working, but there is no longer any reason to write one.</li>
+          <li><strong>Who claims an unrouted event:</strong> the calendar's own name, then the first entry in <code>lines</code>, then the feed's <code>X-WR-CALNAME</code>. Whichever wins becomes a <em>line</em>: name a calendar after the line it belongs to, or leave it unnamed when its rules route everything, or you get an extra line named after the calendar.</li>
+          <li><strong>Sides, colours and dash patterns</strong> are chosen for you: sides are balanced by event count once every calendar has loaded, busiest first, and each side's lines then take solid, dashed, dotted, dash-dot in order. <code>side</code> and <code>color</code> on a line are still read, so a configuration that already sets them keeps working, but there is no longer any reason to write one.</li>
           <li><strong>Account settings, not config:</strong> <code>timeZone</code> and <code>locale</code> are also accepted at the top level and override your TRMNL account's zone and language. Set them only if the account's own values are wrong; the AI prompt above deliberately leaves them out, because an assistant guessing a zone puts the whole day on the board at the wrong hour.</li>
           <li><strong>Recurring events</strong> show if they use <code>RRULE:FREQ=WEEKLY</code> (optionally with BYDAY/UNTIL) or start today.</li>
-          <li><strong>Legacy:</strong> <code>people</code>/<code>person</code> are still accepted in place of <code>tracks</code>/<code>track</code>.</li>
         </ul>
       </div>
     </details>
@@ -390,18 +389,18 @@
   }
 
   // ------------------------------------------------------------ model
-  var state = { tracks: [], calendars: [], rules: [], timeZone: "", locale: "" };
-  function newTrack() { return { _id: uid(), name: "", color: "", side: "" }; }
+  var state = { lines: [], calendars: [], rules: [], timeZone: "", locale: "" };
+  function newLine() { return { _id: uid(), name: "", color: "", side: "" }; }
   function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false, keepEmpty: false }; }
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
   function newCondition() { return { _id: uid(), type: "word", field: "", value: "", status: "confirmed", weekdays: [], min: "", max: "", from: "", to: "", negate: false }; }
-  function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], tracks: [], rename: true, rewrite: "", rewriteFull: false, hide: false }; }
+  function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], lines: [], rename: true, rewrite: "", rewriteFull: false, hide: false }; }
 
   // ------------------------------------------------------------ undo
   //
   // One button, at the top of the page where every section can reach it, for
   // the four things that throw work away: a preset or an import replacing the
-  // editor, and a track, a calendar or a rule being removed. The whole editor
+  // editor, and a line, a calendar or a rule being removed. The whole editor
   // is one plain object, so a snapshot is a deep copy of it and undoing is
   // putting the copy back; the only thing that must not be copied is the
   // `_status` node the preview hangs on a calendar, which is a DOM element.
@@ -425,7 +424,7 @@
   function undo() {
     var top = undoStack.pop();
     if (!top) { paintUndo(); return; }
-    state.tracks = top.state.tracks;
+    state.lines = top.state.lines;
     state.calendars = top.state.calendars;
     state.rules = top.state.rules;
     state.timeZone = top.state.timeZone;
@@ -450,10 +449,10 @@
   var TEXT_TYPES = ["word", "contains", "exact", "regex"];
   var WEEKDAYS = [["MO", "Mon"], ["TU", "Tue"], ["WE", "Wed"], ["TH", "Thu"], ["FR", "Fri"], ["SA", "Sat"], ["SU", "Sun"]];
 
-  // Which side, colour, dash pattern and width the plugin will give each track. The real
+  // Which side, colour, dash pattern and width the plugin will give each line. The real
   // plugin only decides sides once it has fetched every calendar and counted today's events
   // (busiest side balanced against lightest), which this static list can't know yet, so
-  // any track without an explicit side is shown as a rough guess (first track left, the rest
+  // any line without an explicit side is shown as a rough guess (first line left, the rest
   // right); use "Draw the map" below to see the real, event-count-balanced result.
   // t.side / t.color are only ever set by an imported config now: the pickers are gone, but
   // a config that already carries them keeps them, and the swatch shows what it asked for.
@@ -461,7 +460,7 @@
     var buckets = { left: [], right: [] };
     var out = {};
     var firstName = null;
-    state.tracks.forEach(function (t) {
+    state.lines.forEach(function (t) {
       var name = t.name.trim();
       if (!name) return;
       if (firstName === null) firstName = name;
@@ -510,20 +509,20 @@
     var conds = r.conditions.map(conditionValue).filter(Boolean);
     if (!conds.length) return null;
     var out = { match: conds.length === 1 ? conds[0] : { type: r.combinator, matchers: conds } };
-    if (r.tracks.length) {
-      out.track = r.tracks.length === 1 ? r.tracks[0] : r.tracks.slice();
+    if (r.lines.length) {
+      out.line = r.lines.length === 1 ? r.lines[0] : r.lines.slice();
       if (!r.rename) out.rename = false;
     }
     if (r.rewrite.trim()) { out.rewrite = r.rewrite.trim(); if (r.rewriteFull) out.rewriteFull = true; }
     if (r.hide) out.hide = true;
-    if (!out.track && !out.rewrite && !out.hide) return null;
+    if (!out.line && !out.rewrite && !out.hide) return null;
     return out;
   }
   function buildConfig() {
     var cfg = {};
     if (state.timeZone.trim()) cfg.timeZone = state.timeZone.trim();
     if (state.locale.trim()) cfg.locale = state.locale.trim();
-    cfg.tracks = state.tracks.filter(function (t) { return t.name.trim(); }).map(function (t) {
+    cfg.lines = state.lines.filter(function (t) { return t.name.trim(); }).map(function (t) {
       var o = { name: t.name.trim() };
       if (t.color) o.color = t.color;
       if (t.side === "left" || t.side === "right") o.side = t.side;
@@ -535,7 +534,7 @@
       var o = { url: c.url.trim() };
       if (c.name.trim()) o.name = c.name.trim();
       var rules = [];
-      if (c.assign.length) rules.push({ match: { type: "any" }, track: c.assign.length === 1 ? c.assign[0] : c.assign.slice() });
+      if (c.assign.length) rules.push({ match: { type: "any" }, line: c.assign.length === 1 ? c.assign[0] : c.assign.slice() });
       rules = rules.concat(c.rules.map(ruleValue).filter(Boolean));
       if (rules.length) o.rules = rules;
       var headers = {}, has = false;
@@ -612,11 +611,9 @@
     var m = rv.match;
     if (m && (m.type === "and" || m.type === "or") && Array.isArray(m.matchers)) { r.combinator = m.type; r.conditions = m.matchers.map(conditionFrom); }
     else r.conditions = [conditionFrom(m)];
-    // `track` is the current field name; `person` is accepted too, for
-    // configs written before tracks were called tracks.
-    var rawTracks = rv.track !== undefined ? rv.track : rv.person;
-    var tracks = Array.isArray(rawTracks) ? rawTracks : typeof rawTracks === "string" ? [rawTracks] : [];
-    r.tracks = tracks.filter(function (n) { return typeof n === "string" && n.trim(); }).map(function (n) { return n.trim(); });
+    var rawLines = rv.line;
+    var lines = Array.isArray(rawLines) ? rawLines : typeof rawLines === "string" ? [rawLines] : [];
+    r.lines = lines.filter(function (n) { return typeof n === "string" && n.trim(); }).map(function (n) { return n.trim(); });
     r.rename = rv.rename !== false;
     r.rewrite = typeof rv.rewrite === "string" ? rv.rewrite : "";
     r.rewriteFull = rv.rewriteFull === true;
@@ -628,31 +625,29 @@
     return r;
   }
   function loadConfig(data) {
-    // `tracks` is the current top-level field name; `people` is accepted
-    // too, for configs written before tracks were called tracks.
-    var rawTracks = Array.isArray(data.tracks) ? data.tracks : Array.isArray(data.people) ? data.people : [];
-    state.tracks = rawTracks.filter(function (t) { return t && typeof t.name === "string" && t.name.trim(); }).map(function (t) {
-      var o = newTrack();
+    var rawLines = Array.isArray(data.lines) ? data.lines : [];
+    state.lines = rawLines.filter(function (t) { return t && typeof t.name === "string" && t.name.trim(); }).map(function (t) {
+      var o = newLine();
       o.name = t.name.trim();
       o.color = typeof t.color === "string" && COLORS.indexOf(t.color.toLowerCase()) !== -1 ? t.color.toLowerCase() : "";
       var side = typeof t.side === "string" ? t.side.toLowerCase() : "";
       o.side = side === "left" || side === "work" ? "left" : side === "right" || side === "family" ? "right" : "";
       return o;
     });
-    var knownNames = state.tracks.map(function (t) { return t.name; });
-    function ensureTrack(name) { if (knownNames.indexOf(name) === -1) { var t = newTrack(); t.name = name; state.tracks.push(t); knownNames.push(name); } }
+    var knownNames = state.lines.map(function (t) { return t.name; });
+    function ensureTrack(name) { if (knownNames.indexOf(name) === -1) { var t = newLine(); t.name = name; state.lines.push(t); knownNames.push(name); } }
     state.calendars = (Array.isArray(data.calendars) ? data.calendars : []).map(function (c) { return typeof c === "string" ? { url: c } : c; })
       .filter(function (c) { return c && typeof c.url === "string" && c.url.trim(); }).map(function (c) {
         var o = newCalendar();
         o.url = c.url.trim();
         o.name = typeof c.name === "string" ? c.name.trim() : "";
         var rules = (Array.isArray(c.rules) ? c.rules : []).filter(function (r) { return r && r.match; }).map(ruleFrom);
-        // a leading "any event → track" rule is the calendar's owner; keep it as the simple picker
-        if (rules.length && rules[0].conditions.length === 1 && rules[0].conditions[0].type === "any" && rules[0].tracks.length && !rules[0].rewrite && !rules[0].hide) {
-          o.assign = rules.shift().tracks;
+        // a leading "any event → line" rule is the calendar's owner; keep it as the simple picker
+        if (rules.length && rules[0].conditions.length === 1 && rules[0].conditions[0].type === "any" && rules[0].lines.length && !rules[0].rewrite && !rules[0].hide) {
+          o.assign = rules.shift().lines;
         }
         o.rules = rules;
-        rules.forEach(function (r) { r.tracks.forEach(ensureTrack); });
+        rules.forEach(function (r) { r.lines.forEach(ensureTrack); });
         o.assign.forEach(ensureTrack);
         if (c.headers && typeof c.headers === "object") Object.keys(c.headers).forEach(function (k) { if (typeof c.headers[k] === "string") { var h = newHeader(); h.key = k; h.value = c.headers[k]; o.headers.push(h); } });
         o.includeDescription = c.includeDescription === true;
@@ -660,7 +655,7 @@
         return o;
       });
     state.rules = (Array.isArray(data.rules) ? data.rules : []).filter(function (r) { return r && r.match; }).map(ruleFrom);
-    state.rules.forEach(function (r) { r.tracks.forEach(ensureTrack); });
+    state.rules.forEach(function (r) { r.lines.forEach(ensureTrack); });
     state.timeZone = typeof data.timeZone === "string" ? data.timeZone : "";
     state.locale = typeof data.locale === "string" ? data.locale : "";
     if (!state.calendars.length) state.calendars.push(newCalendar());
@@ -754,40 +749,40 @@
     return { data: { calendars: links }, mode: "links", skipped: skipped };
   }
 
-  // ------------------------------------------------------------ tracks UI
-  function trackNames() { return state.tracks.map(function (t) { return t.name.trim(); }).filter(Boolean); }
+  // ------------------------------------------------------------ lines UI
+  function lineNames() { return state.lines.map(function (t) { return t.name.trim(); }).filter(Boolean); }
   // A multi-select is the one control here that does not explain itself: an
   // unselected list looks like "all of them", and picking two needs a key
-  // nobody is born knowing. So it is sized to show every track without
+  // nobody is born knowing. So it is sized to show every line without
   // scrolling, it carries a name of its own, and the instruction is on the
   // page next to it rather than in a tooltip.
-  function trackPicker(values, onChange, label) {
-    var names = trackNames();
-    var sel = el("select", { multiple: "multiple", title: "Ctrl-click (Cmd-click on a Mac) to pick more than one", "aria-label": label || "Which track's line" });
-    if (!names.length) { sel.appendChild(el("option", { value: "", disabled: "disabled", text: "add a track first" })); sel.disabled = true; return sel; }
+  function linePicker(values, onChange, label) {
+    var names = lineNames();
+    var sel = el("select", { multiple: "multiple", title: "Ctrl-click (Cmd-click on a Mac) to pick more than one", "aria-label": label || "Which line's line" });
+    if (!names.length) { sel.appendChild(el("option", { value: "", disabled: "disabled", text: "add a line first" })); sel.disabled = true; return sel; }
     sel.setAttribute("size", String(Math.min(Math.max(names.length, 2), 6)));
     names.forEach(function (n) { var o = el("option", { value: n, text: n }); if (values.indexOf(n) !== -1) o.selected = true; sel.appendChild(o); });
     sel.addEventListener("change", function () { onChange(Array.from(sel.selectedOptions).map(function (o) { return o.value; }).filter(Boolean)); });
     return sel;
   }
 
-  function renderTracks() {
-    var wrap = document.getElementById("tracks");
+  function renderLines() {
+    var wrap = document.getElementById("lines");
     wrap.innerHTML = "";
     var looks = lineLook();
-    state.tracks.forEach(function (p, idx) {
+    state.lines.forEach(function (p, idx) {
       var look = looks[p._id] || { style: "solid", width: 3, color: p.color, side: "right" };
       var sw = swatchSvg(look.color, look.style, look.width);
-      var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "You (e.g. Sam)" : "Name", value: p.name, "aria-label": "Name of track " + (idx + 1) });
+      var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "You (e.g. Sam)" : "Name", value: p.name, "aria-label": "Name of line " + (idx + 1) });
       name.addEventListener("input", function () { p.name = name.value; renderJson(); renderCalendars(); renderGlobalRules(); });
-      name.addEventListener("change", function () { renderTracks(); });
+      name.addEventListener("change", function () { renderLines(); });
       var up = el("button", { class: "ghost small", title: "Move up", text: "↑" }); up.disabled = idx === 0;
-      up.addEventListener("click", function () { state.tracks.splice(idx - 1, 0, state.tracks.splice(idx, 1)[0]); renderAll(); });
-      var down = el("button", { class: "ghost small", title: "Move down", text: "↓" }); down.disabled = idx === state.tracks.length - 1;
-      down.addEventListener("click", function () { state.tracks.splice(idx + 1, 0, state.tracks.splice(idx, 1)[0]); renderAll(); });
-      var rm = el("button", { class: "ghost small", text: "Remove", title: "Remove this track" });
-      rm.addEventListener("click", function () { snapshot("remove " + (p.name.trim() || "a track")); state.tracks.splice(idx, 1); renderAll(); });
-      wrap.appendChild(el("div", { class: "card track" }, [
+      up.addEventListener("click", function () { state.lines.splice(idx - 1, 0, state.lines.splice(idx, 1)[0]); renderAll(); });
+      var down = el("button", { class: "ghost small", title: "Move down", text: "↓" }); down.disabled = idx === state.lines.length - 1;
+      down.addEventListener("click", function () { state.lines.splice(idx + 1, 0, state.lines.splice(idx, 1)[0]); renderAll(); });
+      var rm = el("button", { class: "ghost small", text: "Remove", title: "Remove this line" });
+      rm.addEventListener("click", function () { snapshot("remove " + (p.name.trim() || "a line")); state.lines.splice(idx, 1); renderAll(); });
+      wrap.appendChild(el("div", { class: "card line" }, [
         el("div", { class: "card-head" }, [sw, name, up, down, rm]),
         // Side and colour used to be pickers here. Both are decided by the plugin now
         // (sides balanced by today's event count, colour and dash pattern by line order),
@@ -796,11 +791,11 @@
         // whatever loadConfig read, and the swatch above shows it, there is just no
         // control to set one from scratch.
         //
-        // That used to be spelled out under every track. It is a fact about
-        // the plugin, not about this track, and repeating it once per track
+        // That used to be spelled out under every line. It is a fact about
+        // the plugin, not about this line, and repeating it once per line
         // told the reader nothing they could act on: the swatch already shows
-        // what the track got, and the section lede says who chose it. The only
-        // thing that IS particular to a track is being first, which is the one
+        // what the line got, and the section lede says who chose it. The only
+        // thing that IS particular to a line is being first, which is the one
         // line that stayed.
         idx === 0 ? el("div", { class: "row" }, [
           el("div", { class: "hint" }, ["Also gets any event no rule claims."]),
@@ -896,7 +891,7 @@
       var warn = el("div", { class: "status err" });
       function refresh() { warn.textContent = ruleValue(r) ? "" : "This rule is not exported yet: it needs a condition and at least one action."; renderJson(); }
       renderConditions(r, conds, refresh);
-      var persons = trackPicker(r.tracks, function (v) { r.tracks = v; refresh(); }, "Put the event on this track's line");
+      var persons = linePicker(r.lines, function (v) { r.lines = v; refresh(); }, "Put the event on this line's line");
       var rename = el("input", { type: "checkbox" }); rename.checked = r.rename;
       rename.addEventListener("change", function () { r.rename = rename.checked; refresh(); });
       var rewrite = el("input", { type: "text", placeholder: "new title, or what to put in place of the matched text", value: r.rewrite, style: "flex:1 1 320px; min-width:180px", "aria-label": "New title, or what to put in place of the matched text" });
@@ -931,29 +926,29 @@
       // fallback name becomes a LINE. Someone generated a config where every calendar had a
       // descriptive name ("Planet Express", "Deliveries") and got seven lines for five
       // people, with no way to tell from the JSON which two were the accident. So the moment
-      // a name is not also a track name, say what it will do.
+      // a name is not also a line name, say what it will do.
       var nameWarn = el("div", { class: "status err cal-name-warn" });
       // The name only becomes a line if an event can reach it, and none can
       // when the calendar routes every event somewhere: "whose line" is exactly
-      // that rule (any event goes to this track), and a rule written by hand
-      // with an "any" condition and a track is the same catch-all. Warning
+      // that rule (any event goes to this line), and a rule written by hand
+      // with an "any" condition and a line is the same catch-all. Warning
       // through one of those cried wolf on the shipped demo, whose Work
       // calendar sends everything to Sam and cannot leak the word "Work".
       function routesEverything() {
         if (c.assign.length) return true;
         return c.rules.some(function (r) {
-          return r.tracks.length && !r.hide && r.conditions.length === 1
+          return r.lines.length && !r.hide && r.conditions.length === 1
             && r.conditions[0].type === "any" && !r.conditions[0].negate;
         });
       }
       function checkName() {
         var n = c.name.trim();
-        var known = trackNames().some(function (t) { return t.toLowerCase() === n.toLowerCase(); });
+        var known = lineNames().some(function (t) { return t.toLowerCase() === n.toLowerCase(); });
         nameWarn.textContent = (!n || known || routesEverything()) ? ""
-          : "\u201C" + n + "\u201D is not one of your tracks, so any event here that no rule routes falls back to it and draws \u201C" + n + "\u201D as its own line on the map. Name this calendar after the track whose line it is, add \u201C" + n + "\u201D as a track, or clear the name.";
+          : "\u201C" + n + "\u201D is not one of your lines, so any event here that no rule routes falls back to it and draws \u201C" + n + "\u201D as its own line on the map. Name this calendar after the line whose line it is, add \u201C" + n + "\u201D as a line, or clear the name.";
       }
       name.addEventListener("input", function () { c.name = name.value; checkName(); renderJson(); });
-      name.addEventListener("change", function () { renderTracks(); });
+      name.addEventListener("change", function () { renderLines(); });
       var urlId = "cal-url-" + c._id;
       var url = el("input", { type: "text", id: urlId, placeholder: "https://…/calendar.ics (or webcal://…)", value: c.url });
       // A link that is not a link is the commonest way a board comes back
@@ -967,8 +962,8 @@
           : "This does not look like an ICS link. One starts with https:// or webcal://, and a calendar's web page is not the same thing as its feed.";
       }
       url.addEventListener("input", function () { c.url = url.value; checkUrl(); renderJson(); renderSources(); });
-      var assignId = "cal-track-" + c._id;
-      var assign = trackPicker(c.assign, function (v) { c.assign = v; checkName(); renderJson(); renderTracks(); }, "Whose line the events in this calendar go on");
+      var assignId = "cal-line-" + c._id;
+      var assign = linePicker(c.assign, function (v) { c.assign = v; checkName(); renderJson(); renderLines(); }, "Whose line the events in this calendar go on");
       assign.id = assignId;
       var rm = el("button", { class: "ghost small", text: "Remove", title: "Remove this calendar" });
       rm.addEventListener("click", function () {
@@ -1007,7 +1002,7 @@
         el("summary", { text: "Rules, headers & advanced options" }),
         el("div", { class: "adv-body" }, [
           el("div", { class: "rule-step", text: "Rules for this calendar" }),
-          el("p", { class: "hint", text: "Checked in order; the last matching rule wins for each effect. Use these when one calendar holds several tracks' events, or to rename class codes and hide noise. Comma-separate a value to match any of several (\"L1, L3, L4\"); click \"not\" to invert a condition. Combine both for \"one of these, except that one\", with no regex needed." }),
+          el("p", { class: "hint", text: "Checked in order; the last matching rule wins for each effect. Use these when one calendar holds several lines' events, or to rename class codes and hide noise. Comma-separate a value to match any of several (\"L1, L3, L4\"); click \"not\" to invert a condition. Combine both for \"one of these, except that one\", with no regex needed." }),
           rulesWrap, addRule,
           el("div", { class: "rule-step", style: "margin-top:14px", text: "HTTP headers for this feed" }),
           addHeaderHint,
@@ -1031,9 +1026,9 @@
     });
   }
 
-  function renderAll() { renderTracks(); renderCalendars(); renderGlobalRules(); renderJson(); renderSources(); }
+  function renderAll() { renderLines(); renderCalendars(); renderGlobalRules(); renderJson(); renderSources(); }
 
-  document.getElementById("addTrack").addEventListener("click", function () { state.tracks.push(newTrack()); renderAll(); });
+  document.getElementById("addLine").addEventListener("click", function () { state.lines.push(newLine()); renderAll(); });
   document.getElementById("addCalendar").addEventListener("click", function () { state.calendars.push(newCalendar()); renderAll(); });
   document.getElementById("addGlobalRule").addEventListener("click", function () { state.rules.push(newRule()); renderGlobalRules(); });
 
@@ -1047,16 +1042,16 @@
   //
   // Deliberately three different SHAPES, not three casts of characters, and
   // between them they cover what turns a list into a board: one event shared
-  // by several tracks (Family), a long block the layout draws as a siding instead of
+  // by several lines (Family), a long block the layout draws as a siding instead of
   // eating a label lane (Work vs Personal), a feed whose noise is hidden
   // (Family's school menu, Work's cancelled holds), and one feed fanned out
   // into three lines on a title prefix that is then stripped off (Solo).
   //
   // Rules for anything added here:
-  //  * no "side" and no "color" on a track. Both are the plugin's job now,
+  //  * no "side" and no "color" on a line. Both are the plugin's job now,
   //    the pickers are gone from this page, and a preset that set them would
   //    quietly teach the setting back.
-  //  * every calendar is either unnamed or named after one of its tracks,
+  //  * every calendar is either unnamed or named after one of its lines,
   //    or the editor's own name warning fires on a config we shipped.
   //  * only fields this page round-trips: no "allDay" (the rule editor has
   //    no such switch) and no empty "rewrite" (an empty one exports as
@@ -1067,7 +1062,7 @@
       label: "Family of 4",
       note: "One calendar per person, plus a shared feed: dinner and the school run are drawn once, across everyone on them.",
       config: {
-        tracks: [{ name: "Sam" }, { name: "Alex" }, { name: "Mia" }, { name: "Noah" }],
+        lines: [{ name: "Sam" }, { name: "Alex" }, { name: "Mia" }, { name: "Noah" }],
         calendars: [
           { url: "https://calendar.example.com/sam.ics", name: "Sam" },
           { url: "https://calendar.example.com/alex.ics", name: "Alex" },
@@ -1076,20 +1071,20 @@
           // reads the same shape every morning
           { url: "https://calendar.example.com/noah.ics", name: "Noah", hideIfEmpty: false },
           // shared household feed: unnamed, so the odd thing no rule routes
-          // falls back to the first track instead of drawing a fifth line
+          // falls back to the first line instead of drawing a fifth line
           {
             url: "https://calendar.example.com/family-shared.ics",
             rules: [
-              { match: { type: "contains", value: "Family Dinner" }, track: ["Sam", "Alex", "Mia", "Noah"], rename: false },
-              { match: { type: "contains", value: "School Run" }, track: ["Alex", "Mia", "Noah"], rename: false }
+              { match: { type: "contains", value: "Family Dinner" }, line: ["Sam", "Alex", "Mia", "Noah"], rename: false },
+              { match: { type: "contains", value: "School Run" }, line: ["Alex", "Mia", "Noah"], rename: false }
             ]
           },
           {
             url: "https://calendar.example.com/school.ics",
             rules: [
               { match: { type: "contains", value: "Lunch Menu" }, hide: true },
-              { match: { type: "word", value: "Y4" }, track: "Mia", rename: false },
-              { match: { type: "word", value: "Y2" }, track: "Noah", rename: false }
+              { match: { type: "word", value: "Y4" }, line: "Mia", rename: false },
+              { match: { type: "word", value: "Y2" }, line: "Noah", rename: false }
             ]
           }
         ]
@@ -1100,7 +1095,7 @@
       label: "Work vs Personal Split",
       note: "Two lines for one person. The office day is long enough that the layout runs the work line alongside it rather than branching for it, and cancelled holds are hidden everywhere.",
       config: {
-        tracks: [{ name: "Work" }, { name: "Personal" }],
+        lines: [{ name: "Work" }, { name: "Personal" }],
         rules: [
           { match: { type: "status", value: "cancelled" }, hide: true }
         ],
@@ -1109,13 +1104,13 @@
             url: "https://calendar.example.com/work.ics",
             name: "Work",
             rules: [
-              { match: { type: "any" }, track: "Work" }
+              { match: { type: "any" }, line: "Work" }
             ]
           },
           {
             url: "https://calendar.example.com/personal.ics",
             name: "Personal",
-            rules: [{ match: { type: "any" }, track: "Personal" }],
+            rules: [{ match: { type: "any" }, line: "Personal" }],
             hideIfEmpty: false
           }
         ]
@@ -1123,24 +1118,24 @@
     },
     {
       id: "solo",
-      label: "Solo Freelancer Track",
+      label: "Solo Freelancer Line",
       note: "One work feed fanned out into a line per client on the title prefix, which is then stripped so the board reads “Sprint review” and not “Acme: Sprint review”.",
       config: {
-        tracks: [{ name: "Studio" }, { name: "Acme" }, { name: "Globex" }],
+        lines: [{ name: "Studio" }, { name: "Acme" }, { name: "Globex" }],
         calendars: [
           {
             url: "https://calendar.example.com/freelance.ics",
             name: "Studio",
             rules: [
-              { match: { type: "regex", value: "^Acme:" }, track: "Acme", rename: false },
-              { match: { type: "regex", value: "^Globex:" }, track: "Globex", rename: false },
+              { match: { type: "regex", value: "^Acme:" }, line: "Acme", rename: false },
+              { match: { type: "regex", value: "^Globex:" }, line: "Globex", rename: false },
               // routed on the prefix, so the prefix has done its job: keep
               // the rest of the title ($1) and drop the client name
               { match: { type: "regex", value: "^[A-Za-z]+:\\s*(.+)$" }, rewrite: "$1" }
             ]
           },
           // gym, dentist, the rest of a life: unnamed and unrouted, so it
-          // lands on the first track, which is this one person's own line
+          // lands on the first line, which is this one person's own line
           { url: "https://calendar.example.com/personal.ics" }
         ]
       }
@@ -1182,7 +1177,7 @@
   function editorHasWork() {
     var paste = document.getElementById("importIn").value.trim();
     var has = !!paste || state.rules.length > 0
-      || state.tracks.some(function (t) { return t.name.trim(); })
+      || state.lines.some(function (t) { return t.name.trim(); })
       || state.calendars.some(function (c) { return c.url.trim() || c.name.trim() || c.rules.length; });
     if (!has) return false;
     if (!lastLoaded) return true;
@@ -1218,7 +1213,7 @@
       setStatus("importStatus", "That loaded, but there are no calendars in it. Check the key is spelled “calendars”: anything this format does not recognise is ignored without a word.", "err");
       return;
     }
-    var msg = "Loaded " + plural(cals, "calendar", "calendars") + " and " + plural(state.tracks.length, "track", "tracks") + ".";
+    var msg = "Loaded " + plural(cals, "calendar", "calendars") + " and " + plural(state.lines.length, "line", "lines") + ".";
     if (res.mode === "recovered") msg += " It came out of a chat window, so " + res.repairs + " had to be taken out of it first: check the calendars below are the ones you meant.";
     if (res.mode === "links") msg += " Now say whose line each one is, under Calendars.";
     if (res.skipped && res.skipped.length) msg += " " + plural(res.skipped.length, "line", "lines") + " did not look like a link and " + (res.skipped.length === 1 ? "was" : "were") + " left out.";
@@ -1352,35 +1347,35 @@
   // somebody's board.
   var WORKED_EXAMPLE = {
     timeFormat: "24h",
-    tracks: [{ name: "Marge" }, { name: "Homer" }, { name: "Bart" }, { name: "Lisa" }],
+    lines: [{ name: "Marge" }, { name: "Homer" }, { name: "Bart" }, { name: "Lisa" }],
     calendars: [
       {
         url: "https://example.com/homer.ics",
         name: "Homer",
         rules: [
-          { match: { type: "any" }, track: "Homer" },
+          { match: { type: "any" }, line: "Homer" },
           { match: { type: "contains", value: "Out of office" }, hide: true }
         ]
       },
       {
         url: "https://example.com/school.ics",
         rules: [
-          { match: { type: "word", value: "L6" }, track: "Bart", rename: false },
-          { match: { type: "word", value: "K3" }, track: "Lisa", rename: false },
+          { match: { type: "word", value: "L6" }, line: "Bart", rename: false },
+          { match: { type: "word", value: "K3" }, line: "Lisa", rename: false },
           { match: { type: "regex", value: "^(?:L6|K3)\\s+" }, rewrite: "" },
-          { match: { type: "contains", value: "School Day" }, track: ["Bart", "Lisa"], rename: false },
+          { match: { type: "contains", value: "School Day" }, line: ["Bart", "Lisa"], rename: false },
           { match: { type: "contains", value: "Staff Meeting" }, hide: true }
         ]
       },
       {
         url: "https://example.com/family.ics",
         rules: [
-          { match: { type: "regex", value: "^Marge:" }, track: "Marge", rename: false },
-          { match: { type: "regex", value: "^Homer:" }, track: "Homer", rename: false },
-          { match: { type: "regex", value: "^Bart:" }, track: "Bart", rename: false },
-          { match: { type: "regex", value: "^Lisa:" }, track: "Lisa", rename: false },
+          { match: { type: "regex", value: "^Marge:" }, line: "Marge", rename: false },
+          { match: { type: "regex", value: "^Homer:" }, line: "Homer", rename: false },
+          { match: { type: "regex", value: "^Bart:" }, line: "Bart", rename: false },
+          { match: { type: "regex", value: "^Lisa:" }, line: "Lisa", rename: false },
           { match: { type: "regex", value: "^[A-Za-z]+:\\s*" }, rewrite: "" },
-          { match: { type: "contains", value: "Family Dinner" }, track: ["Marge", "Homer", "Bart", "Lisa"], rename: false }
+          { match: { type: "contains", value: "Family Dinner" }, line: ["Marge", "Homer", "Bart", "Lisa"], rename: false }
         ]
       }
     ]
@@ -1439,7 +1434,7 @@
     out.push("## What makes this board read well");
     out.push("- 2 to 6 lines. More than that and the panel runs out of depth and starts dropping lines.");
     out.push("- Do NOT try to mark long blocks in any way. A block spent in ONE place (a school day, a work shift, a desk booking, a delivery) is recognised by the layout from its length alone. One person's block is drawn ON their line, along the stretch of it the block covers, with its caption tied back to the line by a thin leader -- it costs no label lane at all. A block several people share draws their lines running together for its span instead, which is what several people being in one place looks like. Either way the meetings inside it still branch off normally. There is no setting for this and none is needed.");
-    out.push("- Something several people are at should list all of them: `\"track\": [\"Bart\", \"Lisa\"]`. It is then drawn once, as an interchange joining their lines, instead of once per person.");
+    out.push("- Something several people are at should list all of them: `\"line\": [\"Bart\", \"Lisa\"]`. It is then drawn once, as an interchange joining their lines, instead of once per person.");
     out.push("- Titles are read at arm's length on a small panel. Use `rewrite` to drop codes, room numbers, \"[Teams]\" and the like. Use `hide` for things nobody reads off a wall board: birthdays, \"Free\", \"Out of office\", declined invitations.");
     out.push("- Prefer `word` or `contains` matchers over `regex`. Use `regex` only when the pattern really needs it.");
     out.push("- Never set `side` or `color`. Both are chosen by the plugin: sides are balanced against the day's real event counts and the colours follow the panel's own theme, so anything you pick can only be worse. They are not in the format below; do not add them.");
@@ -1453,12 +1448,12 @@
     out.push("- A text matcher reads the title, plus the description when the calendar has one. Give it `\"field\"` to read something else: `title`, `location`, `description`, `categories` or `any`. Route on `location` when the titles are uninformative but the place is not (a school, an office, a pitch), and on `categories` when the feed sets them. Naming `description` or `any` turns `includeDescription` on by itself.");
     out.push("- Rules run in order; the last match wins for each effect. A calendar's own rules beat the top-level ones.");
     out.push("- A calendar's `name` is NOT a caption: an event that no rule routes falls back to it, and that fallback name is drawn as a LINE on the map. So name a calendar after the person whose line it is, or leave `name` off entirely when the calendar's rules route every event somewhere. A calendar called \"Deliveries\" or \"Planet Express\" with one unrouted event in it puts a \"Deliveries\" line on a board that was supposed to have one line per person.");
-    out.push("- The fallback order in full: the calendar's `name`, else the first entry in `tracks`, else the feed's own name. Count the lines your configuration produces before you send it: it is one per entry in `tracks`, PLUS one for every named calendar that can still leak an unrouted event. That total must match the number of people you found.");
-    out.push("- `rename` defaults to true for a rule that names a track, which rewrites the matched text into that track's name. Set `\"rename\": false` when you only want to route, not retitle.");
+    out.push("- The fallback order in full: the calendar's `name`, else the first entry in `lines`, else the feed's own name. Count the lines your configuration produces before you send it: it is one per entry in `lines`, PLUS one for every named calendar that can still leak an unrouted event. That total must match the number of people you found.");
+    out.push("- `rename` defaults to true for a rule that names a line, which rewrites the matched text into that line's name. Set `\"rename\": false` when you only want to route, not retitle.");
     out.push("- The exception: on an `any` or `all` match `rename` defaults to FALSE, because there is no particular matched text to rename and silently overwriting every title would be surprising. A catch-all that routes a whole calendar to one person needs no `rename` key at all.");
     out.push("- A regex `value` has its leading and trailing spaces stripped before it is compiled. To eat the space around a separator — \"Mila - Ballet\", \"Mila: Ballet\" — put `\\\\s*` or `\\\\s+` in the pattern rather than a literal space at either end, or the space survives into the rewritten title.");
     out.push("- Only events that recur with `RRULE:FREQ=WEEKLY` (with or without BYDAY/UNTIL), or that fall on today, are drawn.");
-    out.push("- `\"hideIfEmpty\": false` on a track or a calendar keeps its line on the board on a day it has nothing.");
+    out.push("- `\"hideIfEmpty\": false` on a line or a calendar keeps its line on the board on a day it has nothing.");
     out.push("- `\"allDay\": true` on a rule moves a normally TIMED event into the all-day strip, which is drawn at the head of the line rather than anywhere on the clock. Use it for something a calendar exported as a full day of hours — midnight to midnight, or 00:00 to 23:59 — which is a holiday or a leave day wearing a timed event's clothes. A genuine all-day entry needs no rule.");
     out.push("- Two feeds often carry the same real event. It is drawn ONCE, as an interchange joining those people's lines, only if after your rules run the title, the start and the end all match exactly. If the same thing arrives with different wording in each feed — bare in the family calendar, prefixed with a name in somebody's own export — write the `rewrite` rules so both come out character for character identical. Anything less and it is drawn twice.");
     out.push("");
@@ -1467,7 +1462,7 @@
     out.push("```json");
     out.push(prettyCompact(WORKED_EXAMPLE));
     out.push("```");
-    out.push("Reading it back: `Homer` is named after its track, so the one thing in it no rule catches still lands on Homer's line rather than inventing one. The school feed routes on the class codes and then strips them, so the board reads \"Maths\" and not \"L6 Maths\". The seven-hour `\"School Day\"` needs no rule of its own: because of how long it is, the layout draws Bart's and Lisa\'s lines running together for its span rather than spending a label lane on it twice. `\"Family Dinner\"` lists all four tracks, so it is drawn once as an interchange. The staff meeting nobody in the house attends is hidden.");
+    out.push("Reading it back: `Homer` is named after its line, so the one thing in it no rule catches still lands on Homer's line rather than inventing one. The school feed routes on the class codes and then strips them, so the board reads \"Maths\" and not \"L6 Maths\". The seven-hour `\"School Day\"` needs no rule of its own: because of how long it is, the layout draws Bart's and Lisa\'s lines running together for its span rather than spending a label lane on it twice. `\"Family Dinner\"` lists all four lines, so it is drawn once as an interchange. The staff meeting nobody in the house attends is hidden.");
     out.push("");
     out.push("## Calendars");
     if (!urls.length) out.push("(none added yet)");
@@ -1493,7 +1488,7 @@
         out.push("  Not read by the tool: the browser could not fetch it, which is usual — most calendar feeds send no CORS header. Fetch this URL yourself if you can. If you cannot, say so and say that pasting the .ics text into the editor beside this calendar (\"Paste / upload instead\") will put its events straight into this prompt.");
       }
     });
-    if (cfg.calendars && cfg.calendars.length && (cfg.tracks.length || (cfg.rules || []).length
+    if (cfg.calendars && cfg.calendars.length && (cfg.lines.length || (cfg.rules || []).length
         || cfg.calendars.some(function (c) { return c.rules; }))) {
       out.push("");
       out.push("## The configuration so far");
@@ -1656,8 +1651,8 @@
         text: (metro.i18n && metro.i18n.weather_stale) || "Forecast may be out of date" }));
     }
     // The swatch legend that used to sit here is gone. The board has no
-    // legend: every line is named at its own terminus, and the Tracks
-    // section above already shows each track's swatch. In the preview it
+    // legend: every line is named at its own terminus, and the Lines
+    // section above already shows each line's swatch. In the preview it
     // was a row of header the device never draws.
     return h;
   }
@@ -1788,7 +1783,7 @@
   });
 
   // ------------------------------------------------------------ init
-  state.tracks.push(newTrack());
+  state.lines.push(newLine());
   state.calendars.push(newCalendar());
   paintPresets();
   paintUndo();

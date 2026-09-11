@@ -27,10 +27,10 @@ module.exports = function (test, h) {
   test('the same event on two calendars becomes one event on both lines', async () => {
     const r = await runTransform(twoFeeds('Swim Class', 'Swim Class', SAME[0], SAME[1]), NOW)
       .run(baseInput(NOW, cfgWith({
-        tracks: [{ name: 'Ada' }, { name: 'Bo' }],
+        lines: [{ name: 'Ada' }, { name: 'Bo' }],
         calendars: [
-          { url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'Ada' }] },
-          { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, track: 'Bo' }] },
+          { url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, line: 'Ada' }] },
+          { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, line: 'Bo' }] },
         ],
       })));
     const swims = eventItems(r.data).filter((e) => e.title === 'Swim Class');
@@ -42,10 +42,10 @@ module.exports = function (test, h) {
     const r = await runTransform(twoFeeds('Swim Class', 'Swim Class',
       ['20260907T140000Z', '20260907T150000Z'], ['20260907T160000Z', '20260907T170000Z']), NOW)
       .run(baseInput(NOW, cfgWith({
-        tracks: [{ name: 'Ada' }, { name: 'Bo' }],
+        lines: [{ name: 'Ada' }, { name: 'Bo' }],
         calendars: [
-          { url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'Ada' }] },
-          { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, track: 'Bo' }] },
+          { url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, line: 'Ada' }] },
+          { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, line: 'Bo' }] },
         ],
       })));
     assertEqual(eventItems(r.data).filter((e) => e.title === 'Swim Class').length, 2,
@@ -65,10 +65,10 @@ module.exports = function (test, h) {
     // children were drawn separately and the school was captioned twice.
     const r = await runTransform(twoFeeds('School Day', 'School Day', LONG[0], LONG[1]), NOW)
       .run(baseInput(NOW, cfgWith({
-        tracks: [{ name: 'Ada' }, { name: 'Bo' }],
+        lines: [{ name: 'Ada' }, { name: 'Bo' }],
         calendars: [
-          { url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'Ada' }] },
-          { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, track: 'Bo' }] },
+          { url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, line: 'Ada' }] },
+          { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, line: 'Bo' }] },
         ],
       })));
     const st = eventItems(r.data).filter((s) => s.title === 'School Day');
@@ -93,14 +93,14 @@ module.exports = function (test, h) {
       return okText(icsWithEvents([{ start: '20260907T160000Z', end: '20260907T170000Z', summary: 'Shared Two' }]));
     };
     const r = await runTransform(feeds, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'Ada' }, { name: 'Bo' }, { name: 'Cy' }],
+      lines: [{ name: 'Ada' }, { name: 'Bo' }, { name: 'Cy' }],
       calendars: [
-        { url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'Ada' }] },
-        { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, track: 'Bo' }] },
-        { url: 'https://example.com/c.ics', rules: [{ match: { type: 'any' }, track: 'Cy' }] },
+        { url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, line: 'Ada' }] },
+        { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, line: 'Bo' }] },
+        { url: 'https://example.com/c.ics', rules: [{ match: { type: 'any' }, line: 'Cy' }] },
       ],
     })));
-    const board = r.data.legend.slice().sort((x, y) => x.track_offset - y.track_offset).map((t) => t.name);
+    const board = r.data.legend.slice().sort((x, y) => x.line_offset - y.line_offset).map((t) => t.name);
     assertEqual(board.length, 3, 'three lines');
     assertEqual(board[1], 'Bo',
       'Bo shares an event with each of the others, so Bo belongs between them; got ' + board.join(' '));
@@ -139,13 +139,13 @@ module.exports = function (test, h) {
       return okText(icsWithEvents(mine));
     };
     const r = await runTransform(feeds, NOW).run(baseInput(NOW, cfgWith({
-      tracks: Object.keys(who).map((k) => ({ name: who[k] })),
+      lines: Object.keys(who).map((k) => ({ name: who[k] })),
       calendars: Object.keys(who).map((k) => ({
         url: 'https://example.com/' + k + '.ics',
-        rules: [{ match: { type: 'any' }, track: who[k] }],
+        rules: [{ match: { type: 'any' }, line: who[k] }],
       })),
     })));
-    const board = r.data.legend.slice().sort((x, y) => x.track_offset - y.track_offset).map((t) => t.name);
+    const board = r.data.legend.slice().sort((x, y) => x.line_offset - y.line_offset).map((t) => t.name);
     assertEqual(board.length, 5, 'five lines: ' + board.join(' '));
     // The groups as the BOARD has them, not as this test declared them:
     // what matters is that the order is the best one for the events that

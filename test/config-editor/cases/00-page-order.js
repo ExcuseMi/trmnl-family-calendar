@@ -12,7 +12,7 @@ module.exports = function (test, h) {
     const { document } = loadEditor();
     const ids = [...document.querySelectorAll('main.line > section')].map((s) => s.id);
     assertEqual(ids, [
-      'station-start', 'station-agent', 'station-tracks', 'station-calendars',
+      'station-start', 'station-agent', 'station-lines', 'station-calendars',
       'station-rules', 'station-preview', 'station-output',
     ]);
   });
@@ -21,7 +21,7 @@ module.exports = function (test, h) {
     const { document } = loadEditor();
     const hrefs = [...document.querySelectorAll('.mc-top nav a')]
       .map((a) => a.getAttribute('href')).filter((hr) => hr.charAt(0) === '#');
-    assertEqual(hrefs, ['#station-agent', '#station-tracks', '#station-calendars', '#station-preview', '#station-output']);
+    assertEqual(hrefs, ['#station-agent', '#station-lines', '#station-calendars', '#station-preview', '#station-output']);
     // ids are load-bearing: they are what the nav, the docs and every deep link point at
     hrefs.forEach((hr) => assert(document.querySelector(hr), 'nav points at a section that is not there: ' + hr));
   });

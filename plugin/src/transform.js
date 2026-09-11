@@ -5,7 +5,7 @@
 //     always shown — no network, no config needed, safe fallback.
 //   - config: a real calendar config pasted into the "Calendar Config"
 //     setting, same JSON shape as this repo's calendar-config.json /
-//     demo-config.json ({ calendars: [{url,name,rules}], tracks, timeZone,
+//     demo-config.json ({ calendars: [{url,name,rules}], lines, timeZone,
 //     rules }). Calendars are fetched as plain ICS and parsed with a small
 //     hand-rolled parser (TRMNL Serverless only guarantees the built-in
 //     HTTP client, not an ICS library — see topics/serverless.md).
@@ -25,18 +25,14 @@
 // true, EXCEPT on an any/all match where it defaults to false — a
 // catch-all shouldn't silently rewrite every title unless asked), a
 // top-level `rules` array applied before each calendar's own (a
-// calendar's own rule wins when both assign a track to the same event),
-// a `track` field that can be a list (multiple tracks on the same
+// calendar's own rule wins when both assign a line to the same event),
+// a `line` field that can be a list (multiple lines on the same
 // event become an interchange node, metro-plugin's own concept for a
-// shared event), and an `everyoneTrack` fallback (the first entry in
-// `tracks[]`) for any event no rule assigns a track to.
+// shared event), and an `everyoneLine` fallback (the first entry in
+// `lines[]`) for any event no rule assigns a line to.
 //
-// (For compatibility with configs written before tracks were called
-// tracks: the legacy top-level `people` key and per-rule `person` field
-// are still accepted as aliases for `tracks`/`track`.)
-//
-// `tracks[].side` ("left"/"work" or "right"/"family") pins a track to a
-// side of the map; without it the track a calendar named "Work" assigns
+// `lines[].side` ("left"/"work" or "right"/"family") pins a line to a
+// side of the map; without it the line a calendar named "Work" assigns
 // goes left and everyone else right. `locale` in the config overrides the
 // account locale for the string table and date names.
 //
@@ -65,13 +61,13 @@
 //     reads.
 //
 // Both branches converge on the SAME buildMetro() — the rest of the
-// pipeline (hour ticks, sub-spur detection, the "now" marker, tracks
+// pipeline (hour ticks, sub-spur detection, the "now" marker, lines
 // list) doesn't care whether events came from DUMMY_EVENTS or real ICS.
 
 var DAY_START_MIN = 7 * 60;
 var DAY_END_MIN = 21 * 60;
 var SECONDARY_THRESHOLD_MIN = 30;
-var TRACK_STEP = 10; // px between adjacent track offsets
+var LINE_STEP = 10; // px between adjacent line offsets
 // Line styles and stroke weights used to be handed out here. They are
 // drawing decisions, so they live in shared.liquid now (`TRACK_STYLES`);
 // this file says only which line is the anchor.
@@ -498,7 +494,7 @@ function resolveTz(explicitTzname, input) {
 // ---------------------------------------------------------------------
 // buildMetro: the shared pipeline. `events`: [{track, title, startMin,
 // endMin, location, interchange_with}], startMin/endMin are minutes
-// since midnight LOCAL time. `tracks`: [{key,name,side,hue,track_offset,
+// since midnight LOCAL time. `lines`: [{key,name,side,hue,line_offset,
 // line_width,line_style}].
 //
 // transform.js is a pure data normalizer — it does NOT decide where
@@ -520,9 +516,9 @@ function timeLabel12(min, extra) {
   if (!(extra && extra.hour12)) return pad2(h) + ':' + pad2(m);
   return (h % 12 || 12) + (m ? ':' + pad2(m) : '') + (h < 12 ? 'am' : 'pm');
 }
-function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, windowLabel, allDayEvents, extra) {
-  var trackByKey = {};
-  tracks.forEach(function (t) { trackByKey[t.key] = t; });
+function buildMetro(lines, events, weatherMilestones, headerWeather, nowMin, windowLabel, allDayEvents, extra) {
+  var lineByKey = {};
+  lines.forEach(function (t) { lineByKey[t.key] = t; });
 
   // ---- how much of the day is on the board -----------------------------
   //
@@ -560,18 +556,18 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
   // stay whatever finalize() decided from the FULL registered set (so a
   // track's color/side identity doesn't shift day to day depending on
   // who else happens to be busy); only the per-side offset is repacked
-  // against just today's active tracks, closing the gaps a filtered-out
+  // against just today's active lines, closing the gaps a filtered-out
   // track would otherwise leave.
   var activeKeys = {};
   events.forEach(function (ev) {
-    if (!trackByKey[ev.track]) return;
-    activeKeys[ev.track] = true;
-    (ev.interchange_with || []).forEach(function (key) { if (trackByKey[key]) activeKeys[key] = true; });
+    if (!lineByKey[ev.line]) return;
+    activeKeys[ev.line] = true;
+    (ev.interchange_with || []).forEach(function (key) { if (lineByKey[key]) activeKeys[key] = true; });
   });
-  (allDayEvents || []).forEach(function (ev) { if (trackByKey[ev.track]) activeKeys[ev.track] = true; });
-  tracks.forEach(function (t) { if (t.keep_empty) activeKeys[t.key] = true; });
-  tracks = tracks.filter(function (t) { return activeKeys[t.key]; });
-  tracks.forEach(function (t) { delete t.keep_empty; }); // bookkeeping, not payload
+  (allDayEvents || []).forEach(function (ev) { if (lineByKey[ev.line]) activeKeys[ev.line] = true; });
+  lines.forEach(function (t) { if (t.keep_empty) activeKeys[t.key] = true; });
+  lines = lines.filter(function (t) { return activeKeys[t.key]; });
+  lines.forEach(function (t) { delete t.keep_empty; }); // bookkeeping, not payload
   // Renumbering closes the gaps left by the lines just dropped, and it has
   // to keep the ORDER `finalize` chose. Done in whatever sequence the array
   // happened to be in, it did not: the chain built to keep the people who
@@ -583,20 +579,20 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
   // Sorted by the offset finalize gave them, innermost first on each side,
   // the renumbering closes the gaps and changes nothing else.
   var sideIdx = { left: 0, right: 0 };
-  tracks.sort(function (a, b) {
+  lines.sort(function (a, b) {
     if (a.side !== b.side) return a.side === 'left' ? -1 : 1;
-    return Math.abs(a.track_offset) - Math.abs(b.track_offset);
+    return Math.abs(a.line_offset) - Math.abs(b.line_offset);
   });
-  tracks.forEach(function (t) { t.track_offset = TRACK_STEP * (++sideIdx[t.side]) * (t.side === 'left' ? -1 : 1); });
-  trackByKey = {};
-  tracks.forEach(function (t) { trackByKey[t.key] = t; });
+  lines.forEach(function (t) { t.line_offset = LINE_STEP * (++sideIdx[t.side]) * (t.side === 'left' ? -1 : 1); });
+  lineByKey = {};
+  lines.forEach(function (t) { lineByKey[t.key] = t; });
 
   var items = [];
 
   events.forEach(function (ev) {
-    var track = trackByKey[ev.track];
-    if (!track) return; // no resolved/known track for this event — drop it rather than guess
-    var coOwners = (ev.interchange_with || []).filter(function (key) { return !!trackByKey[key]; });
+    var line = lineByKey[ev.line];
+    if (!line) return; // no resolved/known line for this event — drop it rather than guess
+    var coOwners = (ev.interchange_with || []).filter(function (key) { return !!lineByKey[key]; });
     items.push({
       type: 'event',
       _sortMin: ev.startMin,
@@ -604,13 +600,14 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
       start_min: ev.startMin,
       end_min: ev.endMin,
       location: ev.location || null,
-      owner: track.key,
-      co_owners: coOwners, // other track keys sharing this event (an interchange) — empty for a normal event
-      side: track.side,
-      hue: track.hue,
-      track_width: track.line_width,
-      track_style: track.line_style,
-      track_offset: track.track_offset,
+      owner: line.key,
+      co_owners: coOwners, // other line keys sharing this event (an interchange) — empty for a normal event
+      // NO PRESENTATION HERE. Which side an event's line runs on, its
+      // colour, its weight and its dash pattern all belong to the LINE, and
+      // the board looks them up on the legend entry the owner names. Copied
+      // onto every event they were five dead fields per item that nothing
+      // read -- on a busy day, eighty-five of them, in a payload with a
+      // hundred kilobyte ceiling.
     });
   });
 
@@ -629,15 +626,15 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
   // the grouping happens here rather than being rediscovered per line.
   var allDayByTitle = {};
   (allDayEvents || []).forEach(function (ev) {
-    var track = trackByKey[ev.track];
-    if (!track) return;
+    var line = lineByKey[ev.line];
+    if (!line) return;
     var row = allDayByTitle[ev.title];
     if (!row) {
       // No hue, no style: presentation is the frontend's, and `owners`
       // already says which lines' styles to draw the badge in.
       row = allDayByTitle[ev.title] = { title: ev.title, owners: [] };
     }
-    if (row.owners.indexOf(track.key) < 0) row.owners.push(track.key);
+    if (row.owners.indexOf(line.key) < 0) row.owners.push(line.key);
   });
   var allDay = Object.keys(allDayByTitle).map(function (t) { return allDayByTitle[t]; });
 
@@ -706,7 +703,7 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     // events off the board with it, and a board that is missing half a
     // family without saying so reads as a quiet day.
     calendars_down: (extra && extra.calendarsDown) || [],
-    legend: tracks,
+    legend: lines,
     all_day: allDay, // declared at the line's head, never on the axis: see above
     // TWO LISTS, NOT ONE MIXED ONE.
     //
@@ -736,11 +733,11 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
 // shared.liquid from this same ordering. No colour is pinned either, so a
 // theme still gets to repaint them.
 var DEMO_TRACKS = [
-  { key: 'homer', name: 'Homer', side: 'left', track_offset: -10, anchor: true },
-  { key: 'lisa', name: 'Lisa', side: 'left', track_offset: -20 },
-  { key: 'marge', name: 'Marge', side: 'right', track_offset: 10 },
-  { key: 'bart', name: 'Bart', side: 'right', track_offset: 20 },
-  { key: 'maggie', name: 'Maggie', side: 'right', track_offset: 30 },
+  { key: 'homer', name: 'Homer', side: 'left', line_offset: -10, anchor: true },
+  { key: 'lisa', name: 'Lisa', side: 'left', line_offset: -20 },
+  { key: 'marge', name: 'Marge', side: 'right', line_offset: 10 },
+  { key: 'bart', name: 'Bart', side: 'right', line_offset: 20 },
+  { key: 'maggie', name: 'Maggie', side: 'right', line_offset: 30 },
 ];
 
 // A deliberately busy day in Springfield: two meetings starting minutes
@@ -748,32 +745,32 @@ var DEMO_TRACKS = [
 // long day at school and a shift at the plant as sidings, and an
 // evening cluster once everyone is home.
 var DEMO_EVENTS = [
-  { track: 'marge', interchange_with: ['bart', 'lisa'], title: 'School Run', startMin: 7 * 60 + 45, endMin: 8 * 60 + 15 },
-  { track: 'homer', title: 'Shift Briefing', startMin: 8 * 60, endMin: 8 * 60 + 15 },
-  { track: 'homer', title: 'Donut Run', startMin: 8 * 60 + 20, endMin: 8 * 60 + 35 },
-  { track: 'marge', title: 'Dr. Hibbert', startMin: 10 * 60, endMin: 10 * 60 + 45 },
-  { track: 'homer', title: '1:1 with Mr. Burns', startMin: 11 * 60, endMin: 11 * 60 + 30, location: 'The Office' },
-  { track: 'marge', interchange_with: ['homer'], title: 'Lunch at Krusty Burger', startMin: 12 * 60, endMin: 13 * 60 },
-  { track: 'homer', title: 'Safety Inspection', startMin: 14 * 60, endMin: 15 * 60 },
-  { track: 'lisa', title: 'Sax Practice', startMin: 15 * 60 + 30, endMin: 16 * 60 + 15, location: 'Band Room' },
-  { track: 'marge', interchange_with: ['bart', 'lisa'], title: 'Pick Up', startMin: 16 * 60, endMin: 16 * 60 + 20 },
-  { track: 'bart', title: 'Skate Park', startMin: 16 * 60 + 30, endMin: 17 * 60 + 30 },
-  { track: 'marge', title: 'Groceries', startMin: 17 * 60 + 30, endMin: 18 * 60, location: 'Kwik-E-Mart' },
-  { track: 'marge', interchange_with: ['homer', 'bart', 'lisa', 'maggie'], title: 'Family Dinner', startMin: 18 * 60 + 30, endMin: 19 * 60 + 30 },
-  { track: 'homer', title: "Moe's Tavern", startMin: 19 * 60 + 45, endMin: 21 * 60 },
-  { track: 'bart', interchange_with: ['lisa'], title: 'Itchy & Scratchy', startMin: 20 * 60, endMin: 20 * 60 + 30 },
+  { line: 'marge', interchange_with: ['bart', 'lisa'], title: 'School Run', startMin: 7 * 60 + 45, endMin: 8 * 60 + 15 },
+  { line: 'homer', title: 'Shift Briefing', startMin: 8 * 60, endMin: 8 * 60 + 15 },
+  { line: 'homer', title: 'Donut Run', startMin: 8 * 60 + 20, endMin: 8 * 60 + 35 },
+  { line: 'marge', title: 'Dr. Hibbert', startMin: 10 * 60, endMin: 10 * 60 + 45 },
+  { line: 'homer', title: '1:1 with Mr. Burns', startMin: 11 * 60, endMin: 11 * 60 + 30, location: 'The Office' },
+  { line: 'marge', interchange_with: ['homer'], title: 'Lunch at Krusty Burger', startMin: 12 * 60, endMin: 13 * 60 },
+  { line: 'homer', title: 'Safety Inspection', startMin: 14 * 60, endMin: 15 * 60 },
+  { line: 'lisa', title: 'Sax Practice', startMin: 15 * 60 + 30, endMin: 16 * 60 + 15, location: 'Band Room' },
+  { line: 'marge', interchange_with: ['bart', 'lisa'], title: 'Pick Up', startMin: 16 * 60, endMin: 16 * 60 + 20 },
+  { line: 'bart', title: 'Skate Park', startMin: 16 * 60 + 30, endMin: 17 * 60 + 30 },
+  { line: 'marge', title: 'Groceries', startMin: 17 * 60 + 30, endMin: 18 * 60, location: 'Kwik-E-Mart' },
+  { line: 'marge', interchange_with: ['homer', 'bart', 'lisa', 'maggie'], title: 'Family Dinner', startMin: 18 * 60 + 30, endMin: 19 * 60 + 30 },
+  { line: 'homer', title: "Moe's Tavern", startMin: 19 * 60 + 45, endMin: 21 * 60 },
+  { line: 'bart', interchange_with: ['lisa'], title: 'Itchy & Scratchy', startMin: 20 * 60, endMin: 20 * 60 + 30 },
 ];
 
 // Sidings: the line kinks out to siding level for the span
 // rather than branching, for a place you simply ARE for a while.
 var DEMO_STATIONS = [
-  { track: 'homer', title: 'Sector 7-G', location: 'Springfield Nuclear', startMin: 9 * 60, endMin: 17 * 60 },
-  { track: 'bart', title: 'Springfield Elementary', location: 'Room 12', startMin: 8 * 60 + 30, endMin: 15 * 60 },
-  { track: 'lisa', title: 'Springfield Elementary', location: 'Room 4', startMin: 8 * 60 + 30, endMin: 15 * 60 },
+  { line: 'homer', title: 'Sector 7-G', location: 'Springfield Nuclear', startMin: 9 * 60, endMin: 17 * 60 },
+  { line: 'bart', title: 'Springfield Elementary', location: 'Room 12', startMin: 8 * 60 + 30, endMin: 15 * 60 },
+  { line: 'lisa', title: 'Springfield Elementary', location: 'Room 4', startMin: 8 * 60 + 30, endMin: 15 * 60 },
 ];
 
 var DEMO_ALLDAY = [
-  { track: 'maggie', title: 'With Grampa' },
+  { line: 'maggie', title: 'With Grampa' },
 ];
 
 var DEMO_NOW_MIN = 11 * 60;
@@ -850,8 +847,8 @@ var DEMO_ICS_BASE = 'https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-cale
 function demoCalendar(name, file, rules) {
   return { name: name, url: DEMO_ICS_BASE + file, rules: rules };
 }
-function demoOwnTrack(name, file) {
-  return demoCalendar(name, file, [{ match: { type: 'any' }, track: name }]);
+function demoOwnLine(name, file) {
+  return demoCalendar(name, file, [{ match: { type: 'any' }, line: name }]);
 }
 var SIMPSONS_CONFIG = {
   // Springfield is American, so the demo reads American: US date order and a
@@ -869,7 +866,7 @@ var SIMPSONS_CONFIG = {
   // remaps — pin "gray-40" and the line stays that grey whatever theme the
   // device is set to. Pinning is still available per track for anyone who
   // wants it; the shipped configs just don't use it.
-  tracks: [
+  lines: [
     { name: 'Homer', side: 'left' },
     { name: 'Marge' },
     { name: 'Bart' },
@@ -877,24 +874,24 @@ var SIMPSONS_CONFIG = {
     { name: 'Maggie' },
   ],
   calendars: [
-    demoOwnTrack('Homer', 'simpsons/homer.ics'),
-    demoOwnTrack('Marge', 'simpsons/marge.ics'),
-    demoOwnTrack('Bart', 'simpsons/bart.ics'),
-    demoOwnTrack('Lisa', 'simpsons/lisa.ics'),
-    demoOwnTrack('Maggie', 'simpsons/maggie.ics'),
+    demoOwnLine('Homer', 'simpsons/homer.ics'),
+    demoOwnLine('Marge', 'simpsons/marge.ics'),
+    demoOwnLine('Bart', 'simpsons/bart.ics'),
+    demoOwnLine('Lisa', 'simpsons/lisa.ics'),
+    demoOwnLine('Maggie', 'simpsons/maggie.ics'),
     // One school calendar split by class code, the way a real school feed
     // is. rename:false throughout — a track assignment rewrites the matched
     // text into the track's name by default, which would turn "Family
     // Dinner" into the entire guest list.
     demoCalendar('School', 'simpsons/school.ics', [
-      { match: { type: 'word', value: 'L6' }, track: 'Bart', rename: false },
-      { match: { type: 'word', value: 'K3' }, track: 'Lisa', rename: false },
+      { match: { type: 'word', value: 'L6' }, line: 'Bart', rename: false },
+      { match: { type: 'word', value: 'K3' }, line: 'Lisa', rename: false },
       { match: { type: 'regex', value: '^(?:L6|K3)\\s+' }, rewrite: '' },
     ]),
     demoCalendar('Family', 'simpsons/family.ics', [
-      { match: { type: 'contains', value: 'Family Dinner' }, track: ['Marge', 'Homer', 'Bart', 'Lisa', 'Maggie'], rename: false },
-      { match: { type: 'contains', value: 'School Run' }, track: ['Marge', 'Bart', 'Lisa'], rename: false },
-      { match: { type: 'contains', value: 'Spring Break' }, track: 'Bart', allDay: true, rename: false },
+      { match: { type: 'contains', value: 'Family Dinner' }, line: ['Marge', 'Homer', 'Bart', 'Lisa', 'Maggie'], rename: false },
+      { match: { type: 'contains', value: 'School Run' }, line: ['Marge', 'Bart', 'Lisa'], rename: false },
+      { match: { type: 'contains', value: 'Spring Break' }, line: 'Bart', allDay: true, rename: false },
     ]),
   ],
 };
@@ -907,7 +904,7 @@ var SIMPSONS_CONFIG = {
 var FUTURAMA_CONFIG = {
   locale: 'en-US',
   timeFormat: '12h',
-  tracks: [
+  lines: [
     { name: 'Professor', side: 'left' },
     { name: 'Amy', side: 'left' },
     { name: 'Fry' },
@@ -918,18 +915,18 @@ var FUTURAMA_CONFIG = {
     demoCalendar('Planet Express', 'futurama/crew.ics', [
       // route by the name the entry is filed under, then take the prefix
       // back off so the board reads "Coffee (100 cups)", not "Fry: Coffee"
-      { match: { type: 'regex', value: '^Fry:' }, track: 'Fry', rename: false },
-      { match: { type: 'regex', value: '^Leela:' }, track: 'Leela', rename: false },
-      { match: { type: 'regex', value: '^Bender:' }, track: 'Bender', rename: false },
-      { match: { type: 'regex', value: '^Amy:' }, track: 'Amy', rename: false },
-      { match: { type: 'regex', value: '^Professor:' }, track: 'Professor', rename: false },
+      { match: { type: 'regex', value: '^Fry:' }, line: 'Fry', rename: false },
+      { match: { type: 'regex', value: '^Leela:' }, line: 'Leela', rename: false },
+      { match: { type: 'regex', value: '^Bender:' }, line: 'Bender', rename: false },
+      { match: { type: 'regex', value: '^Amy:' }, line: 'Amy', rename: false },
+      { match: { type: 'regex', value: '^Professor:' }, line: 'Professor', rename: false },
       { match: { type: 'regex', value: '^[A-Za-z]+:\\s*' }, rewrite: '' },
     ]),
     demoCalendar('Deliveries', 'futurama/deliveries.ics', [
-      { match: { type: 'contains', value: 'Delivery Run' }, track: ['Fry', 'Leela', 'Bender'], rename: false },
-      { match: { type: 'contains', value: 'Good News' }, track: ['Professor', 'Fry', 'Leela', 'Bender', 'Amy'], rename: false },
-      { match: { type: 'contains', value: 'Crew Debrief' }, track: ['Fry', 'Leela', 'Bender'], rename: false },
-      { match: { type: 'contains', value: 'Ship Inspection' }, track: 'Leela', allDay: true, rename: false },
+      { match: { type: 'contains', value: 'Delivery Run' }, line: ['Fry', 'Leela', 'Bender'], rename: false },
+      { match: { type: 'contains', value: 'Good News' }, line: ['Professor', 'Fry', 'Leela', 'Bender', 'Amy'], rename: false },
+      { match: { type: 'contains', value: 'Crew Debrief' }, line: ['Fry', 'Leela', 'Bender'], rename: false },
+      { match: { type: 'contains', value: 'Ship Inspection' }, line: 'Leela', allDay: true, rename: false },
     ]),
   ],
 };
@@ -939,7 +936,7 @@ var FUTURAMA_CONFIG = {
 var FRIENDS_CONFIG = {
   locale: 'en-US',
   timeFormat: '12h',
-  tracks: [
+  lines: [
     { name: 'Monica', side: 'left' },
     { name: 'Rachel' },
   ],
@@ -948,15 +945,15 @@ var FRIENDS_CONFIG = {
     // the line runs straight on and the block is a siding beside it
     demoCalendar('Monica', 'friends/monica.ics', [
       { match: { type: 'contains', value: 'Head Chef Shift' }, rename: false },
-      { match: { type: 'any' }, track: 'Monica' },
+      { match: { type: 'any' }, line: 'Monica' },
     ]),
     demoCalendar('Rachel', 'friends/rachel.ics', [
       { match: { type: 'contains', value: 'Desk booking' }, rename: false },
-      { match: { type: 'any' }, track: 'Rachel' },
+      { match: { type: 'any' }, line: 'Rachel' },
     ]),
     demoCalendar('Apartment 20', 'friends/apartment.ics', [
-      { match: { type: 'contains', value: 'Central Perk' }, track: ['Monica', 'Rachel'], rename: false },
-      { match: { type: 'contains', value: 'Laundry' }, track: ['Monica', 'Rachel'], rename: false },
+      { match: { type: 'contains', value: 'Central Perk' }, line: ['Monica', 'Rachel'], rename: false },
+      { match: { type: 'contains', value: 'Laundry' }, line: ['Monica', 'Rachel'], rename: false },
     ]),
   ],
 };
@@ -989,7 +986,7 @@ function buildFromDemo(weather, nowMin, extra) {
       serviceAlert: alertFor(extra, 0, nowMin != null ? nowMin : DEMO_NOW_MIN),
       sun: (w.sun && w.sun.length) ? w.sun : DEMO_SUN }),
     DEMO_STATIONS.map(function (st) {
-      return { track: st.track, title: st.title, location: st.location || null, startMin: st.startMin, endMin: st.endMin };
+      return { line: st.line, title: st.title, location: st.location || null, startMin: st.startMin, endMin: st.endMin };
     })
   );
 }
@@ -1594,24 +1591,24 @@ function weeklyRruleMatchesToday(rruleValue, dtstartCivil, todayY, todayMo, toda
 // day is the same code with a list of one.
 function parseIcs(text, tz, days, includeDescription) {
   var today = days[0];
-  var lines = unfoldIcs(text);
+  var rows = unfoldIcs(text);
   var raw = [];
   var cur = null;
   // The feed's own name. A config that names its calendars never needs it,
   // but the simplest setup there is — a list of ICS links and nothing else
-  // — has no other way to know whose line this is.
+  // — has no other way to know whose row this is.
   var calName = null;
-  lines.forEach(function (line) {
-    if (line === 'BEGIN:VEVENT') { cur = {}; return; }
-    if (line === 'END:VEVENT') { if (cur) raw.push(cur); cur = null; return; }
+  rows.forEach(function (row) {
+    if (row === 'BEGIN:VEVENT') { cur = {}; return; }
+    if (row === 'END:VEVENT') { if (cur) raw.push(cur); cur = null; return; }
     if (!cur) {
-      if (line.indexOf('X-WR-CALNAME:') === 0) calName = unescapeIcsText(line.slice('X-WR-CALNAME:'.length)).trim() || null;
+      if (row.indexOf('X-WR-CALNAME:') === 0) calName = unescapeIcsText(row.slice('X-WR-CALNAME:'.length)).trim() || null;
       return;
     }
-    var idx = line.indexOf(':');
+    var idx = row.indexOf(':');
     if (idx < 0) return;
-    var keyPart = line.slice(0, idx);
-    var value = line.slice(idx + 1);
+    var keyPart = row.slice(0, idx);
+    var value = row.slice(idx + 1);
     var key = keyPart.split(';')[0];
     var params = keyPart.slice(key.length);
     if (key === 'DTSTART') cur.dtstart = parseIcsDateTime(params, value, tz);
@@ -1876,13 +1873,11 @@ function compileRule(spec) {
   if (!spec || typeof spec !== 'object') return null;
   var m = compileMatcher(spec.match);
   if (!m) return null;
-  // `track` is the current field name; `person` is accepted too, for
-  // configs written before tracks were called tracks.
-  var track = normalizeNameList(spec.track !== undefined ? spec.track : spec.person);
+  var line = normalizeNameList(spec.line);
   var allDay = spec.allDay === true;
   var hide = spec.hide === true;
   // `siding` (and the `station` it shipped as) used to live here: a rule
-  // could declare that an event's own track leaves the running line for its
+  // could declare that an event's own line leaves the running line for its
   // span instead of branching into a lane. Both keys are gone, and a config
   // that still carries either is read the same as one that does not — the
   // key is simply ignored, which is what happens to any key this does not
@@ -1891,15 +1886,15 @@ function compileRule(spec) {
 
   var rewrite = typeof spec.rewrite === 'string' ? spec.rewrite : null;
   var rewriteFull = spec.rewriteFull === true;
-  if (!track && !allDay && !hide && rewrite === null) return null; // a no-op rule is dropped, not kept
+  if (!line && !allDay && !hide && rewrite === null) return null; // a no-op rule is dropped, not kept
   var isAnyMatch = spec.match && (spec.match.type === 'any' || spec.match.type === 'all');
   // rename defaults to true (a rule assigning a track also renames the
   // title to that track, historically the common case) EXCEPT on an
   // any/all match, where there's no specific text to rename and silently
   // overwriting every title would be surprising — there it defaults to
   // false and must be opted into.
-  var rename = track ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
-  return { match: m.test, rx: m.rx, usesDesc: !!m.usesDesc, track: track, allDay: allDay, hide: hide, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
+  var rename = line ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
+  return { match: m.test, rx: m.rx, usesDesc: !!m.usesDesc, line: line, allDay: allDay, hide: hide, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
 }
 
 function usesDesc(rule) { return !!(rule && rule.usesDesc); }
@@ -1952,7 +1947,7 @@ function looksLikeConfigJson(raw) {
 }
 
 // Parses the "Calendar Config (JSON)" setting text into
-// { calendars, tracks, timeZone, globalRules, everyoneTrack }. Never
+// { calendars, lines, timeZone, globalRules, everyoneLine }. Never
 // throws: invalid JSON falls back to treating the text as a plain
 // newline-separated list of calendar URLs (a low-friction path for
 // someone who just wants to paste ICS links with no rules at all).
@@ -2011,11 +2006,11 @@ function parseConfig(raw) {
     return v === 'auto' ? 'auto' : null;
   })();
 
-  var tracks = {};
-  var everyoneTrack = null;
-  // `tracks` is the current field name; `people` is accepted too, for
-  // configs written before tracks were called tracks.
-  (Array.isArray(data.tracks) ? data.tracks : Array.isArray(data.people) ? data.people : []).forEach(function (item) {
+  var lines = {};
+  var everyoneLine = null;
+  // `lines` is the current field name; `people` is accepted too, for
+  // configs written before lines were called lines.
+  (Array.isArray(data.lines) ? data.lines : []).forEach(function (item) {
     if (!item || typeof item !== 'object') return;
     var name = typeof item.name === 'string' ? item.name.trim() : '';
     if (!name) return;
@@ -2025,13 +2020,13 @@ function parseConfig(raw) {
     // optional explicit side of the map: "left"/"work" or "right"/"family"
     var sideRaw = typeof item.side === 'string' ? item.side.trim().toLowerCase() : '';
     var side = (sideRaw === 'left' || sideRaw === 'work') ? 'left' : (sideRaw === 'right' || sideRaw === 'family') ? 'right' : null;
-    if (everyoneTrack === null) everyoneTrack = name;
+    if (everyoneLine === null) everyoneLine = name;
     // A track with nothing on today's board gets no line, which is what
     // stops every day carrying every ever-configured person's empty rail.
     // `hideIfEmpty: false` opts out: the line is drawn whatever happens, so
     // the board reads the same shape every day and a quiet person still has
     // a place on it. Only `false` counts; anything else keeps the default.
-    tracks[name.toLowerCase()] = { name: name, color: color, badge: badge, side: side, keepEmpty: item.hideIfEmpty === false };
+    lines[name.toLowerCase()] = { name: name, color: color, badge: badge, side: side, keepEmpty: item.hideIfEmpty === false };
   });
 
   var globalRules = compileRuleList(data.rules);
@@ -2055,12 +2050,12 @@ function parseConfig(raw) {
       || globalRules.some(usesDesc) || rules.some(usesDesc);
     // The same switch on the calendar rather than the track: for the common
     // setup where one calendar IS one line, this is where the line is
-    // declared, and there may be no tracks[] entry to hang it off at all.
+    // declared, and there may be no lines[] entry to hang it off at all.
     calendars.push({ name: name, url: item.url.trim(), rules: rules, headers: headers,
       includeDescription: includeDescription, keepEmpty: item.hideIfEmpty === false });
   });
 
-  return { calendars: calendars, tracks: tracks, timeZone: timeZone, locale: locale, timeFormat: timeFormat, temperatureUnit: temperatureUnit, globalRules: globalRules, everyoneTrack: everyoneTrack };
+  return { calendars: calendars, lines: lines, timeZone: timeZone, locale: locale, timeFormat: timeFormat, temperatureUnit: temperatureUnit, globalRules: globalRules, everyoneLine: everyoneLine };
 }
 
 // A replace that never double-matches an empty-string-capable pattern
@@ -2075,10 +2070,10 @@ function replaceMatch(text, rx, replacement) {
 // Applies global rules then this calendar's own (cumulatively, in order —
 // a later matching rule's track/rewrite overrides an earlier one's,
 // and a calendar's own rule is listed after globals so it wins ties).
-// Returns { title, trackNames, allDay, hide }; trackNames is an array
+// Returns { title, lineNames, allDay, hide }; lineNames is an array
 // (possibly with more than one name — a multi-track rule becomes an
 // interchange event) or null if nothing assigned one.
-function applyCalendarRules(ev, weekday, cal, globalRules, everyoneTrack) {
+function applyCalendarRules(ev, weekday, cal, globalRules, everyoneLine) {
   var originalTitle = ev.title;
   // Everything a matcher may ask about, in one shape, so a rule reads the
   // event rather than the four arguments somebody happened to pass down.
@@ -2095,7 +2090,7 @@ function applyCalendarRules(ev, weekday, cal, globalRules, everyoneTrack) {
     startOfDayMin: typeof ev.startMin === 'number' ? ((ev.startMin % 1440) + 1440) % 1440 : null,
     durationMin: (typeof ev.startMin === 'number' && typeof ev.endMin === 'number') ? ev.endMin - ev.startMin : null,
   };
-  var trackNames = null;
+  var lineNames = null;
   var renameRule = null;
   var rewriteRule = null;
   var allDay = false;
@@ -2106,8 +2101,8 @@ function applyCalendarRules(ev, weekday, cal, globalRules, everyoneTrack) {
     if (rule.hide) hide = true;
     if (rule.allDay) allDay = true;
 
-    if (rule.track) {
-      trackNames = rule.track;
+    if (rule.line) {
+      lineNames = rule.line;
       renameRule = rule.rename ? rule : null;
     }
     if (rule.rewrite !== null) rewriteRule = rule;
@@ -2119,26 +2114,26 @@ function applyCalendarRules(ev, weekday, cal, globalRules, everyoneTrack) {
       : rewriteRule.rx ? replaceMatch(originalTitle, rewriteRule.rx, rewriteRule.rewrite)
       : originalTitle;
   } else if (renameRule && renameRule.rx) {
-    finalTitle = replaceMatch(originalTitle, renameRule.rx, renameRule.track.join(' & '));
+    finalTitle = replaceMatch(originalTitle, renameRule.rx, renameRule.line.join(' & '));
   }
-  // NOTE: everyoneTrack is deliberately NOT applied here — a calendar's
+  // NOTE: everyoneLine is deliberately NOT applied here — a calendar's
   // own name is meant to be the fallback for one that has no rule
-  // assigning anyone (see buildFromConfig), and everyoneTrack is the
+  // assigning anyone (see buildFromConfig), and everyoneLine is the
   // last resort after THAT. Applying it here unconditionally used to make
-  // the calendar-name fallback unreachable dead code: with tracks[] set,
+  // the calendar-name fallback unreachable dead code: with lines[] set,
   // EVERY unnamed-by-rule event (i.e. every event from any calendar with
   // no rules at all, or whose rules didn't match this one) landed on
-  // everyoneTrack instead of that calendar's own name — so calendars
+  // everyoneLine instead of that calendar's own name — so calendars
   // literally named after a track (a common real setup: one calendar per
   // family member, no rules needed) never got their events attributed to
   // themselves at all.
 
-  return { title: finalTitle, trackNames: trackNames, allDay: allDay, hide: hide };
+  return { title: finalTitle, lineNames: lineNames, allDay: allDay, hide: hide };
 }
 
 // Converts a config track's `color` (a plain framework hue name like
 // "blue", or "gray-NN"/"black"/"white") into the "hue-65"-style token
-// this plugin's tracks/nodes use ("hue-40" style) — null (fall back to the auto HUE_CYCLE)
+// this plugin's lines/nodes use ("hue-40" style) — null (fall back to the auto HUE_CYCLE)
 // if unset or not one of those.
 function hueTokenForColor(color) {
   if (!color) return null;
@@ -2147,7 +2142,7 @@ function hueTokenForColor(color) {
   return null;
 }
 
-// A small, growable track registry — seeded from parsed.tracks, but
+// A small, growable track registry — seeded from parsed.lines, but
 // calendars with no track-assigning rule (e.g. a shared "Family"
 // calendar) fall back to using the CALENDAR's own name as an implicit
 // track, added here the first time it's encountered, so those events
@@ -2160,7 +2155,7 @@ function hueTokenForColor(color) {
 // event count (heaviest first, each going to whichever side is currently
 // lighter), so the split reflects the actual day's data instead of a
 // fixed "Work calendar" convention.
-function makeTrackRegistry(parsed) {
+function makeLineRegistry(parsed) {
   var order = [];
   var byName = {};
   var counts = {};
@@ -2168,7 +2163,7 @@ function makeTrackRegistry(parsed) {
 
   function add(name, weight) {
     if (!byName[name]) {
-      byName[name] = { key: 'p' + (keyIdx++), name: name, side: null, hue: null, track_offset: null, line_width: null, line_style: null, initial: null };
+      byName[name] = { key: 'p' + (keyIdx++), name: name, side: null, hue: null, line_offset: null, line_width: null, line_style: null, initial: null };
       order.push(name);
       counts[name] = 0;
     }
@@ -2186,11 +2181,11 @@ function makeTrackRegistry(parsed) {
   }
 
   function explicitSide(name) {
-    var c = parsed.tracks[name.toLowerCase()];
+    var c = parsed.lines[name.toLowerCase()];
     return (c && (c.side === 'left' || c.side === 'right')) ? c.side : null;
   }
 
-  // How often two tracks are in the same place at the same time. Every
+  // How often two lines are in the same place at the same time. Every
   // shared event links each pair it joins, and those links decide the ORDER
   // the lines are laid out in: a family that eats dinner together should not
   // have to read across two other people's days to see that they did.
@@ -2218,7 +2213,7 @@ function makeTrackRegistry(parsed) {
   }
   function affinityOf(a, b) { return affinity[pairKey(a, b)] || 0; }
 
-  // Lay the tracks out as ONE chain, strongest link first, then extended at
+  // Lay the lines out as ONE chain, strongest link first, then extended at
   // whichever end offers the strongest next link. The board is a chain too —
   // outermost left ... innermost left, spine, innermost right ... outermost
   // right — so a chain laid along it keeps every consecutive pair adjacent,
@@ -2460,11 +2455,11 @@ function makeTrackRegistry(parsed) {
 
     // The map's anchor line: black and boldest. The first track the config
     // names, which is also the one any unassigned event falls back to — the
-    // household's main line. Failing that (a config that names no tracks at
+    // household's main line. Failing that (a config that names no lines at
     // all, or lists none that survived), the busiest line. It used to be
     // whichever line happened to sit innermost-left, which the chain no
     // longer decides by load.
-    var configured0 = order.filter(function (n) { return parsed.tracks[n.toLowerCase()]; })[0];
+    var configured0 = order.filter(function (n) { return parsed.lines[n.toLowerCase()]; })[0];
     var anchor = configured0 || chain.slice().sort(function (a, b) { return counts[b] - counts[a]; })[0];
 
     var boardOrder = chain.slice();
@@ -2474,9 +2469,9 @@ function makeTrackRegistry(parsed) {
       // the chain runs outward-left to outward-right, so the slot nearest
       // the spine is the LAST left entry and the FIRST right one
       var idx = side === 'left' ? cut - pos : pos - cut - 1;
-      var configured = parsed.tracks[name.toLowerCase()];
+      var configured = parsed.lines[name.toLowerCase()];
       t.side = side;
-      t.track_offset = TRACK_STEP * (idx + 1) * (side === 'left' ? -1 : 1);
+      t.line_offset = LINE_STEP * (idx + 1) * (side === 'left' ? -1 : 1);
       // A PINNED COLOUR AND NOTHING ELSE.
       //
       // A colour somebody chose is a preference, and preferences are data.
@@ -2531,12 +2526,12 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   var days = [];
   for (var di = 0; di < DAY_SPAN; di++) days.push(addCivilDays(today, di));
 
-  var registry = makeTrackRegistry(parsed);
+  var registry = makeLineRegistry(parsed);
   // Every explicitly-configured track is registered up front, even with
   // zero events today, so they still get a line and (if they set an
   // explicit side) it's honored regardless of load.
-  Object.keys(parsed.tracks).forEach(function (key) {
-    var t = parsed.tracks[key];
+  Object.keys(parsed.lines).forEach(function (key) {
+    var t = parsed.lines[key];
     if (t.keepEmpty) registry.keep(t.name); else registry.add(t.name, 0);
   });
 
@@ -2607,18 +2602,18 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
       // owns on the board on a day it has nothing. Which line that is can
       // only be known once the feed has been read, since an unnamed
       // calendar borrows the feed's own name.
-      if (cal.keepEmpty) registry.keep(cal.name || parsed.everyoneTrack || calLabel);
+      if (cal.keepEmpty) registry.keep(cal.name || parsed.everyoneLine || calLabel);
       parsedIcs.timed.forEach(function (ev) {
-        var resolved = applyCalendarRules(ev, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
+        var resolved = applyCalendarRules(ev, todayWeekday, cal, parsed.globalRules, parsed.everyoneLine);
         if (resolved.hide) return;
-        var trackNames = resolved.trackNames || (cal.name ? [cal.name] : null)
-          || (parsed.everyoneTrack ? [parsed.everyoneTrack] : null) || (calLabel ? [calLabel] : null);
-        if (!trackNames || !trackNames.length) return;
+        var lineNames = resolved.lineNames || (cal.name ? [cal.name] : null)
+          || (parsed.everyoneLine ? [parsed.everyoneLine] : null) || (calLabel ? [calLabel] : null);
+        if (!lineNames || !lineNames.length) return;
         // A rule can mark an otherwise-timed event allDay (e.g. a calendar
         // that lists "Public Holiday" as a timed 00:00 entry) — that now
         // routes into the all-day strip instead of the timeline, same as a
         // genuine ICS all-day entry, rather than being silently dropped.
-        if (resolved.allDay) { allDayEvents.push({ track: registry.add(trackNames[0], 0.25).key, title: resolved.title }); return; }
+        if (resolved.allDay) { allDayEvents.push({ line: registry.add(lineNames[0], 0.25).key, title: resolved.title }); return; }
         // A LONG BLOCK IS AN EVENT LIKE ANY OTHER.
         //
         // A school day, a shift, a desk booking, a delivery used to be a
@@ -2637,14 +2632,14 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         // track stays where its name says it is. Shared by two people it is
         // a shared event, which is a convergence, which is what two children
         // at the same school all day actually looks like.
-        var primary = registry.add(trackNames[0], 1);
+        var primary = registry.add(lineNames[0], 1);
         // a co-owner on a shared/interchange event gets a smaller weight
         // toward side balancing — they have a ring there too, but it's not
         // "their" event the way the primary owner's is
-        var interchangeWith = trackNames.slice(1).map(function (n) { return registry.add(n, 0.5).key; });
-        if (trackNames.length > 1) registry.link(trackNames, null, ev.startMin);
+        var interchangeWith = lineNames.slice(1).map(function (n) { return registry.add(n, 0.5).key; });
+        if (lineNames.length > 1) registry.link(lineNames, null, ev.startMin);
         events.push({
-          track: primary.key,
+          line: primary.key,
           interchange_with: interchangeWith.length ? interchangeWith : undefined,
           title: resolved.title,
           startMin: ev.startMin,
@@ -2653,12 +2648,12 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         });
       });
       parsedIcs.allDay.forEach(function (ev) {
-        var resolved = applyCalendarRules(ev, todayWeekday, cal, parsed.globalRules, parsed.everyoneTrack);
+        var resolved = applyCalendarRules(ev, todayWeekday, cal, parsed.globalRules, parsed.everyoneLine);
         if (resolved.hide) return;
-        var trackNames = resolved.trackNames || (cal.name ? [cal.name] : null)
-          || (parsed.everyoneTrack ? [parsed.everyoneTrack] : null) || (calLabel ? [calLabel] : null);
-        if (!trackNames || !trackNames.length) return;
-        allDayEvents.push({ track: registry.add(trackNames[0], 0.25).key, title: resolved.title });
+        var lineNames = resolved.lineNames || (cal.name ? [cal.name] : null)
+          || (parsed.everyoneLine ? [parsed.everyoneLine] : null) || (calLabel ? [calLabel] : null);
+        if (!lineNames || !lineNames.length) return;
+        allDayEvents.push({ line: registry.add(lineNames[0], 0.25).key, title: resolved.title });
       });
     } catch (e) {
       // one calendar failing shouldn't blank the whole render — skip it,
@@ -2681,15 +2676,15 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   // Merging them here rather than in the template also means the layout
   // learns that those two people are together, which is what decides the
   // order the lines are laid out in.
-  function mergeAcrossTracks(list) {
+  function mergeAcrossLines(list) {
     var byWhat = {}, out = [];
     list.forEach(function (ev) {
       var k = ev.title + '\u0000' + ev.startMin + '\u0000' + ev.endMin;
       var seen = byWhat[k];
       if (!seen) { byWhat[k] = ev; out.push(ev); return; }
-      var mine = [seen.track].concat(seen.interchange_with || []);
-      if (mine.indexOf(ev.track) >= 0) return;             // the same track twice: a duplicate, drop it
-      seen.interchange_with = (seen.interchange_with || []).concat([ev.track]);
+      var mine = [seen.line].concat(seen.interchange_with || []);
+      if (mine.indexOf(ev.line) >= 0) return;             // the same line twice: a duplicate, drop it
+      seen.interchange_with = (seen.interchange_with || []).concat([ev.line]);
       if (!seen.location && ev.location) seen.location = ev.location;
     });
     return out;
@@ -2699,7 +2694,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   function linkMerged(list) {
     list.forEach(function (ev) {
       if (!ev.interchange_with || !ev.interchange_with.length) return;
-      var names = [ev.track].concat(ev.interchange_with)
+      var names = [ev.line].concat(ev.interchange_with)
         .map(function (k) { return keyToName[k]; }).filter(Boolean);
       if (names.length > 1) registry.link(names, null, ev.start_min);
     });
@@ -2740,7 +2735,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   events = onShownDay(events);
   allDayEvents = allDayEvents.filter(function (e) { return (e.day || 0) === showIx; });
 
-  events = mergeAcrossTracks(events);
+  events = mergeAcrossLines(events);
   linkMerged(events);
 
   events.sort(function (a, b) { return a.startMin - b.startMin; });
@@ -2921,7 +2916,7 @@ async function run(input) {
       // calendar while the rest are current is the case that actually
       // happens, and it renders a mixed board that is nobody's day. An
       // unexpected line is as wrong as a missing one; both fall back.
-      var want = demoCfg.tracks.map(function (t) { return t.name; });
+      var want = demoCfg.lines.map(function (t) { return t.name; });
       var got = (demoMetro && demoMetro.legend ? demoMetro.legend : []).map(function (t) { return t.name; });
       var complete = want.length === got.length
         && want.every(function (n) { return got.indexOf(n) >= 0; });

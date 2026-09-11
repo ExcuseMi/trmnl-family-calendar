@@ -106,16 +106,6 @@
     {% if data.weather_stale %}
       <div class="metro-alerts label label--small metro-quiet">{{ data.i18n.weather_stale | default: "Forecast may be out of date" }}</div>
     {% endif %}
-    {% if data.all_day and data.all_day.size > 0 %}
-      <div class="metro-allday flex flex--row flex--center-y gap--small flex--wrap">
-        {% for a in data.all_day %}
-          <span class="flex flex--row flex--center-y gap--xsmall">
-            <svg class="metro-allday-swatch no-shrink" data-hue="{{ a.hue }}" data-style="{{ a.track_style }}" width="20" height="8" viewBox="0 0 20 8"></svg>
-            <span class="label label--small font--bold">{{ a.title }}</span>
-          </span>
-        {% endfor %}
-      </div>
-    {% endif %}
   </div>
 
   <div class="divider divider--on-white flex-none"></div>
@@ -290,7 +280,20 @@
   // and every panel got the 1-bit table. That is the third time in this
   // file a declaration below its reader has cost an afternoon.
   var TRACK_STYLES = ['heavydash', 'dotted', 'dashdot', 'widedash'];
-  var TONES = ['black', 'gray-25', 'gray-40', 'gray-55', 'gray-70'];
+  // THE DARK END ONLY, BECAUSE TONE IS NO LONGER ALONE.
+  //
+  // This ran the whole ladder to gray-70, and had to: when every line was
+  // drawn solid, tone was the only thing telling one from another, so the
+  // fifth line had to be a long way from the first. The cost was that the
+  // fifth line was barely there -- Maggie's rail, a main line of the board,
+  // came out a pale wash you could lose against the paper.
+  //
+  // Now that every line carries a TEXTURE as well, tone does not have to
+  // separate anything on its own; it only has to stop two neighbours
+  // merging at a glance, and fifteen percent does that when the dash
+  // patterns differ too. So the ladder stops at gray-40 and every line on
+  // the board stays dark enough to read from across a room.
+  var TONES = ['black', 'gray-25', 'gray-40'];
   // THE TONE LADDER, WALKED IN HALVES.
   //
   // Handing the greys out in order -- black, 25, 40, 55, 70 -- puts every
@@ -306,15 +309,18 @@
   // Adjacency on this board is not incidental: parallel rails run the
   // whole width a few pixels apart, and two neighbours a shade apart read
   // as one thick line.
+  // With a three-rung ladder there is nothing to interleave: the anchor
+  // takes black and the rest alternate the two greys, which puts a
+  // different tone AND a different texture between every pair of
+  // neighbours. The halves-interleave this replaced existed to spread five
+  // lines across five tones, and five tones is what made the last of them
+  // too faint to read.
   function toneOrder(len) {
-    var half = Math.ceil(len / 2), out = [];
-    for (var i = 0; i < half; i++) {
-      out.push(i);
-      if (half + i < len) out.push(half + i);
-    }
+    var out = [];
+    for (var i = 0; i < len; i++) out.push(i);
     return out;
   }
-  function styleTracks() {
+  function styleLines() {
     var n = 0;
     // The anchor is black by definition, so black is spent before the
     // ladder is handed out and the sequence must not offer it again --
@@ -328,15 +334,23 @@
       p.line_width = 3;
       var tone = BITS === 1 ? 'black' : TONES[order[n % order.length]];
       if (!p.hue) p.hue = p.anchor ? 'black' : tone;
-      // MORE LINES THAN GREYS. Clamping the ladder at its last rung, which
-      // is what this did, gave the sixth line and the seventh the same
-      // grey as the fifth -- three rails a reader cannot tell apart on the
-      // one panel that has greys to spare. Past the end of the ladder the
-      // tones start again and the dash patterns come back in to separate
-      // them, the same way they carry the whole job at one bit.
-      p.line_style = p.anchor ? 'solid'
-        : (BITS >= 4 && LEGEND.length <= order.length + (anchored ? 1 : 0)) ? 'solid'
-        : TRACK_STYLES[n % TRACK_STYLES.length];
+      // TEXTURE AT EVERY DEPTH, NOT ONLY WHERE THERE ARE NO GREYS.
+      //
+      // Four bits used to mean solid rails and a tonal ladder, on the
+      // reasoning that with sixteen greys the patterns do not have to carry
+      // identity. They do not have to, and it turns out they still should:
+      // where a bundle of lines runs parallel six pixels apart -- the exits
+      // from an interchange, a corridor two people share -- four solid
+      // rails a shade apart read as one thick band, and the fan-out that
+      // makes an interchange legible simply disappears. At one bit the same
+      // board is immediately readable, because each rail is a different
+      // texture.
+      //
+      // So both channels, always: the tone says which line at a glance
+      // across the board, the texture says which line where they are
+      // touching. The anchor stays solid black, which is its whole
+      // identity.
+      p.line_style = p.anchor ? 'solid' : TRACK_STYLES[n % TRACK_STYLES.length];
       if (!p.anchor) n++;
     });
     var any = LEGEND.some(function (p) { return p.line_style === 'solid'; });
@@ -401,7 +415,7 @@
   var BITS = screenEl && screenEl.classList.contains('screen--1bit') ? 1
            : screenEl && screenEl.classList.contains('screen--2bit') ? 2 : 4;
   var ONE_BIT = BITS === 1;
-  styleTracks();
+  styleLines();
   // Crisp pixels where there are no greys to blend with, smooth vectors
   // where there are. Paint only: neither changes a coordinate.
   canvas.setAttribute('shape-rendering', BITS === 1 ? 'crispEdges' : 'geometricPrecision');
@@ -534,20 +548,6 @@
     var sum = 0;
     for (var i = 0; i < parts.length; i++) sum += parts[i];
     return parts.length % 2 ? sum * 2 : sum;
-  }
-  // The map's own dash periods are tuned for long track lines — over a
-  // short, fixed-length legend swatch the same period leaves a visible gap
-  // before the swatch's own right edge (worst on 'dotted': a handful of
-  // widely-spaced dots trail off well short of it), making that row read as
-  // less aligned with the others even though the text starts at the same
-  // fixed offset. These periods are tuned instead to complete a whole
-  // number of repeats across the swatch's own length, so every line style
-  // reads as an equally "full" swatch.
-  function legendDashFor(style, S) {
-    if (style === 'dashed') return (3.5 * S) + ' ' + (7 * S);
-    if (style === 'dotted') return (2 * S) + ' ' + (4 * S);
-    if (style === 'dashdot') return (5 * S) + ' ' + (2.5 * S);
-    return null;
   }
   // How much of its nominal weight a line is drawn at. Weights are tuned
   // for a board where each track has a band to itself; on a panel where they
@@ -752,22 +752,10 @@
       swap('.metro-date', large ? 'label--large' : 'label--base');
       swap('.metro-temp', large ? 'title--large' : compact ? 'title--small' : 'title--base');
       swap('.metro-cond', large ? 'label--base' : 'label--small');
-      header.querySelectorAll('.metro-allday-swatch').forEach(function (sw) {
-        while (sw.firstChild) sw.removeChild(sw.firstChild);
-        var abw = 20 * S, abh = 8 * S;
-        sw.setAttribute('width', abw); sw.setAttribute('height', abh); sw.setAttribute('viewBox', '0 0 ' + abw + ' ' + abh);
-        var p = { hue: sw.getAttribute('data-hue'), line_style: sw.getAttribute('data-style'), line_width: 3 };
-        var ln = svgEl('line', { x1: 2 * S, y1: abh / 2, x2: abw - 2 * S, y2: abh / 2 });
-        paintLine(ln, p, S, sw, null);
-        // the map's own rung pitch is tuned for long lines; over a 20px
-        // swatch it would show one rung and read as a different line
-        var ov = sw.lastChild, ld = legendDashFor(p.line_style, S);
-        if (ov !== ln && ld) ov.setAttribute('stroke-dasharray', ld);
-      });
     }
 
     // geometry constants (device-scaled)
-    var TRACK_STEP = 20 * S, NODE_R = 6 * S, NODE_STROKE = 3 * S;
+    var LINE_STEP = 20 * S, NODE_R = 6 * S, NODE_STROKE = 3 * S;
     var LINE_GAP = 6 * S, LANE_GAP = 12 * S, LANE_BASE = 14 * S + Math.min(24 * S, crossPx * 0.025), EDGE = 8 * S;
     // The car rides on TOP of whatever line it is on, so a spur has to sit
     // far enough off the trunk for one to fit between them — at 10*S the
@@ -870,7 +858,7 @@
       if (LEGEND.length < 2) return;
       // a line, the room its kink wants, and one lane deep enough for a
       // two-row label (the time tag above the title)
-      var perLine = TRACK_STEP + LANE_BASE + hourH * 2.6;
+      var perLine = LINE_STEP + LANE_BASE + hourH * 2.6;
       var room = crossPx - bandLo - 2 * EDGE;
       // One line is a valid board. On a quadrant there is honestly room for
       // one person's day and a count of what else is on, and that beats five
@@ -901,16 +889,16 @@
     // ---- tracks: side A = 'left' (up / left of axis), side B = 'right'
     var sides = { A: [], B: [] };
     LEGEND.forEach(function (p) { sides[p.side === 'left' ? 'A' : 'B'].push(p); });
-    var trackByKey = {};
+    var lineByKey = {};
     ['A', 'B'].forEach(function (s) {
       var sign = s === 'A' ? -1 : 1;
-      sides[s].sort(function (a, b) { return Math.abs(a.track_offset) - Math.abs(b.track_offset); });
+      sides[s].sort(function (a, b) { return Math.abs(a.line_offset) - Math.abs(b.line_offset); });
       sides[s].forEach(function (p, i) {
-        p._dist = TRACK_STEP * (i + 0.5);
+        p._dist = LINE_STEP * (i + 0.5);
         p._c = sign * p._dist;
         p._sign = sign;
         p._sideKey = s;
-        trackByKey[p.key] = p;
+        lineByKey[p.key] = p;
       });
     });
     function bundleHalf(s) {
@@ -1711,7 +1699,7 @@
     var earlier = 0, later = 0, visible = [];
     all.forEach(function (e) {
       // an event on a line this canvas had no room for is counted, not drawn
-      if (!trackByKey[e.owner]) { later++; return; }
+      if (!lineByKey[e.owner]) { later++; return; }
       if (e.start_min < dayFrom) earlier++;
       else if (e.start_min >= dayTo) later++;
       else visible.push(e);
@@ -1812,7 +1800,7 @@
       n.style.overflowWrap = 'anywhere';
     }
     function buildLabel(e) {
-      var p = trackByKey[e.owner];
+      var p = lineByKey[e.owner];
       // Alignment is a framework class, not an inline style: text--left /
       // text--right are what the framework documents for this, and they pick
       // up any per-screen overrides a theme sets. Only the arbitrary pixel
@@ -1917,7 +1905,7 @@
     // by before, and it would have read as a mystery on the first paint.
     function staticFacts() {
     visible.forEach(function (e) {
-      var p = trackByKey[e.owner];
+      var p = lineByKey[e.owner];
       e._p = p;
       // Where the drawing put this event LAST time. These live on the
       // payload's own objects, which survive from one layout run to the
@@ -1942,7 +1930,7 @@
       // interchange: capsule spans every involved track; the branch leaves from
       // the capsule's outer edge on the owner's side
       var involved = [p];
-      (e.co_owners || []).forEach(function (k) { if (trackByKey[k]) involved.push(trackByKey[k]); });
+      (e.co_owners || []).forEach(function (k) { if (lineByKey[k]) involved.push(lineByKey[k]); });
       e._involved = involved;
       // An interchange's ring sits on the OUTERMOST line it joins (the
       // capsule spans them all and the branch leaves from its outer edge),
@@ -2031,7 +2019,7 @@
     // Where a branch leaves its owner's line and where it merges back. Both
     // are read off the track distances, which the band layout re-solves on
     // every attempt, so this is a function rather than a one-off pass.
-    function recomputeTrackDists() {
+    function recomputeLineDists() {
       visible.forEach(function (e) {
         // Both ends measure from the line the spur actually touches: the
         // OUTERMOST track this event joins, which for a solo event is the
@@ -2041,16 +2029,16 @@
         // climb back was scaled for a distance several bands too big — it
         // came back as a shallow ramp dragging on for hours instead of a
         // corner just after the event.
-        var p = e._p, lo = trackByKey[e._lead] || p;
+        var p = e._p, lo = lineByKey[e._lead] || p;
         // if this event's start (or end) falls inside one of that track's own
         // sidings, its ring sits on the raised siding level segment of
         // the line, not the flat baseline — so the branch has to originate
         // (or merge back) from that raised height too
-        e._trackDist = distAt(lo, e._nodeA) + raiseAt(lo, e._nodeA) + NODE_R;   // branch origin (edge of the ring/capsule)
-        e._trackDistEnd = distAt(lo, e._endA) + raiseAt(lo, e._endA) + NODE_R;  // merge target (same line, after the event)
+        e._lineDist = distAt(lo, e._nodeA) + raiseAt(lo, e._nodeA) + NODE_R;   // branch origin (edge of the ring/capsule)
+        e._lineDistEnd = distAt(lo, e._endA) + raiseAt(lo, e._endA) + NODE_R;  // merge target (same line, after the event)
       });
     }
-    recomputeTrackDists();
+    recomputeLineDists();
 
     var maxLabelThick, laneStep, step, spineC, usedA, usedB, needA, needB, dropped, demand, alloc, sep, packedFallback;
     // WHICH LABELS HAVE SOMEBODY ELSE'S LINE THROUGH THEM, by track.
@@ -2148,7 +2136,7 @@
     }
     // DECLARED BEFORE THE THING THAT READS THEM.
     //
-    // These live with `placeOnTrackCaptions`, which is written below the
+    // These live with `placeOnLineCaptions`, which is written below the
     // tier loop that calls it. `var` hoists the name and not the value, so
     // during every attempt these were `undefined`, and the score they were
     // added to came out NaN -- which compares false against everything, so
@@ -2348,7 +2336,7 @@
       // below), so it has no business closing the inward side of the ladder
       // to everybody else on this side: with marks the common shape, one of
       // them anywhere on a side turned off A15 for every track on it.
-      var trackLong = visible.some(function (e) {
+      var lineLong = visible.some(function (e) {
         return e._onTrack && !e._diagStick && e._sideKey === sideKey;
       });
       var evs = visible.filter(function (e) { return e._sideKey === sideKey && (!onlyOwner || e._laneOwner === onlyOwner); }).sort(function (a, b) { return a._nodeA - b._nodeA; });
@@ -2447,7 +2435,7 @@
         // outward and does not need to take it. Not applied while MEASURING
         // what a track wants: the probe ladder has no sides on it, and an
         // event that can find no rung there is counted as dropped.
-        if (!onlyOwner && trackLong) {
+        if (!onlyOwner && lineLong) {
           if (e._onTrack !== (laneSide(k) < 0)) return null;
         }
         // dy (the diagonal's axis reach) is the real distance from this
@@ -2458,12 +2446,12 @@
         // grid never tested.
         // Signed: a rung may sit INWARD of its own line (A15), and then
         // the branch turns toward the spine. Read through Math.max every
-        // inward rung collapsed onto trackDist + MIN_DIAG, so two lanes
+        // inward rung collapsed onto lineDist + MIN_DIAG, so two lanes
         // became one distance and their labels were drawn on top of each
         // other, which is the opposite of what the second side is for.
         var rowDist = laneDist(k);
-        var dy = rowDist - e._trackDist;
-        if (Math.abs(dy) < MIN_DIAG) { dy = (dy < 0 ? -1 : 1) * MIN_DIAG; rowDist = e._trackDist + dy; }
+        var dy = rowDist - e._lineDist;
+        if (Math.abs(dy) < MIN_DIAG) { dy = (dy < 0 ? -1 : 1) * MIN_DIAG; rowDist = e._lineDist + dy; }
         var inward = laneSide(k) < 0;
         // THE BRANCH LEAVES AT THE EVENT'S OWN MINUTE. Nothing about a
         // branch may be drawn before the thing it names has started.
@@ -2592,9 +2580,9 @@
         // 9am, branching off the middle of School Day's kink, was drawn that
         // way. Where the trunk is not level across the lead, drop vertically
         // at the event's own minute instead — the shape that needs no run.
-        var leadTrack = trackByKey[e._lead] || e._p;
+        var leadLine = lineByKey[e._lead] || e._p;
         if (diagFrom !== elbow
-            && Math.abs(raiseAt(leadTrack, diagFrom) - raiseAt(leadTrack, elbow)) > 0.5) {
+            && Math.abs(raiseAt(leadLine, diagFrom) - raiseAt(leadLine, elbow)) > 0.5) {
           diagFrom = elbow;
         }
         // And it needs board to leave from. A 45° ramp for an event in the
@@ -2636,7 +2624,7 @@
           var dg = L.items[dgi];
           if (dg.kind === 'diag' && dg.dir !== dir && dg.a0 < diagHi && diagLo < dg.a1) return null;
         }
-        var crossing = diagonalCrosses(diagFrom, e._trackDist, elbow, rowDist, k);
+        var crossing = diagonalCrosses(diagFrom, e._lineDist, elbow, rowDist, k);
         if (crossing && !allowCross) return null;
         // How far the elbow ended up past the event's own start, if at all.
         var pastStart = dir > 0 ? Math.max(0, elbow - e._nodeA) : Math.max(0, e._nodeA - elbow);
@@ -2712,7 +2700,7 @@
         // one it was dropped outright the first time its own line's descent
         // swept that rung: Moe's Tavern, a mark on Homer's way to dinner,
         // vanished from the board. Its name is placed against the mark by
-        // `placeOnTrackCaptions`, after the trunks are final. The rung the
+        // `placeOnLineCaptions`, after the trunks are final. The rung the
         // solver reserves on the inward side is still the ROOM that makes
         // that possible; this just stops the ladder handing it out.
         if (e._onTrack) return;
@@ -2794,7 +2782,7 @@
           // event was drawn as already leaving. The flat run now holds until
           // the end time and the rejoin happens beyond it — which also means
           // the end tick has flat rail to sit on.
-          var mergeDy = Math.max(best.ld - e._trackDistEnd, MIN_DIAG);
+          var mergeDy = Math.max(best.ld - e._lineDistEnd, MIN_DIAG);
           var mergeAt = e._endA + best.dir * mergeDy;
           // The rejoin must be finished before this line's next event wants
           // the trunk back. Coming down late reserves lane space across the
@@ -2819,7 +2807,7 @@
           if (fitsBeforeNext && longEnough && mergeAt <= axisEnd - EDGE) {
             var clear = true, L2 = lane(best.k);
             for (var m = 0; m < L2.items.length && clear; m++) if (itemOverlaps(L2.items[m], [lineB, mergeAt + CORNER])) clear = false;
-            if (clear && !diagonalCrosses(e._endA, best.ld, mergeAt, e._trackDistEnd, best.k)) {
+            if (clear && !diagonalCrosses(e._endA, best.ld, mergeAt, e._lineDistEnd, best.k)) {
               e._merge = true; e._mergeAt = mergeAt; lineB = e._endA;
             }
           }
@@ -2961,7 +2949,7 @@
         // would otherwise sit a double pitch apart, which reads as a
         // missing line rather than as the middle of the map.
         tracks.forEach(function (t, i) {
-          var gap = (i ? k.trackStep + sepPx : (k.trackStep + sepPx) / 2);
+          var gap = (i ? k.lineStep + sepPx : (k.lineStep + sepPx) / 2);
           // What the track asked for is its OUTWARD lanes. Rungs on the
           // inward side are ADDED to that, not taken out of it: a long
           // event's name and a pierced track's escape are both extra needs,
@@ -3116,7 +3104,7 @@
         var acc = 0, slots = [], dist = {}, bandEnd = {};
         sepPx = sepPx || 0;
         tracks.forEach(function (t, i) {
-          acc += i ? k.trackStep + sepPx : (k.trackStep + sepPx) / 2;
+          acc += i ? k.lineStep + sepPx : (k.lineStep + sepPx) / 2;
           dist[t.key] = acc;
           bandEnd[t.key] = acc;
         });
@@ -3211,7 +3199,7 @@
         // one gap.
         var STEP_CAP = k.laneStep * 1.35;
         var widest = Math.max(sides.A.length, sides.B.length);
-        var SEP_CAP = Math.max(k.trackStep * 2, k.nameH ? k.nameH + k.nodeR * 2 : 0,
+        var SEP_CAP = Math.max(k.lineStep * 2, k.nameH ? k.nameH + k.nodeR * 2 : 0,
           widest ? room / (widest + 1) : 0);
         // Grow one solution into the room it has: pitch to its cap, then
         // separation, stopping the moment the sides stop fitting.
@@ -3230,7 +3218,7 @@
           // track-step needed four hundred tries to cross a deep canvas
           // and the loop gave up a third of the way, so the map stopped
           // spreading well before the room ran out.
-          var sepStep = Math.max(k.trackStep * 0.2, SEP_CAP / 40);
+          var sepStep = Math.max(k.lineStep * 0.2, SEP_CAP / 40);
           for (var gj = 0; gj < 60 && sp < SEP_CAP; gj++) {
             var trySep = Math.min(SEP_CAP, sp + sepStep);
             if (trySep <= sp + 0.01) break;
@@ -3352,8 +3340,8 @@
         // How close the tracks ended up. A line drawn at full weight when
         // the next one is a track-step away turns the map into stripes, so
         // the weights come down with the pitch.
-        var pitch = k.trackStep + sep;
-        var weightScale = clampN(pitch / (k.trackStep * 1.7), 0.5, 1);
+        var pitch = k.lineStep + sep;
+        var weightScale = clampN(pitch / (k.lineStep * 1.7), 0.5, 1);
         var spineC = k.bandLo + clampN(sol.needA + (room - sol.needA - sol.needB) / 2,
           Math.min(sol.needA, room / 2), Math.max(room - sol.needB, room / 2));
 
@@ -3501,7 +3489,7 @@
     // bundle; inside a band a lane only has to clear its own line.
     function crossConsts() {
       return {
-        trackStep: TRACK_STEP, lineGap: LINE_GAP, laneGap: LANE_GAP, minDiag: MIN_DIAG,
+        lineStep: LINE_STEP, lineGap: LINE_GAP, laneGap: LANE_GAP, minDiag: MIN_DIAG,
         nodeR: NODE_R,
         maxLabelThick: maxLabelThick, laneStep: laneStep, laneBasePacked: LANE_BASE,
         nameH: fan ? fan.nameH : 0, edge: EDGE, alertBand: alertBand,
@@ -3527,17 +3515,17 @@
     // tracks wanted 996px of a board with 674; counting none of them left
     // the bundle at minimum pitch with fourteen names adrift in the middle
     // of the board. What they all want is the same gap, once.
-    function marksOnTrack(p) {
+    function marksOnLine(p) {
       var n = 0;
       visible.forEach(function (e) {
         if (e._onTrack && !e._dropped && e._p === p) n++;
       });
       return n;
     }
-    function crossTracks(sideKey) {
+    function crossLines(sideKey) {
       return sides[sideKey].map(function (p) {
         return { key: p.key, shared: sharedCount(p),
-                 marks: marksOnTrack(p) ? 1 : 0,
+                 marks: marksOnLine(p) ? 1 : 0,
                  needIn: inwardNeed[p.key] ? 1 : 0 };
       });
     }
@@ -3623,7 +3611,7 @@
     function solveCross(gaps) {
       return CrossSolver.solve({
         k: crossConsts(),
-        sides: { A: crossTracks('A'), B: crossTracks('B') },
+        sides: { A: crossLines('A'), B: crossLines('B') },
         demand: demand,
         gaps: gaps || null,
         // A15: a track hangs rungs on either side of its line. The gap
@@ -3714,15 +3702,15 @@
       if (packedFallback || LEGEND.length < 3) return;
       var shared = [];
       visible.forEach(function (e) {
-        var mem = [e.owner].concat(e.co_owners || []).filter(function (k) { return trackByKey[k]; });
+        var mem = [e.owner].concat(e.co_owners || []).filter(function (k) { return lineByKey[k]; });
         if (mem.length > 1) shared.push({ atMin: e.start_min, members: mem });
       });
       var w = CrossSolver.weave({
-        sides: { A: crossTracks('A'), B: crossTracks('B') },
+        sides: { A: crossLines('A'), B: crossLines('B') },
         dist: cross.dist, events: shared,
       });
       if (!w) return;
-      var pa = trackByKey[w.a], pb = trackByKey[w.b];
+      var pa = lineByKey[w.a], pb = lineByKey[w.b];
       if (!pa || !pb) return;
       var atA = aFor(w.atMin);
       function posOf(p) { return { sideKey: p._sideKey, sign: p._sign, dist: p._dist, c: p._c, bandKey: p.key }; }
@@ -3766,20 +3754,20 @@
       // solver hands out fewer rungs, the tighter answer was the better
       // board and this one is thrown away.
       function rungsOf(sol) { return sol ? sol.lanes.A.length + sol.lanes.B.length : -1; }
-      var want = TRACK_STEP * 2.4 + NODE_R * 2 + laneStep;
+      var want = LINE_STEP * 2.4 + NODE_R * 2 + laneStep;
       var re = solveCross([{ a: w.a, b: w.b, px: want }]);
       if (!re || re.packed || rungsOf(re) < rungsOf(cross)) {
         // ...and if it does cost, fall back to just enough to cross in
-        re = solveCross([{ a: w.a, b: w.b, px: TRACK_STEP * 2.4 + NODE_R * 2 }]);
+        re = solveCross([{ a: w.a, b: w.b, px: LINE_STEP * 2.4 + NODE_R * 2 }]);
       }
       if (re && !re.packed && rungsOf(re) >= rungsOf(cross)) { cross = re; applyCross(); }
       // and now the positions are final, so where the lines actually go is
       // read off them rather than off the answer they were planned against
       setWeave();
-      recomputeTrackDists();
+      recomputeLineDists();
     })();
 
-    recomputeTrackDists();
+    recomputeLineDists();
     // A corridor was planned before any of this, and it sweeps a band of
     // the cross axis for the hours it lasts. That band is closed to lanes,
     // so no label is dropped into the space the lines are about to move
@@ -3904,7 +3892,7 @@
       measureDemand({ A: corridorBlocks('A'), B: corridorBlocks('B') });
       var re = solveCross(null);
       if (re && !re.packed) {
-        cross = re; applyCross(); recomputeTrackDists(); placeBoth();
+        cross = re; applyCross(); recomputeLineDists(); placeBoth();
         if (dropCount() < n0) {
           LEGEND.forEach(function (p) {
             laneFloor[p.key] = Math.max(laneFloor[p.key] || 0, demand[p.key] || 0);
@@ -3913,7 +3901,7 @@
         }
       }
       demand = keepDemand; cross = keepCross;
-      applyCross(); recomputeTrackDists(); placeBoth();
+      applyCross(); recomputeLineDists(); placeBoth();
     })();
     // SOLVE, LOOK, SOLVE AGAIN: which side of its own line a track's labels
     // belong on.
@@ -3943,17 +3931,17 @@
       ask.forEach(function (k) { inwardNeed[k] = 1; });
       var re = solveCross(null);
       if (re && !re.packed) {
-        cross = re; applyCross(); recomputeTrackDists(); placeBoth();
+        cross = re; applyCross(); recomputeLineDists(); placeBoth();
         if (pierceTotal(piercedBy()) < n0) return;
       }
       ask.forEach(function (k) { inwardNeed[k] = 0; });
-      cross = keep; applyCross(); recomputeTrackDists(); placeBoth();
+      cross = keep; applyCross(); recomputeLineDists(); placeBoth();
     })();
     // The trunks as this attempt leaves them, and then the names that can
     // only be placed against them. Both have to happen before the counting
     // below or the counting is of a board that was never drawn.
     buildTrunks();
-    placeOnTrackCaptions();
+    placeOnLineCaptions();
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0, adrift = 0;
     visible.forEach(function (e) {
@@ -4211,7 +4199,7 @@
       // them. Half a lane is that with room to spare, and it scales with a
       // board that has had to pack its lanes. Where the reaches leave less
       // than that, the stack opens out from its middle instead.
-      var need = Math.max(TRACK_STEP, laneStep * 0.5), want = need * (rows.length - 1);
+      var need = Math.max(LINE_STEP, laneStep * 0.5), want = need * (rows.length - 1);
       if (hi - lo < want) { var mid = (lo + hi) / 2; lo = mid - want / 2; hi = mid + want / 2; }
       var stepC = (hi - lo) / (rows.length - 1), prevC = null;
       rows.forEach(function (r, k) {
@@ -4327,7 +4315,7 @@
         // as three people in a car. A track-step of daylight is enough to
         // turn one rail into three and to give whatever follows somewhere
         // flat to leave from.
-        var pitch = Math.max(tight, Math.min(tight + TRACK_STEP,
+        var pitch = Math.max(tight, Math.min(tight + LINE_STEP,
           tight + (natural - tight) * urgency * 0.5));
         var centre = (mem[0]._c + mem[mem.length - 1]._c) / 2;
         var ok = true;
@@ -4505,7 +4493,7 @@
           // there, which still reads as heading back.
           var sgn = near < 0 ? -1 : 1;
           var limit = Math.abs(near);
-          var clearAt = TRACK_STEP * 0.45;
+          var clearAt = LINE_STEP * 0.45;
           var stepQ = Math.max(CORNER, (to - from) / 24);
           LEGEND.forEach(function (q) {
             if (q === p) return;
@@ -4543,7 +4531,7 @@
       });
 
       settleHomeRun();
-      recomputeTrackDists();
+      recomputeLineDists();
     }
     buildTrunks();
 
@@ -4701,7 +4689,7 @@
 
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
     buildTrunks();
-    placeOnTrackCaptions();
+    placeOnLineCaptions();
 
     // CALLED ONCE PER ATTEMPT, not once at the end.
     //
@@ -4728,7 +4716,7 @@
     // tip the tier loop into the largest text on a packed board with six
     // names through each other, and it scored that as an improvement,
     // because every term it had did improve.
-    function placeOnTrackCaptions() {
+    function placeOnLineCaptions() {
       capClashes = 0; capPierces = 0;
       // A MARK ON THE TRUNK NAMES ITSELF THE SAME WAY A CONVERGENCE DOES.
       //
@@ -5418,9 +5406,9 @@
         });
       }
 
-      recomputeTrackDists();
+      recomputeLineDists();
     }
-    function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA), e._routeShared ? 'shared' : e._onTrack ? 'mark' : 'shelf']; }); }
+    function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._lineDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA), e._routeShared ? 'shared' : e._onTrack ? 'mark' : 'shelf']; }); }
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal,
       corner: CORNER, minDiag: MIN_DIAG, win: [dayFrom, dayTo],
@@ -5736,7 +5724,7 @@
     // at every head they would say there were several holidays.
     function drawOriginTies() {
       (METRO.all_day || []).forEach(function (a) {
-        var owners = (a.owners || []).map(function (k) { return trackByKey[k]; })
+        var owners = (a.owners || []).map(function (k) { return lineByKey[k]; })
           .filter(function (q) { return q; });
         if (owners.length < 2) return;
         var cs = owners.map(function (q) { return spineC + q._c; });
@@ -6459,7 +6447,7 @@
         // pattern reads as that line branching, which is what it is. It also
         // puts the dash phase on the right trunk — the lead-in lies on the
         // outermost line, so that is the one to line the pattern up with.
-        var p = trackByKey[g.members[0]._laneOwner] || g.members[0]._p;
+        var p = lineByKey[g.members[0]._laneOwner] || g.members[0]._p;
         // A SHARED event's rail is bold. When several people are in one
         // place that is the heaviest thing on that stretch of the board, and
         // it needs to look it — but as one heavier line, not as one rail per
@@ -6602,7 +6590,7 @@
     });
     placed.forEach(function (e) {
       if (!e._merge) return;
-      var p = trackByKey[e._lead] || e._p, sign = e._sign, laneC = spineC + sign * e._laneDist;
+      var p = lineByKey[e._lead] || e._p, sign = e._sign, laneC = spineC + sign * e._laneDist;
       // A rejoin is two ramps back to back with the rail between them: out
       // at the start, flat for the event, back in after it. Drawn as ONE
       // path so the dashes run continuously round the loop, with the phase
@@ -7266,7 +7254,7 @@
         // slide forward past the event's own start to dodge something, the
         // start tick lands on the diagonal, and drawn at lane height it
         // floats off the line it is supposed to mark. Follow the spur.
-        var forkC = lineCAt(trackByKey[e._laneOwner] || p, e._diagFrom);
+        var forkC = lineCAt(lineByKey[e._laneOwner] || p, e._diagFrom);
         function spurC(a) {
           // ROUTE MODE: there is no spur to follow. The line went to the
           // event itself, so the mark goes where the LINE is at that

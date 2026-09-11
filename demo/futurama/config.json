@@ -1,7 +1,7 @@
 {
   "locale": "en-US",
   "timeFormat": "12h",
-  "tracks": [
+  "lines": [
     {
       "name": "Professor",
       "side": "left"
@@ -30,7 +30,7 @@
             "type": "regex",
             "value": "^Fry:"
           },
-          "track": "Fry",
+          "line": "Fry",
           "rename": false
         },
         {
@@ -38,7 +38,7 @@
             "type": "regex",
             "value": "^Leela:"
           },
-          "track": "Leela",
+          "line": "Leela",
           "rename": false
         },
         {
@@ -46,7 +46,7 @@
             "type": "regex",
             "value": "^Bender:"
           },
-          "track": "Bender",
+          "line": "Bender",
           "rename": false
         },
         {
@@ -54,7 +54,7 @@
             "type": "regex",
             "value": "^Amy:"
           },
-          "track": "Amy",
+          "line": "Amy",
           "rename": false
         },
         {
@@ -62,7 +62,7 @@
             "type": "regex",
             "value": "^Professor:"
           },
-          "track": "Professor",
+          "line": "Professor",
           "rename": false
         },
         {
@@ -83,7 +83,7 @@
             "type": "contains",
             "value": "Delivery Run"
           },
-          "track": [
+          "line": [
             "Fry",
             "Leela",
             "Bender"
@@ -95,7 +95,7 @@
             "type": "contains",
             "value": "Good News"
           },
-          "track": [
+          "line": [
             "Professor",
             "Fry",
             "Leela",
@@ -109,7 +109,7 @@
             "type": "contains",
             "value": "Crew Debrief"
           },
-          "track": [
+          "line": [
             "Fry",
             "Leela",
             "Bender"
@@ -121,7 +121,7 @@
             "type": "contains",
             "value": "Ship Inspection"
           },
-          "track": "Leela",
+          "line": "Leela",
           "allDay": true,
           "rename": false
         }

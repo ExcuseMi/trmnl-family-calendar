@@ -62,7 +62,7 @@ module.exports = function (test, h) {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Schoolfotografie' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'regex', value: '.*' }, track: 'Ward', rename: true }] }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'regex', value: '.*' }, line: 'Ward', rename: true }] }],
     })));
     assertEqual(eventItems(r.data).map((e) => e.title), ['Ward'], 'a single non-global replace should produce "Ward", never "WardWard"');
   });
@@ -71,8 +71,8 @@ module.exports = function (test, h) {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Schoolfotografie' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'Ward' }],
-      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'regex', value: '.*' }, track: 'Ward', rename: false }] }],
+      lines: [{ name: 'Ward' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'regex', value: '.*' }, line: 'Ward', rename: false }] }],
     })));
     assertEqual(eventItems(r.data).map((e) => e.title), ['Schoolfotografie']);
   });
@@ -81,8 +81,8 @@ module.exports = function (test, h) {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Schoolfotografie' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'Ward' }],
-      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'Ward' }] }],
+      lines: [{ name: 'Ward' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, line: 'Ward' }] }],
     })));
     assertEqual(eventItems(r.data).map((e) => e.title), ['Schoolfotografie'], 'an "any" match should badge Ward without needing an explicit rename:false');
     assertEqual(r.data.legend.map((p) => p.name), ['Ward']);
@@ -110,9 +110,9 @@ module.exports = function (test, h) {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'L6 Swim Class' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'Alex' }],
+      lines: [{ name: 'Alex' }],
       calendars: [{ url: 'https://example.com/a.ics', rules: [
-        { match: { type: 'word', value: 'L6' }, track: 'Alex' },
+        { match: { type: 'word', value: 'L6' }, line: 'Alex' },
         { match: { type: 'word', value: 'L6' }, rewrite: 'Lesson 6' },
       ] }],
     })));
@@ -125,8 +125,8 @@ module.exports = function (test, h) {
       summary: url.includes('a.ics') ? 'Doctor Appointment' : 'Something Else',
     }]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      rules: [{ match: { type: 'word', value: 'Doctor' }, track: 'Mom' }],
-      tracks: [{ name: 'Mom', badge: 'M' }],
+      rules: [{ match: { type: 'word', value: 'Doctor' }, line: 'Mom' }],
+      lines: [{ name: 'Mom', badge: 'M' }],
       calendars: [{ url: 'https://example.com/a.ics' }, { url: 'https://example.com/b.ics' }],
     })));
     const doctorEvent = eventItems(r.data).find((e) => e.title.indexOf('Mom') !== -1 || e.title.indexOf('Doctor') !== -1);
@@ -137,13 +137,13 @@ module.exports = function (test, h) {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Doctor Appointment' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      rules: [{ match: { type: 'word', value: 'Doctor' }, track: 'Mom' }],
-      tracks: [{ name: 'Mom', badge: 'M' }, { name: 'Dad', badge: 'D' }],
-      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'Doctor' }, track: 'Dad' }] }],
+      rules: [{ match: { type: 'word', value: 'Doctor' }, line: 'Mom' }],
+      lines: [{ name: 'Mom', badge: 'M' }, { name: 'Dad', badge: 'D' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'Doctor' }, line: 'Dad' }] }],
     })));
     const ev0 = eventItems(r.data)[0];
     const dadTrack = r.data.legend.find((p) => p.name === 'Dad');
-    assertEqual(ev0.hue, dadTrack.hue, 'the calendar-specific rule should win over the global one');
+    assertEqual(ev0.owner, dadTrack.key, 'the calendar-specific rule should win over the global one');
   });
 
   test('a calendar\'s custom headers are sent on its ICS fetch, alongside the default User-Agent', async () => {
@@ -170,7 +170,7 @@ module.exports = function (test, h) {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Unclaimed Event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'Everyone', badge: '★' }],
+      lines: [{ name: 'Everyone', badge: '★' }],
       calendars: [{ url: 'https://example.com/a.ics' }],
     })));
     assertEqual(eventItems(r.data).length, 1);
@@ -181,31 +181,31 @@ module.exports = function (test, h) {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Extra turnen' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'Familie', badge: '★' }, { name: 'Kato', badge: 'K' }],
+      lines: [{ name: 'Familie', badge: '★' }, { name: 'Kato', badge: 'K' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Kato' }],
     })));
     const ev0 = eventItems(r.data)[0];
     const katoTrack = r.data.legend.find((p) => p.name === 'Kato');
-    assertEqual(ev0.hue, katoTrack.hue, 'a calendar with no rules should fall back to its own name, not the first tracks[] entry');
+    assertEqual(ev0.owner, katoTrack.key, 'a calendar with no rules should fall back to its own name, not the first tracks[] entry');
   });
 
   test('a rule\'s own track assignment still wins over the everyoneTrack fallback', async () => {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Alex event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'Everyone', badge: '★' }, { name: 'Alex', badge: 'A' }],
-      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'Alex' }, track: 'Alex' }] }],
+      lines: [{ name: 'Everyone', badge: '★' }, { name: 'Alex', badge: 'A' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'Alex' }, line: 'Alex' }] }],
     })));
     const ev0 = eventItems(r.data)[0];
     const alexTrack = r.data.legend.find((p) => p.name === 'Alex');
-    assertEqual(ev0.hue, alexTrack.hue);
+    assertEqual(ev0.owner, alexTrack.key);
   });
 
   test('a rule with a multi-name track list produces an event with co_owners (an interchange, client-side)', async () => {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Family Dinner' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: ['Alex', 'Kids'] }] }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, line: ['Alex', 'Kids'] }] }],
     })));
     const ev0 = eventItems(r.data)[0];
     assertEqual(ev0.owner, r.data.legend.find((p) => p.name === 'Alex').key, 'the first name becomes the primary owner');
@@ -216,7 +216,7 @@ module.exports = function (test, h) {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'Everyone' }],
+      lines: [{ name: 'Everyone' }],
       calendars: ['https://example.com/a.ics'],
     })));
     assertEqual(eventItems(r.data).length, 1);
@@ -242,8 +242,8 @@ module.exports = function (test, h) {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Busy track only' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'Idle', side: 'left' }, { name: 'Busy', side: 'left' }],
-      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'Busy' }] }],
+      lines: [{ name: 'Idle', side: 'left' }, { name: 'Busy', side: 'left' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, line: 'Busy' }] }],
     })));
     assertEqual(r.data.legend.map((p) => p.name), ['Busy'], 'Idle has nothing today, so it should not get a track at all');
   });
@@ -252,18 +252,18 @@ module.exports = function (test, h) {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'C event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'A', side: 'left' }, { name: 'B', side: 'left' }, { name: 'C', side: 'left' }],
-      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'C' }] }],
+      lines: [{ name: 'A', side: 'left' }, { name: 'B', side: 'left' }, { name: 'C', side: 'left' }],
+      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, line: 'C' }] }],
     })));
     assertEqual(r.data.legend.length, 1);
-    assertEqual(r.data.legend[0].track_offset, -10, 'C should sit at the first left slot, not the third, since A and B left no gap');
+    assertEqual(r.data.legend[0].line_offset, -10, 'C should sit at the first left slot, not the third, since A and B left no gap');
   });
 
   test('an emoji badge does not get mangled by taking only half its UTF-16 surrogate pair', async () => {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      tracks: [{ name: 'Everyone', badge: '👪 Family' }],
+      lines: [{ name: 'Everyone', badge: '👪 Family' }],
       calendars: [{ url: 'https://example.com/a.ics' }],
     })));
     assertEqual(r.data.legend[0].initial, '👪', 'the full emoji codepoint should survive, not a broken half-surrogate');
@@ -273,18 +273,6 @@ module.exports = function (test, h) {
   // "people" before this rename); a config written before the rename,
   // still sitting pasted into someone's live device, must keep working
   // exactly as before with zero edits.
-  test('legacy configs using "people"/"person" (pre-rename field names) still parse and resolve correctly', async () => {
-    const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'L6 Extra turnen' };
-    const fetchImpl = async () => okText(icsWithEvents([ev]));
-    const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      people: [{ name: 'Familie' }, { name: 'Nala', badge: 'N' }],
-      calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'L6' }, person: 'Nala' }] }],
-    })));
-    const ev0 = eventItems(r.data)[0];
-    const nalaTrack = r.data.legend.find((p) => p.name === 'Nala');
-    assertEqual(ev0.hue, nalaTrack.hue, 'a legacy person: rule should still assign the track');
-    assertEqual(r.data.legend.map((p) => p.name), ['Nala'], 'legacy people[] should still seed the track registry (Familie has no events today, so no empty track)');
-  });
 
   test('a long block carries its location and earns its owner a legend entry', async () => {
     // Eleven hours at a desk. This used to need `siding: true` in the

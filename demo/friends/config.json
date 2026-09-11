@@ -1,7 +1,7 @@
 {
   "locale": "en-US",
   "timeFormat": "12h",
-  "tracks": [
+  "lines": [
     {
       "name": "Monica",
       "side": "left"
@@ -26,7 +26,7 @@
           "match": {
             "type": "any"
           },
-          "track": "Monica"
+          "line": "Monica"
         }
       ]
     },
@@ -45,7 +45,7 @@
           "match": {
             "type": "any"
           },
-          "track": "Rachel"
+          "line": "Rachel"
         }
       ]
     },
@@ -58,7 +58,7 @@
             "type": "contains",
             "value": "Central Perk"
           },
-          "track": [
+          "line": [
             "Monica",
             "Rachel"
           ],
@@ -69,7 +69,7 @@
             "type": "contains",
             "value": "Laundry"
           },
-          "track": [
+          "line": [
             "Monica",
             "Rachel"
           ],

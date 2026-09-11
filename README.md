@@ -1,6 +1,6 @@
 # Metro Calendar for TRMNL
 
-Your family's day drawn as a transit map. One line per track runs along a
+Your family's day drawn as a transit map. One line per line runs along a
 central spine with the hour axis down its middle; events are stations,
 labels sit on 45° branches, long events loop out and rejoin their line, and
 the whole thing lays itself out to the screen it lands on: TRMNL OG, OG V2,
@@ -16,9 +16,9 @@ No server of your own.
 
 - Today, 07:00–21:00 (narrowed around now on small views), with "+N earlier"
   and "+N more" counts at the ends of the line.
-- Each track gets a side of the spine, a dash pattern and (on grayscale and
+- Each line gets a side of the spine, a dash pattern and (on grayscale and
   colour panels) a shade, all picked for you: sides are balanced against the
-  day's actual event counts, busiest track first. A line is named where it
+  day's actual event counts, busiest line first. A line is named where it
   enters the map, and appears in the legend.
 - Events as rings at their true start time; shared events as capsules across
   the lines involved. Title, time and location on the branch.
@@ -45,7 +45,7 @@ No server of your own.
    which also previews the map at every device size, or write it by hand
    (see [CONFIG.md](CONFIG.md)). No ICS links yet? The editor's **Start**
    section has three presets (*Family of 4*, *Work vs Personal Split*,
-   *Solo Freelancer Track*): pick one, draw the map, then swap the
+   *Solo Freelancer Line*): pick one, draw the map, then swap the
    placeholder links for your own. Each demo board is also a worked example:
    [demo/simpsons/config.json](demo/simpsons/config.json),
    [demo/futurama/config.json](demo/futurama/config.json),
@@ -63,23 +63,23 @@ No server of your own.
 
 ```json
 {
-  "tracks": [
+  "lines": [
     { "name": "Sam" },
     { "name": "Alex" },
     { "name": "Kids" }
   ],
   "calendars": [
-    { "name": "Work", "url": "https://…/work.ics", "rules": [{ "match": { "type": "any" }, "track": "Sam" }] },
-    { "name": "Alex", "url": "https://…/alex.ics", "rules": [{ "match": { "type": "any" }, "track": "Alex" }] },
+    { "name": "Work", "url": "https://…/work.ics", "rules": [{ "match": { "type": "any" }, "line": "Sam" }] },
+    { "name": "Alex", "url": "https://…/alex.ics", "rules": [{ "match": { "type": "any" }, "line": "Alex" }] },
     { "name": "School", "url": "https://…/school.ics",
-      "rules": [{ "match": { "type": "word", "value": "L2" }, "track": "Kids" }, { "match": { "type": "contains", "value": "staff" }, "hide": true }] }
+      "rules": [{ "match": { "type": "word", "value": "L2" }, "line": "Kids" }, { "match": { "type": "contains", "value": "staff" }, "hide": true }] }
   ]
 }
 ```
 
-A track is just a name: which side of the map it runs on, what colour it is
+A line is just a name: which side of the map it runs on, what colour it is
 and which dash pattern it gets are all worked out from the day itself, so
-there is nothing to choose. (`side` and `color` on a track are still read,
+there is nothing to choose. (`side` and `color` on a line are still read,
 so an older configuration that sets them keeps working.)
 
 A calendar's `name` is worth a second's thought: any event in it that no rule
@@ -89,7 +89,7 @@ its rules route everything, or you get an extra line named after the
 calendar.
 
 Rules match on the title (`word`, `contains`, `exact`, `regex`, `status`,
-`weekday`, `any`, or `and`/`or` of those) and can assign one or more tracks,
+`weekday`, `any`, or `and`/`or` of those) and can assign one or more lines,
 rewrite the title, or hide the event. Everything is documented in
 [CONFIG.md](CONFIG.md); the design of the map itself in [DESIGN.md](DESIGN.md).
 

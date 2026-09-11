@@ -55,21 +55,21 @@ module.exports = function (test, h) {
 
   test('an "any" match assigning a track defaults rename to false (opt-in, not opt-out)', () => {
     const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, track: 'Ward' }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, line: 'Ward' }] }],
     });
     assert(cfg.calendars[0].rules[0].rename === false, 'rename should default to false for a catch-all match');
   });
 
   test('an "any" match can still opt into rename explicitly', () => {
     const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, track: 'Ward', rename: true }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'any' }, line: 'Ward', rename: true }] }],
     });
     assert(cfg.calendars[0].rules[0].rename === true, 'rename:true should still be honored when explicitly set on an "any" match');
   });
 
   test('a word/regex match still defaults rename to true, unaffected by the "any" default change', () => {
     const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L6' }, track: 'Alex' }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L6' }, line: 'Alex' }] }],
     });
     assert(cfg.calendars[0].rules[0].rename === true);
   });
@@ -86,30 +86,30 @@ module.exports = function (test, h) {
 
   test('a rule\'s track is normalized to an array even when given a single string', () => {
     const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L1' }, track: 'Alex', allDay: true }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'L1' }, line: 'Alex', allDay: true }] }],
     });
     const rule = cfg.calendars[0].rules[0];
     assert(rule.allDay === true);
     assert(rule.hide === false, 'hide should default to false');
-    assert(JSON.stringify(rule.track) === JSON.stringify(['Alex']));
+    assert(JSON.stringify(rule.line) === JSON.stringify(['Alex']));
   });
 
   test('a rule\'s track field also accepts a list directly', () => {
     const cfg = parse({
-      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'Dinner' }, track: ['Alex', 'Kids'] }] }],
+      calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word', value: 'Dinner' }, line: ['Alex', 'Kids'] }] }],
     });
-    assert(JSON.stringify(cfg.calendars[0].rules[0].track) === JSON.stringify(['Alex', 'Kids']));
+    assert(JSON.stringify(cfg.calendars[0].rules[0].line) === JSON.stringify(['Alex', 'Kids']));
   });
 
   test('a calendar rule with an invalid matcher (missing value) drops the rule, not the calendar', () => {
-    const cfg = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word' }, track: 'Alex' }] }] });
+    const cfg = parse({ calendars: [{ url: 'https://x/a.ics', rules: [{ match: { type: 'word' }, line: 'Alex' }] }] });
     assert(cfg.calendars[0].rules.length === 0);
     assert(cfg.calendars.length === 1, 'the calendar itself should still be kept');
   });
 
   test('global (top-level) rules compile separately from any calendar\'s own', () => {
     const cfg = parse({
-      rules: [{ match: { type: 'word', value: 'Doctor' }, track: 'Mom' }],
+      rules: [{ match: { type: 'word', value: 'Doctor' }, line: 'Mom' }],
       calendars: [{ url: 'https://x/a.ics' }],
     });
     assert(cfg.globalRules.length === 1, 'the top-level rule should compile');
@@ -236,7 +236,7 @@ module.exports = function (test, h) {
     ];
     const fetchImpl = async () => okText(icsWithEvents(events));
     const cfg = JSON.stringify({
-      tracks: [{ name: 'Familie' }, { name: 'Kato' }, { name: 'Nala' }],
+      lines: [{ name: 'Familie' }, { name: 'Kato' }, { name: 'Nala' }],
       calendars: [{
         url: 'https://example.com/familie.ics', name: 'Familie',
         rules: [
@@ -248,8 +248,8 @@ module.exports = function (test, h) {
             ] },
             hide: true,
           },
-          { match: { type: 'word', value: 'L2' }, track: 'Kato' },
-          { match: { type: 'word', value: 'L6' }, track: 'Nala' },
+          { match: { type: 'word', value: 'L2' }, line: 'Kato' },
+          { match: { type: 'word', value: 'L6' }, line: 'Nala' },
         ],
       }],
     });

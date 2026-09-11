@@ -48,7 +48,7 @@ function consts(over) {
   const depth = (over && over.depth) || 401;
   const maxLabelThick = (over && over.maxLabelThick) || 37 * S;
   const k = {
-    trackStep: 20 * S, lineGap: 6 * S, laneGap: 12 * S,
+    lineStep: 20 * S, lineGap: 6 * S, laneGap: 12 * S,
     minDiag: Math.max(10 * S, 6 * 2.4 * S + 2 * S),
     nodeR: 6 * S,
     maxLabelThick: maxLabelThick,

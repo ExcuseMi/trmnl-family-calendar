@@ -133,9 +133,9 @@ module.exports = function (test, h) {
   // a renamed track, a changed rule or a moved file breaks that board for
   // everyone who picks it and nothing else would notice.
   const SETS = {
-    simpsons: { tracks: ['Bart', 'Homer', 'Lisa', 'Maggie', 'Marge'], dir: 'simpsons' },
-    futurama: { tracks: ['Amy', 'Bender', 'Fry', 'Leela', 'Professor'], dir: 'futurama' },
-    friends: { tracks: ['Monica', 'Rachel'], dir: 'friends' },
+    simpsons: { lines: ['Bart', 'Homer', 'Lisa', 'Maggie', 'Marge'], dir: 'simpsons' },
+    futurama: { lines: ['Amy', 'Bender', 'Fry', 'Leela', 'Professor'], dir: 'futurama' },
+    friends: { lines: ['Monica', 'Rachel'], dir: 'friends' },
   };
 
   for (const set of Object.keys(SETS)) {
@@ -143,8 +143,8 @@ module.exports = function (test, h) {
       const { run } = runTransform(serveDemoFiles(), NOW);
       const r = await run(baseInput(NOW, { use_demo_data: 'true', demo_set: set }));
       const names = r.data.legend.map((t) => t.name).sort();
-      assert(names.join(',') === SETS[set].tracks.join(','),
-        set + ': expected ' + SETS[set].tracks.join(', ') + ', got ' + names.join(', '));
+      assert(names.join(',') === SETS[set].lines.join(','),
+        set + ': expected ' + SETS[set].lines.join(', ') + ', got ' + names.join(', '));
       // and it fetched only its own show's files
       assert(eventItems(r.data).length > 0, set + ': resolved no events');
     });
@@ -154,7 +154,7 @@ module.exports = function (test, h) {
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(baseInput(NOW, { use_demo_data: 'true', demo_set: 'the-wire' }));
     const names = r.data.legend.map((t) => t.name).sort();
-    assert(names.join(',') === SETS.simpsons.tracks.join(','), 'got ' + names.join(', '));
+    assert(names.join(',') === SETS.simpsons.lines.join(','), 'got ' + names.join(', '));
   });
 
   test('the Planet Express delivery is one long event on three lines', async () => {
@@ -245,9 +245,9 @@ module.exports = function (test, h) {
   test('the JSON config wins over the plain list when both are filled', async () => {
     const { run } = runTransform(serveDemoFiles(), NOW);
     const cfg = JSON.stringify({
-      tracks: [{ name: 'Just Me' }],
+      lines: [{ name: 'Just Me' }],
       calendars: [{ name: 'Mine', url: 'https://raw.githubusercontent.com/x/y/main/demo/friends/monica.ics',
-        rules: [{ match: { type: 'any' }, track: 'Just Me' }] }],
+        rules: [{ match: { type: 'any' }, line: 'Just Me' }] }],
     });
     const r = await run(baseInput(NOW, {
       use_demo_data: 'false',

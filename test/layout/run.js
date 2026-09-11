@@ -401,6 +401,29 @@ const REPORTER = `
       }
       return null;
     }
+    // THE HEADER IS DRAWING TOO, and none of it is in the canvas, so none
+    // of it ever reached \`labels\`. It says what day this is and what the
+    // day IS (a holiday belongs to the day, not to any line, so that is
+    // where it is stated), and whatever height it takes is height the map
+    // was not given. Reported in the same canvas-relative space as
+    // everything else: every element in it carrying a metro- class, with
+    // whether it is actually shown, because the header hides parts of
+    // itself by class as the view gets smaller.
+    var headerEl = document.querySelector('.metro-header');
+    var head = null;
+    if (headerEl) {
+      var items = [];
+      headerEl.querySelectorAll('[class]').forEach(function (n) {
+        var cls = String(n.className && n.className.baseVal != null ? n.className.baseVal : n.className);
+        if (cls.indexOf('metro-') < 0) return;
+        var hr = n.getBoundingClientRect();
+        items.push(Object.assign(rel(hr), { cls: cls, text: (n.textContent || '').trim(),
+          shown: !!(hr.width && hr.height) }));
+      });
+      var hrect = headerEl.getBoundingClientRect();
+      head = { shown: getComputedStyle(headerEl).display !== 'none',
+        h: hrect.height, w: hrect.width, items: items };
+    }
     var root = document.querySelector('.metro-root');
     // The slot the board is given: .view when the framework wraps one (a
     // mashup slot takes its box from --full-w/--full-h there), else the
@@ -430,6 +453,7 @@ const REPORTER = `
       root: rel(root.getBoundingClientRect()), view: rel(viewEl.getBoundingClientRect()),
       boardBg: bgOf(canvas), banner: banner,
       debug: dbg, labels: labels, paths: paths, rects: rects, painted: painted, overlays: overlays,
+      header: head,
       circles: circles.concat(shapeMarkers)
     });
     document.body.appendChild(out);

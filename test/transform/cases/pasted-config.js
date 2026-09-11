@@ -16,8 +16,8 @@ module.exports = function (test, h) {
   const serve = async (url) => (String(url) === URL ? okText(ics) : fail(404));
 
   const CONFIG = {
-    tracks: [{ name: 'Fry' }, { name: 'Leela' }],
-    calendars: [{ url: URL, name: 'Crew', rules: [{ match: { type: 'contains', value: 'Fry:' }, track: 'Fry' }] }],
+    lines: [{ name: 'Fry' }, { name: 'Leela' }],
+    calendars: [{ url: URL, name: 'Crew', rules: [{ match: { type: 'contains', value: 'Fry:' }, line: 'Fry' }] }],
   };
   const PRETTY = JSON.stringify(CONFIG, null, 1);
 
@@ -28,7 +28,7 @@ module.exports = function (test, h) {
   // what the config actually says, in the terms the rest of the pipeline
   // reads it in: two lines, one feed, one routing rule
   function shape(cfg) {
-    return Object.keys(cfg.tracks).map((k) => cfg.tracks[k].name).join(',') + ' | '
+    return Object.keys(cfg.lines).map((k) => cfg.lines[k].name).join(',') + ' | '
       + cfg.calendars.map((c) => c.name + '@' + c.url + ':' + c.rules.length).join(',');
   }
   const WANT = shape(parse(PRETTY));
@@ -68,7 +68,7 @@ module.exports = function (test, h) {
   // nothing but backslashes. Un-escaping markdown must not touch those.
   test('a regex rule survives the tidying', () => {
     const withRegex = JSON.stringify({
-      calendars: [{ url: URL, name: 'Crew', rules: [{ match: { type: 'regex', value: '^\\d+ ' }, track: 'Fry' }] }],
+      calendars: [{ url: URL, name: 'Crew', rules: [{ match: { type: 'regex', value: '^\\d+ ' }, line: 'Fry' }] }],
     }, null, 1);
     const cfg = parse(withRegex.replace(/([[\]])/g, '\\$1'));
     assertEqual(cfg.calendars.length, 1, 'the escaped config did not parse at all');
@@ -93,8 +93,8 @@ module.exports = function (test, h) {
   test('a board builds from a configuration that arrived escaped', async () => {
     const { run } = runTransform(serve, NOW);
     const escaped = JSON.stringify({
-      tracks: [{ name: 'Fry' }],
-      calendars: [{ url: URL, name: 'Fry', rules: [{ match: { type: 'any' }, track: 'Fry' }] }],
+      lines: [{ name: 'Fry' }],
+      calendars: [{ url: URL, name: 'Fry', rules: [{ match: { type: 'any' }, line: 'Fry' }] }],
     }, null, 1).replace(/([[\]])/g, '\\$1');
     const r = await run(baseInput(NOW, { use_demo_data: 'false', config_json: escaped }));
     assertEqual(r.data.legend.map((t) => t.name), ['Fry'], 'the board is not the one the config asked for');

@@ -3,7 +3,7 @@ module.exports = function (test, h) {
 
   test('a fresh editor exports an empty configuration', () => {
     const { document } = loadEditor();
-    assertEqual(jsonOut(document), { tracks: [], calendars: [] });
+    assertEqual(jsonOut(document), { lines: [], calendars: [] });
   });
 
   // Side and colour used to be two <select>s on every track card. They are gone: the
@@ -11,46 +11,46 @@ module.exports = function (test, h) {
   // panel's theme, and neither could be guessed well from this page. What must NOT happen
   // is that opening an old configuration here silently strips them, so the two halves are
   // tested apart: no control to set one, but an imported one survives the round trip.
-  test('a track card offers no side or colour control', () => {
+  test('a line card offers no side or colour control', () => {
     const { document } = loadEditor();
-    const card = document.querySelector('#tracks .card');
+    const card = document.querySelector('#lines .card');
     fireInput(card.querySelector('.title-input'), 'Sam');
     assertEqual(card.querySelectorAll('select').length, 0);
-    assertEqual(jsonOut(document).tracks, [{ name: 'Sam' }]);
-    const labels = [...document.querySelectorAll('#tracks label')].map((l) => l.textContent);
+    assertEqual(jsonOut(document).lines, [{ name: 'Sam' }]);
+    const labels = [...document.querySelectorAll('#lines label')].map((l) => l.textContent);
     assert(!labels.some((t) => /side|colour|color/i.test(t)), 'a side/colour control is still offered: ' + JSON.stringify(labels));
   });
 
   test('a side and colour that came in with an imported config are still exported', () => {
     const { document } = loadEditor();
     document.getElementById('importIn').value = JSON.stringify({
-      tracks: [{ name: 'Sam', color: 'gray-20', side: 'left' }, { name: 'Alex' }],
+      lines: [{ name: 'Sam', color: 'gray-20', side: 'left' }, { name: 'Alex' }],
       calendars: [{ url: 'https://example.com/a.ics' }],
     });
     click(document.getElementById('loadImport'));
-    assertEqual(jsonOut(document).tracks, [{ name: 'Sam', color: 'gray-20', side: 'left' }, { name: 'Alex' }]);
+    assertEqual(jsonOut(document).lines, [{ name: 'Sam', color: 'gray-20', side: 'left' }, { name: 'Alex' }]);
   });
 
   test('a calendar assigned to a track exports a leading "any" rule', () => {
     const { document } = loadEditor();
-    fireInput(document.querySelector('#tracks .card .title-input'), 'Alex');
-    fireChange(document.querySelector('#tracks .card .title-input'));
+    fireInput(document.querySelector('#lines .card .title-input'), 'Alex');
+    fireChange(document.querySelector('#lines .card .title-input'));
     const cal = document.querySelector('#calendars .card');
     fireInput(cal.querySelector('input[type=text]:not(.title-input)'), 'https://example.com/a.ics');
     fireInput(cal.querySelector('.title-input'), 'Alex');
     selectMulti(cal.querySelector('select[multiple]'), ['Alex']);
-    assertEqual(jsonOut(document).calendars, [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [{ match: { type: 'any' }, track: 'Alex' }] }]);
+    assertEqual(jsonOut(document).calendars, [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [{ match: { type: 'any' }, line: 'Alex' }] }]);
   });
 
   test('a global rule with a word condition, a track and hide exports correctly', () => {
     const { document } = loadEditor();
-    fireInput(document.querySelector('#tracks .card .title-input'), 'Kids');
-    fireChange(document.querySelector('#tracks .card .title-input'));
+    fireInput(document.querySelector('#lines .card .title-input'), 'Kids');
+    fireChange(document.querySelector('#lines .card .title-input'));
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), 'L2');
     selectMulti(rule.querySelector('select[multiple]'), ['Kids']);
-    assertEqual(jsonOut(document).rules, [{ match: { type: 'word', value: 'L2' }, track: 'Kids' }]);
+    assertEqual(jsonOut(document).rules, [{ match: { type: 'word', value: 'L2' }, line: 'Kids' }]);
     const hide = rule.querySelectorAll('input[type=checkbox]')[2];
     hide.checked = true; fireChange(hide);
     assertEqual(jsonOut(document).rules[0].hide, true);
@@ -67,8 +67,8 @@ module.exports = function (test, h) {
 
   test('two conditions export as an and-matcher', () => {
     const { document } = loadEditor();
-    fireInput(document.querySelector('#tracks .card .title-input'), 'Sam');
-    fireChange(document.querySelector('#tracks .card .title-input'));
+    fireInput(document.querySelector('#lines .card .title-input'), 'Sam');
+    fireChange(document.querySelector('#lines .card .title-input'));
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), 'Piano');

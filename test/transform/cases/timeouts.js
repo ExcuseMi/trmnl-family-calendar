@@ -25,10 +25,10 @@ module.exports = function (test, h) {
     return baseInput(NOW, Object.assign({
       use_demo_data: 'false',
       config_json: JSON.stringify({
-        tracks: [{ name: 'Alex' }, { name: 'Sam' }],
+        lines: [{ name: 'Alex' }, { name: 'Sam' }],
         calendars: [
-          { url: A, name: 'Alex', rules: [{ match: { type: 'any' }, track: 'Alex' }] },
-          { url: B, name: 'Sam', rules: [{ match: { type: 'any' }, track: 'Sam' }] },
+          { url: A, name: 'Alex', rules: [{ match: { type: 'any' }, line: 'Alex' }] },
+          { url: B, name: 'Sam', rules: [{ match: { type: 'any' }, line: 'Sam' }] },
         ],
       }),
     }, extra));

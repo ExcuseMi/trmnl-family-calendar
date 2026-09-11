@@ -8,45 +8,45 @@ silently, so check spelling.
 {
   "timeZone"?: string,            // IANA zone, e.g. "Europe/Brussels" (default: TRMNL account zone)
   "locale"?: string,              // "en", "fr", "es", "de", "nl", "en-US", … (default: account language)
-  "tracks"?: Track[],
+  "lines"?: Line[],
   "rules"?: Rule[],               // applied to every calendar, before the calendar's own rules
   "calendars": (string | Calendar)[]
 }
 ```
 
-(Legacy configs may use `"people"` in place of `"tracks"`; still accepted,
-for anyone who set this up before tracks were called tracks.)
+(Legacy configs may use `"people"` in place of `"lines"`; still accepted,
+for anyone who set this up before lines were called lines.)
 
-## Track
+## Line
 
 ```
 { "name": "Alex", "hideIfEmpty"?: boolean }
 ```
 
-- Each track is one line on the map. Order matters: the first track is the
+- Each line is one line on the map. Order matters: the first line is the
   fallback for any event no rule assigns, and lines on the same side get
   their dash pattern in order (solid, dashed, dotted, dash-dot).
-- A track is otherwise just a name. Which side of the map it runs on, what
+- A line is otherwise just a name. Which side of the map it runs on, what
   colour it is and which dash pattern it gets are all decided from the day
   itself: sides are balanced once every calendar is fetched, whoever has the
-  most events today going first and each track landing on whichever side is
+  most events today going first and each line landing on whichever side is
   currently lighter, then each side's lines take solid, dashed, dotted,
   dash-dot in order. On 1-bit panels every line is black and only the
   pattern tells them apart; on 2/4-bit panels the shade follows the panel's
   own theme.
-- `hideIfEmpty`: `false` keeps this track's line on the board on a day it
-  has nothing on it. By default a track with no events, sidings or all-day
+- `hideIfEmpty`: `false` keeps this line's line on the board on a day it
+  has nothing on it. By default a line with no events, sidings or all-day
   entries today gets no line, so a day when most of the family is idle does
   not spend the board's depth on empty rails. Turn it off for anyone whose
   line should always be there, so the board reads the same shape every day.
 
-Tracks that appear in rules but not in `tracks` are added automatically.
+Lines that appear in rules but not in `lines` are added automatically.
 
 ### `side` and `color`: read, not offered
 
 Older configurations set `"side": "left" | "right"` (also spelled `"work"` /
 `"family"`) and `"color"` (a hue name, `black`, or `gray-10` … `gray-75`) on
-a track. **Both are still read and still honoured**, so nothing you already
+a line. **Both are still read and still honoured**, so nothing you already
 have breaks, and the configuration editor writes back whatever it imported.
 They are no longer offered anywhere, though, and there is no reason to add
 one to a new configuration: the automatic choice is made against the day's
@@ -62,7 +62,8 @@ value in a config file can know.
   "rules"?: Rule[],
   "headers"?: { "Authorization": "…" },  // sent with the feed request
   "includeDescription"?: boolean,        // let rules also match DESCRIPTION (off by default; a rule naming the description turns it on by itself)
-  "hideIfEmpty"?: boolean                // false keeps this calendar's line on a day it has nothing (default true)
+  "hideIfEmpty"?: boolean,               // false keeps this calendar's line on a day it has nothing (default true)
+  "holiday"?: boolean                    // everything in this feed belongs to the DAY, not to a line (see Public holidays)
 }
 ```
 
@@ -70,7 +71,7 @@ A bare string in `calendars` is shorthand for `{ "url": … }`.
 
 **`name` is not a caption: it can become a line.** An event that no rule
 routes falls back to the calendar's `name`, then to the first entry in
-`tracks`, then to the feed's own `X-WR-CALNAME`. Whichever wins is drawn as
+`lines`, then to the feed's own `X-WR-CALNAME`. Whichever wins is drawn as
 a *line* on the map. So a calendar called `"Deliveries"` that leaks a single
 unrouted event puts a "Deliveries" line on a board that was meant to have
 one line per person, and nothing in the JSON says so.
@@ -78,10 +79,10 @@ one line per person, and nothing in the JSON says so.
 Name a calendar after the person whose line it is (`"name": "Alex"` beside a
 rule routing everything to Alex), or leave `name` off entirely when its
 rules route every event somewhere. Count the lines a configuration produces
-before saving it: one per entry in `tracks`, plus one for every named
+before saving it: one per entry in `lines`, plus one for every named
 calendar that can still leak an unrouted event.
 
-`hideIfEmpty: false` is the same switch as the one on a track, put where the
+`hideIfEmpty: false` is the same switch as the one on a line, put where the
 line is actually declared for the common setup of one calendar per person.
 A calendar kept this way also keeps its line when the feed is *unreachable*,
 not only when it is empty, so an hour of downtime does not quietly remove
@@ -94,15 +95,16 @@ answers.
 ```
 {
   "match": Matcher,
-  "track"?: string | string[],    // put the event on this line; several = a shared event (capsule)
-  "rename"?: boolean,             // replace the matched text with the track's name (default true, false for "any")
+  "line"?: string | string[],    // put the event on this line; several = a shared event (capsule)
+  "rename"?: boolean,             // replace the matched text with the line's name (default true, false for "any")
   "rewrite"?: string,             // replace the matched text (or the whole title with rewriteFull)
   "rewriteFull"?: boolean,
-  "hide"?: boolean
+  "hide"?: boolean,
+  "holiday"?: boolean             // this event belongs to the day, not to a line (see Public holidays)
 }
 ```
 
-(Legacy rules may use `"person"` in place of `"track"`; still accepted.)
+(Legacy rules may use `"person"` in place of `"line"`; still accepted.)
 
 ### Long blocks look after themselves
 
@@ -112,7 +114,7 @@ office" block, a school day, a shift, a delivery. **Any timed event of four
 hours or more is drawn as a siding**, and the layout works that out from the
 clock.
 
-The event's own track draws a shallow kink out to siding level for exactly
+The event's own line draws a shallow kink out to siding level for exactly
 that event's span and rejoins at the end, with a caption riding the line: no
 lane, no label run, no branch. Real meetings during that span still fork off
 the line normally, they just aren't crowded out by a long block hogging the
@@ -126,6 +128,57 @@ does not recognise.
 
 Rules run in order, global ones first; for each effect the last matching
 rule wins, so a calendar's own rule overrides a global one.
+
+### Public holidays
+
+A subscribed holiday feed ("Holidays in Belgium", Apple's equivalent, a
+school's term dates) is not a person and has no line. Everything in it is a
+property of **the day**: it has no hour, so there is nowhere on a scale of
+hours to draw it, and no owner, so there is no head to declare it at.
+
+Say so once, on the calendar:
+
+```json
+{ "url": "https://calendar.google.com/…/holidays.ics", "holiday": true }
+```
+
+The day's names then read in the header, beside the date: `Today · Fri 25
+Dec · Christmas Day`. Nothing is drawn on the map, no line is created, and
+on a day with no holiday it takes no room at all.
+
+**Leave the `name` off.** A named calendar's name becomes a line for
+anything no rule routes, so a feed called `"Holidays in Belgium"` used to
+put a rail on the board named after a country. With `holiday` set it cannot
+happen, and there is nothing left for a name to do.
+
+For a feed that carries both kinds, say it per event instead:
+
+```json
+{ "match": { "type": "categories", "value": "Public holiday" }, "holiday": true }
+```
+
+Three details worth knowing.
+
+- **A range says which day of it this is.** "Spring Break" running from the
+  5th to the 9th reads as `Spring Break · Day 3 of 5` on the Wednesday.
+  The board draws one day, and which day of the holiday that is is the only
+  thing telling the Monday from the Thursday. A one-day holiday says just
+  its name.
+- **A holiday is not the same thing as an all-day event.** One person's
+  leave IS a state of their line, and it stays where it was: declared at
+  that line's head, with both ends of the line drawn as open chevrons.
+  `holiday` is for the days nobody owns. A rule that sets both is read as a
+  holiday, because that is the more specific claim about the same event.
+- **It rides with the date.** A panel too small to carry a header has
+  already given up saying which day it is, and the holiday goes with it
+  rather than being moved somewhere the map has to pay for.
+
+Recurrence: a whole-day entry repeating `FREQ=YEARLY` is evaluated, which
+is how most holiday feeds write Christmas Day once and mean every year.
+An ordinal weekday rule (`BYDAY=4TH`, the American Thanksgiving) is not:
+it moves the date every year, and the anniversary of the start date would
+be the wrong answer rather than an approximate one. Feeds that need one of
+those write a separate entry per year instead, which works.
 
 ## Matcher
 
@@ -162,7 +215,7 @@ have changes. Name one when the title is not where the answer is:
 
 ```json
 { "match": { "type": "contains", "value": "Elementary", "field": "location" },
-  "track": "Kids", "rename": false }
+  "line": "Kids", "rename": false }
 ```
 
 That routes on the *place*, which is the case a school or an office feed
@@ -227,7 +280,7 @@ regex feature `and`/`or`/`not` can't express.
 ## Example
 
 [demo-config.json](demo-config.json) is a complete working example with a
-work calendar, per-track calendars, a school calendar split by class code,
+work calendar, per-line calendars, a school calendar split by class code,
 and a shared family calendar.
 
 The [configuration editor](https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html)
@@ -235,14 +288,14 @@ carries three more, in
 the **Start** section, one button each, for when you have no ICS links yet:
 
 - **Family of 4**: one calendar per person plus a shared household feed.
-  Dinner and the school run are `track` lists, so they are drawn once as an
+  Dinner and the school run are `line` lists, so they are drawn once as an
   interchange rather than once per person; the school feed's menu postings
   are hidden, and the quiet toddler's line is kept with `hideIfEmpty`.
 - **Work vs Personal Split**: two lines for one person, and a top-level rule
   that hides cancelled holds in every calendar. The office day needs no rule
   of its own: it is long enough that the work line runs alongside it instead
   of spending a label lane on it.
-- **Solo Freelancer Track**: one work feed fanned out into a line per
+- **Solo Freelancer Line**: one work feed fanned out into a line per
   client on the title prefix, which a `rewrite` then strips, so the board
   reads "Sprint review" and not "Acme: Sprint review".
 

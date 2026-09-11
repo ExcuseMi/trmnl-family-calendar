@@ -1,7 +1,7 @@
 {
   "locale": "en-US",
   "timeFormat": "12h",
-  "tracks": [
+  "lines": [
     {
       "name": "Homer",
       "side": "left"
@@ -28,7 +28,7 @@
           "match": {
             "type": "any"
           },
-          "track": "Homer"
+          "line": "Homer"
         }
       ]
     },
@@ -40,7 +40,7 @@
           "match": {
             "type": "any"
           },
-          "track": "Marge"
+          "line": "Marge"
         }
       ]
     },
@@ -52,7 +52,7 @@
           "match": {
             "type": "any"
           },
-          "track": "Bart"
+          "line": "Bart"
         }
       ]
     },
@@ -64,7 +64,7 @@
           "match": {
             "type": "any"
           },
-          "track": "Lisa"
+          "line": "Lisa"
         }
       ]
     },
@@ -76,7 +76,7 @@
           "match": {
             "type": "any"
           },
-          "track": "Maggie"
+          "line": "Maggie"
         }
       ]
     },
@@ -89,7 +89,7 @@
             "type": "word",
             "value": "L6"
           },
-          "track": "Bart",
+          "line": "Bart",
           "rename": false
         },
         {
@@ -97,7 +97,7 @@
             "type": "word",
             "value": "K3"
           },
-          "track": "Lisa",
+          "line": "Lisa",
           "rename": false
         },
         {
@@ -118,7 +118,7 @@
             "type": "contains",
             "value": "Family Dinner"
           },
-          "track": [
+          "line": [
             "Marge",
             "Homer",
             "Bart",
@@ -132,7 +132,7 @@
             "type": "contains",
             "value": "School Run"
           },
-          "track": [
+          "line": [
             "Marge",
             "Bart",
             "Lisa"
@@ -144,7 +144,7 @@
             "type": "contains",
             "value": "Spring Break"
           },
-          "track": "Bart",
+          "line": "Bart",
           "allDay": true,
           "rename": false
         }

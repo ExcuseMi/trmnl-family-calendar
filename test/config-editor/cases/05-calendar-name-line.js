@@ -16,7 +16,7 @@ module.exports = function (test, h) {
   test('a calendar named after something that is not a track is flagged', () => {
     const { document } = loadEditor();
     document.getElementById('importIn').value = JSON.stringify({
-      tracks: [{ name: 'Fry' }, { name: 'Leela' }],
+      lines: [{ name: 'Fry' }, { name: 'Leela' }],
       calendars: [
         { name: 'Fry', url: 'https://a.example/fry.ics' },
         { name: 'Deliveries', url: 'https://a.example/deliveries.ics' },
@@ -35,7 +35,7 @@ module.exports = function (test, h) {
   test('the warning appears as the name is typed, and clears when a track matches it', () => {
     const { document } = loadEditor();
     document.getElementById('importIn').value = JSON.stringify({
-      tracks: [{ name: 'Fry' }],
+      lines: [{ name: 'Fry' }],
       calendars: [{ url: 'https://a.example/x.ics' }],
     });
     click(document.getElementById('loadImport'));
@@ -52,14 +52,14 @@ module.exports = function (test, h) {
   test('adding the missing track clears the warning on the calendar named after it', () => {
     const { document } = loadEditor();
     document.getElementById('importIn').value = JSON.stringify({
-      tracks: [{ name: 'Fry' }],
+      lines: [{ name: 'Fry' }],
       calendars: [{ name: 'Leela', url: 'https://a.example/x.ics' }],
     });
     click(document.getElementById('loadImport'));
     assert(warnings(document)[0].length > 0, 'the imported name should be flagged');
-    const blank = [...document.querySelectorAll('#tracks .card .title-input')].pop();
-    click(document.getElementById('addTrack'));
-    fireInput([...document.querySelectorAll('#tracks .card .title-input')].pop(), 'Leela');
+    const blank = [...document.querySelectorAll('#lines .card .title-input')].pop();
+    click(document.getElementById('addLine'));
+    fireInput([...document.querySelectorAll('#lines .card .title-input')].pop(), 'Leela');
     assertEqual(warnings(document)[0], '', 'naming the track should settle it');
     assert(blank, 'sanity: the tracks list rendered');
   });

@@ -77,9 +77,9 @@ module.exports = function (test, h) {
   test('an existing configuration is handed over to improve on', () => {
     const { document } = loadEditor();
     document.getElementById('importIn').value = JSON.stringify({
-      tracks: [{ name: 'Fry' }],
+      lines: [{ name: 'Fry' }],
       calendars: [{ url: 'https://a.example/crew.ics',
-        rules: [{ match: { type: 'regex', value: '^Fry:' }, track: 'Fry', rename: false }] }],
+        rules: [{ match: { type: 'regex', value: '^Fry:' }, line: 'Fry', rename: false }] }],
     });
     click(document.getElementById('loadImport'));
     click(document.getElementById('makePrompt'));
@@ -154,11 +154,11 @@ module.exports = function (test, h) {
     assert(fence, 'the worked example is not in a json fence');
     const ex = JSON.parse(fence[1]);
 
-    assert(ex.tracks.length >= 3, 'the example has no tracks to speak of');
+    assert(ex.lines.length >= 3, 'the example has no tracks to speak of');
     const rules = ex.calendars.reduce((all, c) => all.concat(c.rules || []), []);
     assert(rules.some((r) => r.rewrite === '' && r.match.type === 'regex' && /\^\[A-Za-z\]\+:/.test(r.match.value)),
       'no rule that strips a name prefix off the title');
-    assert(rules.some((r) => Array.isArray(r.track) && r.track.length > 1), 'no shared event with a track list');
+    assert(rules.some((r) => Array.isArray(r.line) && r.line.length > 1), 'no shared event with a track list');
     assert(!rules.some((r) => r.siding === true || r.station === true),
       'the worked example still teaches a key the config does not have any more');
     assert(rules.some((r) => r.hide === true), 'no hide rule');
@@ -167,7 +167,7 @@ module.exports = function (test, h) {
     // and it is checked against the same parser the device runs
     const parsed = document.defaultView.parseConfig(JSON.stringify(ex));
     assert(parsed.calendars.length === ex.calendars.length, 'the worked example does not survive parseConfig');
-    assert(Object.keys(parsed.tracks).length === ex.tracks.length, 'the example\'s tracks do not survive parseConfig');
+    assert(Object.keys(parsed.lines).length === ex.lines.length, 'the example\'s tracks do not survive parseConfig');
 
     // EVERY RULE IN IT HAS TO DO SOMETHING.
     //

@@ -30,11 +30,12 @@ const REPO = path.join(__dirname, '../../..');
 const LIQUID = fs.readFileSync(path.join(REPO, 'plugin/src/shared.liquid'), 'utf-8');
 const EDITOR = fs.readFileSync(path.join(REPO, 'tools/config-editor.html'), 'utf-8');
 
-// The template's header: the .metro-header block, down to the all-day row
-// (which is not a header thing and is empty in every payload now).
+// The template's header: the .metro-header block, down to where it closes.
+// It used to stop at the all-day row, which was a second declaration of a
+// holiday already named at its line's head, and is gone.
 function templateHeader() {
   const a = LIQUID.indexOf('class="metro-header');
-  const b = LIQUID.indexOf('{% if data.all_day');
+  const b = LIQUID.indexOf('<div class="divider', a);
   if (a < 0 || b < 0 || b < a) throw new Error('cannot find the template header');
   return LIQUID.slice(a, b);
 }

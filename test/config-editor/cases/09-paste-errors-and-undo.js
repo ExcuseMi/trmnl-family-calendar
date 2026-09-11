@@ -24,7 +24,7 @@ module.exports = function (test, h) {
   test('a configuration that does not parse is refused, and nothing is loaded', () => {
     const { document } = loadEditor();
     load(document, '{\n  "calendars": [\n    {"url": "https://a.example/x.ics"},\n}\n');
-    assertEqual(jsonOut(document), { tracks: [], calendars: [] }, 'a broken paste must not reach the editor');
+    assertEqual(jsonOut(document), { lines: [], calendars: [] }, 'a broken paste must not reach the editor');
     const msg = status(document);
     assert(/not readable/i.test(msg), 'the message does not say it failed: ' + msg);
     assert(/line \d+/.test(msg), 'the message does not say where the mistake is: ' + msg);
@@ -33,7 +33,7 @@ module.exports = function (test, h) {
   });
 
   test('a paste that had to be repaired says so', () => {
-    const cfg = { tracks: [{ name: 'Fry' }], calendars: [{ url: 'https://a.example/x.ics' }] };
+    const cfg = { lines: [{ name: 'Fry' }], calendars: [{ url: 'https://a.example/x.ics' }] };
     const pretty = JSON.stringify(cfg, null, 1);
     const { document } = loadEditor();
     load(document, 'Sure!\n\n```json\n'
@@ -84,10 +84,10 @@ module.exports = function (test, h) {
     // The warning fired on it anyway, on every load, which is how a warning stops being read.
     const { document } = loadEditor();
     load(document, JSON.stringify({
-      tracks: [{ name: 'Sam' }],
+      lines: [{ name: 'Sam' }],
       calendars: [
-        { name: 'Work', url: 'https://a.example/w.ics', rules: [{ match: { type: 'any' }, track: 'Sam' }] },
-        { name: 'School', url: 'https://a.example/s.ics', rules: [{ match: { type: 'word', value: 'L6' }, track: 'Sam' }] },
+        { name: 'Work', url: 'https://a.example/w.ics', rules: [{ match: { type: 'any' }, line: 'Sam' }] },
+        { name: 'School', url: 'https://a.example/s.ics', rules: [{ match: { type: 'word', value: 'L6' }, line: 'Sam' }] },
       ],
     }));
     const w = [...document.querySelectorAll('.cal-name-warn')].map((n) => n.textContent);
@@ -113,13 +113,13 @@ module.exports = function (test, h) {
     assertEqual(document.getElementById('jsonOut').value, loaded, 'undo did not put the calendar back');
 
     click(undoBtn);
-    assertEqual(jsonOut(document), { tracks: [], calendars: [] }, 'undo did not put the empty editor back');
+    assertEqual(jsonOut(document), { lines: [], calendars: [] }, 'undo did not put the empty editor back');
     assert(undoBtn.disabled, 'the button should go quiet when there is nothing left to undo');
   });
 
   test('undo puts back a removed track and a removed rule', () => {
     const { document } = loadEditor();
-    fireInput(document.querySelector('#tracks .card .title-input'), 'Sam');
+    fireInput(document.querySelector('#lines .card .title-input'), 'Sam');
     click(document.getElementById('addGlobalRule'));
     fireInput(document.querySelector('#globalRules .rule .cond input[type=text]'), 'Dentist');
     const rule = document.querySelector('#globalRules .rule');
@@ -134,10 +134,10 @@ module.exports = function (test, h) {
     click(document.getElementById('undoBtn'));
     assertEqual(document.getElementById('jsonOut').value, withRule, 'undo did not put the rule back');
 
-    click([...document.querySelectorAll('#tracks .card button')].find((b) => b.textContent === 'Remove'));
-    assertEqual(jsonOut(document).tracks, []);
+    click([...document.querySelectorAll('#lines .card button')].find((b) => b.textContent === 'Remove'));
+    assertEqual(jsonOut(document).lines, []);
     click(document.getElementById('undoBtn'));
-    assertEqual(jsonOut(document).tracks, [{ name: 'Sam' }], 'undo did not put the track back');
+    assertEqual(jsonOut(document).lines, [{ name: 'Sam' }], 'undo did not put the track back');
   });
 
   test('there is nothing to copy from an empty editor, and the page says so', () => {

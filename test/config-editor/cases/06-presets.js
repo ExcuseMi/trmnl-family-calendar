@@ -40,7 +40,7 @@ module.exports = function (test, h) {
     assertEqual(buttons.map((b) => [b.getAttribute('data-preset'), b.querySelector('strong').textContent]), [
       ['family4', 'Family of 4'],
       ['worksplit', 'Work vs Personal Split'],
-      ['solo', 'Solo Freelancer Track'],
+      ['solo', 'Solo Freelancer Line'],
     ]);
     buttons.forEach((b) => {
       const note = b.querySelector('.preset-note');
@@ -84,15 +84,15 @@ module.exports = function (test, h) {
       const src = JSON.parse(document.getElementById('jsonOut').value);
       const parsed = window.parseConfig(document.getElementById('jsonOut').value);
       assert(parsed.calendars.length === src.calendars.length, id + ': a calendar was dropped');
-      assert(Object.keys(parsed.tracks).length === src.tracks.length, id + ': a track was dropped');
-      assert(parsed.everyoneTrack === src.tracks[0].name, id + ': first track should be the fallback');
+      assert(Object.keys(parsed.lines).length === src.lines.length, id + ': a track was dropped');
+      assert(parsed.everyoneLine === src.lines[0].name, id + ': first track should be the fallback');
       // every rule the preset writes has to compile, or it is decoration
       const compiled = parsed.globalRules.length + parsed.calendars.reduce((n, c) => n + c.rules.length, 0);
       assert(compiled === allRules(src).length, id + ': ' + (allRules(src).length - compiled) + ' rule(s) did not compile');
       // and every track a rule routes to has to exist
-      const names = src.tracks.map((t) => t.name);
+      const names = src.lines.map((t) => t.name);
       allRules(src).forEach((r) => {
-        [].concat(r.track || []).forEach((n) => assert(names.indexOf(n) !== -1, id + ': rule routes to unknown track ' + n));
+        [].concat(r.line || []).forEach((n) => assert(names.indexOf(n) !== -1, id + ': rule routes to unknown track ' + n));
       });
     });
   });
@@ -102,10 +102,10 @@ module.exports = function (test, h) {
       const { window, document } = loadEditor();
       pick(window, document, id, true);
       const cfg = jsonOut(document);
-      cfg.tracks.forEach((t) => {
+      cfg.lines.forEach((t) => {
         assert.deepStrictEqual(Object.keys(t), ['name'], id + ': a track carries more than a name');
       });
-      const names = cfg.tracks.map((t) => t.name.toLowerCase());
+      const names = cfg.lines.map((t) => t.name.toLowerCase());
       cfg.calendars.forEach((c) => {
         if (c.name) assert(names.indexOf(c.name.toLowerCase()) !== -1, id + ': calendar named "' + c.name + '" is not a track');
       });
@@ -126,7 +126,7 @@ module.exports = function (test, h) {
       const cfg = jsonOut(document);
       const rules = allRules(cfg);
       got[id] = {
-        shared: rules.some((r) => Array.isArray(r.track) && r.track.length > 1),
+        shared: rules.some((r) => Array.isArray(r.line) && r.line.length > 1),
         renames: rules.some((r) => typeof r.rewrite === 'string' && r.rewrite && !/^\^/.test(r.match.value || '')),
         strips: rules.some((r) => typeof r.rewrite === 'string' && r.rewrite && /^\^/.test(r.match.value || '')),
         hides: rules.some((r) => r.hide === true),
@@ -152,13 +152,13 @@ module.exports = function (test, h) {
     // nothing typed yet: swapping presets is not worth a dialog
     let asked = pick(window, document, 'family4', true);
     assertEqual(asked.n, 0);
-    assertEqual(jsonOut(document).tracks[0].name, 'Sam');
+    assertEqual(jsonOut(document).lines[0].name, 'Sam');
     asked = pick(window, document, 'solo', true);
     assert.strictEqual(asked.n, 0, 'an untouched preset should swap without asking');
-    assertEqual(jsonOut(document).tracks[0].name, 'Studio');
+    assertEqual(jsonOut(document).lines[0].name, 'Studio');
 
     // now it is the user's config, not ours
-    fireInput(document.querySelector('#tracks .card input.title-input'), 'Robin');
+    fireInput(document.querySelector('#lines .card input.title-input'), 'Robin');
     const mine = document.getElementById('jsonOut').value;
     asked = pick(window, document, 'worksplit', false);
     assert.strictEqual(asked.n, 1, 'edited work should not be thrown away silently');
@@ -168,7 +168,7 @@ module.exports = function (test, h) {
 
     asked = pick(window, document, 'worksplit', true);
     assertEqual(asked.n, 1);
-    assertEqual(jsonOut(document).tracks.map((t) => t.name), ['Work', 'Personal']);
+    assertEqual(jsonOut(document).lines.map((t) => t.name), ['Work', 'Personal']);
     assert(document.getElementById('jsonOut').value !== mine, 'accepting the confirm must replace everything');
   });
 

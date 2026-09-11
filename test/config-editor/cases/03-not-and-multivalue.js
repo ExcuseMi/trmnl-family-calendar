@@ -6,8 +6,8 @@ module.exports = function (test, h) {
   // track picker), which would detach any rule/condition DOM reference
   // grabbed beforehand.
   function ruleWithCondition(document, value, negate) {
-    fireInput(document.querySelector('#tracks .card .title-input'), 'Sam');
-    fireChange(document.querySelector('#tracks .card .title-input'));
+    fireInput(document.querySelector('#lines .card .title-input'), 'Sam');
+    fireChange(document.querySelector('#lines .card .title-input'));
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), value);
@@ -53,7 +53,7 @@ module.exports = function (test, h) {
   test('importing not(or(word...)) round-trips back into one negated, comma-joined condition', () => {
     const { document } = loadEditor();
     const cfg = {
-      tracks: [{ name: 'Familie' }, { name: 'Kato' }],
+      lines: [{ name: 'Familie' }, { name: 'Kato' }],
       rules: [{
         match: { type: 'and', matchers: [
           { type: 'or', matchers: [{ type: 'word', value: 'L1' }, { type: 'word', value: 'L3' }] },

@@ -48,9 +48,9 @@ module.exports = function (test, h) {
     // The case that motivates the whole thing: a school calendar where the
     // titles say nothing useful and the place says everything.
     const r = await board(AT_SCHOOL, {
-      tracks: [{ name: 'Work' }, { name: 'Kids' }],
+      lines: [{ name: 'Work' }, { name: 'Kids' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Work', rules: [
-        { match: { type: 'contains', value: 'Elementary', field: 'location' }, track: 'Kids' },
+        { match: { type: 'contains', value: 'Elementary', field: 'location' }, line: 'Kids' },
       ] }],
     });
     assertEqual(tracksOf(r.data), ['Assembly@Kids', 'Budget call@Work']);
@@ -62,7 +62,7 @@ module.exports = function (test, h) {
     // event has to keep its name rather than be renamed to the track.
     const r = await board(AT_SCHOOL, {
       calendars: [{ url: 'https://example.com/a.ics', name: 'Work', rules: [
-        { match: { type: 'contains', value: 'Elementary', field: 'location' }, track: 'Kids' },
+        { match: { type: 'contains', value: 'Elementary', field: 'location' }, line: 'Kids' },
       ] }],
     });
     assertEqual(tracksOf(r.data), ['Assembly@Kids', 'Budget call@Work'],
@@ -75,9 +75,9 @@ module.exports = function (test, h) {
       { start: '20260909T110000Z', end: '20260909T113000Z', summary: 'Standup', categories: 'Work' },
     ]);
     const r = await board(ics, {
-      tracks: [{ name: 'Desk' }, { name: 'Club' }],
+      lines: [{ name: 'Desk' }, { name: 'Club' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Desk', rules: [
-        { match: { type: 'exact', value: 'Sport', field: 'categories' }, track: 'Club', rename: false },
+        { match: { type: 'exact', value: 'Sport', field: 'categories' }, line: 'Club', rename: false },
       ] }],
     });
     assertEqual(tracksOf(r.data), ['Match@Club', 'Standup@Desk']);
@@ -91,9 +91,9 @@ module.exports = function (test, h) {
       { start: '20260909T090000Z', end: '20260909T093000Z', summary: 'Trip', categories: 'Kids\\, school,Sport' },
     ]);
     const r = await board(ics, {
-      tracks: [{ name: 'Desk' }, { name: 'Club' }],
+      lines: [{ name: 'Desk' }, { name: 'Club' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Desk', rules: [
-        { match: { type: 'exact', value: 'Kids, school', field: 'categories' }, track: 'Club', rename: false },
+        { match: { type: 'exact', value: 'Kids, school', field: 'categories' }, line: 'Club', rename: false },
       ] }],
     });
     assertEqual(tracksOf(r.data), ['Trip@Club']);
@@ -107,9 +107,9 @@ module.exports = function (test, h) {
       { start: '20260909T090000Z', end: '20260909T093000Z', summary: 'Block', description: 'room 4, with the sitter' },
     ]);
     const r = await board(ics, {
-      tracks: [{ name: 'Desk' }, { name: 'Home' }],
+      lines: [{ name: 'Desk' }, { name: 'Home' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Desk', rules: [
-        { match: { type: 'contains', value: 'sitter', field: 'description' }, track: 'Home', rename: false },
+        { match: { type: 'contains', value: 'sitter', field: 'description' }, line: 'Home', rename: false },
       ] }],
     });
     assertEqual(tracksOf(r.data), ['Block@Home']);
@@ -122,9 +122,9 @@ module.exports = function (test, h) {
       { start: '20260909T090000Z', end: '20260909T093000Z', summary: 'Block', description: 'sitter' },
     ]);
     const cfg = (field) => ({
-      tracks: [{ name: 'Desk' }, { name: 'Home' }],
+      lines: [{ name: 'Desk' }, { name: 'Home' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Desk', includeDescription: true, rules: [
-        { match: Object.assign({ type: 'contains', value: 'sitter' }, field ? { field: field } : {}), track: 'Home', rename: false },
+        { match: Object.assign({ type: 'contains', value: 'sitter' }, field ? { field: field } : {}), line: 'Home', rename: false },
       ] }],
     });
     assertEqual(tracksOf((await board(ics, cfg(null))).data), ['Block@Home'], 'no field: the description still counts');
@@ -137,9 +137,9 @@ module.exports = function (test, h) {
       { start: '20260909T110000Z', end: '20260909T113000Z', summary: 'Elementary theory', categories: 'Work' },
     ]);
     const r = await board(ics, {
-      tracks: [{ name: 'Desk' }, { name: 'Kids' }],
+      lines: [{ name: 'Desk' }, { name: 'Kids' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Desk', rules: [
-        { match: { type: 'contains', value: 'Elementary', field: 'any' }, track: 'Kids', rename: false },
+        { match: { type: 'contains', value: 'Elementary', field: 'any' }, line: 'Kids', rename: false },
       ] }],
     });
     assertEqual(tracksOf(r.data), ['Elementary theory@Kids', 'Pickup@Kids']);
@@ -149,9 +149,9 @@ module.exports = function (test, h) {
     // Same rule the rest of the config follows: a misspelling is ignored,
     // not fatal. It would otherwise be a rule that silently does nothing.
     const r = await board(AT_SCHOOL, {
-      tracks: [{ name: 'Desk' }, { name: 'Kids' }],
+      lines: [{ name: 'Desk' }, { name: 'Kids' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Desk', rules: [
-        { match: { type: 'contains', value: 'Assembly', field: 'titel' }, track: 'Kids', rename: false },
+        { match: { type: 'contains', value: 'Assembly', field: 'titel' }, line: 'Kids', rename: false },
       ] }],
     });
     assert(tracksOf(r.data).indexOf('Assembly@Kids') >= 0, 'got ' + JSON.stringify(tracksOf(r.data)));
@@ -186,9 +186,9 @@ module.exports = function (test, h) {
 
   test('duration takes a ceiling as well as a floor', async () => {
     const r = await board(LONG_DAY, {
-      tracks: [{ name: 'Alex' }, { name: 'Quick' }],
+      lines: [{ name: 'Alex' }, { name: 'Quick' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [
-        { match: { type: 'duration', max: 30 }, track: 'Quick', rename: false },
+        { match: { type: 'duration', max: 30 }, line: 'Quick', rename: false },
       ] }],
     });
     // "In the office" is in the list, on the line it came in on: six and a
@@ -205,9 +205,9 @@ module.exports = function (test, h) {
     // office" starts at exactly 08:30 and stays on Alex, which is the
     // exclusive end of the window being right about its own boundary.
     const r = await board(LONG_DAY, {
-      tracks: [{ name: 'Alex' }, { name: 'Early' }],
+      lines: [{ name: 'Alex' }, { name: 'Early' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [
-        { match: { type: 'time', to: '08:30' }, track: 'Early', rename: false },
+        { match: { type: 'time', to: '08:30' }, line: 'Early', rename: false },
       ] }],
     });
     assertEqual(tracksOf(r.data), ['Gym@Early', 'In the office@Alex', 'Standup@Alex']);
@@ -234,10 +234,10 @@ module.exports = function (test, h) {
     // A no-op rule that matched everything would silently move the whole
     // board onto one line.
     const r = await board(LONG_DAY, {
-      tracks: [{ name: 'Alex' }, { name: 'Nowhere' }],
+      lines: [{ name: 'Alex' }, { name: 'Nowhere' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [
-        { match: { type: 'duration' }, track: 'Nowhere', rename: false },
-        { match: { type: 'time' }, track: 'Nowhere', rename: false },
+        { match: { type: 'duration' }, line: 'Nowhere', rename: false },
+        { match: { type: 'time' }, line: 'Nowhere', rename: false },
       ] }],
     });
     assert(tracksOf(r.data).every((t) => t.indexOf('@Alex') > 0), 'got ' + JSON.stringify(tracksOf(r.data)));

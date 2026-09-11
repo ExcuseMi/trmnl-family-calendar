@@ -32,10 +32,10 @@ module.exports = function (test, h) {
 
   test('a track with nothing on today is dropped, as it always was', async () => {
     const r = await board({
-      tracks: [{ name: 'Busy' }, { name: 'Quiet' }],
+      lines: [{ name: 'Busy' }, { name: 'Quiet' }],
       calendars: [
-        { name: 'Busy', url: BUSY, rules: [{ match: { type: 'any' }, track: 'Busy' }] },
-        { name: 'Quiet', url: QUIET, rules: [{ match: { type: 'any' }, track: 'Quiet' }] },
+        { name: 'Busy', url: BUSY, rules: [{ match: { type: 'any' }, line: 'Busy' }] },
+        { name: 'Quiet', url: QUIET, rules: [{ match: { type: 'any' }, line: 'Quiet' }] },
       ],
     });
     assert(TRACKS(r) === 'Busy', 'got ' + TRACKS(r));
@@ -43,10 +43,10 @@ module.exports = function (test, h) {
 
   test('hideIfEmpty:false on a track keeps its line on a day it has nothing', async () => {
     const r = await board({
-      tracks: [{ name: 'Busy' }, { name: 'Quiet', hideIfEmpty: false }],
+      lines: [{ name: 'Busy' }, { name: 'Quiet', hideIfEmpty: false }],
       calendars: [
-        { name: 'Busy', url: BUSY, rules: [{ match: { type: 'any' }, track: 'Busy' }] },
-        { name: 'Quiet', url: QUIET, rules: [{ match: { type: 'any' }, track: 'Quiet' }] },
+        { name: 'Busy', url: BUSY, rules: [{ match: { type: 'any' }, line: 'Busy' }] },
+        { name: 'Quiet', url: QUIET, rules: [{ match: { type: 'any' }, line: 'Quiet' }] },
       ],
     });
     assert(TRACKS(r) === 'Busy,Quiet', 'got ' + TRACKS(r));
@@ -87,10 +87,10 @@ module.exports = function (test, h) {
 
   test('hideIfEmpty:true is the default and changes nothing', async () => {
     const r = await board({
-      tracks: [{ name: 'Busy' }, { name: 'Quiet', hideIfEmpty: true }],
+      lines: [{ name: 'Busy' }, { name: 'Quiet', hideIfEmpty: true }],
       calendars: [
-        { name: 'Busy', url: BUSY, rules: [{ match: { type: 'any' }, track: 'Busy' }] },
-        { name: 'Quiet', url: QUIET, rules: [{ match: { type: 'any' }, track: 'Quiet' }] },
+        { name: 'Busy', url: BUSY, rules: [{ match: { type: 'any' }, line: 'Busy' }] },
+        { name: 'Quiet', url: QUIET, rules: [{ match: { type: 'any' }, line: 'Quiet' }] },
       ],
     });
     assert(TRACKS(r) === 'Busy', 'got ' + TRACKS(r));
