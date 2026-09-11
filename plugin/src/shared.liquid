@@ -4486,17 +4486,22 @@
       if (shared.length) {
         var busy = [];
         LEGEND.forEach(function (q) {
-          // ISOLATION, NOT MERELY NOT TOUCHING.
+          // TWO RINGS, AND THEY ARE NOT WORTH THE SAME.
           //
-          // A rail counted as an obstacle only out to its own edge plus half
-          // a gap, about five pixels, so a caption could be dropped into the
-          // twenty pixel slot between two lines running close together and
-          // be technically clear of both while reading as belonging to
-          // neither. Twelve pixels either side is a caption's own breathing
-          // room; a slot that cannot hold that is not a slot, and the
-          // search steps further out -- a longer stem -- rather than
-          // squeezing in.
-          var half = Math.max(2, q.line_width) * S * weightScale / 2 + LINE_GAP * 0.5 + 12 * S;
+          // A rail counted as one obstacle out to its own edge plus twelve
+          // pixels of isolation, all of it SOFT -- so a rail lying through
+          // the letters cost the same third price as a rail eleven pixels
+          // clear of them, and the search took the cheap option: the bottom
+          // of "Mensa Meeting" came to rest exactly on Marge's dashed line.
+          //
+          // A line behind words is untidy and better than a dropped event,
+          // which is why the discount exists. A line THROUGH the words is
+          // not untidy, it is unreadable. So the rail's own width plus a
+          // real gap is hard, and the isolation beyond it stays soft: the
+          // search will squeeze into the clearance when it must, and never
+          // into the letters.
+          var ink = Math.max(2, q.line_width) * S * weightScale / 2 + LINE_GAP * 0.5;
+          var half = ink + 12 * S;
           var stepA = Math.max(CORNER, (axisEnd - axisStart) / 140);
           // A VERTICAL DROP IS A WALL, NOT A RAIL TO WRITE OVER.
           //
@@ -4526,7 +4531,12 @@
                           c0: Math.min(u0, u1) - half, c1: Math.max(u0, u1) + half });
               continue;
             }
-            busy.push({ a0: a, a1: b, q: q, c0: Math.min(u0, u1) - half, c1: Math.max(u0, u1) + half, soft: true });
+            // the ink itself, which nothing may be written over...
+            busy.push({ a0: a, a1: b, q: q,
+                        c0: Math.min(u0, u1) - ink, c1: Math.max(u0, u1) + ink });
+            // ...and the paper it wants around it, which is a preference
+            busy.push({ a0: a, a1: b, q: q, c0: Math.min(u0, u1) - half,
+                        c1: Math.max(u0, u1) + half, soft: true });
           }
         });
         // every branch rail and every caption the lane machinery already
@@ -4979,9 +4989,31 @@
             }
           }
           var row = e._h + LINE_GAP * 0.6;
-          var outs = [e._capOut, e._capOut + row, e._capOut + row * 2, e._capOut + row * 3];
+          // A LEADER IS A TICK, NOT A TETHER.
+          //
+          // The ladder stepped out a row at a time for four rows, and with
+          // empty board below Homer the search happily took the fourth:
+          // "Shift Handover" ended up the better part of two bands under
+          // its own line with a stem that long reaching back up to the
+          // tick. Past about a stem's length the line stops reading as
+          // pointing at anything -- the eye pairs the words with whatever
+          // rail is nearest, which by then is somebody else's.
+          //
+          // So the ladder is clamped and the search is given more room
+          // SIDEWAYS instead: sliding keeps a name at its own line's height,
+          // where the stem is short and the pairing is obvious, and costs
+          // only the words being a little late.
+          var MAX_LEADER = 32 * S;
+          var outs = [];
+          for (var ri = 0; ri < 4; ri++) {
+            var o = e._capOut + ri * row;
+            if (ri && o - e._capOut > MAX_LEADER) break;
+            outs.push(o);
+          }
           var slides = [0, e._textLen * 0.3, -e._textLen * 0.3,
-                        e._textLen * 0.55, -e._textLen * 0.55];
+                        e._textLen * 0.55, -e._textLen * 0.55,
+                        e._textLen * 0.85, -e._textLen * 0.85,
+                        e._textLen * 1.2, -e._textLen * 1.2];
           // AN ENCLOSURE'S NEIGHBOURS STACK BELOW IT, IN TIME ORDER.
           //
           // A convergence's own name is pinned above its pill. The events
@@ -5012,7 +5044,12 @@
                 var away = sg * e._sign;
                 if (banSign && away === banSign) continue;
                 var c0 = away > 0 ? e._routeEdge + outs[oi] : e._routeEdge - outs[oi] - e._h;
-                var b = { a0: at - TEXT_PAD, a1: at + e._textLen + TEXT_PAD, c0: c0, c1: c0 + e._h };
+                // SIX PIXELS UNDER THE DESCENDERS. A label's measured
+                // height stops at the bottom of its box, and a rail drawn
+                // along that edge touches the tails of the letters in it.
+                // The box is tested six pixels taller than it is drawn.
+                var b = { a0: at - TEXT_PAD, a1: at + e._textLen + TEXT_PAD,
+                          c0: c0, c1: c0 + e._h + 6 * S };
                 if (c0 < bandLo || c0 + e._h > crossPx - EDGE) continue;
                 var raw = costAt(b, e);
                 // A FLAT NAME MAY NOT CROSS A LINE EITHER.
