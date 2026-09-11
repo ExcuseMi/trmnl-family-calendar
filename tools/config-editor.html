@@ -1445,7 +1445,23 @@
     document.getElementById("importIn").value = "";
     icsOverrides = {};
     icsFromExample = {};
+    fetchErrors = {};
     feedsChanged();
+    // AND THE PICTURE OF IT, WHICH IS THE HALF THAT IS ON SCREEN.
+    //
+    // Clearing the example emptied the lines, the calendars, the rules, the
+    // paste box and the feeds, and left the panel showing Springfield: the
+    // board still drawn, greyed out as out of date, over a line reading "10
+    // events today" about calendars that were no longer in the editor, with
+    // that draw's run() output still below it. The prompt written for the
+    // example, and the offer to fetch its feeds, stayed too. The first thing
+    // somebody sees after choosing to do this for real should not be the
+    // example they have just left.
+    resetPreview();
+    document.getElementById("promptOut").value = "";
+    setStatus("promptStatus", "", "");
+    hideRelayOffer();
+    document.getElementById("resultJson").value = "";
     selectedPreset = "";
     lastLoaded = null;
     paintPresets();
@@ -2437,6 +2453,20 @@
     note.hidden = !stale;
     note.className = "stage-note status err";
     note.textContent = stale ? "This map was drawn before your last change. Draw it again to see it." : "";
+  }
+  // Back to "nothing drawn yet": no board, no note about one being out of
+  // date, and no status line describing a draw that is no longer on screen.
+  function resetPreview() {
+    drawnSig = null;
+    var stage = document.getElementById("stage");
+    if (stage) { stage.hidden = true; stage.className = "stage"; }
+    var note = document.getElementById("stageNote");
+    if (note) { note.hidden = true; note.textContent = ""; }
+    var inner = document.getElementById("stageInner");
+    if (inner) inner.innerHTML = "";
+    var empty = document.getElementById("stageEmpty");
+    if (empty) empty.hidden = false;
+    setStatus("previewStatus", "", "");
   }
   var templateCache = null;
   // The plugin template is fetched once; its <script> (the layout engine) and <style> are
