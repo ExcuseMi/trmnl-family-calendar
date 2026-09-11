@@ -52,11 +52,14 @@ module.exports = function (test, h) {
       'two o\'clock and four o\'clock are not the same lesson');
   });
 
+  // Long enough to be a siding, which is now the only thing that makes one:
+  // the config cannot declare it any more.
+  const LONG = [['20260907T083000Z', '20260907T150000Z'], ['20260907T083000Z', '20260907T150000Z']];
+
   test('the same siding on two calendars keeps a kink on each line but is one siding', async () => {
-    const r = await runTransform(twoFeeds('School Day', 'School Day', SAME[0], SAME[1]), NOW)
+    const r = await runTransform(twoFeeds('School Day', 'School Day', LONG[0], LONG[1]), NOW)
       .run(baseInput(NOW, cfgWith({
         tracks: [{ name: 'Ada' }, { name: 'Bo' }],
-        rules: [{ match: { type: 'word', value: 'School' }, siding: true }],
         calendars: [
           { url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'Ada' }] },
           { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, track: 'Bo' }] },

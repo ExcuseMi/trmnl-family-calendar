@@ -871,7 +871,6 @@ var SIMPSONS_CONFIG = {
       { match: { type: 'word', value: 'L6' }, track: 'Bart', rename: false },
       { match: { type: 'word', value: 'K3' }, track: 'Lisa', rename: false },
       { match: { type: 'regex', value: '^(?:L6|K3)\\s+' }, rewrite: '' },
-      { match: { type: 'contains', value: 'School Day' }, siding: true },
     ]),
     demoCalendar('Family', 'simpsons/family.ics', [
       { match: { type: 'contains', value: 'Family Dinner' }, track: ['Marge', 'Homer', 'Bart', 'Lisa', 'Maggie'], rename: false },
@@ -908,7 +907,7 @@ var FUTURAMA_CONFIG = {
       { match: { type: 'regex', value: '^[A-Za-z]+:\\s*' }, rewrite: '' },
     ]),
     demoCalendar('Deliveries', 'futurama/deliveries.ics', [
-      { match: { type: 'contains', value: 'Delivery Run' }, track: ['Fry', 'Leela', 'Bender'], siding: true, rename: false },
+      { match: { type: 'contains', value: 'Delivery Run' }, track: ['Fry', 'Leela', 'Bender'], rename: false },
       { match: { type: 'contains', value: 'Good News' }, track: ['Professor', 'Fry', 'Leela', 'Bender', 'Amy'], rename: false },
       { match: { type: 'contains', value: 'Crew Debrief' }, track: ['Fry', 'Leela', 'Bender'], rename: false },
       { match: { type: 'contains', value: 'Ship Inspection' }, track: 'Leela', allDay: true, rename: false },
@@ -929,11 +928,11 @@ var FRIENDS_CONFIG = {
     // a long block someone spends in one place is a STATION, not a meeting:
     // the line runs straight on and the block is a siding beside it
     demoCalendar('Monica', 'friends/monica.ics', [
-      { match: { type: 'contains', value: 'Head Chef Shift' }, siding: true, rename: false },
+      { match: { type: 'contains', value: 'Head Chef Shift' }, rename: false },
       { match: { type: 'any' }, track: 'Monica' },
     ]),
     demoCalendar('Rachel', 'friends/rachel.ics', [
-      { match: { type: 'contains', value: 'Desk booking' }, siding: true, rename: false },
+      { match: { type: 'contains', value: 'Desk booking' }, rename: false },
       { match: { type: 'any' }, track: 'Rachel' },
     ]),
     demoCalendar('Apartment 20', 'friends/apartment.ics', [
@@ -1863,18 +1862,17 @@ function compileRule(spec) {
   var track = normalizeNameList(spec.track !== undefined ? spec.track : spec.person);
   var allDay = spec.allDay === true;
   var hide = spec.hide === true;
-  // `siding`: the event's own track leaves the running line for its
-  // duration instead of branching into a lane, and rejoins at the end.
-  // For a status/location block (e.g. "Desk booking") that spans real
-  // meetings without being one itself. Only meaningful for a timed event
-  // with both ends; see buildFromConfig.
-  // `siding` was called `station` when it shipped, and a config written
-  // then is still a config. The old key keeps working and is not
-  // documented anywhere any more.
-  var siding = spec.siding === true || spec.station === true;
+  // `siding` (and the `station` it shipped as) used to live here: a rule
+  // could declare that an event's own track leaves the running line for its
+  // span instead of branching into a lane. Both keys are gone, and a config
+  // that still carries either is read the same as one that does not — the
+  // key is simply ignored, which is what happens to any key this does not
+  // recognise. The layout decides it now, from how long the block is; see
+  // SIDING_MIN_MIN in buildFromConfig.
+
   var rewrite = typeof spec.rewrite === 'string' ? spec.rewrite : null;
   var rewriteFull = spec.rewriteFull === true;
-  if (!track && !allDay && !hide && !siding && rewrite === null) return null; // a no-op rule is dropped, not kept
+  if (!track && !allDay && !hide && rewrite === null) return null; // a no-op rule is dropped, not kept
   var isAnyMatch = spec.match && (spec.match.type === 'any' || spec.match.type === 'all');
   // rename defaults to true (a rule assigning a track also renames the
   // title to that track, historically the common case) EXCEPT on an
@@ -1882,7 +1880,7 @@ function compileRule(spec) {
   // overwriting every title would be surprising — there it defaults to
   // false and must be opted into.
   var rename = track ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
-  return { match: m.test, rx: m.rx, usesDesc: !!m.usesDesc, track: track, allDay: allDay, hide: hide, siding: siding, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
+  return { match: m.test, rx: m.rx, usesDesc: !!m.usesDesc, track: track, allDay: allDay, hide: hide, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
 }
 
 function usesDesc(rule) { return !!(rule && rule.usesDesc); }
@@ -2083,12 +2081,12 @@ function applyCalendarRules(ev, weekday, cal, globalRules, everyoneTrack) {
   var rewriteRule = null;
   var allDay = false;
   var hide = false;
-  var siding = false;
+
   globalRules.concat(cal.rules).forEach(function (rule) {
     if (!rule.match(ctx)) return;
     if (rule.hide) hide = true;
     if (rule.allDay) allDay = true;
-    if (rule.siding) siding = true;
+
     if (rule.track) {
       trackNames = rule.track;
       renameRule = rule.rename ? rule : null;
@@ -2116,7 +2114,7 @@ function applyCalendarRules(ev, weekday, cal, globalRules, everyoneTrack) {
   // family member, no rules needed) never got their events attributed to
   // themselves at all.
 
-  return { title: finalTitle, trackNames: trackNames, allDay: allDay, hide: hide, siding: siding };
+  return { title: finalTitle, trackNames: trackNames, allDay: allDay, hide: hide };
 }
 
 // Converts a config track's `color` (a plain framework hue name like
@@ -2371,6 +2369,10 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   var deadline = (extra && extra.deadline) || (Date.now() + RENDER_BUDGET_MS);
   var events = [];
   var allDayEvents = [];
+  // Four hours. Every block over it in every demo calendar is a school day,
+  // a shift, a desk booking or a delivery, and nothing under it is: the
+  // shape of a day is what tells them apart, not what anybody called them.
+  var SIDING_MIN_MIN = 240;
   var sidingEvents = [];
 
   // A named calendar that is kept when empty is kept when it is UNREACHABLE
@@ -2442,11 +2444,22 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         // routes into the all-day strip instead of the timeline, same as a
         // genuine ICS all-day entry, rather than being silently dropped.
         if (resolved.allDay) { allDayEvents.push({ track: registry.add(trackNames[0], 0.25).key, title: resolved.title }); return; }
-        // A rule can mark a timed event as a siding: a status/location
-        // block (e.g. "Desk booking") that its own track runs alongside
-        // rather than branches for. Needs real start/end minutes, so it is
-        // only meaningful here in the timed-events loop.
-        if (resolved.siding) {
+        // A LONG BLOCK IS A SIDING, AND THE CLOCK SAYS SO.
+        //
+        // A school day, a shift, a desk booking, a delivery: a block that
+        // lasts most of a day is a different kind of thing from a meeting,
+        // whatever it is called, and it wants a different drawing. The line
+        // leaves the running line for its span and rejoins, instead of
+        // spending a whole label lane on it, and the real meetings inside it
+        // branch off that.
+        //
+        // This used to be `"siding": true` in the config, which made it the
+        // last piece of layout a user had to hand-declare — and a declared
+        // one is a promise the drawing has to keep whether or not the board
+        // can keep it. It is also a fact the data already contains: every
+        // block over four hours in every demo calendar is one of these, and
+        // nothing under four hours is.
+        if (ev.endMin != null && ev.endMin - ev.startMin >= SIDING_MIN_MIN) {
           // A siding rule takes a LIST of tracks like any other, one entry
           // per track: three people on the same delivery are three kinks in
           // one corridor, the same shape two children at one school get.

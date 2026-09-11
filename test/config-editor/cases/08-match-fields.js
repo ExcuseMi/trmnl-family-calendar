@@ -99,7 +99,7 @@ module.exports = function (test, h) {
       rules: [
         { match: { type: 'contains', value: 'Elementary', field: 'location' }, track: 'Sam', rename: false },
         { match: { type: 'exact', value: 'Sport', field: 'categories' }, track: 'Sam', rename: false },
-        { match: { type: 'duration', min: 240, max: 600 }, siding: true },
+        { match: { type: 'duration', min: 240, max: 600 }, hide: true },
         { match: { type: 'time', from: '07:00', to: '09:00' }, track: 'Sam', rename: false },
         { match: { type: 'not', matcher: { type: 'word', value: 'staff', field: 'description' } }, hide: true },
       ],

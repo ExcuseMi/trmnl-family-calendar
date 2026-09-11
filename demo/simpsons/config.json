@@ -106,13 +106,6 @@
             "value": "^(?:L6|K3)\\s+"
           },
           "rewrite": ""
-        },
-        {
-          "match": {
-            "type": "contains",
-            "value": "School Day"
-          },
-          "siding": true
         }
       ]
     },

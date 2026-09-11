@@ -1211,11 +1211,25 @@
       return Math.min(CORNER, Math.abs(d) / (2 * KNEE));
     }
     function octRun(d, r) { return Math.abs(d) + 2 * r * (OCT - KNEE); }
-    function octAt(t, d, r) {
-      // where the line is `t` along a transition that moves `d` across
-      var R = octRun(d, r);
+    function octAt(t, d, r, R) {
+      // Where the line is `t` along a transition that moves `d` across, over
+      // a run of `R`.
+      //
+      // R HAS TO BE PASSED IN. Recomputed here from d and r, it was always
+      // the length a 45 would like, and the span that had decided otherwise
+      // was ignored: told it had a corner's width to get home in, the line
+      // took its full 45 anyway, so leaving Family Dinner at eight o'clock
+      // Maggie was still climbing toward her own lane when the day ran out
+      // and the whole corridor ran diagonally off the right-hand edge.
+      var full = octRun(d, r);
+      if (R == null) R = full;
       if (t <= 0) return 0;
       if (t >= R) return d;
+      // Less room than a 45 needs is the 90 case: straight across, over the
+      // little run the two corners need, and then the line runs straight
+      // again. It is the other legal angle, not a squeezed version of this
+      // one.
+      if (R < full - 0.01) return d * (t / R);
       var sgn = d < 0 ? -1 : 1, knee = r * OCT;
       if (t < knee) return sgn * (r - Math.sqrt(Math.max(0, r * r - t * t)));
       if (t > R - knee) {
@@ -1232,7 +1246,20 @@
     function octSpan(from, to, d, where) {
       var r = octRadius(d), R = octRun(d, r), room = to - from;
       if (R > room) { r = 0; R = Math.abs(d); }        // no room to be lazy about it
-      if (R > room) return { a0: from, R: room, r: 0 };  // steeper than 45: the 90 case
+      // STILL NO ROOM: THE OTHER LEGAL ANGLE, not a squeezed one.
+      //
+      // Spread over whatever room was left, the move came out at neither 45
+      // nor 90 and, worse, it took the whole of the rest of the board to do
+      // it: leaving Family Dinner at eight, Maggie's line was still climbing
+      // back toward her own lane when the day ran out, and every line in the
+      // corridor ran diagonally off the right-hand edge instead of going
+      // home. A line with no room to slope goes ACROSS, promptly, and then
+      // runs straight -- which is the whole point of having only three
+      // angles. Kept a corner wide so the two ends can still be rounded.
+      if (R > room) {
+        var vr = Math.min(room, CORNER * 0.8);
+        return { a0: where < 0 ? to - vr : from, R: vr, r: 0 };
+      }
       if (where < 0) return { a0: to - R, R: R, r: r };
       if (where > 0) return { a0: from, R: R, r: r };
       return { a0: from + (room - R) / 2, R: R, r: r };
@@ -1277,12 +1304,12 @@
         var h = hs[i];
         if (a < h.a0) {
           var sp = routeSpan(p, i);
-          return sp.base + octAt(a - sp.a0, sp.d, sp.r);
+          return sp.base + octAt(a - sp.a0, sp.d, sp.r, sp.R);
         }
         if (a <= h.a1) return h.lvl;
       }
       var tail = routeSpan(p, hs.length);
-      return tail.base + octAt(a - tail.a0, tail.d, tail.r);
+      return tail.base + octAt(a - tail.a0, tail.d, tail.r, tail.R);
     }
     function sidingRaiseAt(p, a) {
       if (p._route && p._route.length) return routeRaiseAt(p, a);
@@ -3327,14 +3354,23 @@
         // Taken from lineCAt at each step, not from the baseline, so they
         // follow a rail that is kinked out for a siding instead of
         // floating beside it.
+        //
+        // ALONG the rail and offset ACROSS it, both worked out from the
+        // rail's own slope. Drawn flat at a fixed height they were a pair of
+        // horizontal dashes beside a line running at 45 degrees: the one
+        // thing a speed mark cannot do is point somewhere other than the way
+        // the thing is going.
         var lineLen = 11 * S, pitch = 17 * S;
         for (var sx = a0 + 6 * S; sx < a1 - lineLen - 4 * S; sx += pitch) {
           LEGEND.forEach(function (p) {
             var w = Math.max(2, p.line_width) * S * weightScale;
-            var c = lineCAt(p, sx + lineLen / 2);
+            var cA = lineCAt(p, sx), cB = lineCAt(p, sx + lineLen);
+            var slope = (cB - cA) / lineLen, len = Math.sqrt(1 + slope * slope);
+            var nA = -slope / len, nC = 1 / len;     // the normal, in (axis, cross)
             [-1, 1].forEach(function (sd) {
-              var off = c + sd * (w / 2 + 3.5 * S);
-              var s0 = toXY(sx, off), s1 = toXY(sx + lineLen, off);
+              var off = sd * (w / 2 + 3.5 * S);
+              var s0 = toXY(sx + off * nA, cA + off * nC);
+              var s1 = toXY(sx + lineLen + off * nA, cB + off * nC);
               var sl = svgEl('line', { x1: s0[0], y1: s0[1], x2: s1[0], y2: s1[1],
                 'stroke-width': 1.2 * S, 'stroke-linecap': 'round', 'stroke-opacity': 0.5 });
               sl.style.stroke = colorFor(p.hue);

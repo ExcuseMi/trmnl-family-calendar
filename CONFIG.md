@@ -98,31 +98,31 @@ answers.
   "rename"?: boolean,             // replace the matched text with the track's name (default true, false for "any")
   "rewrite"?: string,             // replace the matched text (or the whole title with rewriteFull)
   "rewriteFull"?: boolean,
-  "hide"?: boolean,
-  "siding"?: boolean              // its own track leaves the running line for its span and rejoins, instead of branching into a lane
+  "hide"?: boolean
 }
 ```
 
 (Legacy rules may use `"person"` in place of `"track"`; still accepted.)
 
-A `siding` event needs both a start and end time (it only applies to a
-timed event, never an all-day one). Use it for a status/location block that
-spans real meetings without being one itself: a synced-in "Desk booking",
-an "In the office" block, anything you don't want competing for lane space
-with the actual meetings inside it:
+### Long blocks look after themselves
 
-```json
-{
-  "match": { "type": "word", "value": "Desk booking" },
-  "siding": true
-}
-```
+There is nothing to write for a status or location block that spans real
+meetings without being one itself: a synced-in "Desk booking", an "In the
+office" block, a school day, a shift, a delivery. **Any timed event of four
+hours or more is drawn as a siding**, and the layout works that out from the
+clock.
 
-The event's own track draws a shallow 45° kink out to siding level for
-exactly that event's [start, end] span and rejoins at the end, with a
-caption riding the line: no lane, no label run, no branch.
-Real meetings during that span still fork off the line normally, they just
-aren't crowded out by a long status block hogging the innermost lane.
+The event's own track draws a shallow kink out to siding level for exactly
+that event's span and rejoins at the end, with a caption riding the line: no
+lane, no label run, no branch. Real meetings during that span still fork off
+the line normally, they just aren't crowded out by a long block hogging the
+innermost lane. Where two lines are in the same long block (two children at
+one school), it is drawn once as a corridor they share.
+
+Earlier versions asked for this with `"siding": true` on a rule, and before
+that `"station": true`. Both keys are gone. A config that still carries
+either one loads fine: the key is ignored, the same as any other key this
+does not recognise.
 
 Rules run in order, global ones first; for each effect the last matching
 rule wins, so a calendar's own rule overrides a global one.
@@ -184,10 +184,10 @@ default.
 both. It only ever matches an event with both a start and an end.
 
 ```json
-{ "match": { "type": "duration", "min": 240 }, "siding": true }
+{ "match": { "type": "duration", "min": 240 }, "hide": true }
 ```
 
-That is the whole "which of these is a status block" question answered
+That is the whole "which of these do I not want to see" question answered
 once: anything over four hours is a block the line runs alongside, however
 the household spells it this week. It saves listing "In the office", "WFH",
 "Desk booking", "School day" and whatever gets invented next.
@@ -238,9 +238,10 @@ the **Start** section's preset dropdown, for when you have no ICS links yet:
   Dinner and the school run are `track` lists, so they are drawn once as an
   interchange rather than once per person; the school feed's menu postings
   are hidden, and the quiet toddler's line is kept with `hideIfEmpty`.
-- **Work vs Personal Split**: two lines for one person. The office day is a
-  `siding` the work line runs alongside instead of a label lane of its own,
-  and a top-level rule hides cancelled holds in every calendar.
+- **Work vs Personal Split**: two lines for one person, and a top-level rule
+  that hides cancelled holds in every calendar. The office day needs no rule
+  of its own: it is long enough that the work line runs alongside it instead
+  of spending a label lane on it.
 - **Solo Freelancer Track**: one work feed fanned out into a line per
   client on the title prefix, which a `rewrite` then strips, so the board
   reads "Sprint review" and not "Acme: Sprint review".

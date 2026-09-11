@@ -35,7 +35,7 @@ module.exports = function (test, h) {
     const p = document.getElementById('promptOut').value;
     assert(p.length > 800, 'the prompt is only ' + p.length + ' characters');
     for (const must of ['Metro Calendar', '## What to do', '## Format', '## Calendars',
-      '"siding": true', 'hideIfEmpty', 'ONE JSON object']) {
+      'hideIfEmpty', 'ONE JSON object']) {
       assert(p.indexOf(must) >= 0, 'the prompt never mentions ' + JSON.stringify(must));
     }
     // the schema is quoted from the page's own reference, not a second copy
@@ -153,7 +153,8 @@ module.exports = function (test, h) {
     assert(rules.some((r) => r.rewrite === '' && r.match.type === 'regex' && /\^\[A-Za-z\]\+:/.test(r.match.value)),
       'no rule that strips a name prefix off the title');
     assert(rules.some((r) => Array.isArray(r.track) && r.track.length > 1), 'no shared event with a track list');
-    assert(rules.some((r) => r.siding === true), 'no siding: true block');
+    assert(!rules.some((r) => r.siding === true || r.station === true),
+      'the worked example still teaches a key the config does not have any more');
     assert(rules.some((r) => r.hide === true), 'no hide rule');
     assert(ex.calendars.some((c) => !c.name), 'every calendar in the example is named, which is the mistake it is meant to teach');
 

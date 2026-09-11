@@ -165,13 +165,13 @@ module.exports = function (test, h) {
     { start: '20260909T070000Z', end: '20260909T073000Z', summary: 'Gym' },
   ]);
 
-  test('a long block can become a siding without being named', async () => {
-    // "Anything over four hours is a status block, not a meeting" said
-    // once, instead of listing every phrase a household can invent for it.
+  test('a long block becomes a siding without being named or declared', async () => {
+    // "Anything over four hours is a status block, not a meeting" is the
+    // rule, and nobody has to write it down: the config used to carry
+    // `siding: true` and no longer can, because the shape of a day is a
+    // fact about the calendar rather than a setting.
     const r = await board(LONG_DAY, {
-      calendars: [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [
-        { match: { type: 'duration', min: 240 }, siding: true },
-      ] }],
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Alex' }],
     });
     const sidings = r.metro.sidings.map((s) => s.title).sort();
     assertEqual(sidings, ['In the office'], 'got ' + JSON.stringify(sidings));
@@ -185,7 +185,10 @@ module.exports = function (test, h) {
         { match: { type: 'duration', max: 30 }, track: 'Quick', rename: false },
       ] }],
     });
-    assertEqual(tracksOf(r.metro), ['Gym@Quick', 'In the office@Alex', 'Standup@Quick']);
+    // "In the office" is not in the list because it is a siding, not an
+    // event: seven hours is the shape of a day. The rule under test still
+    // sends both of the short ones to Quick.
+    assertEqual(tracksOf(r.metro), ['Gym@Quick', 'Standup@Quick']);
   });
 
   test('a rule can ask when the day it belongs to starts', async () => {
@@ -197,20 +200,23 @@ module.exports = function (test, h) {
         { match: { type: 'time', to: '08:30' }, track: 'Early', rename: false },
       ] }],
     });
-    assertEqual(tracksOf(r.metro), ['Gym@Early', 'In the office@Alex', 'Standup@Alex']);
+    assertEqual(tracksOf(r.metro), ['Gym@Early', 'Standup@Alex']);
   });
 
   test('the shape matchers compose with the word ones', async () => {
-    // The point of and/or/not: "a long block, but not that one".
+    // The point of and/or/not: "a short one, but not that one". Written
+    // against `hide` rather than against a siding, because a siding is no
+    // longer something a rule can ask for.
     const r = await board(LONG_DAY, {
       calendars: [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [
         { match: { type: 'and', matchers: [
-          { type: 'duration', min: 240 },
-          { type: 'not', matcher: { type: 'contains', value: 'office' } },
-        ] }, siding: true },
+          { type: 'duration', max: 60 },
+          { type: 'not', matcher: { type: 'contains', value: 'Gym' } },
+        ] }, hide: true },
       ] }],
     });
-    assertEqual(r.metro.sidings.map((s) => s.title), [], 'the one long block was excluded by name');
+    assertEqual(eventItems(r.metro).map((e) => e.title).sort(), ['Gym'],
+      'Standup was short and unnamed, so it went; Gym was short and named, so it stayed');
   });
 
   test('a duration or time matcher with nothing to compare is dropped, not always-true', async () => {

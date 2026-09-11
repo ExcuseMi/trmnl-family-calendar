@@ -104,7 +104,7 @@ module.exports = function (test, h) {
       const rules = allRules(cfg);
       got[id] = {
         shared: rules.some((r) => Array.isArray(r.track) && r.track.length > 1),
-        siding: rules.some((r) => r.siding === true),
+        renames: rules.some((r) => typeof r.rewrite === 'string' && r.rewrite && !/^\^/.test(r.match.value || '')),
         strips: rules.some((r) => typeof r.rewrite === 'string' && r.rewrite && /^\^/.test(r.match.value || '')),
         hides: rules.some((r) => r.hide === true),
         global: (cfg.rules || []).length > 0,
@@ -114,10 +114,14 @@ module.exports = function (test, h) {
     assert(got.family4.shared, 'Family of 4 should draw one event across several tracks');
     assert(got.family4.hides, 'Family of 4 should hide the school feed\'s noise');
     assert(got.family4.keepEmpty, 'Family of 4 should keep the quiet line on the board');
-    assert(got.worksplit.siding, 'Work vs Personal should draw the office day as a siding');
+    // Work vs Personal used to be "the one with a siding in it". A siding is
+    // no longer something a config can ask for -- the layout reads it off
+    // the clock -- so what this preset teaches is the GLOBAL rule, applied
+    // to every calendar rather than to one feed.
     assert(got.worksplit.global, 'Work vs Personal should show a rule applied to every calendar');
+    assert(!got.family4.global && !got.solo.global, 'and it should be the only one that does');
     assert(got.solo.strips, 'Solo Freelancer should route on a title prefix and then strip it');
-    assert(!got.solo.shared && !got.solo.siding, 'Solo Freelancer should not just repeat the other two');
+    assert(!got.solo.shared, 'Solo Freelancer should not just repeat the other two');
   });
 
   test('a preset replaces the editor, and asks first when there is something to lose', () => {

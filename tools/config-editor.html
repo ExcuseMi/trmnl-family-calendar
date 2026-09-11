@@ -251,8 +251,7 @@
           "rename": false,           // don't rewrite the matched text to the track name
           "rewrite": "", "rewriteFull": false,
           "hide": false,
-          "allDay": false,
-          "siding": true }           // a block the line runs alongside, not a branch
+          "allDay": false }
       ] }
   ]
 }</code></pre>
@@ -326,7 +325,7 @@
   function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false, keepEmpty: false }; }
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
   function newCondition() { return { _id: uid(), type: "word", field: "", value: "", status: "confirmed", weekdays: [], min: "", max: "", from: "", to: "", negate: false }; }
-  function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], tracks: [], rename: true, rewrite: "", rewriteFull: false, hide: false, siding: false }; }
+  function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], tracks: [], rename: true, rewrite: "", rewriteFull: false, hide: false }; }
 
   var MATCH_TYPES = [["word", "has the word"], ["contains", "contains"], ["exact", "is exactly"], ["regex", "matches regex"], ["any", "any event"], ["status", "has status"], ["weekday", "is on weekday"], ["duration", "lasts"], ["time", "starts"]];
   // Which property the words are looked for in. Blank is the default and
@@ -404,8 +403,7 @@
     }
     if (r.rewrite.trim()) { out.rewrite = r.rewrite.trim(); if (r.rewriteFull) out.rewriteFull = true; }
     if (r.hide) out.hide = true;
-    if (r.siding) out.siding = true;
-    if (!out.track && !out.rewrite && !out.hide && !out.siding) return null;
+    if (!out.track && !out.rewrite && !out.hide) return null;
     return out;
   }
   function buildConfig() {
@@ -498,9 +496,10 @@
     r.rewrite = typeof rv.rewrite === "string" ? rv.rewrite : "";
     r.rewriteFull = rv.rewriteFull === true;
     r.hide = rv.hide === true;
-    // `siding` was called `station` when it shipped; a config saved then
-    // still loads.
-    r.siding = rv.siding === true || rv.station === true;
+    // `siding` (and the `station` it shipped as) used to be a rule option.
+    // Both are gone: a long block is a siding because it is long, which the
+    // layout can see for itself. A config saved then still loads, with the
+    // key ignored the way any unrecognised key is.
     return r;
   }
   function loadConfig(data) {
@@ -708,8 +707,6 @@
       full.addEventListener("change", function () { r.rewriteFull = full.checked; refresh(); });
       var hide = el("input", { type: "checkbox" }); hide.checked = r.hide;
       hide.addEventListener("change", function () { r.hide = hide.checked; refresh(); });
-      var siding = el("input", { type: "checkbox" }); siding.checked = r.siding;
-      siding.addEventListener("change", function () { r.siding = siding.checked; refresh(); });
       var rm = el("button", { class: "ghost small", text: "Remove rule" });
       rm.addEventListener("click", function () { list.splice(i, 1); renderRules(list, container); renderJson(); });
       card.appendChild(el("div", { class: "rule-step", text: "1 · If" }));
@@ -718,7 +715,6 @@
       card.appendChild(el("div", { class: "action" }, [el("span", { class: "chip", text: "put it on the line of" }), persons, el("label", { class: "check" }, [rename, "replace the matched text with their name"])]));
       card.appendChild(el("div", { class: "action" }, [el("span", { class: "chip", text: "rename it" }), rewrite, el("label", { class: "check" }, [full, "replace the whole title"])]));
       card.appendChild(el("div", { class: "action" }, [el("label", { class: "check" }, [hide, el("span", { class: "chip", text: "hide it from the map" })])]));
-      card.appendChild(el("div", { class: "action" }, [el("label", { class: "check" }, [siding, el("span", { class: "chip", text: "treat as a siding its track runs alongside" })]), el("span", { class: "hint", text: ": a status/location block (e.g. \"Desk booking\"). The line leaves the running line for its span and rejoins, instead of branching into a lane, so real meetings during it aren't crowded out" })]));
       card.appendChild(warn);
       card.appendChild(el("div", { style: "text-align:right" }, [rm]));
       refresh();
@@ -819,7 +815,7 @@
   //
   // Deliberately three different SHAPES, not three casts of characters, and
   // between them they cover what turns a list into a board: one event shared
-  // by several tracks (Family), a long block drawn as a siding instead of
+  // by several tracks (Family), a long block the layout draws as a siding instead of
   // eating a label lane (Work vs Personal), a feed whose noise is hidden
   // (Family's school menu, Work's cancelled holds), and one feed fanned out
   // into three lines on a title prefix that is then stripped off (Solo).
@@ -870,7 +866,7 @@
     {
       id: "worksplit",
       label: "Work vs Personal Split",
-      note: "Two lines for one person. The office day is a siding the work line runs alongside, and cancelled holds are hidden everywhere.",
+      note: "Two lines for one person. The office day is long enough that the layout runs the work line alongside it rather than branching for it, and cancelled holds are hidden everywhere.",
       config: {
         tracks: [{ name: "Work" }, { name: "Personal" }],
         rules: [
@@ -881,9 +877,7 @@
             url: "https://calendar.example.com/work.ics",
             name: "Work",
             rules: [
-              { match: { type: "any" }, track: "Work" },
-              // nine to five in one place: a siding on the line, not a lane
-              { match: { type: "contains", value: "Office day" }, siding: true }
+              { match: { type: "any" }, track: "Work" }
             ]
           },
           {
@@ -1065,7 +1059,7 @@
         name: "Homer",
         rules: [
           { match: { type: "any" }, track: "Homer" },
-          { match: { type: "contains", value: "Plant Shift" }, siding: true },
+          { match: { type: "contains", value: "Plant Shift" }, rename: false },
           { match: { type: "contains", value: "Out of office" }, hide: true }
         ]
       },
@@ -1075,7 +1069,7 @@
           { match: { type: "word", value: "L6" }, track: "Bart", rename: false },
           { match: { type: "word", value: "K3" }, track: "Lisa", rename: false },
           { match: { type: "regex", value: "^(?:L6|K3)\\s+" }, rewrite: "" },
-          { match: { type: "contains", value: "School Day" }, track: ["Bart", "Lisa"], siding: true, rename: false },
+          { match: { type: "contains", value: "School Day" }, track: ["Bart", "Lisa"], rename: false },
           { match: { type: "contains", value: "Staff Meeting" }, hide: true }
         ]
       },
@@ -1145,8 +1139,7 @@
     out.push("");
     out.push("## What makes this board read well");
     out.push("- 2 to 6 lines. More than that and the panel runs out of depth and starts dropping lines.");
-    out.push("- If a feed's long blocks are all shaped the same way but named differently every week, one `duration` rule beats a list of titles: `{ \"match\": { \"type\": \"duration\", \"min\": 240 }, \"siding\": true }` says \"anything over four hours is a status block\" once and keeps saying it.");
-    out.push("- A long block spent in ONE place (a school day, a work shift, a desk booking, a delivery) should be `\"siding\": true`. The line then leaves the running line for its span and rejoins, instead of spending a whole label lane on it, and the meetings inside it still branch off normally.");
+    out.push("- Do NOT try to mark long blocks in any way. A block spent in ONE place (a school day, a work shift, a desk booking, a delivery) is recognised by the layout from its length alone: the line leaves the running line for its span and rejoins, instead of spending a whole label lane on it, and the meetings inside it still branch off normally. There is no setting for this and none is needed.");
     out.push("- Something several people are at should list all of them: `\"track\": [\"Bart\", \"Lisa\"]`. It is then drawn once, as an interchange joining their lines, instead of once per person.");
     out.push("- Titles are read at arm's length on a small panel. Use `rewrite` to drop codes, room numbers, \"[Teams]\" and the like. Use `hide` for things nobody reads off a wall board: birthdays, \"Free\", \"Out of office\", declined invitations.");
     out.push("- Prefer `word` or `contains` matchers over `regex`. Use `regex` only when the pattern really needs it.");
@@ -1170,7 +1163,7 @@
     out.push("```json");
     out.push(prettyCompact(WORKED_EXAMPLE));
     out.push("```");
-    out.push("Reading it back: `Homer` is named after its track, so the one thing in it no rule catches still lands on Homer's line rather than inventing one. The school feed routes on the class codes and then strips them, so the board reads \"Maths\" and not \"L6 Maths\". `\"School Day\"` is a siding, so the seven-hour block runs alongside Bart's and Lisa\'s lines instead of eating a label lane each. `\"Family Dinner\"` lists all four tracks, so it is drawn once as an interchange. The staff meeting nobody in the house attends is hidden.");
+    out.push("Reading it back: `Homer` is named after its track, so the one thing in it no rule catches still lands on Homer's line rather than inventing one. The school feed routes on the class codes and then strips them, so the board reads \"Maths\" and not \"L6 Maths\". The seven-hour `\"School Day\"` needs no rule of its own to be drawn as a siding: the layout runs it alongside Bart's and Lisa\'s lines instead of eating a label lane each, because of how long it is. `\"Family Dinner\"` lists all four tracks, so it is drawn once as an interchange. The staff meeting nobody in the house attends is hidden.");
     out.push("");
     out.push("## Calendars");
     if (!urls.length) out.push("(none added yet)");

@@ -51,16 +51,22 @@ module.exports = function (test, h) {
     assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'L6' }, track: 'Nala' }]);
   });
 
-  test('importing a "siding" rule round-trips and checks the siding box', () => {
+  test('an old config\'s "siding" rule imports without it, and without breaking', () => {
+    // `siding` (and the `station` it shipped as) used to be a rule option
+    // and is not one any more: a long block is a siding because it is long,
+    // which the layout reads off the clock. A config saved back then is
+    // still a config -- it loads, the key is dropped the way any
+    // unrecognised key is, and the rule keeps whatever else it asked for.
     const { document } = loadEditor();
     document.getElementById('importIn').value = JSON.stringify({
       tracks: [{ name: 'Ward' }],
-      calendars: [{ url: 'https://a.example/x.ics', rules: [{ match: { type: 'word', value: 'Desk booking' }, siding: true }] }],
+      calendars: [{ url: 'https://a.example/x.ics', rules: [
+        { match: { type: 'word', value: 'Desk booking' }, siding: true, track: 'Ward', rename: false },
+      ] }],
     });
     click(document.getElementById('loadImport'));
-    assertEqual(jsonOut(document).calendars[0].rules, [{ match: { type: 'word', value: 'Desk booking' }, siding: true }]);
-    const rule = document.querySelector('#calendars .card .rule');
-    assert(rule.querySelectorAll('input[type=checkbox]')[3].checked, 'the siding checkbox should reflect the imported rule');
+    assertEqual(jsonOut(document).calendars[0].rules,
+      [{ match: { type: 'word', value: 'Desk booking' }, track: 'Ward', rename: false }]);
   });
 
   test('importing hideIfEmpty:false round-trips and ticks the keep-empty box', () => {
