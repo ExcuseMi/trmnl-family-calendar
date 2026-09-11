@@ -76,6 +76,11 @@
   .choice[hidden] { display: none; }
   .choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 12px; }
   .choice button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; border-radius: 12px; padding: 12px 14px; }
+  /* `display: flex` above outranks the browser's own rule for [hidden], so a
+     button hidden by the attribute went on being drawn: "Copy the prompt
+     anyway" stayed in the dialog offering the copy that Copy itself refuses.
+     Same reason `.choice[hidden]` is spelled out for the container. */
+  .choice button[hidden] { display: none; }
   .choice .note { font-weight: 400; font-size: 12.5px; line-height: 1.35; color: var(--mute); }
   .choice button:hover .note, .choice button:focus-visible .note { color: var(--ink); }
 
@@ -279,6 +284,10 @@
         <button id="copyPrompt">Copy prompt</button>
         <span id="promptStatus" class="status" role="status" aria-live="polite"></span>
       </div>
+      <!-- Why Copy is off, and what turns it on. A disabled button with no
+           reason beside it is a dead end: the tooltip says the same thing,
+           but a tooltip needs a mouse and needs to be looked for. -->
+      <p class="hint" id="copyPromptWhy" style="margin:6px 0 0" hidden></p>
       <label for="promptOut" class="sr-only">The generated prompt</label>
       <textarea id="promptOut" rows="6" readonly placeholder="Put your calendar links in the box above and press Load first, then generate."></textarea>
       <p class="hint">Draw the map first if you can: the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. A prompt with no events in it comes back as "I cannot read these feeds", because neither this page nor the assistant can fetch a calendar link.</p>
@@ -292,7 +301,10 @@
         <div class="card-head"><strong>These calendars have not been read</strong></div>
         <p class="hint" id="relayWhy"></p>
         <ul class="steps" id="relayList"></ul>
-        <p class="hint">A calendar link is a <strong>password in a URL</strong>: anyone holding it can read that calendar. Three ways forward, most private first.</p>
+        <!-- The count is written by the page: how many ways are actually
+             offered depends on whether the relay is configured and whether
+             the prompt is worth copying at all. -->
+        <p class="hint">A calendar link is a <strong>password in a URL</strong>: anyone holding it can read that calendar. <span id="relayWays">Three ways forward, most private first.</span></p>
         <div class="choice">
           <button id="relayPaste" type="button">
             <strong>Paste the .ics myself</strong>
@@ -2249,6 +2261,7 @@
     setStatus("relayStatus", "", "");
     document.getElementById("relayOffer").hidden = false;
     paintRelayOffer();
+    paintCopyPrompt();
     return true;
   }
   // Everything on this page that can change which feeds have been read ends
@@ -2259,6 +2272,50 @@
   function syncPromptControls() {
     paintRelayOffer();
     paintFeedsSummary();
+    paintCopyPrompt();
+  }
+  // COPY IS OFF WHILE THE PROMPT CANNOT WORK.
+  //
+  // A prompt is only worth pasting into an assistant if there are real
+  // events in it to read. With no links there is nothing to describe at all,
+  // and with nothing read the answer comes back as "I cannot read these
+  // feeds, paste the .ics text" every single time: neither the browser nor
+  // the assistant can fetch a calendar.
+  //
+  // Generate stays on throughout, because Generate is the button that
+  // explains the situation and offers the ways out, the relay among them. It
+  // is Copy that is held back -- the press whose next step is somebody
+  // else's chat window -- and it says what would turn it on.
+  function copyPromptBlocker() {
+    if (!configuredUrls().length) {
+      return "Nothing to send yet: add a calendar link above and press Load, then generate the prompt.";
+    }
+    if (!readUrls().length) {
+      return "Read at least one calendar first: press Draw the map, paste its .ics in the box under the map, or fetch it through the relay, which Generate prompt offers.";
+    }
+    return "";
+  }
+  function paintCopyPrompt() {
+    var btn = document.getElementById("copyPrompt");
+    if (!btn) return;
+    var why = copyPromptBlocker();
+    btn.disabled = !!why;
+    btn.title = why || "Copy the prompt, ready to paste into an assistant";
+    var line = document.getElementById("copyPromptWhy");
+    if (line) { line.textContent = why; line.hidden = !why; }
+    // And "Copy the prompt anyway" is not a way round it: the dialog's third
+    // way out is the same copy under another name.
+    var skip = document.getElementById("relaySkip");
+    if (skip) skip.hidden = !!why;
+    // The dialog counts its own ways out. It promised three in fixed text,
+    // and stood there offering two.
+    var ways = document.getElementById("relayWays");
+    if (ways) {
+      var n = 1 + (RELAY ? 1 : 0) + (why ? 0 : 1);
+      ways.textContent = n > 2 ? "Three ways forward, most private first."
+        : n === 2 ? "Two ways forward, the more private first."
+        : "One way forward.";
+    }
   }
   // ALWAYS THE PROMPT AS IT IS NOW.
   //
@@ -2269,11 +2326,17 @@
   // the assistant a prompt that said "NOT READ. The browser could not fetch
   // it" about a calendar whose events were by then sitting in this page.
   function copyPromptNow() {
+    // Every route to a copy comes through here, the dialog's "copy anyway"
+    // included, so this is where a prompt that cannot work is refused.
+    if (copyPromptBlocker()) { paintCopyPrompt(); return; }
     var ta = document.getElementById("promptOut");
     ta.value = buildAgentPrompt();
     copyFrom(ta, "promptStatus");
   }
   document.getElementById("copyPrompt").addEventListener("click", function () {
+    // The button is disabled, so this is belt and braces: a press that
+    // arrives anyway must not copy a prompt that cannot work.
+    if (copyPromptBlocker()) { paintCopyPrompt(); return; }
     var ta = document.getElementById("promptOut");
     ta.value = buildAgentPrompt();
     if (relayOffer(copyPromptNow)) return;

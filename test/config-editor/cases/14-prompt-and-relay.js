@@ -86,10 +86,17 @@ module.exports = function (test, h) {
   // pressed the button that says copy, went to their assistant, and pasted
   // whatever happened to be on the clipboard before.
   test('"Copy the prompt anyway" copies, even when the offer came from Generate', () => {
+    // One feed read and one not: with nothing read at all Copy is off and
+    // this way out is hidden, which 21-copy-prompt-disabled covers.
     const document = withOneCalendar();
+    document.getElementById('importIn').value = 'https://a.example/crew.ics\nhttps://b.example/ship.ics';
+    click(document.getElementById('loadImport'));
+    pasteFeed(document, ICS);
     click(document.getElementById('makePrompt'));
     assert(!document.getElementById('relayOffer').hidden,
       'sanity: an unread feed should raise the offer');
+    assert(!document.getElementById('relaySkip').hidden,
+      'sanity: with a feed read the copy-anyway route should be offered');
 
     click(document.getElementById('relaySkip'));
     assert(document.getElementById('relayOffer').hidden, 'the offer stayed up');

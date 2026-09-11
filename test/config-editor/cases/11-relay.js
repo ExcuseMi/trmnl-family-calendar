@@ -12,27 +12,45 @@
 module.exports = function (test, h) {
   const { loadEditor, click, fireInput, assert } = h;
 
+  const SOME_ICS = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n';
+
   function withUnreadCalendar() {
     const { document } = loadEditor();
     const url = document.querySelectorAll('#calendars .card input[type=text]')[1];
     fireInput(url, 'https://cal.example.com/secret-address.ics');
     return document;
   }
+  // Copy is off entirely while NOTHING has been read: an event-less prompt
+  // comes back as a refusal every time, so the button no longer hands one
+  // over. The state this dialog is really about is the mixed one -- one
+  // calendar read, another still not -- which is what reaches Copy now.
+  function withReadAndUnreadCalendars(fetchImpl) {
+    const { document } = loadEditor(fetchImpl);
+    document.getElementById('importIn').value =
+      'https://cal.example.com/already-read.ics\nhttps://cal.example.com/secret-address.ics';
+    click(document.getElementById('loadImport'));
+    fireInput(document.querySelector('#sources textarea'), SOME_ICS);
+    return document;
+  }
 
   test('copying a prompt with unread feeds asks before it copies', () => {
-    const document = withUnreadCalendar();
+    const document = withReadAndUnreadCalendars();
     assert(document.getElementById('relayOffer').hidden, 'the offer is showing before anything asked for it');
     click(document.getElementById('copyPrompt'));
     assert(!document.getElementById('relayOffer').hidden, 'copying said nothing about the unread feeds');
-    // and it names exactly what it would send
-    assert(/secret-address\.ics/.test(document.getElementById('relayList').textContent),
-      'the offer does not list the link it would send');
+    // and it names exactly what it would send, which is the unread one only
+    const listed = document.getElementById('relayList').textContent;
+    assert(/secret-address\.ics/.test(listed), 'the offer does not list the link it would send');
+    assert(!/already-read\.ics/.test(listed), 'the offer would send a calendar it has already read');
   });
 
   test('with every feed read it just copies, and never mentions a relay', () => {
     const { document } = loadEditor();
+    document.getElementById('importIn').value = 'https://cal.example.com/already-read.ics';
+    click(document.getElementById('loadImport'));
+    fireInput(document.querySelector('#sources textarea'), SOME_ICS);
     click(document.getElementById('copyPrompt'));
-    assert(document.getElementById('relayOffer').hidden, 'it asked about feeds that do not exist');
+    assert(document.getElementById('relayOffer').hidden, 'it asked about feeds it had already read');
   });
 
   // OFFERED, NAMED, AND NOT USED UNTIL IT IS CHOSEN. The relay is the one
@@ -40,12 +58,10 @@ module.exports = function (test, h) {
   // it goes to, and nothing leaves the page merely because the dialog opened.
   test('the relay is offered with its host named, and sends nothing until chosen', () => {
     const calls = [];
-    const { document } = loadEditor((url) => {
+    const document = withReadAndUnreadCalendars((url) => {
       calls.push(String(url));
       return Promise.reject(new Error('no network in tests'));
     });
-    fireInput(document.querySelectorAll('#calendars .card input[type=text]')[1],
-      'https://cal.example.com/secret-address.ics');
     click(document.getElementById('copyPrompt'));
     assert(!document.getElementById('relayUse').hidden, 'a configured relay is not being offered');
     assert(/trmnl\.bettens\.dev/.test(document.getElementById('relayNote').textContent),
@@ -92,9 +108,14 @@ module.exports = function (test, h) {
       'the offer does not list the link it would send');
   });
 
+  // Only a way through when there is something worth copying: with nothing
+  // read at all the prompt is a wasted round trip, Copy is off, and this way
+  // out is hidden rather than left as a door around it (21-copy-prompt-disabled).
   test('"copy anyway" is a way through, not a dead end', () => {
-    const document = withUnreadCalendar();
+    const document = withReadAndUnreadCalendars();
     click(document.getElementById('copyPrompt'));
+    assert(!document.getElementById('relaySkip').hidden,
+      'with a calendar read the prompt is worth copying, so the way out must be offered');
     click(document.getElementById('relaySkip'));
     assert(document.getElementById('relayOffer').hidden, 'the offer stayed up');
     assert(document.getElementById('promptOut').value.length > 0, 'no prompt was generated to copy');
