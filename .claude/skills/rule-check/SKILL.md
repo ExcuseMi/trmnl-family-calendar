@@ -58,7 +58,13 @@ Ask it to report, per finding:
 And to report rules it checked and found kept only as a one-line list at the
 end, not as findings.
 
-## 3. Judge the report
+## 3. Show the user the picture
+
+Send it with `SendUserFile` before you say anything about it. The whole
+point of this skill is that a drawing has to be looked at, and that goes
+for the user too: a description of a board is not a board.
+
+## 4. Judge the report
 
 The agent is reading a picture and will be wrong sometimes. Before repeating
 anything to the user or acting on it:
