@@ -66,6 +66,29 @@ module.exports = function (test, h) {
     assertStale(document, 'its feed was pasted in');
   });
 
+  // A DRAW TAKES TIME, AND THE EDITOR IS LIVE THROUGHOUT IT.
+  //
+  // Fetching the calendars and laying the board out is a promise chain, and
+  // the form stays editable while it runs -- which is exactly when somebody
+  // fixes the line name they noticed was wrong as they pressed the button.
+  // The fingerprint was taken at the END of the draw, so it recorded the
+  // edit as though the board had been drawn from it: the change that
+  // prompted the edit never appeared, and nothing said the board was behind.
+  test('a change made while the map is drawing is not counted as drawn', async () => {
+    const { document } = loadEditor(noFeeds);
+    document.getElementById('importIn').value = JSON.stringify({
+      lines: [{ name: 'Sam' }], calendars: [{ url: 'https://a.example/crew.ics', name: 'Sam' }],
+    });
+    click(document.getElementById('loadImport'));
+
+    click(document.getElementById('runPreview'));
+    // mid-flight, before the chain settles
+    fireInput(document.querySelector('#lines .card .title-input'), 'Samuel');
+    await h.flush();
+
+    assertStale(document, 'a line was renamed while the board was drawing');
+  });
+
   test('fetching a feed through the relay makes the drawn board say it is out of date', async () => {
     const document = await drawnEditor(withRelay);
     click(document.getElementById('makePrompt'));

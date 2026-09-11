@@ -2396,6 +2396,15 @@
     function done() { previewRunning = false; btn.disabled = false; }
     setStatus("previewStatus", "Fetching the calendars and laying the board out…");
     fetchErrors = {};
+    // THE PICTURE IS OF THE SETTINGS AS THEY ARE NOW, NOT AS THEY WILL BE.
+    //
+    // Fetching the calendars and laying the board out takes a while, and the
+    // form stays editable throughout -- which is exactly when somebody fixes
+    // the name they noticed was wrong as they pressed the button. Taken when
+    // the draw finished, the fingerprint recorded that edit as though the
+    // board had been drawn from it, so the board never showed the change and
+    // never admitted to being behind.
+    var sigAtStart = previewSignature();
     var cfg = buildConfig();
     var tzField = document.getElementById("pTz").value.trim();
     var tz = tzField || cfg.timeZone || (Intl.DateTimeFormat().resolvedOptions().timeZone) || "UTC";
@@ -2450,7 +2459,7 @@
         else if (urls.length && !events) msg += " An empty board with feeds that did read means nothing in them falls on this day, or a rule hides all of it.";
         setStatus("previewStatus", msg, failures.length ? "err" : "ok");
         renderSources();
-        drawnSig = previewSignature();
+        drawnSig = sigAtStart;
         refreshStale();
         done();
       });
