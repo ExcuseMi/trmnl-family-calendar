@@ -1235,25 +1235,39 @@
   // Shown as the JSON it is, rather than as controls that would misdescribe
   // it, and passed through to the configuration untouched. It can still be
   // removed from here, and the JSON box below is where it is edited.
-  function rawRuleCard(r, list, i, container) {
+  function rawRuleCard(r, list, i, container, onChange) {
     var card = el("div", { class: "rule" });
     card.appendChild(el("div", { class: "rule-step", text: "Kept as written" }));
     card.appendChild(el("p", { class: "hint", text: "This rule is written in a shape this page has no controls for, so it is shown as it arrived and goes into your configuration unchanged. Edit it in the JSON at the bottom of the page, or remove it here." }));
     card.appendChild(el("pre", { class: "hint", style: "overflow-x:auto; margin:6px 0" },
       [el("code", { text: JSON.stringify(ruleValue(r), null, 2) })]));
     var rm = el("button", { class: "ghost small", text: "Remove rule" });
-    rm.addEventListener("click", function () { snapshot("remove a rule"); list.splice(i, 1); renderRules(list, container); renderJson(); });
+    rm.addEventListener("click", function () {
+      snapshot("remove a rule");
+      list.splice(i, 1);
+      renderRules(list, container, onChange);
+      renderJson();
+      if (onChange) onChange();
+    });
     card.appendChild(el("div", { style: "text-align:right" }, [rm]));
     return card;
   }
-  function renderRules(list, container) {
+  // `onChange` is how a rule tells the card around it that something moved.
+  // A calendar uses it to re-check its own name: whether the name will be
+  // drawn as a line depends on whether any rule here routes every event, so
+  // the warning about it was stale from the moment a rule was added.
+  function renderRules(list, container, onChange) {
     container.innerHTML = "";
     list.forEach(function (r, i) {
-      if (r.raw) { container.appendChild(rawRuleCard(r, list, i, container)); return; }
+      if (r.raw) { container.appendChild(rawRuleCard(r, list, i, container, onChange)); return; }
       var card = el("div", { class: "rule" });
       var conds = el("div", {});
       var warn = el("div", { class: "status err" });
-      function refresh() { warn.textContent = ruleValue(r) ? "" : "This rule is not exported yet: it needs a condition and at least one action."; renderJson(); }
+      function refresh() {
+        warn.textContent = ruleValue(r) ? "" : "This rule is not exported yet: it needs a condition and at least one action.";
+        renderJson();
+        if (onChange) onChange();
+      }
       renderConditions(r, conds, refresh);
       var persons = linePicker(r.lines, function (v) { r.lines = v; refresh(); }, "Put the event on this line's line");
       var rename = el("input", { type: "checkbox" }); rename.checked = r.rename;
@@ -1283,7 +1297,13 @@
       var allDay = el("input", { type: "checkbox" }); allDay.checked = r.allDay;
       allDay.addEventListener("change", function () { r.allDay = allDay.checked; refresh(); });
       var rm = el("button", { class: "ghost small", text: "Remove rule" });
-      rm.addEventListener("click", function () { snapshot("remove a rule"); list.splice(i, 1); renderRules(list, container); renderJson(); });
+      rm.addEventListener("click", function () {
+        snapshot("remove a rule");
+        list.splice(i, 1);
+        renderRules(list, container, onChange);
+        renderJson();
+        if (onChange) onChange();
+      });
       card.appendChild(el("div", { class: "rule-step", text: "1 · If" }));
       card.appendChild(conds);
       card.appendChild(el("div", { class: "rule-step", text: "2 · Then" }));
@@ -1361,9 +1381,9 @@
       });
       // advanced: rules, headers, description matching
       var rulesWrap = el("div", {});
-      renderRules(c.rules, rulesWrap);
+      renderRules(c.rules, rulesWrap, checkName);
       var addRule = el("button", { class: "small", text: "+ Add a rule" });
-      addRule.addEventListener("click", function () { c.rules.push(newRule()); renderRules(c.rules, rulesWrap); });
+      addRule.addEventListener("click", function () { c.rules.push(newRule()); renderRules(c.rules, rulesWrap, checkName); checkName(); });
       var addHeaderHint = el("p", { class: "hint", text: "Only for a feed behind a token or a password. A public ICS link needs none." });
       var headersWrap = el("div", {});
       function renderHeaders() {
