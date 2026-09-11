@@ -5016,12 +5016,22 @@
           // its own minute, so the tick for an end that does not exist was
           // landing 58px clear of the rail it belonged to with nothing
           // under it.
-          var sh = sharedRailWidth(p) * S * weightScale / 2 + NODE_R * 1.15 * 0.85;
-          var atC = function () { return laneC0; };
+          // A TICK ON ONE RAIL, NOT A BAR ACROSS THE CORRIDOR.
+          //
+          // Sized off the old bold bundle rail and drawn in ink, the mark
+          // reached across every line in the corridor and read as a
+          // terminus: five lines arrive at dinner, and the drawing said
+          // they all stopped there. They do not stop, they part company,
+          // and the drawing already shows that by splitting. So the end of
+          // a convergence gets exactly the tick every other stop gets, on
+          // its own line, in its own colour — the vocabulary intact and
+          // nothing claiming the corridor ends.
+          var sh = markOut(p, NODE_R);
+          var atC = function (a) { return e._onRoute ? lineCAt(p, a) : laneC0; };
           var q0 = tickEnd(e, e._endA, -sh, atC), q1 = tickEnd(e, e._endA, sh, atC);
           var etick = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
-            'stroke-width': NODE_STROKE * 1.15, 'stroke-linecap': 'round' });
-          etick.style.stroke = INK;
+            'stroke-width': NODE_STROKE, 'stroke-linecap': 'round' });
+          etick.style.stroke = e._onRoute ? colorFor(p.hue) : INK;
           etick.setAttribute('data-metro-role', 'stop');
           etick.setAttribute('data-metro-owner', e.owner);
           svg.appendChild(etick);
