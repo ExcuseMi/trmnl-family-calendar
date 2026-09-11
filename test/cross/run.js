@@ -54,7 +54,7 @@ function consts(over) {
     maxLabelThick: maxLabelThick,
     laneStep: maxLabelThick + 6 * S + 12 * S,
     laneBasePacked: 14 * S + Math.min(24 * S, depth * 0.025),
-    nameH: 22 * S, edge: 8 * S, alertBand: 0,
+    nameH: 22 * S, edge: 8 * S, alertBand: 0, capClear: 12 * S,
     depth: depth, bandLo: 30 * S,
   };
   if (over) for (const key of Object.keys(over)) if (key in k) k[key] = over[key];

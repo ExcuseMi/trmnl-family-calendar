@@ -49,11 +49,16 @@ module.exports = function (test, h) {
     // This is the regression. Six tracks, one short event each. Drawn as
     // branches they need a lane apiece and the board cannot hold them;
     // drawn as marks they need the gap beside each line and it can.
+    // Deeper than it was. Every caption now keeps twelve pixels of paper
+    // from every rail, so a mark's gap costs a third more than it did and a
+    // board that only just fitted does not any more. The claim is not about
+    // one depth, it is that the mark board fits where the shelf board does
+    // not -- so the depth moves and the claim stays.
     const shelves = board(['a:1', 'b:1', 'c:1'], ['d:1', 'e:1', 'f:1'],
-      { depth: 701, S: 2, maxLabelThick: 36 });
+      { depth: 820, S: 2, maxLabelThick: 36 });
     const marks = board(['a:0|mark', 'b:0|mark', 'c:0|mark'],
       ['d:0|mark', 'e:0|mark', 'f:0|mark'],
-      { depth: 701, S: 2, maxLabelThick: 36 });
+      { depth: 820, S: 2, maxLabelThick: 36 });
     assert(solve(shelves).packed, 'the shelf board was supposed to be the one that does not fit');
     assert(!solve(marks).packed, 'the same board drawn as marks still packed');
   });
@@ -63,7 +68,7 @@ module.exports = function (test, h) {
     // branches: that track should get its lanes, because the marks are no
     // longer bidding against it.
     const b = board(['busy:3', 'a:0|mark', 'b:0|mark'], ['c:0|mark', 'd:0|mark'],
-      { depth: 701, S: 2, maxLabelThick: 36 });
+      { depth: 820, S: 2, maxLabelThick: 36 });
     const out = solve(b);
     assert(!out.packed, 'banding failed on a board with one busy track and four of marks');
     assert(out.alloc.busy === 3, 'the busy track was trimmed to ' + out.alloc.busy

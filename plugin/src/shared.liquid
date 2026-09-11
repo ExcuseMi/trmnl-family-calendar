@@ -647,6 +647,19 @@
       return Math.max(p.line_width, 4) * 1.5 / Math.max(weightScale, 0.6);
     }
     var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 13 * S;
+    // THE FILLET IS ITS OWN NUMBER.
+    //
+    // `CORNER` is two things at once: the radius a turn is drawn with, and
+    // the unit everything else measures "a corner's worth of room" in --
+    // how much axis a transition needs, how close two elbows may be, how
+    // long a lead-in is. Tuning the look of a turn therefore moved every
+    // clearance on the board with it.
+    //
+    // Eight pixels for the drawn radius, which is a crisp turn at this
+    // weight rather than the soft sweep thirteen gives; the spacing unit
+    // stays where it was, because none of those numbers were about how
+    // round a corner looks.
+    var FILLET = 8 * S;
     // Four hours. Every block over it in every demo calendar is a school
     // day, a shift, a desk booking or a delivery, and nothing under it is:
     // the shape of a day is what tells them apart, not what anybody called
@@ -1305,7 +1318,23 @@
       // falls through to the 90, which is everything but the smallest
       // nudge. The line runs flat until the moment it has to be somewhere
       // else, and then goes there.
-      if (i < hs.length) from = Math.max(from, to - CORNER * 3);
+      // WHICH ANGLE MEANS WHICH THING.
+      //
+      // The two legal moves are not interchangeable and the board should
+      // not use them as if they were. A 90 is abrupt: it says the line has
+      // arrived somewhere, and it is the mark of an interchange -- people
+      // meeting, which is the only thing on this map worth interrupting a
+      // baseline for. A 45 is a lane change: the line is adjusting where it
+      // runs, not doing anything.
+      //
+      // Making everything a 90 said every adjustment was an event. So the
+      // cap that forces the vertical applies only where an enclosure is at
+      // one end of the move; everywhere else the span is left alone and
+      // takes the 45 it wants, which is also what keeps several lines
+      // shifting in the same corridor visually parallel -- they all take
+      // the same angle over the same run.
+      var steep = (i < hs.length && hs[i].shared) || (prev && prev.shared);
+      if (steep && i < hs.length) from = Math.max(from, to - CORNER * 3);
       // GOING HOME IS OPTIONAL. A line has to START the day on its own
       // lane, because that is where its name is written and the reader
       // needs the two to agree. It does not have to END there: after the
@@ -1347,8 +1376,12 @@
       // whatever a 45 could pay for, so the line stopped somewhere between
       // dinner and its own lane and held there, which is a level that means
       // nothing.
-      if (i === hs.length && lvl !== prevLvl) {
-        to = Math.min(to, from + CORNER * 3);
+      // The run home is a fan-out, not an arrival: 45, promptly, and as
+      // far as the board allows. Capped to a corner it came down as a
+      // cliff at the right-hand edge, which says the day ended abruptly
+      // rather than that everybody went back to their own line.
+      if (i === hs.length && lvl !== prevLvl && prev && prev.shared) {
+        to = Math.min(to, from + CORNER * 3 + octRun(lvl - prevLvl, octRadius(lvl - prevLvl)));
       }
       // ...and between two events it cannot refuse: leaving at once and
       // arriving on time are the same demand when the two nearly touch, and
@@ -2600,7 +2633,25 @@
       // because the caption pass slides them along the line past each
       // other. That is a third of what a rung costs and it is the whole
       // difference between a name beside its line and a name adrift.
-      function markRoom(k, t) { return t.marks ? k.lineGap + k.maxLabelThick : 0; }
+      // ...AND THE GAP HAS TO HOLD THE CLEARANCE TOO.
+      //
+      // This booked a label's thickness and a line gap, which is what the
+      // words occupy and not what they need: a caption keeps twelve pixels
+      // of paper from every rail, its own included, or it reads as part of
+      // the line rather than as a name for a stop on it. Left out here, the
+      // caption pass went looking for a slot the solver had never reserved,
+      // found none anywhere at any text size, and the tier loop -- offered
+      // a board that was equally bad however small the words got -- kept
+      // the biggest ones.
+      function markRoom(k, t) {
+        // Clearance on BOTH sides of the words and the words in between:
+        // twelve from the rail the name belongs to, the label, twelve to
+        // whatever is next. `lineGap` used to stand in for the first of
+        // those, so it is replaced rather than added to -- charged on top
+        // it came to more than a whole rung costs, and a mark that costs
+        // more than the rail it replaced is not a cheaper shape.
+        return t.marks ? k.maxLabelThick + (k.capClear || k.lineGap) * 2 : 0;
+      }
 
       // One side, laid out as BANDS: each track gets its baseline, its
       // siding room, then its own lanes, and the next track starts beyond
@@ -3166,6 +3217,8 @@
         nodeR: NODE_R,
         maxLabelThick: maxLabelThick, laneStep: laneStep, laneBasePacked: LANE_BASE,
         nameH: fan ? fan.nameH : 0, edge: EDGE, alertBand: alertBand,
+        // the paper a caption keeps from every rail; see `markRoom`
+        capClear: 12 * S,
         depth: crossPx, bandLo: bandLo,
       };
     }
@@ -4427,7 +4480,17 @@
       if (shared.length) {
         var busy = [];
         LEGEND.forEach(function (q) {
-          var half = Math.max(2, q.line_width) * S * weightScale / 2 + LINE_GAP * 0.5;
+          // ISOLATION, NOT MERELY NOT TOUCHING.
+          //
+          // A rail counted as an obstacle only out to its own edge plus half
+          // a gap, about five pixels, so a caption could be dropped into the
+          // twenty pixel slot between two lines running close together and
+          // be technically clear of both while reading as belonging to
+          // neither. Twelve pixels either side is a caption's own breathing
+          // room; a slot that cannot hold that is not a slot, and the
+          // search steps further out -- a longer stem -- rather than
+          // squeezing in.
+          var half = Math.max(2, q.line_width) * S * weightScale / 2 + LINE_GAP * 0.5 + 12 * S;
           var stepA = Math.max(CORNER, (axisEnd - axisStart) / 140);
           // A VERTICAL DROP IS A WALL, NOT A RAIL TO WRITE OVER.
           //
@@ -5398,7 +5461,7 @@
           .map(function (pt) { return toXY(pt[0], pt[1]); });
         // Drawn once and not shown, for the length lookups everything
         // downstream does against it, exactly as in the plain case below.
-        var path = svgEl('path', { d: roundedPath(fanPts, CORNER) });
+        var path = svgEl('path', { d: roundedPath(fanPts, FILLET) });
         path.style.fill = 'none'; path.style.stroke = 'none';
         // Its own role: this is where the line GOES, which is a different
         // question from where its ink is now that the ink has gaps in it.
@@ -5420,19 +5483,14 @@
         trunkRuns(p, Math.min(merge, far), Math.max(merge, far)).forEach(function (run) {
           var rp = trunkPath(c, p._sign, run[0], run[1], p).map(function (pt) { return toXY(pt[0], pt[1]); });
           if (rp.length < 2) return;
-          var seg = svgEl('path', { d: roundedPath(rp, CORNER) });
+          var seg = svgEl('path', { d: roundedPath(rp, FILLET) });
           seg.setAttribute(ROLE_ATTR, 'track'); seg.setAttribute(OWNER_ATTR, p.key);
           paintLine(seg, p, S, svg, phaseAfter(p, trunkLenAt(p, run[0]) || 0));
         });
         // a terminal bar at each end, the transit-map mark for where a line
         // starts and stops rather than simply running out of canvas
         [[nameEnd, spreadC], [far, lineCAt(p, far)]].forEach(function (at) {
-          var b0 = toXY(at[0], at[1] - NODE_R), b1 = toXY(at[0], at[1] + NODE_R);
-          var cap = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1],
-            'stroke-width': (p.line_width + 1) * S, 'stroke-linecap': 'round' });
-          cap.style.stroke = colorFor(p.hue);
-          cap.setAttribute(ROLE_ATTR, 'terminal'); cap.setAttribute(OWNER_ATTR, p.key);
-          svg.appendChild(cap);
+          endSlash(at[0], at[1], p, NODE_R);
         });
       } else {
         // THE WHOLE TRUNK, DRAWN ONCE AND NOT SHOWN. Everything downstream
@@ -5458,7 +5516,7 @@
         trunkRuns(p).forEach(function (run) {
           var pts = trunkPath(c, p._sign, run[0], run[1], p).map(function (pt) { return toXY(pt[0], pt[1]); });
           if (pts.length < 2) return;
-          var seg = svgEl('path', { d: roundedPath(pts, CORNER) });
+          var seg = svgEl('path', { d: roundedPath(pts, FILLET) });
           seg.setAttribute(ROLE_ATTR, 'track'); seg.setAttribute(OWNER_ATTR, p.key);
           // the phase this piece starts at, so the texture runs on through
           // the gap rather than restarting at every crossing
@@ -5809,19 +5867,41 @@
       var key = e._sideKey + '|' + e._lane + '|' + e.owner + '|' + e._dir; // direction too — a chain's bridge-drawing assumes one consistent direction
       (chains[key] = chains[key] || []).push(e);
     });
+    // A LINE ENDS ON A SLASH, NOT A CROSSBAR.
+    //
+    // The mark at the end of a line was a bar drawn square across it, which
+    // is the same shape as an event's end tick and the same shape as a
+    // station mark: three different things saying three different things
+    // with one glyph, and on a board where a line now ends, starts, stops
+    // at events and passes through interchanges, that is the one glyph the
+    // reader has to disambiguate by position alone.
+    //
+    // A 45 degree slash is the printer's mark for a terminus and it cannot
+    // be mistaken for anything else here, because nothing else on this map
+    // is drawn at 45 any more: the rails are flat, the drops are square,
+    // and the names lie down. It is the only diagonal left, which is what
+    // makes it read.
+    //
+    // Flat caps. A round one puts half a stroke of ink past each end of the
+    // slash and turns a crisp tick into a lozenge.
+    function endSlash(a, c, p, reach, svgTarget) {
+      var r = reach;
+      var b0 = toXY(a - r, c + r), b1 = toXY(a + r, c - r);
+      var el = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1],
+        'stroke-width': Math.max(2, p.line_width) * S, 'stroke-linecap': 'butt' });
+      el.style.stroke = colorFor(p.hue);
+      el.setAttribute(ROLE_ATTR, 'terminal');
+      el.setAttribute(OWNER_ATTR, p.key);
+      (svgTarget || svg).appendChild(el);
+      return el;
+    }
     function terminus(a, laneC, p) {
-      var xy = toXY(a, laneC);
-      var b0 = horizontal ? [xy[0], xy[1] - 4 * S] : [xy[0] - 4 * S, xy[1]];
-      var b1 = horizontal ? [xy[0], xy[1] + 4 * S] : [xy[0] + 4 * S, xy[1]];
-      var tb = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1], 'stroke-width': p.line_width * S, 'stroke-linecap': 'round' });
-      tb.style.stroke = colorFor(p.hue);
-      // The bar that caps a rail is the only thing at that end of it, so a
-      // test asking whether a rail stops at something has to be able to see
-      // it. Without the role it was drawn, correct, and invisible to the
-      // suite, which then read every properly capped rail as a loose end.
-      tb.setAttribute(ROLE_ATTR, 'terminal');
-      tb.setAttribute(OWNER_ATTR, p.key);
-      svg.appendChild(tb);
+      // The mark that caps a rail is the only thing at that end of it, so
+      // a test asking whether a rail stops at something has to be able to
+      // see it: `endSlash` carries the role. Without it the cap was drawn,
+      // correct, and invisible to the suite, which then read every properly
+      // capped rail as a loose end.
+      endSlash(a, laneC, p, 4 * S);
     }
     // ---- ROUTE MODE (prototype, off unless the payload asks for it) ----
     //
