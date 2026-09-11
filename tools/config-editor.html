@@ -965,7 +965,7 @@
         var n = c.name.trim();
         var known = lineNames().some(function (t) { return t.toLowerCase() === n.toLowerCase(); });
         nameWarn.textContent = (!n || known || routesEverything()) ? ""
-          : "\u201C" + n + "\u201D is not one of your lines, so any event here that no rule routes falls back to it and draws \u201C" + n + "\u201D as its own line on the map. Name this calendar after the line whose line it is, add \u201C" + n + "\u201D as a line, or clear the name.";
+          : "\u201C" + n + "\u201D is not one of your lines, so any event here that no rule routes falls back to it and draws \u201C" + n + "\u201D as its own line on the map. Assign a line below, name this calendar after one, add \u201C" + n + "\u201D as a line, or clear the name.";
       }
       name.addEventListener("input", function () { c.name = name.value; checkName(); renderJson(); });
       name.addEventListener("change", function () { renderLines(); });
@@ -983,7 +983,7 @@
       }
       url.addEventListener("input", function () { c.url = url.value; checkUrl(); renderJson(); renderSources(); });
       var assignId = "cal-line-" + c._id;
-      var assign = linePicker(c.assign, function (v) { c.assign = v; checkName(); renderJson(); renderLines(); }, "Whose line the events in this calendar go on");
+      var assign = linePicker(c.assign, function (v) { c.assign = v; checkName(); renderJson(); renderLines(); }, "Assign the line the events in this calendar go on");
       assign.id = assignId;
       var rm = el("button", { class: "ghost small", text: "Remove", title: "Remove this calendar" });
       rm.addEventListener("click", function () {
@@ -1038,7 +1038,7 @@
         nameWarn,
         el("div", { class: "row" }, [
           el("div", { class: "field grow" }, [el("label", { text: "ICS link", "for": urlId }), url]),
-          el("div", { class: "field" }, [el("label", { text: "Whose line", "for": assignId }), assign]),
+          el("div", { class: "field" }, [el("label", { text: "Assign a line", "for": assignId }), assign]),
         ]),
         urlWarn,
         adv,

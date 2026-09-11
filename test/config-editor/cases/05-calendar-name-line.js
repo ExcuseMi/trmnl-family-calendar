@@ -29,6 +29,12 @@ module.exports = function (test, h) {
     assertEqual(w[0], '', 'a calendar named after a track is fine: ' + w[0]);
     assert(/Deliveries/.test(w[1]), 'the offending name is not flagged');
     assert(/line/i.test(w[1]), 'the warning never says what the name actually does: ' + w[1]);
+    // ...and it has to name the control that fixes it. The warning used to
+    // offer three remedies -- rename the calendar, add a line, clear the
+    // name -- and omit the one right beside it, which is the one most
+    // people actually want: put this feed on somebody's line.
+    assert(/assign a line/i.test(w[1]),
+      'the warning does not mention the control sitting next to it: ' + w[1]);
     assertEqual(w[2], '', 'an unnamed calendar has nothing to fall back to: ' + w[2]);
   });
 
