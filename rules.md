@@ -130,6 +130,28 @@ Where the two disagree, this one is newer.
 31. **A convergence gets a leader to its name**, because it has no rail of its
     own to carry one.
 
+29a. **Two angles, and they mean different things.** A 90 is abrupt: it says
+    the line has ARRIVED somewhere, and it is the mark of an interchange,
+    which is the only thing on this map worth interrupting a baseline for.
+    A 45 is a lane change, the line adjusting where it runs rather than
+    doing anything. Making everything a 90 says every adjustment is an
+    event; making everything a 45 turns a four-band move into a diagonal
+    across the whole afternoon.
+29b. **45 by default, 90 when the day runs out.** A 45 costs one pixel of
+    axis for every pixel it climbs, so whether it is available is
+    arithmetic, not preference: where the remaining runway is shorter than
+    the climb, the move is a 90. Leaving Family Dinner at eight, Homer is
+    310px from his own line with 130px of board left; there is no 45 there
+    and a shallower angle is not a compromise, it is a fourth angle this
+    map does not have.
+    Never by starting the move early to buy runway. A line leaving an
+    interchange before the event ends says the person left early, and the
+    board would be lying about the one thing it exists to state.
+29c. **A line ends on a 45 slash.** Its own mark, not the crossbar an
+    event's end tick uses: three different things drawn with one glyph can
+    only be told apart by position. Nothing else on this map is drawn at 45,
+    which is what makes it read.
+
 ## 5. Words
 
 32. **A name on a slope is set on the slope.** A mark on a climbing trunk
@@ -180,6 +202,20 @@ Where the two disagree, this one is newer.
 
 34. **A caption belongs beside its own rail**, on the outside, starting at the
     stop it names.
+34a. **A caption keeps twelve pixels of paper from every rail**, its own
+    included. Merely not touching is not enough: a name dropped into the
+    twenty pixel slot between two close lines is clear of both and reads as
+    belonging to neither. The band solver books this, not just the caption
+    pass -- asked for a slot nobody reserved, the pass finds none at any
+    text size, and the tier loop, shown a board equally bad however small
+    the words get, keeps the biggest ones.
+34b. **An enclosure's name goes above its pill, centred**, and everything
+    whose words overlap that pill goes BELOW it. The region becomes one
+    stack with the interchange named at the top of it.
+34c. **A stack runs in start-time order, earliest highest.** This needs no
+    sort of its own: captions are placed in start-time order and each takes
+    the nearest free rung, and below a pill the nearest rung is the highest
+    one.
 35. **Nothing is written over anything.** Captions are placed against the
     board: the other captions, the rails, the moving trunks, the line names,
     the clock badge.
