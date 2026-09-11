@@ -182,6 +182,30 @@ module.exports = function (test, h) {
     });
   });
 
+  // A PLAIN YAML SCALAR CANNOT CONTAIN ": ".
+  //
+  // There is no YAML parser in this suite -- the reader above is a
+  // deliberate 30 lines of regex -- so an unquoted description with a colon
+  // in it parsed perfectly here and made trmnlp refuse the whole file:
+  // "mapping values are not allowed in this context". Every view in the
+  // layout suite then failed to build at once, which is a long way to go
+  // for a punctuation mark. The existing descriptions that use a colon are
+  // quoted; this says so.
+  test('a description with a colon in it is quoted, or the file will not parse', async () => {
+    const text = fs.readFileSync(SETTINGS, 'utf-8');
+    const bad = [];
+    text.split('\n').forEach((line, i) => {
+      const m = /^(\s+)(description|name|placeholder|help_text): (.*)$/.exec(line);
+      if (!m) return;
+      const v = m[3];
+      // Already quoted, or a block scalar: YAML reads the value as text
+      // and a colon inside it is just a colon.
+      if (/^['"|>]/.test(v)) return;
+      if (/: /.test(v)) bad.push('line ' + (i + 1) + ': ' + m[2]);
+    });
+    assertEqual(bad, [], 'unquoted YAML scalars containing ": " -- trmnlp will refuse the file');
+  });
+
   test('no em dash reaches the reader', async () => {
     // House rule, and the form is the one file in the plugin whose text
     // is read by everyone who installs it.

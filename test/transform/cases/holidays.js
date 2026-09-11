@@ -418,14 +418,17 @@ module.exports = function (test, h) {
   test('a holiday costs the board no line and no depth', async () => {
     // The argument for the header over every other option costed: on a day
     // when nothing else is on, a holiday must not be the reason the board
-    // draws a rail. `hideIfEmpty` is on by default, so a line with nothing
-    // today gets none -- and an all-day event used to be enough to keep
-    // one alive, which is right for a person and wrong for a country.
+    // draws a rail. Both lines here ask to be dropped when they have
+    // nothing, so the board is genuinely empty -- and an all-day event used
+    // to be enough to keep one alive, which is right for a person and wrong
+    // for a country.
     const r = await runTransform(async (url) => okText(
       String(url).indexOf('/hol.ics') >= 0
         ? allDayIcs([{ start: '20261225', end: '20261226', summary: 'Christmas Day' }])
         : icsWithEvents([])), NOW)
-      .run(baseInput(NOW, cfgWith(config())));
+      .run(baseInput(NOW, cfgWith(config({
+        lines: [{ name: 'Ada', hideIfEmpty: true }, { name: 'Bo', hideIfEmpty: true }],
+      }))));
     assertEqual(r.data.legend, [], 'a holiday put a line on an empty board');
     assertEqual((r.data.holidays || []).map((x) => x.title), ['Christmas Day'],
       'and it is still stated');

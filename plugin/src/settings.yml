@@ -68,9 +68,9 @@ custom_fields:
   field_type: number
   name: Switch Over At
   group: The Day
-  description: The hour the board moves on to tomorrow's timetable, on a 24-hour clock, so 18 is six in the evening. Anything outside 0 to 23, or left blank, is read as 18.
-  placeholder: '18'
-  default: 18
+  description: 'The hour the board moves on to tomorrow''s timetable, on a 24-hour clock, so 21 is nine in the evening. Late on purpose: the evening is when a board on a wall is read most, and an early switch throws away dinner and everything after it while people are still standing in front of it. Anything outside 0 to 23, or left blank, is read as 21.'
+  placeholder: '21'
+  default: 21
   optional: true
 - keyname: time_format
   field_type: select

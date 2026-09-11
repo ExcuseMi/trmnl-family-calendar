@@ -58,6 +58,23 @@ module.exports = function (test, h) {
     assertEqual(eventItems(r.data).map((e) => e.title), ['Lesson 6 Swim Class']);
   });
 
+  test('deleting the matched text takes the gap it leaves with it', async () => {
+    // Stripping a class code is the commonest thing anybody writes a rule
+    // for, and it is written as an empty rewrite. "L2 Zwemmen" came back as
+    // " Zwemmen" -- printed on the panel as a caption indented by a space
+    // nobody could account for -- and a code cut out of the middle left two
+    // spaces behind. A rewrite is a cut; it takes the hole with it.
+    const fetchImpl = async () => okText(icsWithEvents([
+      { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'L2 Zwemmen' },
+      { start: '20260907T160000Z', end: '20260907T170000Z', summary: 'Turnen L2 zaal' },
+    ]));
+    const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Cal',
+        rules: [{ match: { type: 'word', value: 'L2' }, rewrite: '' }] }],
+    })));
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Zwemmen', 'Turnen zaal']);
+  });
+
   test('a catch-all ".*" match with rename does not duplicate the title (WardWard bug)', async () => {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Schoolfotografie' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
@@ -238,21 +255,24 @@ module.exports = function (test, h) {
     assert(eventItems(r.data).length > 0, 'demo data should have kicked in');
   });
 
-  test('a configured track with no events today gets no legend entry (no empty track)', async () => {
+  test('a line nobody uses today is still on the board, because somebody named it', async () => {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Busy track only' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       lines: [{ name: 'Idle', side: 'left' }, { name: 'Busy', side: 'left' }],
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, line: 'Busy' }] }],
     })));
-    assertEqual(r.data.legend.map((p) => p.name), ['Busy'], 'Idle has nothing today, so it should not get a track at all');
+    assertEqual(r.data.legend.map((p) => p.name).sort(), ['Busy', 'Idle'],
+      'a board that deletes whoever is quiet changes shape every day');
   });
 
-  test('removing an empty track compacts the remaining offsets on that side, no gap left behind', async () => {
+  test('hideIfEmpty:true drops a line, and the remaining offsets compact with no gap left behind', async () => {
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'C event' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
-      lines: [{ name: 'A', side: 'left' }, { name: 'B', side: 'left' }, { name: 'C', side: 'left' }],
+      lines: [{ name: 'A', side: 'left', hideIfEmpty: true },
+              { name: 'B', side: 'left', hideIfEmpty: true },
+              { name: 'C', side: 'left' }],
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, line: 'C' }] }],
     })));
     assertEqual(r.data.legend.length, 1);
@@ -332,6 +352,27 @@ module.exports = function (test, h) {
     })));
     assertEqual(r.data.all_day.length, 1, 'one row, not one per line');
     assertEqual(r.data.all_day[0].owners.length, 2, 'carrying both lines');
+  });
+
+  test('one rule naming several lines puts the all-day entry on all of them', async () => {
+    // A school holiday feed routed to all four children. This used to keep
+    // `lineNames[0]` and throw the rest away: whichever child happened to
+    // be first in the list was off school and the other three had an
+    // ordinary day. A timed event routed to several lines has been an
+    // interchange all along; this is that, at the head of the line.
+    const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Spring Break' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
+      lines: [{ name: 'Ada' }, { name: 'Bo' }, { name: 'Cy' }],
+      calendars: [{ url: 'https://example.com/a.ics', name: 'School', rules: [
+        { match: { type: 'word', value: 'Spring' }, allDay: true, line: ['Ada', 'Bo', 'Cy'], rename: false },
+      ] }],
+    })));
+    assertEqual(r.data.all_day.length, 1, 'one row, not one per line');
+    const names = {};
+    r.data.legend.forEach((l) => { names[l.key] = l.name; });
+    assertEqual(r.data.all_day[0].owners.map((k) => names[k]).sort(), ['Ada', 'Bo', 'Cy'],
+      'three children are on one holiday, and all three are on it');
   });
 
   test('a real meeting inside a long block\'s span still renders normally alongside it', async () => {

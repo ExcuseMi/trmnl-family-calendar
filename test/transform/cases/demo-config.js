@@ -12,7 +12,7 @@ const path = require('path');
 const DEMO_DIR = path.join(__dirname, '../../../demo');
 
 module.exports = function (test, h) {
-  const { runTransform, okText, fail, baseInput, eventItems, assert } = h;
+  const { runTransform, okText, fail, baseInput, eventItems, assert, assertEqual } = h;
 
   // a Wednesday, so the weekday-limited entries (L6 Field Trip) are on
   const NOW = Date.parse('2026-09-09T09:00:00Z');
@@ -207,6 +207,43 @@ module.exports = function (test, h) {
       const onDisk = JSON.parse(fs.readFileSync(file, 'utf-8'));
       assert(JSON.stringify(onDisk) === JSON.stringify(SETS_LIVE[name]),
         'demo/' + name + '/config.json has drifted from transform.js — run node tools/dump-demo-configs.js');
+    }
+  });
+
+  // THE EXAMPLE PEOPLE ACTUALLY COPY.
+  //
+  // demo-config.json is what CONFIG.md links to and what the editor's
+  // "load the example" button fetches, and until now nothing ran it: the
+  // rename to `lines`/`line:` could have left it describing a schema the
+  // plugin no longer reads and every test would still have passed. Run it
+  // through the real transform against the repo's own ICS files.
+  test('demo-config.json, the example everyone copies, still draws a board', async () => {
+    const cfg = fs.readFileSync(path.join(__dirname, '../../../demo-config.json'), 'utf-8');
+    const parsed = JSON.parse(cfg);
+    const { run } = runTransform(async (url) => {
+      // The holiday feed is a real public URL, not a file in this repo.
+      // It is not what this is testing, so answer it with nothing rather
+      // than with a 404, which would put a service alert on the board.
+      if (String(url).indexOf('/main/demo/') < 0) return okText('BEGIN:VCALENDAR\nEND:VCALENDAR\n');
+      const full = path.join(DEMO_DIR, relOf(url));
+      return fs.existsSync(full) ? okText(fs.readFileSync(full, 'utf-8')) : fail(404);
+    }, NOW);
+    const r = await run(baseInput(NOW, { use_demo_data: 'false', config_json: cfg }));
+    const names = r.data.legend.map((t) => t.name).sort();
+    assert(!r.data.service_alert, 'the example board came up with a service alert: '
+      + JSON.stringify(r.data.service_alert));
+    assertEqual(names, parsed.lines.map((l) => l.name).sort(),
+      'the example declares lines the board does not draw');
+    const titles = eventItems(r.data).map((e) => e.title);
+    assert(titles.length > 0, 'the example board is empty');
+    // Its two interesting rules: a class code routes a school entry and is
+    // then stripped, and a family entry is shared by everyone named.
+    assert(!titles.some((t) => /^(?:L6|K3)\s/.test(t)),
+      'a class code survived into a title: ' + titles.join(', '));
+    const dinner = eventItems(r.data).find((e) => /Family Dinner/.test(e.title));
+    if (dinner) {
+      assertEqual((dinner.co_owners || []).length, 4,
+        'Family Dinner is no longer the whole household');
     }
   });
 

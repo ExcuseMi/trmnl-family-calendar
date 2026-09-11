@@ -145,8 +145,14 @@ module.exports = function (test, h) {
     };
     assertEqual(await board('2026-09-09T09:00:00Z', { show_day: 'auto' }), ['Today Meeting'],
       'the morning board should still be today');
-    assertEqual(await board('2026-09-09T19:00:00Z', { show_day: 'auto' }), ['Tomorrow Meeting'],
-      'the evening board should have switched over');
+    // NOT AT SIX, AND NOT AT SEVEN. The default is late on purpose: the
+    // evening is when a board on a wall is read most, so a switch at 18:00
+    // threw away dinner and everything after it while the family was still
+    // standing in front of it.
+    assertEqual(await board('2026-09-09T19:00:00Z', { show_day: 'auto' }), ['Today Meeting'],
+      'the board gave up on today while the evening was still going');
+    assertEqual(await board('2026-09-09T21:00:00Z', { show_day: 'auto' }), ['Tomorrow Meeting'],
+      'the late board should have switched over');
     // and the hour is the reader's to set
     assertEqual(await board('2026-09-09T15:00:00Z', { show_day: 'auto', switch_hour: '14' }),
       ['Tomorrow Meeting'], 'a switch hour of 14 did not take effect at 15:00');

@@ -2128,8 +2128,8 @@ function parseConfig(raw) {
 
   var lines = {};
   var everyoneLine = null;
-  // `lines` is the current field name; `people` is accepted too, for
-  // configs written before lines were called lines.
+  // One name for the field, everywhere: `lines`. Nothing was released
+  // under the old one, so there is nothing to keep reading it for.
   (Array.isArray(data.lines) ? data.lines : []).forEach(function (item) {
     if (!item || typeof item !== 'object') return;
     var name = typeof item.name === 'string' ? item.name.trim() : '';
@@ -2141,12 +2141,20 @@ function parseConfig(raw) {
     var sideRaw = typeof item.side === 'string' ? item.side.trim().toLowerCase() : '';
     var side = (sideRaw === 'left' || sideRaw === 'work') ? 'left' : (sideRaw === 'right' || sideRaw === 'family') ? 'right' : null;
     if (everyoneLine === null) everyoneLine = name;
-    // A track with nothing on today's board gets no line, which is what
-    // stops every day carrying every ever-configured person's empty rail.
-    // `hideIfEmpty: false` opts out: the line is drawn whatever happens, so
-    // the board reads the same shape every day and a quiet person still has
-    // a place on it. Only `false` counts; anything else keeps the default.
-    lines[name.toLowerCase()] = { name: name, color: color, badge: badge, side: side, keepEmpty: item.hideIfEmpty === false };
+    // A DECLARED LINE IS DRAWN, QUIET DAY OR NOT.
+    //
+    // It used to be the other way round: a line with nothing on today was
+    // dropped unless it said `hideIfEmpty: false`. That made the board a
+    // different shape every day and quietly deleted whoever had nothing on
+    // -- which is exactly the day you look at a family board to check. A
+    // name in `lines[]` is somebody saying "this person is on this board",
+    // and an empty rail with their name on it is an answer, not noise.
+    // `hideIfEmpty: true` still drops it, for a line that only matters on
+    // the days it is used. (A CALENDAR's line is not the same thing and
+    // keeps the old default: a feed named "School" whose events are all
+    // routed to the children is a router, not a person, and drawing it
+    // would put an empty School rail on the board.)
+    lines[name.toLowerCase()] = { name: name, color: color, badge: badge, side: side, keepEmpty: item.hideIfEmpty !== true };
   });
 
   var globalRules = compileRuleList(data.rules);
@@ -2246,6 +2254,14 @@ function applyCalendarRules(ev, weekday, cal, globalRules, everyoneLine) {
   } else if (renameRule && renameRule.rx) {
     finalTitle = replaceMatch(originalTitle, renameRule.rx, renameRule.line.join(' & '));
   }
+  // MIND THE HOLE THE RULE LEFT.
+  //
+  // Cutting a class code out of "L2 Zwemmen" leaves " Zwemmen", and cutting
+  // one out of the middle leaves two spaces where it was. The board prints
+  // the title as it is given, so that reached the panel as a caption
+  // indented by a space nobody could explain. A rewrite is a cut, and
+  // whatever it takes out it takes the gap out with it.
+  if (finalTitle !== originalTitle) finalTitle = finalTitle.replace(/\s+/g, ' ').trim();
   // NOTE: everyoneLine is deliberately NOT applied here — a calendar's
   // own name is meant to be the fallback for one that has no rule
   // assigning anyone (see buildFromConfig), and everyoneLine is the
@@ -2703,6 +2719,21 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   // consulted: falling back is what put a whole country's Christmas on
   // whoever happened to be first in `lines[]`, and a holiday feed with no
   // name has not told us whose it is -- it has told us it is nobody's.
+  // AN ALL-DAY ENTRY GOES ON EVERY LINE IT NAMES.
+  //
+  // Same reason as the holiday below, and the same bug: pushed as
+  // `lineNames[0]`, a rule that put a school holiday on all four children
+  // landed it on whichever of them happened to be first and left the other
+  // three with an ordinary day. A timed event routed to several lines has
+  // been an interchange all along; this is the all-day strip's version of
+  // it, and `buildMetro` already groups by title and collects the owners so
+  // one title is drawn once with a tie between the heads.
+  function placeAllDay(resolved, names, dayIx) {
+    names.forEach(function (n) {
+      allDayEvents.push({ line: registry.add(n, 0.25).key, title: resolved.title, day: dayIx || 0 });
+    });
+  }
+
   function placeHoliday(resolved, dayIx, span, index) {
     var named = resolved.lineNames;
     if (!named || !named.length) { addHoliday(resolved.title, dayIx, span, index); return; }
@@ -2793,8 +2824,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         // routes into the all-day strip instead of the timeline, same as a
         // genuine ICS all-day entry, rather than being silently dropped.
         if (resolved.allDay) {
-          allDayEvents.push({ line: registry.add(lineNames[0], 0.25).key, title: resolved.title,
-            day: Math.floor(ev.startMin / 1440) });
+          placeAllDay(resolved, lineNames, Math.floor(ev.startMin / 1440));
           return;
         }
         // A LONG BLOCK IS AN EVENT LIKE ANY OTHER.
@@ -2847,8 +2877,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         // every all-day entry read as day 0: a holiday that is tomorrow's
         // was declared on today's board, and on a board set to tomorrow
         // the filter below threw every one of them away.
-        allDayEvents.push({ line: registry.add(lineNames[0], 0.25).key, title: resolved.title,
-          day: ev.day || 0 });
+        placeAllDay(resolved, lineNames, ev.day);
       });
     } catch (e) {
       // one calendar failing shouldn't blank the whole render — skip it,
@@ -2910,8 +2939,14 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   var showIx = 0;
   if (showPref === 'tomorrow') showIx = 1;
   else if (showPref === 'auto') {
+    // LATE. Six in the evening was too early by hours: the evening is the
+    // part of the day a family board is read most, and swapping it for
+    // tomorrow at 18:00 threw away dinner, the lesson at seven and the
+    // pub at nine while everybody was still standing in front of it. Nine
+    // is past all of that and still early enough to be useful for the
+    // morning.
     var sh = parseInt(cf(input, 'switch_hour').trim(), 10);
-    if (!isFinite(sh) || sh < 0 || sh > 23) sh = 18;
+    if (!isFinite(sh) || sh < 0 || sh > 23) sh = 21;
     if (nowMin >= sh * 60) showIx = 1;
   }
   if (showIx >= days.length) showIx = days.length - 1;
@@ -3136,7 +3171,26 @@ async function run(input) {
       var got = (demoMetro && demoMetro.legend ? demoMetro.legend : []).map(function (t) { return t.name; });
       var complete = want.length === got.length
         && want.every(function (n) { return got.indexOf(n) >= 0; });
-      if (complete) return done(demoMetro);
+      // AND EVERY ONE OF THEM HAS SOMETHING ON.
+      //
+      // A declared line is drawn on its quiet day now rather than dropped,
+      // so "all five names came back" stopped meaning "all five calendars
+      // answered": a fetch that returned nothing at all still produced the
+      // full set of names over a completely empty board, and that passed as
+      // a good demo. Every demo member has something on every day, so an
+      // idle one is the same evidence a missing one was.
+      var busy = {};
+      var keyOf = {};
+      (demoMetro && demoMetro.legend ? demoMetro.legend : []).forEach(function (t) { keyOf[t.name] = t.key; });
+      (demoMetro && demoMetro.events ? demoMetro.events : []).forEach(function (e) {
+        busy[e.owner] = true;
+        (e.co_owners || []).forEach(function (k) { busy[k] = true; });
+      });
+      (demoMetro && demoMetro.all_day ? demoMetro.all_day : []).forEach(function (a) {
+        (a.owners || []).forEach(function (k) { busy[k] = true; });
+      });
+      var everyoneBusy = want.every(function (n) { return !!busy[keyOf[n]]; });
+      if (complete && everyoneBusy) return done(demoMetro);
     } catch (e) { /* fall through to the offline demo below */ }
     return done(buildFromDemo(demoWx.weather, demoNowMin, demoExtra));
   }

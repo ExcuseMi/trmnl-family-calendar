@@ -1,6 +1,6 @@
 # Calendar Config reference
 
-The **Calendar Config (JSON)** field accepts either plain text (one ICS URL
+The **Calendars** field accepts either plain text (one ICS URL
 per line) or a JSON object with this shape. Unknown keys are ignored
 silently, so check spelling.
 
@@ -8,14 +8,13 @@ silently, so check spelling.
 {
   "timeZone"?: string,            // IANA zone, e.g. "Europe/Brussels" (default: TRMNL account zone)
   "locale"?: string,              // "en", "fr", "es", "de", "nl", "en-US", … (default: account language)
+  "timeFormat"?: "auto" | "12h" | "24h",   // the clock (default: "auto", which follows the locale)
+  "temperatureUnit"?: "auto" | "c" | "f",  // (default: "auto", which follows the locale)
   "lines"?: Line[],
   "rules"?: Rule[],               // applied to every calendar, before the calendar's own rules
   "calendars": (string | Calendar)[]
 }
 ```
-
-(Legacy configs may use `"people"` in place of `"lines"`; still accepted,
-for anyone who set this up before lines were called lines.)
 
 ## Line
 
@@ -100,11 +99,10 @@ answers.
   "rewrite"?: string,             // replace the matched text (or the whole title with rewriteFull)
   "rewriteFull"?: boolean,
   "hide"?: boolean,
+  "allDay"?: boolean,             // draw it at the line's head, not at a time, whatever the ICS says
   "holiday"?: boolean             // a state, not an appointment: the day's if no `line`, that line's head if there is one
 }
 ```
-
-(Legacy rules may use `"person"` in place of `"line"`; still accepted.)
 
 ### Long blocks look after themselves
 
