@@ -233,7 +233,6 @@
   // 49 repeats of seventeen characters.
   var ROLE_ATTR = 'data-metro-role', OWNER_ATTR = 'data-metro-owner';
   var LEGEND = METRO.legend || [];
-  var SIDINGS = METRO.sidings || [];
   var DAY_START = METRO.day_start_min, DAY_END = METRO.day_end_min;
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -578,10 +577,15 @@
       return Math.max(p.line_width, 4) * 1.5 / Math.max(weightScale, 0.6);
     }
     var TEXT_PAD = 5 * S, TAIL = 7 * S, CORNER = 13 * S;
+    // Four hours. Every block over it in every demo calendar is a school
+    // day, a shift, a desk booking or a delivery, and nothing under it is:
+    // the shape of a day is what tells them apart, not what anybody called
+    // them. Decided here rather than upstream, because which drawing an
+    // event gets is a question about this board and nothing else knows the
+    // board.
+    var LONG_MIN = 240;
     var MIN_DIAG = Math.max(10 * S, 6 * 2.4 * S + 2 * S);
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
-    var SIDING_RAISE = 32 * S; // how far a track's own line kinks out to siding level; for a short siding a smaller raise also means a shallower, less jarring kink instead of a deep sideways "V"
-    var SIDING_GAP = 4 * S; // clear space kept between the raised line itself and the near edge of its caption
     // Paper between the rails where a group of lines runs together. Three
     // px was asked for and three px is not legible: at these stroke weights
     // the rails merged into one thick line and the bundle could not be seen
@@ -610,33 +614,6 @@
     var bandThick = (horizontal ? hourH : hourW) + 8 * S;
     var bandC = bandThick / 2;        // centre of the strip, in cross units
     var bandLo = bandThick + 4 * S;   // first cross coordinate the map may use
-    // fixed at 'label' sizing (not 'title') regardless of what the real
-    // events on the canvas are currently using — a siding is meta/status
-    // info, not a primary event, and letting it scale up with everything
-    // else (up to title--xlarge on a big canvas) made it big enough to
-    // physically overlap its own track's ramp geometry. Measured for real
-    // here (title line + tag line, same as an actual caption's shape)
-    // rather than assumed, so SIDING_LABEL_ROOM below reserves exactly
-    // what a caption really needs instead of guessing and being wrong for
-    // some font/scale combination.
-    var SIDING_TITLE_CLASS = 'label label--base', SIDING_TAG_CLASS = 'label label--small';
-    var capProbe = el('div', 'metro-gen absolute');
-    var capProbeTitle = labelRow('metro-title-text ' + SIDING_TITLE_CLASS + ' font--bold text--black');
-    capProbeTitle.textContent = 'Mg'; // ascender+descender, for a realistic line height
-    var capProbeTag = labelRow(SIDING_TAG_CLASS + ' ' + quietText());
-    capProbeTag.textContent = 'Mg';
-    capProbe.appendChild(capProbeTitle); capProbe.appendChild(capProbeTag);
-    canvas.appendChild(capProbe);
-    var sidingCapH = measure(capProbe).h;
-    capProbe.remove();
-    // room reserved (in bundleHalf, below) between the spine bundle and the
-    // first real lane on a side that has sidings: the raise itself, plus
-    // clearance, plus the caption's own real height — a caption sits
-    // OUTSIDE the raised line (never straddling/centered on it), so a
-    // neighboring lane can't crowd or cross through it, and the raised
-    // line can't run through the caption's own box either.
-    var SIDING_LABEL_ROOM = SIDING_RAISE + SIDING_GAP + sidingCapH;
-
     // ---- how many lines this canvas can actually carry -------------------
     //
     // A line needs its own stretch of the cross axis: the line itself, the
@@ -667,13 +644,11 @@
         if (load[i.owner] != null) load[i.owner]++;
         (i.co_owners || []).forEach(function (k) { if (load[k] != null) load[k] += 0.5; });
       });
-      (SIDINGS || []).forEach(function (st) { if (load[st.owner] != null) load[st.owner] += 0.25; });
       var keep = LEGEND.slice().sort(function (a, b) { return load[b.key] - load[a.key]; }).slice(0, maxLines);
       var kept = {};
       keep.forEach(function (p) { kept[p.key] = true; });
       droppedLines = LEGEND.length - keep.length;
       LEGEND = LEGEND.filter(function (p) { return kept[p.key]; });
-      SIDINGS = SIDINGS.filter(function (st) { return kept[st.owner]; });
     })();
 
     // ---- tracks: side A = 'left' (up / left of axis), side B = 'right'
@@ -688,9 +663,6 @@
         p._c = sign * p._dist;
         p._sign = sign;
         p._sideKey = s;
-        // raw minute-range sidings for this track — converted to axis-unit
-        // segments once aFor() exists, below
-        p._sidings = SIDINGS.filter(function (st) { return st.owner === p.key; }).sort(function (a, b) { return a.start_min - b.start_min; });
         trackByKey[p.key] = p;
       });
     });
@@ -700,7 +672,7 @@
       // re-solves them per attempt rather than packing at a fixed pitch
       var far = 0;
       sides[s].forEach(function (p) {
-        far = Math.max(far, p._dist + NODE_R + (p._sidings.length ? SIDING_RAISE + SIDING_GAP : 0));
+        far = Math.max(far, p._dist + NODE_R);
       });
       return far;
     }
@@ -880,14 +852,11 @@
     var axisContent = [];
     METRO.items.forEach(function (i) {
       if (i.type !== 'event' || i.start_min == null) return;
+      // An all-day event is deliberately day-wide: it must not decide what
+      // the busy part of a day is, or one holiday would say the whole day
+      // is busy and there would be nothing left to compress.
+      if (i.all_day) return;
       axisContent.push({ start_min: i.start_min, end_min: i.end_min == null ? i.start_min : i.end_min });
-    });
-    // an all-day siding is deliberately day-wide: it must not decide what
-    // the busy part of a day is, or one holiday would say the whole day is
-    // busy and there would be nothing left to compress
-    SIDINGS.forEach(function (st) {
-      if (st.all_day) return;
-      axisContent.push({ start_min: st.start_min, end_min: st.end_min });
     });
     var winLabel = ROOT.querySelector('.metro-window');
     // ---- line names: every line begins at its own named terminus, and the
@@ -1002,64 +971,9 @@
     // ---- sidings: convert each track's raw minute ranges to clamped
     // axis-unit segments now that aFor()/axisStart/axisEnd exist.
     //
-    // An all-day-derived siding's [start,end] is DAY_START..DAY_END, so it
-    // clamps to the full visible axis just like any other siding — it's
-    // meant to read as "the whole day", not a short flag. Real events on
-    // the same line still branch off the raised segment normally
-    // (e._trackDist/e._trackDistEnd factor in sidingRaiseAt at that
-    // event's own position), so a busy early morning doesn't need the
-    // all-day span to get out of its way.
-    LEGEND.forEach(function (p) {
-      p._sidings = p._sidings.map(function (st) {
-        var a0 = clamp(aFor(st.start_min), axisStart, axisEnd), a1 = clamp(aFor(st.end_min), axisStart, axisEnd);
-        return { a0: a0, a1: a1, title: st.title, location: st.location || null, allDay: !!st.all_day, group: st.group || null, toward: 1 };
-      }).filter(function (s) { return s.a1 > s.a0; });
-    });
-    // A SHARED siding pulls its lines TOGETHER. A siding normally kinks a
-    // line away from the spine, and two people at the same school kinking
-    // away from each other looked like two unrelated sidings that happened
-    // to share a name. Converging instead — the inner line steps out, the
-    // outer line steps in — draws them alongside each other for the length
-    // of the thing they are both at, which is what "they are both here"
-    // looks like on a transit map.
-    //
-    // Decided from board order, not from cross positions, because those are
-    // still being solved when this is read. Members on opposite sides of the
-    // spine keep the ordinary outward kink: converging across the middle
-    // would take them through the hour river.
-    (function orientSharedSidings() {
-      var groups = {};
-      LEGEND.forEach(function (p) {
-        p._sidings.forEach(function (s) {
-          if (s.group) (groups[s.group] = groups[s.group] || []).push({ p: p, s: s });
-        });
-      });
-      Object.keys(groups).forEach(function (g) {
-        var mem = groups[g];
-        if (mem.length < 2) return;
-        if (mem.some(function (m) { return m.p._sign !== mem[0].p._sign; })) return;
-        mem.sort(function (a, b) { return Math.abs(a.p.track_offset) - Math.abs(b.p.track_offset); });
-        var half = (mem.length - 1) / 2;
-        var tracks = mem.map(function (m) { return m.p; });
-        mem.forEach(function (m, i) {
-          // the whole group, so sidingGeom can space them as a set rather
-          // than as a chain of pairs: closing each line on its neighbour
-          // leaves the far ones further apart than the near ones, and what
-          // this has to draw is a bundle of parallel rails
-          m.s.mem = tracks;
-          m.s.toward = i <= half ? 1 : -1;
-          // Who this one is closing on, so the kink can be capped at half
-          // the gap between them. Unclamped they each moved a full siding
-          // raise and, on a board where the lines sit closer together than
-          // that, swapped places and crossed.
-          var other = mem[m.s.toward > 0 ? i + 1 : i - 1];
-          m.s.closingOn = other ? other.p : null;
-        });
-      });
-    })();
     // the raise (in c-units) a track's own line sits at, at a given axis
     // position — 0 outside any siding, ramping up/down across the same
-    // 45° kink sidingPath() actually draws (not a flat step), so an
+    // 45° kink trunkPath() actually draws (not a flat step), so an
     // event whose ring lands inside the kink itself — not just the flat
     // middle — still sits exactly on the drawn line, not floating off it
     // How a line leaves its baseline for a corridor, and comes back.
@@ -1071,7 +985,7 @@
     // horizontal, turns in the middle and arrives horizontal again, which is
     // how a track actually diverges.
     //
-    // It is the SINGLE source of truth for where a line is: sidingPath
+    // It is the SINGLE source of truth for where a line is: trunkPath
     // samples this function rather than assuming a shape, so the drawn path
     // and every ring, tick and caption placed with lineCAt agree by
     // construction, whatever easing this returns.
@@ -1103,104 +1017,6 @@
       return LEGEND.some(function (q) {
         return mem.indexOf(q) < 0 && q._c > lo && q._c < hi;
       });
-    }
-    function sidingGeom(p, s) {
-      var span = s.a1 - s.a0;
-      // A third of the span to turn in, a third running, a third to turn
-      // back. At half the span the two turns met in the middle and the
-      // corridor was a funnel: the lines came together and left again
-      // without ever running alongside, which is the one thing the drawing
-      // is for.
-      var rampA = Math.min(SIDING_RAISE, span / 3);
-      var rr = rampA;
-      // A synthetic siding (route mode, below) says how deep it goes: it is
-      // the line visiting one of its own lanes rather than stepping a fixed
-      // distance aside, so the depth is the lane's and the ramp is eased to
-      // match, the way a two-line corridor's is.
-      if (s.raise != null) {
-        rr = Math.abs(s.raise);
-        rampA = Math.min(span / 3, Math.max(rr * 1.1, CORNER));
-      }
-      var tw = packedFallback ? 1 : s.toward;
-      var shift = 0;
-      if (s.mem && s.mem.length > 1 && !packedFallback) {
-        // The group leaves its baselines and runs as a BUNDLE just outside
-        // the outermost of them: parallel rails, CORRIDOR_GAP of paper
-        // between each pair, in the same order they already run in so no
-        // line ever has to pass another.
-        //
-        // Placed outside rather than between: at three px there is no room
-        // between them to be, and a bundle struck through the middle of the
-        // group would put the shared event on top of whichever line is in
-        // the middle of it.
-        var mem = s.mem.slice().sort(function (a, b) { return a._c - b._c; });
-        if (p._sign < 0) mem.reverse();          // work outward, whichever way that is
-        var w = mem.map(function (q) { return Math.max(2, q.line_width) * S * weightScale; });
-        // Centred on where the group already sits, so it moves as little
-        // as it can. Placed beyond the outermost line instead, the bundle
-        // was faithful to the sketch and unusable on a real board: the
-        // innermost line had to fall the whole depth of the map to reach
-        // it, and the drop crossed every lane on the way down.
-        var pitch = [], total = 0;
-        for (var k = 1; k < mem.length; k++) {
-          var g2 = CORRIDOR_GAP + (w[k - 1] + w[k]) / 2;
-          pitch.push(g2); total += g2;
-        }
-        var centre = (mem[0]._c + mem[mem.length - 1]._c) / 2;
-        var pos = [], acc = centre - p._sign * total / 2;
-        for (var k2 = 0; k2 < mem.length; k2++) {
-          if (k2) acc += p._sign * pitch[k2 - 1];
-          pos.push(acc);
-        }
-        var mine = -1;
-        for (var m = 0; m < mem.length; m++) if (mem[m] === p) mine = m;
-        if (mine >= 0) {
-          var delta = pos[mine] - p._c;
-          rr = Math.abs(delta);
-          tw = (delta * p._sign) < 0 ? -1 : 1;
-          // TWO SHAPES ONLY, the same rule every branch on this board
-          // follows: a shallow move takes the eased ramp, anything deeper
-          // goes fully vertical at its own minute, nothing in between.
-          //
-          // WHICH of the two is a question about room, not about being a
-          // corridor. A line dropping into a bundle used to take the
-          // vertical always, because a drop is usually deep and an event
-          // is usually short. Where the event is long enough to hold a
-          // ramp as long as the move is deep, the ramp is the better
-          // drawing: the line leans into the bundle and leans out again,
-          // which is what the shape means, and it is the shape a siding of
-          // its own would get for the same move.
-          if (rr > rampA) {
-            // The eased ramp is for the SIMPLE corridor and nothing else:
-            // exactly two lines, next to each other with nobody in
-            // between, and an event long enough to hold a turn as long as
-            // the move is deep. Two lines leaning together and apart again
-            // is a shape a reader can follow at a glance; three or more,
-            // or a pair with somebody between them, is a comb, and a comb
-            // wants its verticals so the rungs stay legible and so the
-            // drops that cross a line cross it square rather than slicing
-            // through it at a shallow angle.
-            var pair = mem.length === 2 && !crossesBetween(mem);
-            var eased = Math.min(span / 3, rr * 1.2);
-            rampA = (pair && eased >= rr * 0.8) ? eased
-              // Otherwise the vertical, and its turn is a proper ELBOW: a
-              // corner radius of run where the event can spare it, so the
-              // line turns through a quarter circle instead of breaking at
-              // a point. span/3 gave a shorter turn than the radius the
-              // rest of the map rounds its corners with, which read as a
-              // kink on anything under an hour.
-              : Math.min(CORNER, span * 0.45);
-          }
-          // STAGGERED, so the drops nest instead of stacking on one minute.
-          // The line nearest the bundle turns first and the one furthest
-          // from it turns last, which means every vertical sits to the
-          // right of the point where the lines below it have already left.
-          // Nothing crosses anything, by construction rather than by
-          // checking afterwards.
-          shift = (mem.length - 1 - mine) * Math.min(CORNER * 1.4, span / (mem.length * 3));
-        }
-      }
-      return { rampA: rampA, rr: rr, tw: tw, shift: shift };
     }
     // ROUTE MODE: one continuous path per line, instead of a kink per event.
     //
@@ -1399,7 +1215,7 @@
       var tail = routeSpan(p, hs.length);
       return tail.base + octAt(a - tail.a0, tail.d, tail.r, tail.R);
     }
-    function sidingRaiseAt(p, a) {
+    function raiseAt(p, a) {
       if (p._route && p._route.length) return routeRaiseAt(p, a);
       return 0;
     }
@@ -1429,7 +1245,7 @@
     function bandKeyAt(p, a) { var q = posAt(p, a); return q ? q.bandKey : p.key; }
     // How far this line has moved from where it started, at this point on
     // the axis. Eased, so the exchange is a curve rather than a corner:
-    // sidingPath samples anywhere the height is changing, so adding it here
+    // trunkPath samples anywhere the height is changing, so adding it here
     // is all it takes for the trunk to be drawn as one.
     function weaveDelta(p, a) {
       var w = p._weave;
@@ -1440,7 +1256,7 @@
     }
     function spreadCFor(p) { return spineC + p._c; }
     function lineCAt(p, a) {
-      var flat = spineC + p._c + weaveDelta(p, a) + p._sign * sidingRaiseAt(p, a);
+      var flat = spineC + p._c + weaveDelta(p, a) + p._sign * raiseAt(p, a);
       if (!fan) return flat;
       var spreadC = spreadCFor(p);
       var delta = Math.abs(spreadC - (spineC + p._c));
@@ -1448,7 +1264,7 @@
       var u = d * (a - fanStart);
       if (u <= 0) return spreadC;              // out past the fan: flat at the spread position
       if (!delta || u >= delta) return flat;   // inside the map proper
-      var atMerge = spineC + p._c + p._sign * sidingRaiseAt(p, fanStart + d * delta);
+      var atMerge = spineC + p._c + p._sign * raiseAt(p, fanStart + d * delta);
       return spreadC + (atMerge - spreadC) * (u / delta);
     }
 
@@ -1663,6 +1479,42 @@
       // which is why one used to do for both.
       e._lead = outermost.key;
       e._laneOwner = bandKeyAt(outermost, e._nodeA);
+      // A LONG EVENT IS DRAWN ON THE MAIN TRACK.
+      //
+      // A school day, a shift, a desk booking, a delivery. These used to be
+      // SIDINGS: a second kind of thing with its own array, its own
+      // geometry, its own caption pass and its own marks, whose whole
+      // effect was to take the line off its own lane for the length of it.
+      // Nine hours of "Desk booking" displaced Homer's entire day for a
+      // fact about where he was sitting, and a line that spends the day off
+      // its lane is a line whose name at the head of the board points at
+      // empty paper. Given a lane instead, it is worse: one branch holds a
+      // whole lane open from breakfast to teatime and everything else on
+      // that line is pushed out past it.
+      //
+      // So it is drawn where the line already is. The ring, the end tick
+      // and the caption say where they are and for how long, the track
+      // stays where its name says it is, and the person's own events
+      // inside it branch off it as any own event does.
+      //
+      // Shared, it is not this at all: two children at the same school all
+      // day are together, and together is a convergence, which is the
+      // ordinary drawing for a shared event of any length.
+      e._long = e.all_day || (e.end_min - e.start_min) >= LONG_MIN;
+      e._onTrack = !!e._long && involved.length < 2;
+      // and its marks sit where the line IS, which is what `_onRoute`
+      // already means for the other event that has no rail of its own.
+      //
+      // AND ITS NAME GETS A LEADER, for the same reason a convergence's
+      // does: the caption still goes in a lane, because that is where the
+      // board keeps words and the whole clash apparatus lives there, but
+      // there is no rail running out to it any more. A name in a lane with
+      // nothing under it belongs to nobody; the thin tick back to the line
+      // is what a transit map draws for exactly this.
+      if (e._onTrack) {
+        e._onRoute = true;
+        e._capLead = true;
+      }
     });
     }
     staticFacts();
@@ -1685,8 +1537,8 @@
         // sidings, its ring sits on the raised siding level segment of
         // the line, not the flat baseline — so the branch has to originate
         // (or merge back) from that raised height too
-        e._trackDist = distAt(lo, e._nodeA) + sidingRaiseAt(lo, e._nodeA) + NODE_R;   // branch origin (edge of the ring/capsule)
-        e._trackDistEnd = distAt(lo, e._endA) + sidingRaiseAt(lo, e._endA) + NODE_R;  // merge target (same line, after the event)
+        e._trackDist = distAt(lo, e._nodeA) + raiseAt(lo, e._nodeA) + NODE_R;   // branch origin (edge of the ring/capsule)
+        e._trackDistEnd = distAt(lo, e._endA) + raiseAt(lo, e._endA) + NODE_R;  // merge target (same line, after the event)
       });
     }
     recomputeTrackDists();
@@ -1734,6 +1586,8 @@
     // what each track wants before the bands are sized).
     function placeSide(sideKey, slots, obstacles, onlyOwner) {
       var maxLanes = slots.length;
+      // whether this side has a long event wanting the gap kept for it
+      var trackLong = visible.some(function (e) { return e._onTrack && e._sideKey === sideKey; });
       var evs = visible.filter(function (e) { return e._sideKey === sideKey && (!onlyOwner || e._laneOwner === onlyOwner); }).sort(function (a, b) { return a._nodeA - b._nodeA; });
       // The earlier event normally keeps the inner lane, so its label sits
       // next to its own time. But when the next event's ring falls UNDER
@@ -1823,6 +1677,16 @@
       // take it.
       function settle(e, k, dir, allowCross) {
         if (slots[k].owner && slots[k].owner !== e._laneOwner) return null; // another track's band
+        // THE INWARD RUNG BELONGS TO THE LONG EVENT, and the outward
+        // ladder belongs to the branches. A long event is drawn on the line
+        // and has no branch to hang a name off, so the rung in the gap is
+        // the only place its name can be; a branch has the whole ladder
+        // outward and does not need to take it. Not applied while MEASURING
+        // what a track wants: the probe ladder has no sides on it, and an
+        // event that can find no rung there is counted as dropped.
+        if (!onlyOwner && trackLong) {
+          if (e._onTrack !== (laneSide(k) < 0)) return null;
+        }
         // dy (the diagonal's axis reach) is the real distance from this
         // event's own ring out to the rung, so the branch is drawn exactly
         // on the lane the collision grid checked it against. With rungs no
@@ -1967,7 +1831,7 @@
         // at the event's own minute instead — the shape that needs no run.
         var leadTrack = trackByKey[e._lead] || e._p;
         if (diagFrom !== elbow
-            && Math.abs(sidingRaiseAt(leadTrack, diagFrom) - sidingRaiseAt(leadTrack, elbow)) > 0.5) {
+            && Math.abs(raiseAt(leadTrack, diagFrom) - raiseAt(leadTrack, elbow)) > 0.5) {
           diagFrom = elbow;
         }
         // And it needs board to leave from. A 45° ramp for an event in the
@@ -2223,12 +2087,20 @@
       // How far past a track's baseline its own first lane sits. Inside a
       // band a lane only has to clear its OWN line and rings.
       function laneBase(k, t) {
-        return k.nodeR + Math.max(k.lineGap, k.minDiag) + (t.sidings ? k.sidingRaise + k.sidingGap : 0);
+        return k.nodeR + Math.max(k.lineGap, k.minDiag);
       }
-      // A siding caption sits ON the baseline, so a track carrying one
-      // needs room on the inward side too, for the half of the caption
-      // that reaches back toward the spine.
-      function capIn(k, t) { return t.sidings ? k.sidingCapH / 2 + k.sidingGap : 0; }
+      // A LONG EVENT'S NAME NEEDS A RUNG OF ITS OWN, ON THE INWARD SIDE.
+      //
+      // A long event is drawn ON the line, so it has no branch running out
+      // to a lane and its name has to sit against the line itself. Outward
+      // is where that line's branches already write, so the name goes
+      // inward, into the gap between this line and the one inside it -- and
+      // the gap has to be wide enough to hold it, which is the whole point:
+      // "why is Desk booking not south of Homer's line" is the same
+      // question as "why is there not a caption's worth of board between
+      // Homer and Marge", and the answer to both is that nobody was asking
+      // for it.
+      function longIn(t) { return t.long || 0; }
 
       // One side, laid out as BANDS: each track gets its baseline, its
       // siding room, then its own lanes, and the next track starts beyond
@@ -2250,7 +2122,7 @@
         // would otherwise sit a double pitch apart, which reads as a
         // missing line rather than as the middle of the map.
         tracks.forEach(function (t, i) {
-          var gap = (i ? k.trackStep + sepPx : (k.trackStep + sepPx) / 2) + capIn(k, t);
+          var gap = (i ? k.trackStep + sepPx : (k.trackStep + sepPx) / 2);
           var want = lanesFor(t);
 
           // A15: A TRACK CARRIES EVENTS ON BOTH SIDES OF ITS LINE.
@@ -2291,6 +2163,19 @@
           // 43 = 207px with everything on one side, and 65.4 + 22.4 + 61 +
           // 43 = 192px with one rung inward. The wider gap costs 45px and
           // buys back a 61px lane step.
+          // A CORRIDOR STILL KEEPS A TRACK OFF ITS OWN INWARD SIDE.
+          //
+          // The reason on record is stale -- it was a SIDING caption, placed
+          // outside the lane grid in exactly the gap an inward rung wants,
+          // that wrote "Assembly" through "School Run", and sidings are
+          // gone. But lifting it outright is worse than leaving it: every
+          // line on a family board is in somebody's dinner, so every line
+          // then asked for the gap beside it at once, the bands stopped
+          // fitting and the whole board dropped into the packed fallback
+          // with six events lost. What this wants is a split chosen by
+          // whether the label CLASHES, not by band depth alone, which the
+          // solver cannot see: it is arithmetic on sizes and the clashes
+          // are only known once the labels are placed.
           var inN = 0;
           if (opts.bothSides && want > 1 && !t.shared) {
             var bestCost = gap + rungRoom(k, t, want, stepPx), bestN = 0;
@@ -2304,6 +2189,9 @@
             }
             inN = bestN;
           }
+          // ...and one rung inward regardless for a long event's name. Not
+          // a cost question: there is nowhere else for it to be.
+          inN = Math.max(inN, Math.min(want, longIn(t)));
           inward[t.key] = inN;
           // What is left after the inward rungs have taken their share of
           // the gap; never less than the gap itself, so a track that wants
@@ -2362,7 +2250,7 @@
           dist[t.key] = acc;
           bandEnd[t.key] = acc;
         });
-        var kink = tracks.some(function (t) { return t.sidings; }) ? k.sidingRaise + k.sidingGap : 0;
+        var kink = 0;
         var start = acc + k.nodeR + kink + k.laneBasePacked;
         for (var j = 0; j < nLanes; j++) slots.push({ dist: start + j * stepPx, owner: null });
         return {
@@ -2698,7 +2586,7 @@
         return best;
       }
 
-      return { solve: solve, laneBase: laneBase, capIn: capIn, buildSide: buildSide, weave: weave };
+      return { solve: solve, laneBase: laneBase, buildSide: buildSide, weave: weave };
     })();
     // ==== CROSS_SOLVER_END ====
 
@@ -2721,7 +2609,7 @@
     function crossConsts() {
       return {
         trackStep: TRACK_STEP, lineGap: LINE_GAP, laneGap: LANE_GAP, minDiag: MIN_DIAG,
-        nodeR: NODE_R, sidingRaise: SIDING_RAISE, sidingGap: SIDING_GAP, sidingCapH: sidingCapH,
+        nodeR: NODE_R,
         maxLabelThick: maxLabelThick, laneStep: laneStep, laneBasePacked: LANE_BASE,
         nameH: fan ? fan.nameH : 0, edge: EDGE, alertBand: alertBand,
         depth: crossPx, bandLo: bandLo,
@@ -2736,14 +2624,14 @@
     // inflated its band by a kink it never makes, and a four-line day that
     // had a band each was tipped into the packed fallback by three family
     // dinners.
-    function ownSidings(p) {
+    function longOnTrack(p) {
       var n = 0;
-      p._sidings.forEach(function (s) { if (!s.mem || s.mem.length < 2) n++; });
+      visible.forEach(function (e) { if (e._onTrack && e._p === p) n++; });
       return n;
     }
     function crossTracks(sideKey) {
       return sides[sideKey].map(function (p) {
-        return { key: p.key, sidings: ownSidings(p), shared: sharedCount(p) };
+        return { key: p.key, long: longOnTrack(p), shared: sharedCount(p) };
       });
     }
     // How many shared events this track is part of. A corridor is planned
@@ -2762,7 +2650,7 @@
       return n;
     }
     // the same shape CrossSolver reads, so the two cannot drift
-    function laneBase(p) { return CrossSolver.laneBase(crossConsts(), { sidings: ownSidings(p) }); }
+    function laneBase(p) { return CrossSolver.laneBase(crossConsts(), { long: longOnTrack(p) }); }
 
     // pass 1: what does each track want on its own, with room to spare?
     //
@@ -3216,61 +3104,13 @@
       // convergence says — this line is over here, from this minute to that
       // one — so it belongs in the same list and gets the same octilinear
       // approach. Kept in a second model of its own it was simply lost:
-      // `sidingRaiseAt` answered from the route and ignored the sidings
+      // `raiseAt` answered from the route and ignored the sidings
       // completely, so on a board with both, a siding was drawn against a
       // trunk that had never heard of it and ended 45px off its own line.
-      // A SHORTER SIDING WINS INSIDE A LONGER ONE.
-      //
-      // Two can cover the same minutes -- Bart is on Spring Break all day
-      // and at school from half past eight -- and two holds over one
-      // stretch leave `routeRaiseAt` answering with whichever it reaches
-      // first. Spring Break came first and covered everything, so Bart
-      // never came down to the school corridor his sister was in and the
-      // two of them were drawn as if they went to different schools.
-      //
-      // The more specific one is the shorter one, so they are laid down
-      // longest first and each new hold cuts the ones already there. Same
-      // rule the convergences use, for the same reason.
-      function addHold(p, h) {
-        var keep = [];
-        (p._route || []).forEach(function (o) {
-          if (h.a1 <= o.a0 || o.a1 <= h.a0) { keep.push(o); return; }
-          if (o.a0 < h.a0) keep.push({ a0: o.a0, a1: h.a0, lvl: o.lvl, siding: true });
-          if (o.a1 > h.a1) keep.push({ a0: h.a1, a1: o.a1, lvl: o.lvl, siding: true });
-        });
-        keep.push(h);
-        keep.sort(function (a, b) { return a.a0 - b.a0; });
-        p._route = keep;
-      }
       LEGEND.forEach(function (p) {
         p._octs = null;
         p._route = null;
         p._homeLvl = null;
-        (p._sidings || []).slice().sort(function (a, b) {
-          return (b.a1 - b.a0) - (a.a1 - a.a0);
-        }).forEach(function (st) {
-          var g = sidingGeom(p, st);
-          // THE HOLD IS THE FLAT PART, and the turns either side of it stay
-          // INSIDE the siding's own span. A siding is a stretch of the day,
-          // not a change of address: the line has to be back on its
-          // baseline by the time the span ends, or a siding running the
-          // whole day leaves the trunk parked one lane off its own terminal
-          // bars at both ends of the board.
-          var lvl = g.rr * g.tw;
-          if (!isFinite(lvl)) return;
-          // ...and the inset is however long an octilinear turn of this
-          // depth actually takes, not the siding's own idea of a ramp.
-          // Short by a few pixels, the trunk was still ten off its baseline
-          // where the siding ended and no longer met the line it runs beside.
-          // AN ALL-DAY SIDING HAS NO ENDS TO TURN AT. It runs the width of
-          // the visible day by definition, so insetting for ramps takes the
-          // line off its own band at both edges of the board and the band is
-          // drawn longer than the line that is meant to be in it.
-          var inset = st.all_day ? 0 : Math.max(g.rampA, octRun(lvl, octRadius(lvl)));
-          var b0 = st.a0 + g.shift + inset, b1 = st.a1 - g.shift - inset;
-          if (!(b1 > b0)) return;
-          addHold(p, { a0: b0, a1: b1, lvl: lvl, siding: true });
-        });
       });
 
       visible.forEach(function (e) {
@@ -3299,7 +3139,7 @@
         // the device was drawing.
         var clash = want.some(function (w) {
           return (w.q._route || []).some(function (h) {
-            return !h.siding && e._nodeA <= h.a1 && h.a0 <= e._endA;
+            return e._nodeA <= h.a1 && h.a0 <= e._endA;
           });
         });
         if (clash) return;
@@ -3321,39 +3161,7 @@
         // occupies and two of them a corner apart touch.
         var STAGGER = CORNER * 2.2;
         want.forEach(function (w) {
-          // The corridor takes precedence for its own span, so the siding
-          // gives way around it rather than overlapping it: two holds over
-          // the same minutes would leave `routeRaiseAt` answering with
-          // whichever it reached first, and the line would be drawn in one
-          // place and marked in another.
-          var keep = [];
-          (w.q._route || []).forEach(function (h) {
-            if (!h.siding || e._endA <= h.a0 || h.a1 <= e._nodeA) { keep.push(h); return; }
-            // AS MUCH ROOM FOR THE RAMP AS THE SIDING CAN SPARE.
-            //
-            // Cut flush, the line steps out of Spring Break into dinner and
-            // straight back with nowhere to turn, so both moves come out as
-            // right angles -- the thing that is meant to be the last resort,
-            // happening twice in an hour. Cut by the full length a 45 wants,
-            // the siding loses its own tail whenever the event lands near
-            // the end of it and never returns to the level its band and
-            // caption are drawn at.
-            //
-            // Neither, then: each side gives up what a 45 needs or half of
-            // what it has, whichever is less. An all-day siding has hours on
-            // both sides and pays the full price without noticing; a short
-            // one keeps half of itself and takes a steeper turn, which is
-            // the trade in the right direction.
-            var want = octRun(w.lvl - h.lvl, octRadius(w.lvl - h.lvl));
-            if (h.a0 < e._nodeA) {
-              var cutL = Math.min(want, (e._nodeA - h.a0) / 2);
-              keep.push({ a0: h.a0, a1: e._nodeA - cutL, lvl: h.lvl, siding: true });
-            }
-            if (h.a1 > e._endA) {
-              var cutR = Math.min(want, (h.a1 - e._endA) / 2);
-              keep.push({ a0: e._endA + cutR, a1: h.a1, lvl: h.lvl, siding: true });
-            }
-          });
+          var keep = (w.q._route || []).slice();
           keep.push({ a0: e._nodeA, a1: e._endA, lvl: w.lvl, shared: true,
                       lead: w.rank * STAGGER, trail: w.rank * STAGGER });
           keep.sort(function (a, b) { return a.a0 - b.a0; });
@@ -3807,8 +3615,8 @@
     // a track's own line/rings kink out to siding level for the span of
     // any siding it passes through, then back to the flat baseline —
     // waypoints in [fromA,toA] order, ready for roundedPath
-    function sidingPath(baseC, sign, fromA, toA, p) {
-      // Every breakpoint's height comes from sidingRaiseAt itself, not an
+    function trunkPath(baseC, sign, fromA, toA, p) {
+      // Every breakpoint's height comes from raiseAt itself, not an
       // assumption that fromA/toA sit at baseline — a clip that lands
       // mid-ramp or mid-shelf (the fan's own merge point can, when a
       // siding's true span reaches all the way to the axis edge, e.g. a
@@ -3840,15 +3648,11 @@
           });
         }
       }
-      p._sidings.forEach(function (s) {
-        var gg = sidingGeom(p, s), ra = gg.rampA, b0 = s.a0 + gg.shift, b1 = s.a1 - gg.shift;
-        [b0, b0 + ra, b1 - ra, b1].forEach(function (a) { if (a > lo && a < hi) marks.push(a); });
-      });
       marks.sort(function (a, b) { return a - b; });
       // Walk the breakpoints, and SAMPLE anywhere the line is changing
       // height rather than drawing a straight line between the ends of the
       // move. The samples are what make the eased ramp a curve, and taking
-      // them from sidingRaiseAt is what keeps the curve and the markers on
+      // them from raiseAt is what keeps the curve and the markers on
       // it in agreement: there is no second description of the shape to get
       // out of step. One layout px is below the resolution of either panel,
       // and roundedPath leaves a step that small alone rather than filleting
@@ -3860,14 +3664,14 @@
         if (i && a - marks[i - 1] < 0.01) continue;   // a boundary two sidings share
         if (i) {
           var prev = marks[i - 1];
-          if (Math.abs(sidingRaiseAt(p, a) - sidingRaiseAt(p, prev)) > 0.01
+          if (Math.abs(raiseAt(p, a) - raiseAt(p, prev)) > 0.01
               || Math.abs(weaveDelta(p, a) - weaveDelta(p, prev)) > 0.01) {
             for (var t = prev + step; t < a - 0.01; t += step) {
-              out.push([t, baseC + weaveDelta(p, t) + sign * sidingRaiseAt(p, t)]);
+              out.push([t, baseC + weaveDelta(p, t) + sign * raiseAt(p, t)]);
             }
           }
         }
-        out.push([a, baseC + weaveDelta(p, a) + sign * sidingRaiseAt(p, a)]);
+        out.push([a, baseC + weaveDelta(p, a) + sign * raiseAt(p, a)]);
       }
       return out;
     }
@@ -3915,45 +3719,6 @@
       });
     })();
 
-    var capGroups = {};
-    LEGEND.forEach(function (p) {
-      p._sidings.forEach(function (s) {
-        if (!s.group) return;
-        (capGroups[s.group] = capGroups[s.group] || []).push(p);
-      });
-    });
-    // A siding shared by two lines is a CORRIDOR: they close on each other
-    // for the length of it, and the bend is the whole point. A siding only
-    // one person is at is not — bending a line down for nine hours of "Desk
-    // booking" displaces that person's entire day off its own baseline for
-    // a fact about where they are sitting.
-    function sharedSiding(s) { return !!(s.group && capGroups[s.group] && capGroups[s.group].length > 1); }
-    // So a solo siding is drawn as a SIDING instead: the main line carries
-    // straight on at its own height and the siding is the loop that leaves
-    // it and comes back. That is the express/local pair a transit map draws,
-    // it keeps the baseline hierarchy — one line, one height, all day — and
-    // it costs nothing in truth, since the kink already runs exactly the
-    // siding's span.
-    // Where this line would run at `a` if it had not kinked out for a
-    // siding: its drawn position less whatever the kink lifted it by. Taken
-    // as a constant instead, the siding was drawn at the line's FANNED
-    // position (where its name is) while the trunk either side of it ran at
-    // the line's real one, so the two met with a step in the middle of the
-    // rail: Homer's line was visibly interrupted where "Desk booking"
-    // began. It also blends correctly inside the fan, which a constant
-    // cannot do.
-    function flatCAt(p, a) { return lineCAt(p, a) - p._sign * sidingRaiseAt(p, a); }
-    // Which siding has the line at `a`. sidingRaiseAt takes the FIRST
-    // segment whose span contains the position and returns, so where two
-    // sidings on one line overlap only one of them moves the line at all.
-    // Read the same way here so the two cannot disagree about which.
-    function governingSiding(p, a) {
-      var segs = p._sidings;
-      for (var i = 0; i < segs.length; i++) {
-        if (a >= segs[i].a0 && a <= segs[i].a1) return segs[i];
-      }
-      return null;
-    }
 
     // ---- tracks (full bleed), each starting at its named terminus when fanned
     // Every name already placed, so the next one can keep off it.
@@ -4074,7 +3839,7 @@
         p._nameC1 = p._nameC0 + nameThick;
         placedNames.push({ a0: nameA, a1: nameA + nameLen, c0: p._nameC0, c1: p._nameC1 });
         var far = d > 0 ? axisEnd : axisStart;
-        var legPts = sidingPath(c, p._sign, Math.min(merge, far), Math.max(merge, far), p);
+        var legPts = trunkPath(c, p._sign, Math.min(merge, far), Math.max(merge, far), p);
         if (d < 0) legPts = legPts.slice().reverse();
         // Map through toXY like every other path: these points are in
         // (axis, cross), which only coincides with (x, y) lying down. Fed
@@ -4104,7 +3869,7 @@
         leadEl.setAttribute(ROLE_ATTR, 'track'); leadEl.setAttribute(OWNER_ATTR, p.key);
         paintLine(leadEl, p, S, svg, 0);
         trunkRuns(p, Math.min(merge, far), Math.max(merge, far)).forEach(function (run) {
-          var rp = sidingPath(c, p._sign, run[0], run[1], p).map(function (pt) { return toXY(pt[0], pt[1]); });
+          var rp = trunkPath(c, p._sign, run[0], run[1], p).map(function (pt) { return toXY(pt[0], pt[1]); });
           if (rp.length < 2) return;
           var seg = svgEl('path', { d: roundedPath(rp, CORNER) });
           seg.setAttribute(ROLE_ATTR, 'track'); seg.setAttribute(OWNER_ATTR, p.key);
@@ -4126,7 +3891,7 @@
         // minute, so that the dash phase of a branch picks up where its
         // trunk left off. It has to be one unbroken path for that to mean
         // anything, and the visible line is now several.
-        var whole = svgEl('path', { d: roundedPath(sidingPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
+        var whole = svgEl('path', { d: roundedPath(trunkPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
         whole.style.fill = 'none'; whole.style.stroke = 'none';
         whole.setAttribute(ROLE_ATTR, 'course');
         whole.setAttribute(OWNER_ATTR, p.key);
@@ -4142,7 +3907,7 @@
         // meet a convergence cuts through every lane between -- and each one
         // was drawn straight over whatever was in the way.
         trunkRuns(p).forEach(function (run) {
-          var pts = sidingPath(c, p._sign, run[0], run[1], p).map(function (pt) { return toXY(pt[0], pt[1]); });
+          var pts = trunkPath(c, p._sign, run[0], run[1], p).map(function (pt) { return toXY(pt[0], pt[1]); });
           if (pts.length < 2) return;
           var seg = svgEl('path', { d: roundedPath(pts, CORNER) });
           seg.setAttribute(ROLE_ATTR, 'track'); seg.setAttribute(OWNER_ATTR, p.key);
@@ -4151,387 +3916,6 @@
           paintLine(seg, p, S, svg, phaseAfter(p, trunkLenAt(p, run[0]) || 0));
         });
       }
-    });
-    // ---- siding markers: a hollow ring at each end, sitting exactly where
-    // the kink itself starts/ends (the true, unmoved boundary time — same
-    // convention as every other ring in this design), plus a caption built
-    // the SAME way a real event's label is (title + location, current text
-    // tier, opaque white background) — so it matches everything else on the
-    // map instead of reading as an afterthought. Positioned OUTSIDE the
-    // raised line entirely (past the shelf, away from the spine) rather
-    // than straddling/centered on it — a box centered on a raise only as
-    // deep as SIDING_RAISE routinely stood taller than the gap actually
-    // was, so the raised line ran right through the caption's own box
-    // (read as the line "clipping" the text) and, on a side with more than
-    // one track, into whatever lane sat just beyond the reserved room too.
-    // Sitting past the shelf instead means the caption only ever needs
-    // clearance from the ONE flat line directly below it, guaranteed by
-    // SIDING_LABEL_ROOM (computed from this same real measured height).
-    // One event, one caption. Two children at the same school are two kinks
-    // — they really are both there — but it is one School Day, and drawn
-    // once per line it appeared twice, on lines that could be at opposite
-    // ends of the board. The caption is drawn once for the group and set
-    // midway between the lines it belongs to, so it reads as theirs jointly
-    // rather than as one child's with a stray copy.
-    var capQueue = [];
-    LEGEND.forEach(function (p) {
-      var baseC = spineC + p._c;
-      p._sidings.forEach(function (s) {
-        var geom = sidingGeom(p, s), raise = geom.rampA;
-        var members = s.group ? capGroups[s.group] : null;
-        var ownsCaption = !members || members[0] === p;
-        // No marker at the kink boundaries. A hollow diamond there claimed
-        // to mark the exact minute a siding starts and ends, and it does
-        // not: the kink is a 45° ramp whose run is a fixed number of pixels,
-        // so where it begins and ends on the axis is a drawing decision, not
-        // a time. The kink itself already shows the span, and the caption
-        // says which siding it is.
-        if (!ownsCaption) return;   // the rings above are per line; the caption is not
-        // metro-caption as well as metro-label: it is cleaned up with the
-        // labels and painted like one, but it is placed by different rules
-        // in a different pass, and a test about captions has to be able to
-        // pick them out of the text on the board.
-        var box = el('div', 'metro-gen metro-label metro-caption absolute text--black');
-        // Lying down a caption may run as long as its siding; standing up
-        // it has only the column between two lines, so cap it there or two
-        // neighbouring sidings write straight over each other.
-        var availW = horizontal ? clamp((s.a1 - s.a0) - raise * 2, 70 * S, maxTitle)
-                                : Math.max(60 * S, colW);
-        var t = labelRow('metro-title-text ' + SIDING_TITLE_CLASS + ' font--bold text--black');
-        t.textContent = s.title;
-        t.style.maxWidth = availW + 'px';
-        clampLines(t, 2);
-        box.appendChild(t);
-        // On a board too small for bands, the second line goes. A siding
-        // caption sits in the space its own kink vacates, and on a packed
-        // board that space is one track-step tall — the location line spills
-        // straight out of it onto the next line's lane, and at 1-bit it is
-        // grey text on a grey rail besides. The title alone still says what
-        // the siding is.
-        if (s.location && !packedFallback) {
-          var loc = labelRow('metro-loc ' + SIDING_TAG_CLASS + ' ' + quietText());
-          loc.textContent = s.location;
-          loc.style.maxWidth = (availW * 1.3) + 'px'; loc.style.overflow = 'hidden'; loc.style.textOverflow = 'ellipsis';
-          box.appendChild(loc);
-        }
-        canvas.appendChild(box);
-        var bm = measure(box);
-        var capA = s.a0 + raise + 3 * S;
-        // An all-day event is the day's landmark on this line — not a stop
-        // the train makes but a place the whole line runs through. It gets
-        // the major-hub marker a transit map uses for its biggest stations:
-        // concentric rings, sat on the line beside the caption.
-        if (s.allDay) {
-          var hubA = Math.min(capA + 2 * S, s.a1 - raise);
-          var hubXY = toXY(hubA, lineCAt(p, hubA));
-          [NODE_R * 1.5, NODE_R * 0.8].forEach(function (r, i) {
-            var hub = svgEl('circle', {
-              cx: hubXY[0], cy: hubXY[1], r: r,
-              'stroke-width': NODE_STROKE * 0.9,
-            });
-            hub.style.stroke = colorFor(p.hue);
-            hub.style.fill = i ? colorFor(p.hue) : PAPER;
-            hub.setAttribute(ROLE_ATTR, 'station-ring'); hub.setAttribute(OWNER_ATTR, p.key);
-            svg.appendChild(hub);
-          });
-        }
-        // exactly where this track's own line WOULD run if it hadn't kinked
-        // out for the siding: the kink vacates that space for the whole
-        // span, so the caption lands in a gap nothing else is using — no
-        // clearance arithmetic, and no line to clip through the text
-        // Where this line ACTUALLY runs across the siding, not where its
-        // baseline is: the kink raises the line away from the spine, so a
-        // caption measured off the baseline sits in the gap the kink opened
-        // and the raised line is written straight through it.
-        var capMid = s.a0 + raise + (s.a1 - raise - (s.a0 + raise)) / 2;
-        var midC = baseC, midCAlt = null, capLo = lineCAt(p, capMid), capHi = capLo;
-        if (members && members.length > 1) {
-          // between the lines WHERE THEY NOW ARE — they have converged for
-          // the length of this siding, and the caption belongs in the space
-          // that opened up between them, not between the baselines they left
-          var lo2 = Infinity, hi2 = -Infinity;
-          members.forEach(function (q) {
-            var c = lineCAt(q, capMid);
-            if (c < lo2) lo2 = c;
-            if (c > hi2) hi2 = c;
-          });
-          midC = (lo2 + hi2) / 2;
-          capLo = lo2; capHi = hi2;
-          // and a bar across the lines at each end of the shared span, so it
-          // reads as one siding both of them call at rather than two that
-          // happen to share a name
-          [s.a0 + raise, s.a1 - raise].forEach(function (at) {
-            if (at <= axisStart + 1 || at >= axisEnd - 1) return;
-            var los = Infinity, his = -Infinity;
-            members.forEach(function (q) {
-              var c = lineCAt(q, at);
-              if (c < los) los = c;
-              if (c > his) his = c;
-            });
-            var b0 = toXY(at, los), b1 = toXY(at, his);
-            var bar = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1],
-              'stroke-width': NODE_STROKE * 0.9, 'stroke-linecap': 'round' });
-            bar.style.stroke = INK;
-            bar.setAttribute(ROLE_ATTR, 'capsule');
-            bar.setAttribute(OWNER_ATTR, p.key);
-            svg.appendChild(bar);
-          });
-        }
-        if (horizontal && sharedSiding(s) && members.length > 1) {
-          // Between two of the lines it belongs to, in the widest gap the
-          // corridor has, NOT at the midpoint. With three lines in one
-          // corridor the midpoint is the middle line itself, and "Delivery
-          // Run" was written along Leela's rail. With TWO it is the middle
-          // of a corridor that is only as wide as the two lines let it be:
-          // "School Day" is a two-line corridor, and centred in it the
-          // caption was written along both of the rails it names.
-          var cs2 = members.map(function (q) { return lineCAt(q, capMid); }).sort(function (a, b) { return a - b; });
-          var wide = null;
-          for (var ci = 1; ci < cs2.length; ci++) {
-            var g2 = cs2[ci] - cs2[ci - 1];
-            if (!wide || g2 > wide.gap) wide = { gap: g2, at: (cs2[ci] + cs2[ci - 1]) / 2 };
-          }
-          if (wide && wide.gap >= bm.h + 2 * SIDING_GAP) {
-            midC = wide.at;
-          } else {
-            // The corridor is too tight to write inside: at three px between
-            // the rails there is no gap left in it at all. Everywhere else
-            // on this board belongs to somebody's lane, and stepping just
-            // past the outermost rail is where the next line's labels
-            // start, which is how "Family Dinner" landed on "Book Club".
-            //
-            // So it sits just OUTSIDE the outermost rail, in the space the
-            // group vacated to get here: those lines have left, and the
-            // corridor's own band is closed to lanes for exactly these
-            // hours, so nothing else can be there. Set on the bundle
-            // instead it masked the one thing the drawing is for, and the
-            // rails could not be told apart from a single thick line.
-            midC = p._sign > 0
-              ? cs2[cs2.length - 1] + SIDING_GAP + bm.h / 2
-              : cs2[0] - SIDING_GAP - bm.h / 2;
-            midCAlt = wide ? wide.at : null;
-          }
-        }
-        if (horizontal && !sharedSiding(s)) {
-          // The main line runs straight through a solo siding, so the
-          // baseline is no longer free: the caption goes INSIDE the loop,
-          // between the express line and the siding — the space the siding
-          // itself opened. A two-line caption does not fit a loop one
-          // raise deep, and pushed outside the siding it lands in the
-          // lanes; the location line goes instead, exactly as it does on a
-          // board too small for bands. The title alone still says what the
-          // siding is.
-          if (bm.h + 2 * SIDING_GAP > raise) {
-            var lc0 = box.querySelector('.metro-loc');
-            if (lc0) { lc0.remove(); bm = measure(box); }
-          }
-          // Still too tall for the loop, so it is going out into the lanes,
-          // where every other box is a one-line title. Two lines gained it
-          // nothing there and cost it twice the chance of landing on
-          // something: "Lab Rotation" wrapped inside a 70px allowance and
-          // then dropped its second line onto "Bend Some Girders" in the
-          // lane below, with no room along its own two-hour siding to
-          // slide out of the way. Wrapping is what the narrow allowance is
-          // for, and the allowance is about fitting the LOOP.
-          if (bm.h + 2 * SIDING_GAP > raise) {
-            t.style.maxWidth = 'none';
-            t.style.overflow = 'hidden'; t.style.textOverflow = 'ellipsis';
-            clampLines(t, 1);
-            bm = measure(box);
-          }
-          // Inside the loop only if there IS a loop. A solo siding nested
-          // inside another of its own line's sidings never gets a siding
-          // (sidingRaiseAt hands the whole overlap to the outer one), so
-          // the space "inside the loop" was never vacated: Amy's "Lab
-          // Rotation", sitting inside the crew's "Delivery Run" corridor,
-          // was set half a raise off a baseline her line had left, which
-          // put it across the rail one line up. With no kink of its own it
-          // is an ordinary caption beside an ordinary line, so it sits off
-          // the line WHERE THAT LINE ACTUALLY RUNS.
-          var ownsKink = governingSiding(p, capMid) === s;
-          midC = !ownsKink
-            ? lineCAt(p, capMid) + p._sign * (SIDING_GAP + bm.h / 2)
-            : (bm.h + 2 * SIDING_GAP <= raise
-              ? baseC + p._sign * raise / 2
-              : baseC + p._sign * (raise + SIDING_GAP + bm.h / 2));
-        }
-        if (horizontal) {
-          // Lying down, a caption is placed in a second pass (capQueue,
-          // below) rather than here: it has to keep clear of the OTHER
-          // captions as well as of the event labels, and which of two
-          // captions should move is not knowable while they are being
-          // built one line at a time.
-          capQueue.push({ box: box, bm: bm, midC: midC, capA: capA,
-            // the lines this caption belongs to, so it can keep off their
-            // own branches when it has been pushed outside their corridor
-            mem: members && members.length > 1 ? members.map(function (q2) { return q2.key; }) : null,
-            midCAlt: midCAlt,
-            limit: s.a1 - raise - bm.w });
-        } else {
-          // Standing up, the space the kink vacates is only a kink wide,
-          // while the caption is a column wide — centring it on the line
-          // pushes it across the gutter and over the hour labels. Set it
-          // beside the line instead, on the side the kink went.
-          box.style.top = capA + 'px';
-          // Clear of the OUTERMOST line of the siding, not of the middle
-          // between them: where two lines have converged for the siding,
-          // a caption measured from the midpoint is written straight over
-          // whichever of them is on that side.
-          box.style.left = (p._sign > 0 ? capHi + SIDING_GAP : capLo - bm.w - SIDING_GAP) + 'px';
-        }
-      });
-    });
-
-    // ---- where the captions actually go ---------------------------------
-    //
-    // Lying down, a caption slides along its OWN siding's span until it is
-    // clear of what is already there. A siding caption is not part of the
-    // lane bookkeeping (it sits in the space the kink vacated) so nothing
-    // else knows to keep out of its way, and on a line with a meeting
-    // inside its own siding's span the two wrote over each other.
-    //
-    // The captions also have to clear EACH OTHER, and that is why this is a
-    // second pass rather than part of the loop above. Two sidings on
-    // different lines can want the same strip of canvas: a solo caption too
-    // tall for its own loop sits just outside it, and a corridor caption
-    // sits just outside the outermost line it joins, which on a packed
-    // board is the same place. Drawn one line at a time, whichever came
-    // second landed on the first ("Lab Rotation" across "Delivery Run").
-    //
-    // Which one should move is decided by how much room it has to move IN,
-    // not by the order the lines happen to be in: a caption is placed
-    // least-freedom-first, so the one pinned to a two-hour siding takes
-    // the spot it needs and the one with seven hours of corridor to slide
-    // along is the one that yields. Sorting the other way round moves the
-    // caption that cannot go anywhere, which is how it ends up back on top
-    // of something.
-    // Where every bundle is going to be, decided before the captions are
-    // placed so they can keep out of its way. Only the plan: nothing is
-    // drawn until the rest of the map is (a rail has to be painted over the
-    // trunk it tunnels under, not before it).
-    visible.forEach(function (e) {
-      e._bundlePlan = null;
-      if (bundled(e)) planSharedBundle(e);
-    });
-
-    capQueue.sort(function (a, b) { return (a.limit - a.capA) - (b.limit - b.capA); });
-    // A caption is not part of the lane bookkeeping, and neither is a
-    // bundle: it is drawn from the solved positions afterwards. So the two
-    // knew nothing about each other and Kids' rail came down through
-    // "Schoolfotografie". Every drop in a bundle runs between one member's
-    // line and its rung, and every rung lies between the outermost members,
-    // so the block the caption has to step past is the members' own span
-    // across, by the cascade of drops along.
-    var bundleBlocks = [];
-    visible.forEach(function (e) {
-      if (!e._bundlePlan) return;
-      var w5 = Math.max(e._p.line_width, 4) * 1.5 * S * weightScale / 2 + 3 * S;
-      var lo5 = Infinity, hi5 = -Infinity, a05 = Infinity, a15 = -Infinity;
-      e._bundlePlan.rails.forEach(function (r) {
-        var fromC5 = lineCAt(r.q, r.dropA);
-        lo5 = Math.min(lo5, fromC5, r.rungC);
-        hi5 = Math.max(hi5, fromC5, r.rungC);
-        a05 = Math.min(a05, r.dropA);
-        a15 = Math.max(a15, r.dropA);
-      });
-      // the drops across, the rungs along: a caption has to be clear of
-      // both, and the rungs run to the end of the event
-      bundleBlocks.push({ a0: a05 - w5, a1: Math.max(a15, e._endA) + w5, c0: lo5 - w5, c1: hi5 + w5 });
-    });
-    // And the RAMPS of the lines a corridor caption belongs to. A caption
-    // that cannot fit between the rails sits just outside the outermost of
-    // them, and that stretch is not closed to anything: Kids' own branch
-    // down to its lane was drawn straight through "School Day". Only its
-    // OWN lines' ramps, because a caption can only move along its siding
-    // and routing it around every branch on the board pushed it into other
-    // captions instead, which is the worse picture.
-    var rampBlocks = [];
-    visible.forEach(function (e) {
-      if (e._dropped || e._laneDist == null || e._diagFrom == null) return;
-      var w6 = Math.max(2, (e._p ? e._p.line_width : 3)) * S * weightScale / 2 + 2 * S;
-      var cA = lineCAt(trackByKey[e._lead] || e._p, e._diagFrom);
-      var cB = e._drawnLaneC != null ? e._drawnLaneC : spineC + e._sign * e._laneDist;
-      rampBlocks.push({ owner: e._laneOwner || e.owner,
-        a0: Math.min(e._diagFrom, e._elbow) - w6, a1: Math.max(e._diagFrom, e._elbow) + w6,
-        c0: Math.min(cA, cB) - w6, c1: Math.max(cA, cB) + w6 });
-    });
-    var capPlaced = [];
-    capQueue.forEach(function (q) {
-      var capW = q.bm.w, capH = q.bm.h, midC = q.midC;
-      var at = q.capA, limit = q.limit;
-      // A corridor too tight to write inside offers TWO places, and neither
-      // is free on every board: just outside the outermost rail (where the
-      // next line's labels start) or along the middle of the corridor
-      // (where its own rails are). Try them in that order and take the
-      // first that has room, because a caption over a caption cannot be
-      // read at all while one with a rail behind it still can: its paper
-      // outline is there for exactly that.
-      var mids = q.midCAlt != null ? [q.midC, q.midCAlt] : [q.midC];
-      var mi = 0;
-      for (;;) {
-      midC = mids[mi];
-      at = q.capA;
-      for (var tries = 0; tries < 24 && at < limit; tries++) {
-        var clashAt = null;
-        for (var vi = 0; vi < visible.length; vi++) {
-          var ov = visible[vi];
-          if (ov._dropped || ov._textStart == null) continue;
-          var oc = spineC + ov._sign * ov._laneDist;
-          var oTop = ov._sign < 0 ? oc - LINE_GAP - ov._h : oc + LINE_GAP;
-          if (oTop > midC + capH / 2 || oTop + ov._h < midC - capH / 2) continue;
-          if (ov._textStart > at + capW + 4 * S || ov._textStart + ov._textLen < at - 4 * S) continue;
-          clashAt = ov._textStart + ov._textLen; break;
-        }
-        if (clashAt == null) {
-          for (var bi = 0; bi < bundleBlocks.length; bi++) {
-            var bb = bundleBlocks[bi];
-            if (bb.c0 > midC + capH / 2 || bb.c1 < midC - capH / 2) continue;
-            if (bb.a0 > at + capW + 4 * S || bb.a1 < at - 4 * S) continue;
-            clashAt = bb.a1; break;
-          }
-        }
-        if (clashAt == null && q.mem) {
-          for (var ri = 0; ri < rampBlocks.length; ri++) {
-            var rb = rampBlocks[ri];
-            if (q.mem.indexOf(rb.owner) < 0) continue;
-            if (rb.c0 > midC + capH / 2 || rb.c1 < midC - capH / 2) continue;
-            if (rb.a0 > at + capW + 4 * S || rb.a1 < at - 4 * S) continue;
-            clashAt = rb.a1; break;
-          }
-        }
-        if (clashAt == null) {
-          for (var ci = 0; ci < capPlaced.length; ci++) {
-            var cp = capPlaced[ci];
-            if (Math.abs(midC - cp.midC) >= (capH + cp.h) / 2) continue;
-            if (cp.at > at + capW + 4 * S || cp.at + cp.w < at - 4 * S) continue;
-            clashAt = cp.at + cp.w; break;
-          }
-        }
-        if (clashAt == null) break;
-        at = clashAt + 8 * S;
-      }
-      if (at <= limit || mi >= mids.length - 1) break;
-      mi++;
-      }
-      if (at > limit) { midC = mids[0]; at = q.capA; }
-      // and clear of the rule that marks now. It is the one line on the
-      // board that crosses everything, drawn at a minute rather than
-      // belonging to anybody, so nothing routes around it, and a caption
-      // sitting on it broke both: the rule came out dashed through the
-      // words and the words came out with a stroke through them. The
-      // siding is long; the caption only needs somewhere along it, so it
-      // steps past the rule, or back before it when there is no room after.
-      if (nowA != null) {
-        var nowClear = 5 * S;
-        if (at < nowA + nowClear && nowA - nowClear < at + capW) {
-          var after = nowA + nowClear, before = nowA - nowClear - capW;
-          if (after <= limit) at = after;
-          else if (before >= q.capA - 1) at = before;
-        }
-      }
-      q.box.style.left = at + 'px';
-      q.box.style.top = (midC - capH / 2) + 'px';
-      capPlaced.push({ at: at, w: capW, midC: midC, h: capH });
     });
 
     // ---- the ramp builder ------------------------------------------------
@@ -4691,7 +4075,7 @@
     // breakpoints over that window makes the lead-in lie on the line
     // whatever the line is doing there — which is the whole point of it.
     function trunkSlice(p, a0, a1) {
-      var pts = sidingPath(spineC + p._c, p._sign, Math.min(a0, a1), Math.max(a0, a1), p);
+      var pts = trunkPath(spineC + p._c, p._sign, Math.min(a0, a1), Math.max(a0, a1), p);
       return a1 < a0 ? pts.slice().reverse() : pts;
     }
     function rampOut(p, aFrom, aElbow, laneC, dir, fromRing, tailTo) {
@@ -4847,7 +4231,7 @@
     var placed = visible.filter(function (e) { return !e._dropped; });
     var chains = {};
     placed.forEach(function (e) {
-      if (e._merge) return;
+      if (e._merge || e._onTrack) return;   // drawn on the line; there is no spur
       // A shared event sends one vertical branch DOWN per line it belongs
       // to, and they land side by side as a bundle. Drawn below, not here:
       // a chain draws ONE rail for the group, which is the single bold rail
@@ -5575,9 +4959,14 @@
         // saying nothing about which of them it was for. This is the thin
         // tick every transit map draws from a station to a label it could
         // not set directly against it.
-        if (e._capLead && e._capOut != null) {
+        if (e._capLead && (e._capOut != null || e._laneDist != null)) {
           var away = e._labelSign != null ? e._labelSign : e._sign;
           var lc0 = e._routeEdge != null ? e._routeEdge : lineCAt(p, e._nodeA);
+          // A long event's name is in a lane like anybody's, so how far out
+          // it went is the lane's distance rather than a fixed step clear
+          // of a capsule.
+          var capOut = e._capOut != null ? e._capOut
+            : Math.abs((spineC + e._sign * e._laneDist) - lc0);
           // TO WHERE THE NAME ACTUALLY IS. The caption gives way to the
           // lines and can end up a good way along the axis from its own
           // capsule; drawn straight out at the event's own minute, the
@@ -5587,7 +4976,7 @@
           var g0 = toXY(e._nodeA, lc0);
           var toA = e._textStart == null ? e._nodeA
             : (e._textStart > e._nodeA ? e._textStart : Math.min(e._nodeA, e._textStart + e._textLen));
-          var g1 = toXY(toA, lc0 + away * (e._capOut - LINE_GAP * 0.25));
+          var g1 = toXY(toA, lc0 + away * (capOut - LINE_GAP * 0.25));
           var lead = svgEl('line', {
             x1: g0[0], y1: g0[1], x2: g1[0], y2: g1[1],
             'stroke-width': Math.max(1, NODE_STROKE * 0.5), 'stroke-linecap': 'round',

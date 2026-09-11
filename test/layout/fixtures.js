@@ -13,8 +13,27 @@ function ev(title, owner, startMin, endMin, extra) {
     owner: owner, co_owners: [], side: 'left', hue: 'black', track_width: 3, track_style: 'solid', track_offset: -10,
   }, extra || {});
 }
-function siding(owner, title, startMin, endMin, extra) {
-  return Object.assign({ owner: owner, title: title, location: null, start_min: startMin, end_min: endMin }, extra || {});
+// A LONG BLOCK IS AN EVENT. It used to travel in a `sidings` array of its
+// own and be drawn as a kink that took the line off its lane for hours;
+// now it is an ordinary event that happens to be long, and the client
+// decides from the clock to draw it on the main track. A block SHARED is
+// one event with co-owners, which is a convergence, which is what two
+// children at the same school all day look like.
+// The attributes an event carries are its own line's: side, hue, width,
+// texture, offset. The short events above write all five out by hand; a
+// long one takes them from the track list, because a long event that
+// disagrees with its own line about which side it is on is not a payload
+// transform.js could produce.
+function longs(list) {
+  var by = {};
+  list.forEach(function (t) { by[t.key] = t; });
+  return function (owner, title, startMin, endMin, extra) {
+    var t = by[owner];
+    return ev(title, owner, startMin, endMin, Object.assign({
+      side: t.side, hue: t.hue, track_width: t.line_width,
+      track_style: t.line_style, track_offset: t.track_offset,
+    }, extra || {}));
+  };
 }
 
 const TRACKS = [
@@ -34,12 +53,8 @@ const TRACKS = [
 function dayWindow(m) {
   var times = [];
   (m.items || []).forEach(function (i) {
-    if (i.type !== 'event') return;
+    if (i.type !== 'event' || i.all_day) return;   // a full-day band must not drag the window out
     times.push(i.start_min); times.push(i.end_min);
-  });
-  (m.sidings || []).forEach(function (st) {
-    if (st.all_day) return;                 // a full-day band must not drag the window out
-    times.push(st.start_min); times.push(st.end_min);
   });
   if (!times.length) return null;
   // an hour before the first thing, 90 minutes after the last, on the hour,
@@ -62,7 +77,7 @@ function base(over) {
     orientation: 'auto', hour12: false,
     i18n: { today: 'Today', more: '+{n} more', earlier: '+{n} earlier', rain_pct: '{n}% rain' },
     header_weather: { hi: 21, lo: 13, condition: 'Rain', rain_chance: 60, icon: '' },
-    legend: TRACKS, all_day: [], sidings: [], items: [],
+    legend: TRACKS, all_day: [], items: [],
   }, over);
   var w = dayWindow(m);
   if (m.day_start_min == null) m.day_start_min = w ? w.lo : 420;
@@ -109,24 +124,22 @@ const busyDay = base({
 // a baseline nobody was sitting on any more) and what put a track's own line
 // through its caption.
 const allDayEveryTrack = base({
-  sidings: [
-    siding('work', 'Office Closed', 420, 1260, { all_day: true }),
-    siding('alex', 'PTO', 420, 1260, { all_day: true }),
-    siding('sam', 'Conference', 420, 1260, { all_day: true }),
-    siding('kids', 'School Holiday', 420, 1260, { all_day: true }),
-  ],
-  items: busyDay.items,
+  items: [
+    longs(TRACKS)('work', 'Office Closed', 420, 1260, { all_day: true }),
+    longs(TRACKS)('alex', 'PTO', 420, 1260, { all_day: true }),
+    longs(TRACKS)('sam', 'Conference', 420, 1260, { all_day: true }),
+    longs(TRACKS)('kids', 'School Holiday', 420, 1260, { all_day: true }),
+  ].concat(busyDay.items),
 });
 
 // A siding (config `siding: true`) with a location line, spanning
 // most of the day, with real meetings inside its span. The caption is two
 // lines here, which is what used to overflow the gap the kink opens up.
 const sidingDay = base({
-  sidings: [
-    siding('work', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
-    siding('kids', 'Schoolfotografie', 420, 1260, { all_day: true }),
-  ],
-  items: busyDay.items,
+  items: [
+    longs(TRACKS)('work', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
+    longs(TRACKS)('kids', 'Schoolfotografie', 420, 1260, { all_day: true }),
+  ].concat(busyDay.items),
 });
 
 // Barely anything on: the layout should use the canvas instead of leaving
@@ -229,11 +242,8 @@ const fullDay = base({
 // but it is one event, so one caption, set between them. Drawn once per line
 // it appeared twice, on lines that could be at opposite ends of the board.
 const sharedSiding = base({
-  sidings: [
-    siding('sam', 'School Day', 480, 960, { location: 'Springfield Elementary', group: 'g1' }),
-    siding('kids', 'School Day', 480, 960, { location: 'Springfield Elementary', group: 'g1' }),
-  ],
   items: [
+    longs(TRACKS)('sam', 'School Day', 480, 960, { location: 'Springfield Elementary', co_owners: ['kids'] }),
     ev('Standup', 'work', 540, 555, { track_width: 4 }),
     ev('Assembly', 'kids', 600, 630, { side: 'right', hue: 'purple-40', track_style: 'dotted', track_offset: 30 }),
     ev('Swim Training', 'sam', 990, 1050, { side: 'right', hue: 'green-40', track_style: 'dashed', track_offset: 20 }),
@@ -255,12 +265,9 @@ const FIVE = [
 ];
 const fiveLines = Object.assign(base({
   now_min: 519,
-  sidings: [
-    siding('bar', 'School Day', 510, 900, { location: 'Springfield Elementary', group: 'g1' }),
-    siding('lis', 'School Day', 510, 900, { location: 'Springfield Elementary', group: 'g1' }),
-    siding('hom', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
-  ],
   items: [
+    longs(FIVE)('bar', 'School Day', 510, 900, { location: 'Springfield Elementary', co_owners: ['lis'] }),
+    longs(FIVE)('hom', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
     ev('School Run', 'mar', 480, 510, { co_owners: ['bar', 'lis'], side: 'right', hue: 'black', track_offset: 10 }),
     ev('Shift Handover', 'hom', 480, 495, { side: 'left', hue: 'black', track_width: 6, track_offset: -10 }),
     ev('Book Club', 'mar', 540, 600, { side: 'right', hue: 'black', track_style: 'dashed', track_offset: 10 }),
@@ -294,12 +301,8 @@ const CREW = [
 ];
 const crewDay = Object.assign(base({
   day_start_min: 360, day_end_min: 1380, window_label: '6am 11pm', now_min: 611,
-  sidings: [
-    siding('fry', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
-    siding('leela', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
-    siding('bender', 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 'c1' }),
-  ],
   items: [
+    longs(CREW)('fry', 'Delivery Run', 540, 960, { location: 'Chapek 9', co_owners: ['leela', 'bender'] }),
     ev('Coffee (100 cups)', 'fry', 450, 480, { side: 'right', hue: 'black', track_style: 'dotted', track_offset: 10 }),
     ev('Bend Some Girders', 'bender', 450, 495, { side: 'right', hue: 'black', track_style: 'dashed', track_offset: 30 }),
     ev('Pre-flight Check', 'leela', 480, 510, { location: 'Docking Bay', side: 'right', hue: 'black', track_offset: 20 }),
@@ -333,12 +336,9 @@ const SEVEN = [
 const CREW_KEYS = ['fry', 'leela', 'bender', 'amy', 'prof'];
 const sevenLines = Object.assign(base({
   day_start_min: 360, day_end_min: 1380, window_label: '6am 11pm', now_min: 683,
-  sidings: [
-    siding('amy', 'Lab Rotation', 570, 690, { location: 'Mars University' }),
-  ].concat(CREW_KEYS.map(function (k) {
-    return siding(k, 'Delivery Run', 540, 960, { location: 'Chapek 9', group: 's1' });
-  })),
   items: [
+    longs(SEVEN)('amy', 'Lab Rotation', 570, 690, { location: 'Mars University' }),
+    longs(SEVEN)(CREW_KEYS[0], 'Delivery Run', 540, 960, { location: 'Chapek 9', co_owners: CREW_KEYS.slice(1) }),
     ev('Coffee (100 cups)', 'fry', 450, 480, { side: 'right', hue: 'black', track_offset: 10 }),
     ev('Bend Some Girders', 'bender', 450, 495, { side: 'right', hue: 'black', track_style: 'dotted', track_offset: 30 }),
     ev('Pre-flight Check', 'leela', 480, 510, { location: 'Docking Bay', side: 'right', hue: 'black', track_style: 'dashdot', track_offset: 20 }),

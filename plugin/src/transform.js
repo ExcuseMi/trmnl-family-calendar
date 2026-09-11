@@ -509,7 +509,7 @@ function timeLabel12(min, extra) {
   if (!(extra && extra.hour12)) return pad2(h) + ':' + pad2(m);
   return (h % 12 || 12) + (m ? ':' + pad2(m) : '') + (h < 12 ? 'am' : 'pm');
 }
-function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, windowLabel, allDayEvents, extra, sidingEvents) {
+function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, windowLabel, allDayEvents, extra) {
   var trackByKey = {};
   tracks.forEach(function (t) { trackByKey[t.key] = t; });
 
@@ -529,10 +529,6 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
   // wider view of the same busy hours.
   var dayLo = DAY_START_MIN, dayHi = DAY_END_MIN;
   (events || []).forEach(function (e) {
-    if (e.startMin != null) dayLo = Math.min(dayLo, e.startMin);
-    if (e.endMin != null) dayHi = Math.max(dayHi, e.endMin);
-  });
-  (sidingEvents || []).forEach(function (e) {
     if (e.startMin != null) dayLo = Math.min(dayLo, e.startMin);
     if (e.endMin != null) dayHi = Math.max(dayHi, e.endMin);
   });
@@ -563,13 +559,6 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
   });
   (allDayEvents || []).forEach(function (ev) { if (trackByKey[ev.track]) activeKeys[ev.track] = true; });
   tracks.forEach(function (t) { if (t.keep_empty) activeKeys[t.key] = true; });
-  (sidingEvents || []).forEach(function (ev) {
-    if (trackByKey[ev.track]) activeKeys[ev.track] = true;
-    // a siding shared across lines keeps EVERY line it is on: two children
-    // at the same school are both at school, and dropping the co-owner as
-    // "inactive" took away one of the two kinks
-    (ev.interchange_with || []).forEach(function (key) { if (trackByKey[key]) activeKeys[key] = true; });
-  });
   tracks = tracks.filter(function (t) { return activeKeys[t.key]; });
   tracks.forEach(function (t) { delete t.keep_empty; }); // bookkeeping, not payload
   // Renumbering closes the gaps left by the lines just dropped, and it has
@@ -614,34 +603,13 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     });
   });
 
-  // sidings: a track's own line, not a lane branch. The client kinks the
-  // spine itself out to siding level for [startMin,endMin] rather than
-  // drawing a diagonal/label run, so a status/location block does not
-  // compete with real meetings for lane space.
-  var sidingsOut = [];
-  (sidingEvents || []).forEach(function (ev, gi) {
-    var owners = [ev.track].concat(ev.interchange_with || []).filter(function (k) { return trackByKey[k]; });
-    if (!owners.length) return;
-    // One siding on several lines is still a kink on EACH of them — they
-    // are all really at school — but it is one event, so it gets one
-    // caption. The group id is what lets the client draw the kinks per line
-    // and the caption once.
-    var group = owners.length > 1 ? 's' + gi : null;
-    owners.forEach(function (k) {
-      sidingsOut.push({ owner: k, title: ev.title, location: ev.location || null,
-        start_min: ev.startMin, end_min: ev.endMin, group: group });
-    });
-  });
-  // An all-day event is ALSO a siding on its owner's line, spanning the
-  // whole day — this now REPLACES the old header-strip rendering (an
-  // all-day event used to appear only as small text under the date; now
-  // it shows as a real kink on the person's own line instead, so a day
-  // with a genuine all-day event (a holiday, "Out of office") reads the
-  // same way any other siding does, deduped by title+owner). `all_day:
-  // true` tells the client not to let this (deliberately full-day-wide)
-  // span drag the content-fit time window out to match — it always
-  // renders across whatever window is chosen, clamped, same as any other
-  // siding.
+  // An all-day event is the longest long event there is: it runs the whole
+  // visible day on its owner's line. It used to appear only as small text
+  // under the date, which said nothing about whose day it was; drawn on the
+  // line it reads the same way every other event does, deduped by title and
+  // owner. `all_day: true` tells the client not to let this (deliberately
+  // full-day-wide) span drag the content-fit window out to match: it renders
+  // across whatever window is chosen, clamped.
   var seenAllDay = {};
   (allDayEvents || []).forEach(function (ev) {
     var track = trackByKey[ev.track];
@@ -649,7 +617,11 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     var key = ev.title + '|' + track.key;
     if (seenAllDay[key]) return;
     seenAllDay[key] = true;
-    sidingsOut.push({ owner: track.key, title: ev.title, location: null, start_min: DAY_LO, end_min: DAY_HI, all_day: true });
+    items.push({ type: 'event', _sortMin: DAY_LO, title: ev.title,
+      start_min: DAY_LO, end_min: DAY_HI, location: null, all_day: true,
+      owner: track.key, co_owners: [], side: track.side, hue: track.hue,
+      track_width: track.line_width, track_style: track.line_style,
+      track_offset: track.track_offset });
   });
 
   (weatherMilestones || []).forEach(function (w) {
@@ -716,8 +688,7 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     // family without saying so reads as a quiet day.
     calendars_down: (extra && extra.calendarsDown) || [],
     legend: tracks,
-    all_day: [], // all-day events now render as sidings (see sidingsOut) instead of a header strip; the key stays for shape compatibility
-    sidings: sidingsOut,
+    all_day: [], // an all-day event is an event now, in items, with all_day: true; the key stays for shape compatibility
     items: items,
   };
 }
@@ -2515,11 +2486,6 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   var deadline = (extra && extra.deadline) || (Date.now() + RENDER_BUDGET_MS);
   var events = [];
   var allDayEvents = [];
-  // Four hours. Every block over it in every demo calendar is a school day,
-  // a shift, a desk booking or a delivery, and nothing under it is: the
-  // shape of a day is what tells them apart, not what anybody called them.
-  var SIDING_MIN_MIN = 240;
-  var sidingEvents = [];
 
   // A named calendar that is kept when empty is kept when it is UNREACHABLE
   // too: a feed being down for an hour should not silently remove somebody
@@ -2590,38 +2556,24 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         // routes into the all-day strip instead of the timeline, same as a
         // genuine ICS all-day entry, rather than being silently dropped.
         if (resolved.allDay) { allDayEvents.push({ track: registry.add(trackNames[0], 0.25).key, title: resolved.title }); return; }
-        // A LONG BLOCK IS A SIDING, AND THE CLOCK SAYS SO.
+        // A LONG BLOCK IS AN EVENT LIKE ANY OTHER.
         //
-        // A school day, a shift, a desk booking, a delivery: a block that
-        // lasts most of a day is a different kind of thing from a meeting,
-        // whatever it is called, and it wants a different drawing. The line
-        // leaves the running line for its span and rejoins, instead of
-        // spending a whole label lane on it, and the real meetings inside it
-        // branch off that.
+        // A school day, a shift, a desk booking, a delivery used to be a
+        // SIDING: a second kind of thing, carried in its own array, with its
+        // own geometry, its own caption pass and its own marks, whose whole
+        // effect was to take the line off its own lane for the length of it.
+        // Nine hours of "Desk booking" displaced Homer's entire day for a
+        // fact about where he was sitting, and a line spending the day off
+        // its lane is a line whose name at the head of the board points at
+        // empty paper.
         //
-        // This used to be `"siding": true` in the config, which made it the
-        // last piece of layout a user had to hand-declare — and a declared
-        // one is a promise the drawing has to keep whether or not the board
-        // can keep it. It is also a fact the data already contains: every
-        // block over four hours in every demo calendar is one of these, and
-        // nothing under four hours is.
-        if (ev.endMin != null && ev.endMin - ev.startMin >= SIDING_MIN_MIN) {
-          // A siding rule takes a LIST of tracks like any other, one entry
-          // per track: three people on the same delivery are three kinks in
-          // one corridor, the same shape two children at one school get.
-          // mergeAcrossTracks folds them back into a single siding with
-          // one caption, so this only has to say who is there.
-          trackNames.forEach(function (nm) {
-            sidingEvents.push({
-              track: registry.add(nm, 0.25).key,
-              title: resolved.title,
-              location: ev.location || null,
-              startMin: ev.startMin,
-              endMin: ev.endMin != null ? ev.endMin : ev.startMin + 30,
-            });
-          });
-          return;
-        }
+        // A long block is a person being somewhere for a long time, which is
+        // what every event on this board is. It travels as an event, and the
+        // client draws it on the main track rather than out in a lane: the
+        // marks and the caption say where they are and for how long, and the
+        // track stays where its name says it is. Shared by two people it is
+        // a shared event, which is a convergence, which is what two children
+        // at the same school all day actually looks like.
         var primary = registry.add(trackNames[0], 1);
         // a co-owner on a shared/interchange event gets a smaller weight
         // toward side balancing — they have a ring there too, but it's not
@@ -2723,13 +2675,10 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     });
   }
   events = onShownDay(events);
-  sidingEvents = onShownDay(sidingEvents);
   allDayEvents = allDayEvents.filter(function (e) { return (e.day || 0) === showIx; });
 
   events = mergeAcrossTracks(events);
-  sidingEvents = mergeAcrossTracks(sidingEvents);
   linkMerged(events);
-  linkMerged(sidingEvents);
 
   events.sort(function (a, b) { return a.startMin - b.startMin; });
   registry.finalize(); // every calendar is in and every event tallied — decide sides now
@@ -2788,8 +2737,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         weekday: localeDatePart(extra.locale || 'en', 'long', 'weekday', shownDay.y, shownDay.mo, shownDay.d),
         weather: shownWx || (snapIx === 0 && weather && weather.header) || null,
       }],
-      sun: ofShownDay('sun'), calendarsDown: downNames }),
-    sidingEvents
+      sun: ofShownDay('sun'), calendarsDown: downNames })
   );
 }
 

@@ -28,9 +28,27 @@ variables:
     {
       "day_start_min": 360,
       "day_end_min": 1380,
+      "days": [
+        {
+          "index": 0,
+          "start_min": 0,
+          "end_min": 1440,
+          "date_label": "Tue 8 Sep",
+          "weekday_label": "Tuesday",
+          "weather": {
+            "hi": 70,
+            "lo": 55,
+            "condition": "Rain",
+            "rain_chance": 60,
+            "icon": "https://trmnl.com/images/plugins/weather/wi-day-rain.svg",
+            "unit": "F"
+          }
+        }
+      ],
       "secondary_threshold_min": 30,
       "window_label": "6am 11pm",
       "date_label": "Tue 8 Sep",
+      "title_word": null,
       "now_min": 870,
       "orientation": "auto",
       "hour12": true,
@@ -38,14 +56,21 @@ variables:
         "today": "Today",
         "more": "+{n} more",
         "earlier": "+{n} earlier",
-        "rain_pct": "{n}% rain"
+        "rain_pct": "{n}% rain",
+        "feed_down": "{n} unavailable",
+        "weather_stale": "Forecast may be out of date"
       },
       "header_weather": {
-        "hi": null,
-        "lo": null,
-        "condition": null,
-        "rain_chance": null
+        "hi": 70,
+        "lo": 55,
+        "condition": "Rain",
+        "rain_chance": 60,
+        "icon": "https://trmnl.com/images/plugins/weather/wi-day-rain.svg",
+        "unit": "F"
       },
+      "weather_stale": false,
+      "service_alert": null,
+      "calendars_down": [],
       "legend": [
         {
           "key": "p0",
@@ -99,7 +124,7 @@ variables:
         }
       ],
       "all_day": [],
-      "stations": [
+      "sidings": [
         {
           "owner": "p2",
           "title": "School Day",
@@ -118,6 +143,13 @@ variables:
         }
       ],
       "items": [
+        {
+          "type": "sun",
+          "at_min": 428,
+          "kind": "sunrise",
+          "icon": "https://trmnl.com/images/plugins/weather/wi-sunrise.svg",
+          "label": "Sunrise"
+        },
         {
           "type": "event",
           "title": "Shift Handover",
@@ -234,6 +266,12 @@ variables:
           "track_offset": -20
         },
         {
+          "type": "weather",
+          "at_min": 780,
+          "icon": "https://trmnl.com/images/plugins/weather/wi-rain.svg",
+          "label": "Rain starts 13:00"
+        },
+        {
           "type": "event",
           "title": "Reactor Core Check",
           "start_min": 840,
@@ -288,6 +326,12 @@ variables:
           "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
+        },
+        {
+          "type": "weather",
+          "at_min": 960,
+          "icon": "https://trmnl.com/images/plugins/weather/wi-day-sunny.svg",
+          "label": "Rain stops 16:00"
         },
         {
           "type": "event",
@@ -349,6 +393,19 @@ variables:
           "track_width": 5,
           "track_style": "dotted",
           "track_offset": 10
+        },
+        {
+          "type": "sun",
+          "at_min": 1198,
+          "kind": "sunset",
+          "icon": "https://trmnl.com/images/plugins/weather/wi-sunset.svg",
+          "label": "Sunset"
+        },
+        {
+          "type": "weather",
+          "at_min": 1200,
+          "icon": "https://trmnl.com/images/plugins/weather/wi-day-thunderstorm.svg",
+          "label": "Storms 20:00"
         }
       ]
     }

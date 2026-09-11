@@ -116,17 +116,27 @@ function localizedCss(css) {
 // is built once for the whole run.
 const YML = path.join(PLUGIN, '.trmnlp.yml');
 
-// Insert keys at the top of the metro mapping. It is a JSON literal
-// embedded in the yml (a YAML flow mapping, so JSON-shaped lines are
-// valid), and inserting straight after its opening brace needs no YAML
-// parser and cannot disturb the ~600 lines already in there.
+// Insert keys into the metro mapping. It is a JSON literal embedded in the
+// yml (a YAML flow mapping, so JSON-shaped lines are valid), so this needs
+// no YAML parser and cannot disturb the ~600 lines already in there.
+//
+// AT THE END OF THE BLOCK, not the start. Inserted at the start, a patched
+// key is overridden by the block's own copy of it further down, and YAML
+// keeps the last of two: the demo payload grew a `service_alert: null` when
+// it was regenerated, and every banner case silently rendered no banner.
 function patchDemoMetro(yml, extra) {
   const at = yml.indexOf('\n  metro:');
   if (at < 0) throw new Error('.trmnlp.yml has no metro: block to patch');
   const open = yml.indexOf('{', at);
+  let depth = 0, close = -1;
+  for (let i = open; i < yml.length; i++) {
+    if (yml[i] === '{') depth++;
+    else if (yml[i] === '}') { depth--; if (depth === 0) { close = i; break; } }
+  }
+  if (close < 0) throw new Error('.trmnlp.yml metro: block does not close');
   const lines = Object.keys(extra)
     .map((k) => '      ' + JSON.stringify(k) + ': ' + JSON.stringify(extra[k]) + ',').join('\n');
-  return yml.slice(0, open + 1) + '\n' + lines + yml.slice(open + 1);
+  return yml.slice(0, close) + ',\n' + lines + '\n    ' + yml.slice(close);
 }
 
 // One `trmnlp build` writes all four views. `page` picks which of them a
@@ -151,6 +161,12 @@ function sourceStamp() {
   // the board that was built while it was wrong, complete with the alert
   // banner, long after the file itself was put back.
   parts.push('yml:' + crypto.createHash('sha1').update(fs.readFileSync(YML)).digest('hex'));
+  // AND THE HARNESS ITSELF. `patchDemoMetro` lives here, and a fix to it
+  // changed what every banner case feeds the build while the cache went on
+  // serving boards built by the broken one: four cases stayed red through a
+  // fix that had already worked. Anything that decides what gets built
+  // belongs in the key that decides whether to rebuild.
+  parts.push('run:' + crypto.createHash('sha1').update(fs.readFileSync(__filename)).digest('hex'));
   return parts.join('|');
 }
 
