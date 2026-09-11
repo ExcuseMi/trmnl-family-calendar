@@ -123,7 +123,7 @@ module.exports = function (test, h) {
     // The counterpart, and the reason four is a fact about the DAY rather
     // than about the layout: every other board here has an order that
     // satisfies every shared event on it, and the chain finds it.
-    for (const name of ['five-lines', 'crew-day', 'shared-siding']) {
+    for (const name of ['five-lines', 'crew-day', 'shared-long-event']) {
       const f = fixtures.find((x) => x.name === name);
       if (!f) continue;
       const bad = forcedCrossings(f, layout(f, byName('x-landscape')));

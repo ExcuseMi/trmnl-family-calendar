@@ -60,8 +60,9 @@ module.exports = function (test, h) {
   test('seven lines still get a rail apart from their neighbours', () => {
     for (const v of FLAT) {
       const rep = render(seven.metro, v);
-      // one line can be drawn as several paths (a siding splits its own
-      // rail in two), so a rail is a per-OWNER position, not a per-path one
+      // one line is drawn as several paths, because the ink is cut wherever
+      // it passes under something, so a rail is a per-OWNER position rather
+      // than a per-path one
       const at = {};
       for (const t of pathsWhere(rep, 'track')) {
         const ys = t.pts.map((p) => p[1]);

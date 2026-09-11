@@ -3,13 +3,13 @@
 // A rail that stops in open space.
 //
 // Reported off a screenshot as "floating track in the middle": a stretch of
-// Amy's line drawn across the board with nothing at either end of it. It
-// was the express half of a siding whose siding was never drawn. A solo
-// siding is a loop (the main line carries straight on, the siding leaves
-// it and comes back), and the express is the straight half; where that
-// siding was nested inside a corridor its own line was already in,
-// sidingRaiseAt gave the whole overlap to the corridor, no loop was drawn,
-// and the express was left lying on a baseline the line had left.
+// Amy's line drawn across the board with nothing at either end of it. A
+// long event used to be drawn as a loop, the main line carrying straight
+// on at the baseline while the block left it and came back, and this was
+// the straight half. Where the block was nested inside a corridor its own
+// line was already in, the whole overlap went to the corridor, no loop was
+// drawn, and that straight half was left lying on a baseline the line had
+// left.
 //
 // Nothing in the suite noticed, because every other property held: the
 // segment was the right colour, the right weight, on the canvas, out of
@@ -30,7 +30,8 @@ module.exports = function (test, h) {
   // arithmetic that drew it, so the two agree to a rounding error, but both
   // are SAMPLED every 2px and a corner is drawn rounded, so the nearest
   // sample can be a couple of px along the fillet. The defect this catches
-  // missed by a full siding raise (32px at 1x, 64px on an X).
+  // missed by the whole depth a long block used to be lifted out by (32px
+  // at 1x, 64px on an X).
   const NEAR = 8;
   const EDGE = 6;
 

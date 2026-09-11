@@ -62,13 +62,13 @@ module.exports = function (test, h) {
   // without the corner radius the diagonal starts before its ring.
   // What is left is the 800x480 panel, and it is one situation with two
   // faces. That board has about a line-height of depth per line, so as soon
-  // as a couple of lines carry a siding the bands do not fit and the
+  // as a couple of lines carry a long event the bands do not fit and the
   // layout falls back to PACKING: one lane ladder shared by the whole side,
-  // which is exactly the trade the fallback exists to make — packing still
+  // which is exactly the trade the fallback exists to make: packing still
   // reads correctly there, just with the crossings bands would prevent. A
   // branch reaching a rung then passes a neighbouring line's caption, and a
-  // siding's kink is deeper than the gap between two packed tracks, so its
-  // caption lands on the next line's rail.
+  // long event's caption wants a rung on the inward side that a packed
+  // board has not got, so it lands on the next line's rail.
   //
   // busy-day used to be the one that was NOT packed: a single interchange
   // bar dropped through "Piano Lesson" on its way to its own lane. There is
@@ -80,8 +80,8 @@ module.exports = function (test, h) {
   // Listed per fixture so none of them can get worse without the suite
   // saying so.
   const PIERCE_KNOWN_VIEW = {
-    'all-day-every-track/og-landscape': 'packed: every line carries an all-day band, so the bands cannot fit and the side shares one lane ladder. Three branches cross a neighbouring caption, and a 32px siding kink on a 10px pitch puts three all-day captions on the next line\'s rail.',
-    'siding-day/og-landscape': 'packed, same as above with one waypoint instead of four all-day bands: three branch crossings and one caption on a neighbouring rail.',
+    'all-day-every-track/og-landscape': 'packed: every line carries an all-day event, so the bands cannot fit and the side shares one lane ladder. Three branches cross a neighbouring caption, and there is no room on a 10px pitch for the inward rung an all-day caption wants, so three of them land on the next line\'s rail.',
+    'long-event-day/og-landscape': 'packed, same as above with two long events instead of four: three branch crossings and one caption on a neighbouring rail.',
     'five-lines/og-landscape': 'packed: five lines on a 480px-deep board leave no room for bands, so three branches cross a neighbouring caption on the shared ladder.',
     // These two are the price of holding an elbow inside its own event.
     // A branch used to be allowed to slide its elbow past the end of the
@@ -176,10 +176,10 @@ module.exports = function (test, h) {
   // which at 2x device scale is a few px. The ring still reads as sitting on
   // the line there. This has to absorb that and nothing more: the bug this
   // guards against put rings tens of px from their own track.
-  // Corner rounding at a siding kink pulls the drawn line up to about a
-  // corner radius off the ideal one, and a ring sitting on that kink is
-  // measured against the drawn path. The bug this guards against put rings
-  // 58-68px from their own track.
+  // Corner rounding where a line changes lane pulls the drawn line up to
+  // about a corner radius off the ideal one, and a ring sitting on that
+  // corner is measured against the drawn path. The bug this guards against
+  // put rings 58-68px from their own track.
   const CENTRE_TOL = 10;
   for (const f of fixtures) {
     test('lines pass through the centre of every ring, from both sides: ' + f.name, () => {
@@ -232,8 +232,8 @@ module.exports = function (test, h) {
 
   // Where a branch leaves its line it must actually TOUCH that line. The
   // fork's height was taken at the event's own minute while the fork is
-  // drawn earlier, so wherever the line was still ramping out of a siding
-  // in between, the branch began at one height and the line was at another:
+  // drawn earlier, so wherever the line was still ramping between lanes in
+  // between, the branch began at one height and the line was at another:
   // it started in mid-air and crossed the ramp instead of forking off it.
   for (const f of fixtures) {
     test('every branch leaves its line from a point on that line: ' + f.name, () => {
@@ -261,7 +261,7 @@ module.exports = function (test, h) {
             best = Math.min(best, Math.hypot(a[0] + dx * u - start[0], a[1] + dy * u - start[1]));
           }
         }
-        // A fork that lands inside a siding's ramp is attached to a
+        // A fork that lands inside a ramp is attached to a
         // CORNER-rounded curve, and rounding pulls the drawn line up to
         // about a corner radius off the ideal one. That is the slack here
         // and nothing more: the bug this guards against started branches
@@ -322,8 +322,8 @@ module.exports = function (test, h) {
             }
             // The rail leaves its line at a point ON it, so this is a
             // rounding error and a 2px sampling step, not a tolerance. The
-            // defect it guards against left rails a whole siding raise (32px
-            // at 1x, 64px on an X) out in mid-air.
+            // defect it guards against left rails the whole depth a long block
+            // used to be lifted out by (32px at 1x, 64px on an X) out in mid-air.
             assert(best <= 8, name + ': ' + item.title + "'s " + owner
               + ' rail never comes within ' + best.toFixed(1) + 'px of ' + owner + "'s own line");
           }
@@ -352,19 +352,19 @@ module.exports = function (test, h) {
     }
   });
 
-  // ------------------------------------------------------------ all-day bands
+  // ------------------------------------------------------------ all-day events
 
-  test('an all-day siding band runs the width of the visible day', () => {
+  test('an all-day event runs the width of the visible day', () => {
     const f = fixtures.find((x) => x.name === 'all-day-every-track');
     const rep = layout(f, ROOMY);
-    // The line itself is the longest piece drawn for it. A siding also
-    // draws the EXPRESS half of its loop, the straight run the line would
-    // have taken from one end of the siding to the other, and that is a
-    // piece of the drawing rather than the line: it is as long as its own
-    // siding and has no business spanning the board.
     // The COURSE, one per line and unbroken: the drawn line is in runs now,
     // cut wherever it passes under something, so its longest piece is not
     // its length. Where the line GOES is the question here.
+    //
+    // Every line on this board carries an all-day event, and an all-day
+    // event is drawn ON the line rather than as a band beside it, so every
+    // line still has to run the whole width of the board. A line that
+    // stops short is one that was taken somewhere by its own event.
     const byOwner = {};
     for (const t of pathsWhere(rep, 'course')) (byOwner[t.owner] = byOwner[t.owner] || []).push(t);
     const tracks = Object.keys(byOwner)
@@ -373,13 +373,26 @@ module.exports = function (test, h) {
       const xs = t.pts.map((p) => p[0]);
       const span = Math.max.apply(null, xs) - Math.min.apply(null, xs);
       assert(span > rep.canvas.w * 0.9, 'track ' + t.owner + ' only spans ' + Math.round(span) + 'px of ' + Math.round(rep.canvas.w));
-      // a raised band means the line spends most of its length off its own
-      // baseline: the run at the most common y should not be the whole line
-      const ys = t.pts.map((p) => Math.round(p[1]));
-      const counts = {};
-      ys.forEach((y) => { counts[y] = (counts[y] || 0) + 1; });
-      const top = Math.max.apply(null, Object.keys(counts).map((k) => counts[k]));
-      assert(top > ys.length * 0.5, 'track ' + t.owner + ' has no sustained flat run — the band never settles');
+    }
+    // And the event itself runs the whole day it is on. Its own drawn span
+    // is what says how long it lasts now that nothing else about it does:
+    // no band, no kink, just a ring, an end tick and the caption between
+    // them. An all-day event covers every other event on the board, so it
+    // has to start no later than the first of them and end no earlier than
+    // the last.
+    const evs = eventsIn(rep);
+    const allDay = f.metro.items.filter((i) => i.type === 'event' && i.all_day);
+    assert(allDay.length > 0, 'this board is meant to carry all-day events');
+    const rest = evs.filter((e) => !allDay.some((a) => a.title === e.title));
+    const first = Math.min.apply(null, rest.map((e) => e.nodeA));
+    const last = Math.max.apply(null, rest.map((e) => e.endA));
+    for (const a of allDay) {
+      const e = evs.find((x) => x.title === a.title);
+      assert(e, '"' + a.title + '" was not laid out at all');
+      assert(e.nodeA <= first + 1, '"' + a.title + '" starts at ' + Math.round(e.nodeA)
+        + ', after the day\'s first event at ' + Math.round(first));
+      assert(e.endA >= last - 1, '"' + a.title + '" ends at ' + Math.round(e.endA)
+        + ', before the day\'s last event at ' + Math.round(last));
     }
   });
 
@@ -450,50 +463,69 @@ module.exports = function (test, h) {
     });
   }
 
-  test('a siding shared by two lines kinks both and is captioned once', () => {
-    // Two children at the same school are two kinks — they really are both
-    // there — but it is one School Day. Drawn once per line the caption
-    // appeared twice, on lines that could be at opposite ends of the board.
-    const f = fixtures.find((x) => x.name === 'shared-siding');
+  test('a long event two people share moves both lines and is captioned once', () => {
+    // Two children at the same school both leave their lane for it, because
+    // they really are both there, but it is one School Day. Drawn once per
+    // line the caption appeared twice, on lines that could be at opposite
+    // ends of the board.
+    const f = fixtures.find((x) => x.name === 'shared-long-event');
     const rep = layout(f, ROOMY);
     const captions = textLabels(rep).filter((l) => l.text.indexOf('School Day') >= 0);
     assert(captions.length === 1,
-      'expected one "School Day" caption for the shared siding, got ' + captions.length);
+      'expected one "School Day" caption for the event they share, got ' + captions.length);
     // and both lines still leave their baseline for it
-    const kinked = pathsWhere(rep, 'track').filter((t) => {
+    const moved = pathsWhere(rep, 'track').filter((t) => {
       const ys = t.pts.map((q) => q[1]);
       return Math.max(...ys) - Math.min(...ys) > 6;
     });
-    assert(kinked.length >= 2,
-      'both lines should kink out to siding level, only ' + kinked.length + ' did');
+    assert(moved.length >= 2,
+      'both lines should lean in to the corridor, only ' + moved.length + ' did');
   });
 
-  test('a shared siding draws its lines TOGETHER, not apart', () => {
-    // A siding normally kinks a line away from the spine. Two people at the
-    // same school kinking away from EACH OTHER looked like two unrelated
-    // sidings that happened to share a name. Converging instead draws them
-    // alongside each other for the length of the thing they are both at.
-    const f = fixtures.find((x) => x.name === 'shared-siding');
+  test('a long event two people share draws their lines TOGETHER, not apart', () => {
+    // Drawn as a siding each, two people at the same school kinked away
+    // from EACH OTHER and it read as two unrelated blocks that happened to
+    // share a name. A long event two people share is not a long event at
+    // all, it is a shared event: the lines converge and run alongside each
+    // other for the length of the thing they are both at.
+    const f = fixtures.find((x) => x.name === 'shared-long-event');
     const rep = layout(f, ROOMY);
-    const owners = new Set(f.metro.sidings.map((s) => s.owner));
-    const lines = pathsWhere(rep, 'track').filter((t) => owners.has(t.owner));
-    assert(lines.length === 2, 'expected the two lines that share the siding');
-    // the gap between them, at the ends of the board versus in the middle
-    // of the shared span
+    const long = f.metro.items.find((i) => i.type === 'event' && (i.co_owners || []).length
+      && (i.all_day || i.end_min - i.start_min >= 240));
+    assert(long, 'this board is meant to carry a long event two people share');
+    const owners = new Set([long.owner].concat(long.co_owners));
+    // the COURSE, not the ink: the drawn line is cut wherever it passes
+    // under something, so a run of it says nothing about where it goes
+    const lines = pathsWhere(rep, 'course').filter((t) => owners.has(t.owner));
+    assert(lines.length === 2, 'expected the two lines that share "' + long.title + '"');
     const at = (t, x) => {
       let best = null;
       for (const q of t.pts) if (!best || Math.abs(q[0] - x) < Math.abs(best[0] - x)) best = q;
       return best[1];
     };
+    // the gap between them at the start of the day, where each is on its
+    // own lane, against the gap in the middle of the span they share
+    const e = eventsIn(rep).find((x) => x.title === long.title);
+    const Z = rep.debug.Z || 1;
     const edge = Math.abs(at(lines[0], 8) - at(lines[1], 8));
-    const mid = Math.abs(at(lines[0], rep.canvas.w / 2) - at(lines[1], rep.canvas.w / 2));
+    const mid = Math.abs(at(lines[0], (e.nodeA + e.endA) / 2 * Z) - at(lines[1], (e.nodeA + e.endA) / 2 * Z));
     assert(mid < edge - 8,
-      'the lines should be closer together inside the shared siding than outside it: '
+      'the lines should be closer together inside the event they share than outside it: '
       + Math.round(mid) + 'px vs ' + Math.round(edge) + 'px');
-    // and a bar across them at each end says where it starts and stops
+    // A capsule spans the lines where the corridor starts. It does NOT get
+    // a second one at the far end: a bar across the corridor there says the
+    // lines all stop, which is not what happens, so the end is a tick on
+    // one rail in that line's own colour (rule 30).
     const bars = (rep.rects || []).filter((r) => r.role === 'capsule');
-    assert(bars.length >= 2,
-      'expected a bar at each end of the shared span, found ' + bars.length);
+    assert(bars.length >= 1, 'expected a capsule where the shared span starts, found none');
+    const near = (r, a) => Math.abs(r.x + r.w / 2 - a) < 12;
+    assert(bars.some((r) => near(r, e.nodeA * Z)),
+      'no capsule where "' + long.title + '" starts');
+    assert(!bars.some((r) => near(r, e.endA * Z)),
+      'a capsule across the corridor where "' + long.title + '" ends says the lines all stop there');
+    const ticks = (rep.circles || []).filter((m) => m.role === 'stop' && near(m, e.endA * Z));
+    assert(ticks.length >= 1,
+      'no tick on a rail where "' + long.title + '" ends: nothing says the corridor is over');
   });
 
   for (const f of fixtures) {

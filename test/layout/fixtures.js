@@ -118,11 +118,12 @@ const busyDay = base({
   ],
 });
 
-// The same day with an all-day event on EVERY track. All-day events render
-// as a full-width siding band, which moves every line off its baseline for
-// the whole day — that is what broke the interchange capsule (it reached for
-// a baseline nobody was sitting on any more) and what put a track's own line
-// through its caption.
+// The same day with an all-day event on EVERY track. Every line carries a
+// long event running the width of the board, which is the densest the
+// inward caption rungs ever get. Drawn as a band that moved every line off
+// its baseline for the whole day, this is what broke the interchange
+// capsule (it reached for a baseline nobody was sitting on any more) and
+// what put a track's own line through its caption.
 const allDayEveryTrack = base({
   items: [
     longs(TRACKS)('work', 'Office Closed', 420, 1260, { all_day: true }),
@@ -132,10 +133,12 @@ const allDayEveryTrack = base({
   ].concat(busyDay.items),
 });
 
-// A siding (config `siding: true`) with a location line, spanning
-// most of the day, with real meetings inside its span. The caption is two
-// lines here, which is what used to overflow the gap the kink opens up.
-const sidingDay = base({
+// A long solo event with a location line, spanning most of the day, with
+// real meetings inside its span that branch off the line as usual. The
+// caption is two lines here, which is what used to overflow the gap the
+// old siding kink opened up, and is now what the reserved inward rung has
+// to be deep enough for.
+const longEventDay = base({
   items: [
     longs(TRACKS)('work', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
     longs(TRACKS)('kids', 'Schoolfotografie', 420, 1260, { all_day: true }),
@@ -238,10 +241,12 @@ const fullDay = base({
   ],
 });
 
-// One siding shared by two lines: both kink (they really are both there)
-// but it is one event, so one caption, set between them. Drawn once per line
-// it appeared twice, on lines that could be at opposite ends of the board.
-const sharedSiding = base({
+// One long event shared by two lines, which is a convergence like any
+// other shared event: the two lean in and run together for the length of
+// it (they really are both there), and it is one event, so one caption,
+// set between them. Drawn once per line it appeared twice, on lines that
+// could be at opposite ends of the board.
+const sharedLongEvent = base({
   items: [
     longs(TRACKS)('sam', 'School Day', 480, 960, { location: 'Springfield Elementary', co_owners: ['kids'] }),
     ev('Standup', 'work', 540, 555, { track_width: 4 }),
@@ -288,8 +293,8 @@ const fiveLines = Object.assign(base({
 }), { legend: FIVE });
 
 // A work crew rather than a family, and the shape the Futurama demo board
-// has: a whole-crew interchange first thing, three of them on one siding
-// for most of the day, and two short events just before the interchange
+// has: a whole-crew interchange first thing, three of them on one long
+// event for most of the day, and two short events just before the interchange
 // whose captions the interchange bar cuts across. Those two are what caught
 // a caption being thrown 71px off its own rail to dodge that bar.
 const CREW = [
@@ -323,7 +328,7 @@ const crewDay = Object.assign(base({
 // nothing to be done about it from the layout's side — which is the point.
 // This is the board that was drawn at a 20px pitch in a 780px-deep canvas
 // with every line's name lying across its own rail, and the whole crew's
-// siding drawn as a stack of unrelated pills.
+// delivery run drawn as a stack of unrelated pills.
 const SEVEN = [
   track('deliv', 'Deliveries', 'left', 'black', -20, 5.5, 'dashed'),
   track('crew', 'Crew', 'left', 'black', -10, 5, 'dotted'),
@@ -409,13 +414,13 @@ const threeDay = Object.assign(base({
 module.exports = [
   { name: 'busy-day', metro: busyDay },
   { name: 'all-day-every-track', metro: allDayEveryTrack },
-  { name: 'siding-day', metro: sidingDay },
+  { name: 'long-event-day', metro: longEventDay },
   { name: 'quiet-day', metro: quietDay },
   { name: 'tight-pair', metro: tightPair },
   { name: 'double-booked', metro: doubleBooked },
   { name: 'regroups', metro: regroups },
   { name: 'full-day', metro: fullDay },
-  { name: 'shared-siding', metro: sharedSiding },
+  { name: 'shared-long-event', metro: sharedLongEvent },
   { name: 'five-lines', metro: fiveLines },
   { name: 'crew-day', metro: crewDay },
   { name: 'seven-lines', metro: sevenLines },
