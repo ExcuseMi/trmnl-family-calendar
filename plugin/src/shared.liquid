@@ -1290,9 +1290,25 @@
       // next one exactly when it is needed: what is between them is
       // straight track, which is the only thing straight track should mean.
       var where = prevEnd == null ? -1 : 1;
-      // ...unless it cannot: leaving at once and arriving on time are the
-      // same demand when the two events nearly touch, and then the move
-      // simply fills what room there is.
+      // GOING HOME IS OPTIONAL. A line has to START the day on its own
+      // lane, because that is where its name is written and the reader
+      // needs the two to agree. It does not have to END there: after the
+      // last thing somebody did there is nothing more to say, and the lane
+      // it came from is not news.
+      //
+      // Squeezed into the few minutes left after a late dinner, the return
+      // was a stack of little verticals and dog-legs down the right-hand
+      // edge, every one of them saying only that the drawing wanted to tidy
+      // up. So the run home happens when there is room to draw it properly
+      // and does not happen at all when there is not: the line simply
+      // carries on at the level it reached and ends there.
+      if (i === hs.length && lvl !== prevLvl) {
+        var want = octRun(lvl - prevLvl, octRadius(lvl - prevLvl));
+        if (to - from < want) lvl = prevLvl;
+      }
+      // ...and between two events it cannot refuse: leaving at once and
+      // arriving on time are the same demand when the two nearly touch, and
+      // then the move fills what room there is.
       var sp = octSpan(from, to, lvl - prevLvl, where);
       sp.base = prevLvl; sp.d = lvl - prevLvl;
       p[key][i] = sp;
