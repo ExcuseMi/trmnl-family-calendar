@@ -3810,10 +3810,33 @@
           svg.appendChild(cap);
         });
       } else {
-        var ln = svgEl('path', { d: roundedPath(sidingPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
-        ln.setAttribute('data-metro-role', 'track'); ln.setAttribute('data-metro-owner', p.key);
-        paintLine(ln, p, S, svg, 0);
-        p._trunkEl = ln;
+        // THE WHOLE TRUNK, DRAWN ONCE AND NOT SHOWN. Everything downstream
+        // asks this element how far along itself the line is at a given
+        // minute, so that the dash phase of a branch picks up where its
+        // trunk left off. It has to be one unbroken path for that to mean
+        // anything, and the visible line is now several.
+        var whole = svgEl('path', { d: roundedPath(sidingPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
+        whole.style.fill = 'none'; whole.style.stroke = 'none';
+        svg.appendChild(whole);
+        p._trunkEl = whole;
+        // AND THEN IN RUNS, BROKEN WHERE IT PASSES UNDER SOMETHING.
+        //
+        // On a transit map the line that gives way at a crossing is broken
+        // there: the gap reads as passing under, and the line on top stays
+        // whole. Every rail on this board has done that for years and the
+        // trunks never did, because trunks used to be level and level lines
+        // do not cross. They cross constantly now -- a line leaning over to
+        // meet a convergence cuts through every lane between -- and each one
+        // was drawn straight over whatever was in the way.
+        trunkRuns(p).forEach(function (run) {
+          var pts = sidingPath(c, p._sign, run[0], run[1], p).map(function (pt) { return toXY(pt[0], pt[1]); });
+          if (pts.length < 2) return;
+          var seg = svgEl('path', { d: roundedPath(pts, CORNER) });
+          seg.setAttribute('data-metro-role', 'track'); seg.setAttribute('data-metro-owner', p.key);
+          // the phase this piece starts at, so the texture runs on through
+          // the gap rather than restarting at every crossing
+          paintLine(seg, p, S, svg, phaseAfter(p, trunkLenAt(p, run[0]) || 0));
+        });
         expressThrough(p);
       }
     });
@@ -4246,6 +4269,62 @@
       return (lo + hi) / 2;
     }
     function trunkLenAt(p, a) { return pathLenAtAxis(p._trunkEl, a); }
+    // WHERE A TRUNK GOES UNDER SOMETHING, and therefore where it is not
+    // drawn. Returns the runs to draw, in axis order.
+    //
+    // Who gives way: the line that is further from its own baseline. A line
+    // running where it always runs keeps its ink and the one leaning across
+    // the board to get somewhere dives under it, which is both the easier
+    // read and the honest one -- the crossing is the traveller's doing.
+    function trunkRuns(p) {
+      var base = spineC + p._c;
+      var step = Math.max(1.5 * S, (axisEnd - axisStart) / 500);
+      var cuts = [];
+      function crossings(cAt, wid, otherBase, a0, a1) {
+        var prev = null;
+        for (var a = a0; a <= a1; a += step) {
+          var dc = lineCAt(p, a) - cAt(a);
+          if (prev !== null && (prev < 0) !== (dc < 0) && Math.abs(dc - prev) > 1e-6) {
+            var mid = a - step / 2;
+            var mine = Math.abs(lineCAt(p, mid) - base);
+            var theirs = otherBase == null ? 0 : Math.abs(cAt(mid) - otherBase);
+            if (mine > theirs + 0.5) {
+              // How far along the axis the two are within a stroke of each
+              // other: the closing rate is what decides it, so a shallow
+              // crossing opens a longer gap than a square one, which is
+              // exactly what looks right.
+              var rate = Math.abs(dc - prev) / step;
+              var half = (wid / 2 + LINE_GAP * 0.6) / Math.max(rate, 0.25);
+              cuts.push([mid - half, mid + half]);
+            }
+          }
+          prev = dc;
+        }
+      }
+      LEGEND.forEach(function (q) {
+        if (q === p) return;
+        crossings(function (a) { return lineCAt(q, a); },
+          Math.max(2, q.line_width) * S * weightScale, spineC + q._c, axisStart, axisEnd);
+      });
+      // and the rails, which are as much a drawn line as a trunk is
+      visible.forEach(function (o) {
+        if (o._dropped || o._laneDist == null || o._p === p) return;
+        if (!isFinite(o._lineFrom) || !isFinite(o._lineTo)) return;
+        var oc = o._drawnLaneC != null ? o._drawnLaneC : spineC + o._sign * o._laneDist;
+        crossings(function () { return oc; },
+          Math.max(2, (o._p ? o._p.line_width : 3)) * S * weightScale, null,
+          Math.min(o._lineFrom, o._lineTo), Math.max(o._lineFrom, o._lineTo));
+      });
+      cuts.sort(function (x, y) { return x[0] - y[0]; });
+      var runs = [], at = axisStart;
+      cuts.forEach(function (g) {
+        if (g[0] > at + 1) runs.push([at, g[0]]);
+        at = Math.max(at, g[1]);
+      });
+      if (at < axisEnd - 1) runs.push([at, axisEnd]);
+      if (!runs.length) runs.push([axisStart, axisEnd]);
+      return runs;
+    }
     // Where a drawn path actually IS at axis position `a`, in canvas px.
     // Corners are drawn rounded, so at a bend the line is up to a corner
     // radius away from the vertex the geometry names — a marker placed on
