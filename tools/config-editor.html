@@ -389,8 +389,8 @@
   }
 
   // ------------------------------------------------------------ model
-  var state = { lines: [], calendars: [], rules: [], timeZone: "", locale: "" };
-  function newLine() { return { _id: uid(), name: "", color: "", side: "" }; }
+  var state = { lines: [], calendars: [], rules: [], timeZone: "", locale: "", timeFormat: "", temperatureUnit: "" };
+  function newLine() { return { _id: uid(), name: "", color: "", side: "", keepEmpty: false }; }
   function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false, keepEmpty: false, holiday: false }; }
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
   function newCondition() { return { _id: uid(), type: "word", field: "", value: "", status: "confirmed", weekdays: [], min: "", max: "", from: "", to: "", negate: false }; }
@@ -528,10 +528,23 @@
     var cfg = {};
     if (state.timeZone.trim()) cfg.timeZone = state.timeZone.trim();
     if (state.locale.trim()) cfg.locale = state.locale.trim();
+    // ACCOUNT-WIDE SETTINGS THIS PAGE DOES NOT EDIT, AND MUST NOT EAT.
+    // There is no control for either -- they are decided once, for the
+    // whole board -- but every shipped demo config carries
+    // `"timeFormat": "12h"`, so importing one of those and pasting the
+    // result back silently flipped the clock to 24h. A tool that quietly
+    // changes a setting it does not show is worse than one that cannot
+    // show it.
+    if (state.timeFormat) cfg.timeFormat = state.timeFormat;
+    if (state.temperatureUnit) cfg.temperatureUnit = state.temperatureUnit;
     cfg.lines = state.lines.filter(function (t) { return t.name.trim(); }).map(function (t) {
       var o = { name: t.name.trim() };
       if (t.color) o.color = t.color;
       if (t.side === "left" || t.side === "right") o.side = t.side;
+      // The same switch the calendar card offers, which a LINE may carry
+      // too: "keep this person's line on a day they have nothing". It is
+      // documented, it is read by the plugin, and it was being dropped.
+      if (t.keepEmpty) o.hideIfEmpty = false;
       return o;
     });
     var gr = state.rules.map(ruleValue).filter(Boolean);
@@ -651,6 +664,7 @@
       o.color = typeof t.color === "string" && COLORS.indexOf(t.color.toLowerCase()) !== -1 ? t.color.toLowerCase() : "";
       var side = typeof t.side === "string" ? t.side.toLowerCase() : "";
       o.side = side === "left" || side === "work" ? "left" : side === "right" || side === "family" ? "right" : "";
+      o.keepEmpty = t.hideIfEmpty === false;
       return o;
     });
     var knownNames = state.lines.map(function (t) { return t.name; });
@@ -678,6 +692,8 @@
     state.rules.forEach(function (r) { r.lines.forEach(ensureTrack); });
     state.timeZone = typeof data.timeZone === "string" ? data.timeZone : "";
     state.locale = typeof data.locale === "string" ? data.locale : "";
+    state.timeFormat = typeof data.timeFormat === "string" ? data.timeFormat : "";
+    state.temperatureUnit = typeof data.temperatureUnit === "string" ? data.temperatureUnit : "";
     if (!state.calendars.length) state.calendars.push(newCalendar());
     renderAll();
   }

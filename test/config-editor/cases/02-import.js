@@ -52,6 +52,32 @@ module.exports = function (test, h) {
   });
 
 
+  // A TOOL MUST NOT QUIETLY CHANGE A SETTING IT DOES NOT SHOW.
+  //
+  // There is no control on this page for the clock or the temperature unit,
+  // and there should not be: they are decided once for the whole board. But
+  // every shipped demo config carries `"timeFormat": "12h"`, so importing
+  // one and pasting the result back flipped the clock to 24h with nothing
+  // said. Line-level `hideIfEmpty` went the same way -- documented, read by
+  // the plugin, and dropped here.
+  test('settings the page cannot edit still survive a trip through it', () => {
+    const { document } = loadEditor();
+    const cfg = {
+      timeFormat: '12h', temperatureUnit: 'f', timeZone: 'Europe/Brussels', locale: 'en',
+      lines: [{ name: 'Sam', hideIfEmpty: false }, { name: 'Alex' }],
+      calendars: [{ url: 'https://a.example/s.ics', name: 'Sam' }],
+    };
+    document.getElementById('importIn').value = JSON.stringify(cfg);
+    click(document.getElementById('loadImport'));
+    const out = jsonOut(document);
+    assertEqual(out.timeFormat, '12h', 'the clock setting was eaten');
+    assertEqual(out.temperatureUnit, 'f', 'the temperature unit was eaten');
+    assertEqual(out.timeZone, 'Europe/Brussels');
+    assertEqual(out.lines[0], { name: 'Sam', hideIfEmpty: false },
+      'a line that should stay on an empty day lost that');
+    assertEqual(out.lines[1], { name: 'Alex' }, 'a plain line grew a key');
+  });
+
   test('an old config\'s "siding" rule imports without it, and without breaking', () => {
     // `siding` (and the `station` it shipped as) used to be a rule option
     // and is not one any more: a long block is a long block because it is
