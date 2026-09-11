@@ -123,11 +123,18 @@ module.exports = function (test, h) {
   });
 
   test('never more rungs than were asked for', () => {
-    // A rung nobody wants is a gap in the middle of the map.
+    // A rung nobody wants is a gap in the middle of the map. `demand` is
+    // the OUTWARD lanes a track asked for; a long event's name and a
+    // pierced track's escape are inward rungs on top of it, because paying
+    // for them out of the outward ladder leaves a track with fewer places
+    // to write than it has things to say.
     for (const seed of SEEDS) {
       const b = randomBoard(seed);
       const out = solve(b);
-      const want = Object.keys(b.demand).reduce((n, key) => n + b.demand[key], 0);
+      let want = Object.keys(b.demand).reduce((n, key) => n + b.demand[key], 0);
+      for (const side of ['A', 'B']) {
+        for (const t of b.sides[side]) want += Math.min(2, (t.long || 0) + (t.needIn ? 1 : 0));
+      }
       assert(laneCount(out) <= want, 'seed ' + seed + ': granted ' + laneCount(out)
         + ' rungs for a demand of ' + want);
     }
