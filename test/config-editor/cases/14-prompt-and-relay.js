@@ -75,4 +75,26 @@ module.exports = function (test, h) {
     assert(!/NOT READ/.test(p), 'the copied prompt still calls the pasted feed unread');
     assert(/Choir practice/.test(p), 'the events pasted in never reached the copied prompt');
   });
+
+  // A BUTTON DOES WHAT IT SAYS, WHICHEVER DOOR IT WAS REACHED THROUGH.
+  //
+  // The unread-feeds dialog offers three ways forward, the last of them
+  // "Copy the prompt anyway". It was written for the dialog raised by Copy,
+  // where the copy it had interrupted was remembered and run afterwards.
+  // Generate raises the same dialog and remembered nothing, so from that
+  // door the button closed the dialog and copied nothing at all: the reader
+  // pressed the button that says copy, went to their assistant, and pasted
+  // whatever happened to be on the clipboard before.
+  test('"Copy the prompt anyway" copies, even when the offer came from Generate', () => {
+    const document = withOneCalendar();
+    click(document.getElementById('makePrompt'));
+    assert(!document.getElementById('relayOffer').hidden,
+      'sanity: an unread feed should raise the offer');
+
+    click(document.getElementById('relaySkip'));
+    assert(document.getElementById('relayOffer').hidden, 'the offer stayed up');
+    assert(/Copied/.test(document.getElementById('promptStatus').textContent),
+      'the button labelled "Copy the prompt anyway" copied nothing: '
+        + document.getElementById('promptStatus').textContent);
+  });
 };

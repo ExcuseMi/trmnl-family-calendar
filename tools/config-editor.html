@@ -1924,7 +1924,11 @@
     // Generate is the first press, so it is where the ways to read the
     // feeds are offered. Hung off Copy alone, the offer went unseen by
     // everybody who read an event-less prompt and stopped there.
-    relayOffer(null);
+    //
+    // It is handed the copy to run afterwards, the same as Copy's own offer:
+    // the dialog's third way out says "Copy the prompt anyway", and raised
+    // from here with nothing to run it closed the dialog and copied nothing.
+    relayOffer(copyPromptNow);
   });
   // ------------------------------------------------------------ the relay
   //
