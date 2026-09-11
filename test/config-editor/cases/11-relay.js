@@ -79,6 +79,19 @@ module.exports = function (test, h) {
       'the reader was told a status code instead of why: ' + st);
   });
 
+  // GENERATE IS THE FIRST PRESS, SO THAT IS WHERE IT ASKS. The offer used to
+  // hang off Copy only, and Generate is the button people press first: they
+  // read a prompt with no events in it, copied nothing, and never saw the
+  // relay at all.
+  test('generating a prompt with unread feeds offers the relay too', () => {
+    const document = withUnreadCalendar();
+    click(document.getElementById('makePrompt'));
+    assert(!document.getElementById('relayOffer').hidden,
+      'Generate made an event-less prompt without offering a way to read the feeds');
+    assert(/secret-address\.ics/.test(document.getElementById('relayList').textContent),
+      'the offer does not list the link it would send');
+  });
+
   test('"copy anyway" is a way through, not a dead end', () => {
     const document = withUnreadCalendar();
     click(document.getElementById('copyPrompt'));

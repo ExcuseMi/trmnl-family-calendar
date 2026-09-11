@@ -58,14 +58,29 @@ module.exports = function (test, h) {
     assertEqual(out.lines || [], [], 'the example lines survived into the real one');
   });
 
-  test('the AI choice lands on the prompt, not on the form', () => {
+  // THE AI ROUTE STARTS AT THE LINKS. It used to jump past the paste box to
+  // the prompt, which then had no calendars to describe -- and with no
+  // calendars there were no unread feeds, so the relay was never offered.
+  test('the AI choice starts at the paste box, not at an empty prompt', () => {
     const { document } = loadEditor();
     click(document.getElementById('goReal'));
     click(document.getElementById('chooseAi'));
     assertEqual(document.getElementById('page').getAttribute('data-stage'), 'ai');
+    assert(/Paste your calendar links here/.test(document.getElementById('importStatus').textContent),
+      'the AI route does not ask for the links first');
   });
 
-  test('pasting a configuration goes straight to the form, whatever stage it was in', () => {
+  test('on the AI route, loading links keeps the prompt on screen', () => {
+    const { document } = loadEditor();
+    click(document.getElementById('goReal'));
+    click(document.getElementById('chooseAi'));
+    document.getElementById('importIn').value = 'https://a.example/sam.ics\nhttps://a.example/alex.ics';
+    click(document.getElementById('loadImport'));
+    assertEqual(document.getElementById('page').getAttribute('data-stage'), 'ai',
+      'loading the links jumped to the form and hid the prompt they were pasted in for');
+  });
+
+  test('pasting a configuration goes straight to the form, from anywhere but the AI route', () => {
     const { document } = loadEditor();
     document.getElementById('importIn').value = JSON.stringify({
       lines: [{ name: 'Sam' }], calendars: [{ url: 'https://a.example/s.ics', name: 'Sam' }],

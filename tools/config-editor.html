@@ -1559,7 +1559,14 @@
     markLoaded();
     // A configuration in hand answers the question the earlier stages ask,
     // so the form it describes is what the page should be showing.
-    setStage("build");
+    //
+    // EXCEPT ON THE AI ROUTE. There the paste box is step one and the prompt
+    // is step two, and a bare list of links is exactly what step one asks
+    // for. Jumping to the form hid the prompt the links were pasted in for:
+    // somebody following "Let an AI write it" pressed Load and the AI
+    // section vanished from under them.
+    if (stage() === "ai") show("station-agent");
+    else setStage("build");
     reportLoad(res);
   });
   document.getElementById("loadDemo").addEventListener("click", function () {
@@ -1887,6 +1894,10 @@
     } else {
       setStatus("promptStatus", "Ready, with the events from all " + read + " calendars in it.", "ok");
     }
+    // Generate is the first press, so it is where the ways to read the
+    // feeds are offered. Hung off Copy alone, the offer went unseen by
+    // everybody who read an event-less prompt and stopped there.
+    relayOffer(null);
   });
   // ------------------------------------------------------------ the relay
   //
@@ -2361,7 +2372,20 @@
     setStage(name);
     show(focusId);
   }
-  document.getElementById("chooseAi").addEventListener("click", function () { intoStage("ai", "station-agent"); });
+  // THE AI ROUTE STARTS AT THE LINKS, NOT AT THE PROMPT.
+  //
+  // It jumped straight to "Let an AI do it", past the paste box sitting
+  // right above it, so the first thing on screen was a Generate button with
+  // no calendars behind it. The prompt then had nothing to say but "send me
+  // your links", and with no links there were no unread feeds for the relay
+  // to offer to fetch either: one skipped box quietly switched off both.
+  document.getElementById("chooseAi").addEventListener("click", function () {
+    intoStage("ai", "station-start");
+    setStatus("importStatus", "Paste your calendar links here, one per line, and press Load. "
+      + "Then generate the prompt just below.", "");
+    var box = document.getElementById("importIn");
+    if (box && box.focus) box.focus();
+  });
   document.getElementById("chooseManual").addEventListener("click", function () { intoStage("build", "station-lines"); });
   // The bar at the top points at sections a stage may be hiding. A nav link
   // that scrolls to nothing is worse than no nav link, so following one puts
