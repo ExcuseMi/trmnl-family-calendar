@@ -761,6 +761,19 @@ is open.
   presets, where somebody is reading a configuration rather than a day,
   and that is where it is.
 
+- [ ] **E16. The rule editor has no control for `allDay` or for deleting the
+  matched text.** Both survive a round trip now -- a config carrying either
+  loads, keeps it and writes it back, where before the editor dropped them
+  silently and handed back a configuration that had quietly stopped
+  stripping class codes. But neither can be SET in the editor, so anybody
+  who wants one has to hand-edit the JSON box.
+
+  `allDay` wants a checkbox beside `hide`. Deleting the matched text is the
+  harder one, because the rewrite field cannot tell "I typed nothing" from
+  "I mean nothing": it wants its own affordance -- a "remove the matched
+  text" tick that disables the field -- rather than a subtler reading of an
+  empty box.
+
 - [ ] **E14. The two biggest text tiers ignore the device's font setting.**
   Carried over from the old tracker. The device's Font Family setting
   (Default / Classic / TRMNL) only redefines `--title-*` and `--label-*` for

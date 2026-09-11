@@ -244,73 +244,88 @@ module.exports = function (test, h) {
   // to lie alongside anybody for and keeps the tie, which must still span
   // the lines it joins. Both say the same thing, and both are checked here
   // against the lines as they are really drawn.
+  // A SHARED EVENT HAS TO REACH EVERY LINE IT JOINS.
+  //
+  // Three people at one place is the plugin's whole reason for being a
+  // transit map rather than a list, and it is drawn two ways depending on
+  // how long the event is. A short one gets the stadium capsule spanning
+  // its members, the standard interchange mark. A long one converges the
+  // lines themselves, so they run alongside each other for its span --
+  // there is no capsule there because the convergence IS the mark.
+  //
+  // What this used to assert: a capsule, or rails carrying a bundle id.
+  // Both halves had drifted. Nothing tags a bundle any more, and a
+  // converged event is drawn on the lines' own trunks, so a perfectly good
+  // interchange read as "drawn neither as a bundle of rails nor as a tie".
+  //
+  // And the capsule half was measuring the wrong thing: it took the MIDDLE
+  // of every sample a line left near the capsule's minute, which for a line
+  // dropping vertically into that capsule is halfway down the drop and
+  // outside it. Both capsules on the everyday board reach exactly the two
+  // lines they join; the midpoint of one of those lines sat 50px clear.
   test('a shared event reaches every line it joins', () => {
     for (const name of ['busy-day', 'all-day-every-track', 'moment-day']) {
       const f = fixtures.find((x) => x.name === name);
       const rep = layout(f, ROOMY);
       const tracks = pathsWhere(rep, 'track');
-      const bundles = {};
-      for (const p of rep.paths) {
-        if (!p.bundle) continue;
-        (bundles[p.bundle] = bundles[p.bundle] || []).push(p);
-      }
-      const ties = rep.paths.filter((p) => p.role === 'capsule')
-        .concat(rep.rects.filter((r) => r.role === 'capsule'));
-      const shared = f.metro.events.filter((i) => i.type === 'event' && (i.co_owners || []).length);
+      const caps = (rep.rects || []).filter((r) => r.role === 'capsule');
+      const shared = f.metro.events.filter((i) => (i.co_owners || []).length);
       assert(shared.length > 0, name + ': fixture has no shared events');
-      let checked = 0;
+
+      // every y this line is drawn at, within a few px of one minute
+      const ysAt = (owner, x) => {
+        const out = [];
+        for (const t of tracks) {
+          if (t.owner !== owner) continue;
+          for (const p of t.pts) if (Math.abs(p[0] - x) <= 3) out.push(p[1]);
+        }
+        return out;
+      };
+
       for (const item of shared) {
-        const key = Object.keys(bundles).find((k) => k.split('|')[0] === item.title);
-        if (key) {
-          // a bundle: every line in the event has a rail, and every rail
-          // starts on the line it came from, wherever that line is
-          const want = [item.owner].concat(item.co_owners).sort();
-          const got = [...new Set(bundles[key].map((p) => p.owner))].sort();
-          assert(got.join(',') === want.join(','), name + ': ' + item.title
-            + ' is on lines ' + want.join(',') + ' but drew rails for ' + (got.join(',') || 'nobody'));
-          for (const owner of got) {
-            const mine = tracks.filter((t) => t.owner === owner);
-            let best = Infinity;
-            for (const p of bundles[key]) {
-              if (p.owner !== owner) continue;
-              for (const q of p.pts) for (const t of mine) for (const pt of t.pts) {
-                const d = Math.hypot(pt[0] - q[0], pt[1] - q[1]);
-                if (d < best) best = d;
-              }
-            }
-            // The rail leaves its line at a point ON it, so this is a
-            // rounding error and a 2px sampling step, not a tolerance. The
-            // defect it guards against left rails the whole depth a long block
-            // used to be lifted out by (32px at 1x, 64px on an X) out in mid-air.
-            assert(best <= 8, name + ': ' + item.title + "'s " + owner
-              + ' rail never comes within ' + best.toFixed(1) + 'px of ' + owner + "'s own line");
+        const want = [item.owner].concat(item.co_owners);
+        const laid = eventsIn(rep).find((e) => e.title === item.title);
+        assert(laid, name + ': ' + item.title + ' was not laid out at all');
+
+        // A capsule at this event's minute must TOUCH every line it joins:
+        // any sample inside it, not the average of a line in mid-turn.
+        const cap = caps.find((c) => Math.abs(c.x + c.w / 2 - laid.nodeA * (rep.debug.Z || 1)) <= 12);
+        if (cap) {
+          const top = cap.y - 3, bot = cap.y + cap.h + 3;
+          for (const owner of want) {
+            const ys = ysAt(owner, cap.x + cap.w / 2);
+            assert(ys.some((y) => y >= top && y <= bot),
+              name + ': ' + item.title + "'s capsule never touches " + owner
+              + " (line at " + (ys.length ? Math.round(Math.min(...ys)) + '..'
+                + Math.round(Math.max(...ys)) : 'nowhere near') + ', capsule '
+              + Math.round(top) + '..' + Math.round(bot) + ')');
           }
-          checked++;
           continue;
         }
-        // no bundle: a moment, which has to be tied instead
-        const tie = ties.find((tie) => {
-          const x = tie.x + tie.w / 2, top = tie.y, bot = tie.y + tie.h;
-          let met = 0;
-          for (const t of tracks) {
-            const at = t.pts.filter((p) => Math.abs(p[0] - x) <= 3);
-            if (!at.length) continue;
-            const ys = at.map((p) => p[1]);
-            const y = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
-            if (y >= top - 3 && y <= bot + 3) met++;
+
+        // No capsule: it is a converged event, and what makes it readable is
+        // that the lines are CLOSER during it than they are apart from it.
+        const Z = rep.debug.Z || 1;
+        const mid = ((laid.nodeA + laid.endA) / 2) * Z;
+        const spreadAt = (x) => {
+          const ys = [];
+          for (const owner of want) {
+            const at = ysAt(owner, x);
+            if (at.length) ys.push(at.reduce((a, b) => a + b, 0) / at.length);
           }
-          return met >= 2;
-        });
-        assert(tie, name + ': ' + item.title + ' was drawn neither as a bundle of rails '
-          + 'nor as a tie reaching two of its lines');
-        checked++;
+          return ys.length < 2 ? null : Math.max(...ys) - Math.min(...ys);
+        };
+        const during = spreadAt(mid);
+        assert(during != null, name + ': ' + item.title
+          + ' has no capsule and its lines are not all drawn at its middle, '
+          + 'so nothing on the board says those people were together');
+        const apart = spreadAt(Math.max(4, laid.nodeA * Z - 120)) || Infinity;
+        assert(during < apart, name + ': ' + item.title
+          + ' draws its lines ' + Math.round(during) + 'px apart during it and '
+          + Math.round(apart) + 'px apart before it, so they never converged');
       }
-      assert(checked === shared.length, name + ': only ' + checked + ' of ' + shared.length
-        + ' shared events were drawn at all');
     }
   });
-
-  // ------------------------------------------------------------ all-day events
 
   test('a line carrying an all-day event still runs the whole width', () => {
     // The board this fixture describes changed underneath this case: an

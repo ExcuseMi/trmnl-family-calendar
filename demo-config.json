@@ -1,115 +1,157 @@
 {
   "locale": "en",
   "timeZone": "America/New_York",
+  "lines": [
+    {
+      "name": "Homer"
+    },
+    {
+      "name": "Marge"
+    },
+    {
+      "name": "Bart"
+    },
+    {
+      "name": "Lisa"
+    },
+    {
+      "name": "Maggie"
+    }
+  ],
   "calendars": [
     {
-      "name": "Family",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/family.ics"
-    },
-    {
-      "name": "Alex",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/alex.ics",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/homer.ics",
+      "name": "Homer",
       "rules": [
         {
           "match": {
             "type": "any"
           },
-          "line": "Alex"
+          "line": "Homer"
         }
       ]
     },
     {
-      "name": "Jordan",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/jordan.ics",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/marge.ics",
+      "name": "Marge",
       "rules": [
         {
           "match": {
             "type": "any"
           },
-          "line": "Jordan"
+          "line": "Marge"
         }
       ]
     },
     {
-      "name": "Mia",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/mia.ics",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/bart.ics",
+      "name": "Bart",
       "rules": [
         {
           "match": {
             "type": "any"
           },
-          "line": "Mia"
+          "line": "Bart"
         }
       ]
     },
     {
-      "name": "Leo",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/leo.ics",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/lisa.ics",
+      "name": "Lisa",
       "rules": [
         {
           "match": {
             "type": "any"
           },
-          "line": "Leo"
+          "line": "Lisa"
         }
       ]
     },
     {
-      "name": "Work",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/sam.ics",
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/maggie.ics",
+      "name": "Maggie",
       "rules": [
         {
           "match": {
             "type": "any"
           },
-          "line": "Sam"
+          "line": "Maggie"
         }
       ]
     },
     {
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/school.ics",
       "name": "School",
-      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/school.ics",
       "rules": [
-        {
-          "match": {
-            "type": "regex",
-            "value": "(?=.*\\b(?:L[1345]|K[123])\\b)(?!.*\\b(?:L2|L6)\\b)"
-          },
-          "hide": true
-        },
-        {
-          "match": {
-            "type": "word",
-            "value": "L2"
-          },
-          "line": "Mia"
-        },
         {
           "match": {
             "type": "word",
             "value": "L6"
           },
-          "line": "Leo"
+          "line": "Bart",
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "word",
+            "value": "K3"
+          },
+          "line": "Lisa",
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "regex",
+            "value": "^(?:L6|K3)\\s+"
+          },
+          "rewrite": ""
         }
       ]
-    }
-  ],
-  "lines": [
-    {
-      "name": "Sam",
-      "side": "left"
     },
     {
-      "name": "Alex"
+      "url": "https://raw.githubusercontent.com/ExcuseMi/trmnl-metro-calendar-plugin/main/demo/simpsons/family.ics",
+      "name": "Family",
+      "rules": [
+        {
+          "match": {
+            "type": "contains",
+            "value": "Family Dinner"
+          },
+          "line": [
+            "Marge",
+            "Homer",
+            "Bart",
+            "Lisa",
+            "Maggie"
+          ],
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "School Run"
+          },
+          "line": [
+            "Marge",
+            "Bart",
+            "Lisa"
+          ],
+          "rename": false
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "Spring Break"
+          },
+          "line": "Bart",
+          "allDay": true,
+          "rename": false
+        }
+      ]
     },
     {
-      "name": "Jordan"
-    },
-    {
-      "name": "Mia"
-    },
-    {
-      "name": "Leo"
+      "url": "https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics",
+      "holiday": true
     }
   ]
 }

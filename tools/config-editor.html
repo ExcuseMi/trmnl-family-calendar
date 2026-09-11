@@ -394,7 +394,7 @@
   function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false, keepEmpty: false, holiday: false }; }
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
   function newCondition() { return { _id: uid(), type: "word", field: "", value: "", status: "confirmed", weekdays: [], min: "", max: "", from: "", to: "", negate: false }; }
-  function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], lines: [], rename: true, rewrite: "", rewriteFull: false, hide: false, holiday: false }; }
+  function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], lines: [], rename: true, rewrite: "", rewriteFull: false, rewriteEmpty: false, hide: false, holiday: false, allDay: false }; }
 
   // ------------------------------------------------------------ undo
   //
@@ -514,12 +514,14 @@
       if (!r.rename) out.rename = false;
     }
     if (r.rewrite.trim()) { out.rewrite = r.rewrite.trim(); if (r.rewriteFull) out.rewriteFull = true; }
+    else if (r.rewriteEmpty) { out.rewrite = ""; if (r.rewriteFull) out.rewriteFull = true; }
+    if (r.allDay) out.allDay = true;
     if (r.hide) out.hide = true;
     // A state rather than an appointment: the day's where it names no line,
     // that line's head where it does. It is an effect in its own right, so
     // a rule carrying only this is not a no-op.
     if (r.holiday) out.holiday = true;
-    if (!out.line && !out.rewrite && !out.hide && !out.holiday) return null;
+    if (!out.line && out.rewrite === undefined && !out.hide && !out.holiday && !out.allDay) return null;
     return out;
   }
   function buildConfig() {
@@ -621,6 +623,17 @@
     r.lines = lines.filter(function (n) { return typeof n === "string" && n.trim(); }).map(function (n) { return n.trim(); });
     r.rename = rv.rename !== false;
     r.rewrite = typeof rv.rewrite === "string" ? rv.rewrite : "";
+    // AN EMPTY REWRITE IS NOT NO REWRITE. `"rewrite": ""` means delete the
+    // matched text, which is how every prefix and class code on this page
+    // gets stripped -- it is the commonest rewrite there is. Exported only
+    // when non-empty, loading a configuration that used it threw those
+    // rules away silently, so the board came back reading "L6 Maths".
+    //
+    // The flag is cleared the moment somebody edits the field, so a user
+    // who types and then clears it gets no rewrite rather than a strip
+    // they never asked for.
+    r.rewriteEmpty = typeof rv.rewrite === "string" && rv.rewrite === "";
+    r.allDay = rv.allDay === true;
     r.rewriteFull = rv.rewriteFull === true;
     r.hide = rv.hide === true;
     r.holiday = rv.holiday === true;
@@ -902,7 +915,7 @@
       var rename = el("input", { type: "checkbox" }); rename.checked = r.rename;
       rename.addEventListener("change", function () { r.rename = rename.checked; refresh(); });
       var rewrite = el("input", { type: "text", placeholder: "new title, or what to put in place of the matched text", value: r.rewrite, style: "flex:1 1 320px; min-width:180px", "aria-label": "New title, or what to put in place of the matched text" });
-      rewrite.addEventListener("input", function () { r.rewrite = rewrite.value; refresh(); });
+      rewrite.addEventListener("input", function () { r.rewrite = rewrite.value; r.rewriteEmpty = false; refresh(); });
       var full = el("input", { type: "checkbox" }); full.checked = r.rewriteFull;
       full.addEventListener("change", function () { r.rewriteFull = full.checked; refresh(); });
       var hide = el("input", { type: "checkbox" }); hide.checked = r.hide;
@@ -1060,9 +1073,11 @@
   //    quietly teach the setting back.
   //  * every calendar is either unnamed or named after one of its lines,
   //    or the editor's own name warning fires on a config we shipped.
-  //  * only fields this page round-trips: no "allDay" (the rule editor has
-  //    no such switch) and no empty "rewrite" (an empty one exports as
-  //    nothing at all), or the preset and the JSON box would disagree.
+  //  * only fields this page round-trips. It round-trips more than it used
+  //    to: an empty "rewrite" (delete the matched text) and "allDay" both
+  //    survive a load now, where before they were silently dropped. Neither
+  //    has a control yet, so a preset still cannot be the only place they
+  //    are taught -- a user who wants one reaches for the JSON box.
   var PRESETS = [
     {
       id: "family4",

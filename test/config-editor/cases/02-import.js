@@ -37,7 +37,18 @@ module.exports = function (test, h) {
     const parsed = window.parseConfig(document.getElementById('jsonOut').value);
     assert(parsed.calendars.length === demo.calendars.length);
     assert(Object.keys(parsed.lines).length === demo.lines.length);
-    assert(parsed.lines['sam'].side === 'left');
+    // Every rule the example writes has to survive the trip and still
+    // compile. The two that used not to are the point: an empty `rewrite`
+    // (delete the matched text -- how every class code on this board gets
+    // stripped) exported as nothing at all, and `allDay` had nowhere to
+    // live, so loading the example silently dropped both and the board came
+    // back reading "L6 Maths".
+    const wrote = demo.calendars.reduce((n, c) => n + (c.rules || []).length, 0);
+    const kept = parsed.calendars.reduce((n, c) => n + (c.rules || []).length, 0);
+    assert(kept === wrote, kept + ' of ' + wrote + ' rules survived the editor');
+    const out = JSON.parse(document.getElementById('jsonOut').value);
+    const all = out.calendars.reduce((a, c) => a.concat(c.rules || []), []);
+    assert(all.some((r) => r.rewrite === ''), 'the strip rules were dropped');
   });
 
 
