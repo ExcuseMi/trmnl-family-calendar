@@ -42,6 +42,12 @@ LIQUID="$HERE/src/shared.liquid"
 TRANSFORM="$HERE/src/transform.js"
 ESBUILD="$ROOT/tools/node_modules/.bin/esbuild"
 
+# Lint the REAL sources, before the squeeze below strips the comments out of
+# them. One of trmnlp's checks counts words that appear in comments, so a
+# stripped copy is a different question from the one the reader of this
+# repository is asking, and the easier one.
+"$HERE/lint.sh" || { echo "trmnlp lint is not clean; nothing was uploaded" >&2; exit 1; }
+
 BAK_L="$(mktemp)"; BAK_T="$(mktemp)"
 cp "$LIQUID" "$BAK_L"; cp "$TRANSFORM" "$BAK_T"
 restore() { cp "$BAK_L" "$LIQUID"; cp "$BAK_T" "$TRANSFORM"; rm -f "$BAK_L" "$BAK_T"; }

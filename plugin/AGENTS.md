@@ -71,9 +71,15 @@ knowing about: it counts the STRINGS `padding`, `margin`, `font-size` and five
 more anywhere in the liquid, comments and `<style>` blocks included, and trips
 at seven, so a comment that says "margin" costs the same as a style attribute;
 and its vendored list of field types predates `lat_lon` (the hosted service's
-Location picker, which is real and live), so on a fresh machine add `lat_lon`
-by hand to `db/data/form_fields.yml` in the `trmnl_preview` gem, as that file's
-own header says to. Do not "fix" it by downgrading the field to a string.
+Location picker, which is real and live), so it reports the Location setting
+as an unknown type on every machine. 0.12.0 is the newest release and
+`FormField::DATA_PATH` is hardcoded to the gem's own file, so there is neither
+an upgrade nor a project-local schema that fixes it. **Run `plugin/lint.sh`**,
+which drops that one line and fails on everything else; it is also what
+`push.sh` runs. Editing the installed gem by hand works on one machine, is
+invisible to everybody else and dies on the next `gem install`, which is how a
+green lint here becomes a red one somewhere else. And do not "fix" it by
+downgrading the field to a string.
 
 
 ---
