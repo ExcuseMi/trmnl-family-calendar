@@ -66,6 +66,11 @@ written before the pickers were removed keeps drawing the same board.
 
 ## Sidings and branches
 
+> **`rules.md` is the current list.** This section predates the route model
+> and several statements below are no longer true -- a siding is not a loop
+> with an express any more, and a branch is not the only shape an event has.
+> Kept for the parts that still describe the drawing.
+
 - A ring on the owner's line at the true start time. Rings never move.
 - An interchange (an event with `co_owners`) is a capsule spanning every
   involved line; the branch leaves from the capsule's outer edge on the

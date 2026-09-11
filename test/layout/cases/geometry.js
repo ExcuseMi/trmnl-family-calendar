@@ -242,15 +242,24 @@ module.exports = function (test, h) {
       assert(forks.length > 0, 'no junction fillets drawn at all');
       const adrift = [];
       for (const fk of forks) {
-        const mine = pathsWhere(rep, 'track').filter((t) => t.owner === fk.owner);
-        assert(mine.length > 0, 'fork for a line with no track: ' + fk.owner);
-        // the fork starts on the trunk: its first sampled point is the one
-        // that has to be on it
+        const mine = pathsWhere(rep, 'course').filter((t) => t.owner === fk.owner);
+        assert(mine.length > 0, 'fork for a line with no course: ' + fk.owner);
+        // The fork starts ON the trunk: its first sampled point is the one
+        // that has to be on it, and "on it" means on the LINE rather than
+        // near one of its corners. A straight run carries no vertices in
+        // the middle, so a departure halfway along a flat stretch read as
+        // hundreds of pixels adrift while lying exactly on the line.
         const start = fk.pts[0];
         let best = Infinity;
-        for (const t of mine) for (const pt of t.pts) {
-          const d = Math.hypot(pt[0] - start[0], pt[1] - start[1]);
-          if (d < best) best = d;
+        for (const t of mine) {
+          for (let i = 1; i < t.pts.length; i++) {
+            const a = t.pts[i - 1], b = t.pts[i];
+            const dx = b[0] - a[0], dy = b[1] - a[1];
+            const len2 = dx * dx + dy * dy;
+            let u = len2 ? ((start[0] - a[0]) * dx + (start[1] - a[1]) * dy) / len2 : 0;
+            u = Math.max(0, Math.min(1, u));
+            best = Math.min(best, Math.hypot(a[0] + dx * u - start[0], a[1] + dy * u - start[1]));
+          }
         }
         // A fork that lands inside a siding's ramp is attached to a
         // CORNER-rounded curve, and rounding pulls the drawn line up to
@@ -353,8 +362,11 @@ module.exports = function (test, h) {
     // have taken from one end of the siding to the other, and that is a
     // piece of the drawing rather than the line: it is as long as its own
     // siding and has no business spanning the board.
+    // The COURSE, one per line and unbroken: the drawn line is in runs now,
+    // cut wherever it passes under something, so its longest piece is not
+    // its length. Where the line GOES is the question here.
     const byOwner = {};
-    for (const t of pathsWhere(rep, 'track')) (byOwner[t.owner] = byOwner[t.owner] || []).push(t);
+    for (const t of pathsWhere(rep, 'course')) (byOwner[t.owner] = byOwner[t.owner] || []).push(t);
     const tracks = Object.keys(byOwner)
       .map((k) => byOwner[k].slice().sort((a, b) => b.len - a.len)[0]);
     for (const t of tracks) {

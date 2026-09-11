@@ -11,6 +11,13 @@
 - Demo boards live in `demo/<show>/`: real ICS files plus a `config.json` that is generated from the copy embedded in `plugin/src/transform.js` (`node tools/dump-demo-configs.js`). Change a board in transform.js and write the file back out, or `test/transform/cases/demo-config.js` fails. Those ICS files are fetched from raw.githubusercontent at run time, so push git BEFORE pushing the plugin when their paths change.
 - `tools/config-editor.html` runs `plugin/src/transform.js` and the `<script>` from `plugin/src/shared.liquid` unmodified for its preview; keep the header markup it mirrors in sync when the template's header changes.
 
+## Where the rules live
+
+`rules.md` lists every rule the board draws by, with the reason attached.
+Read it before changing geometry: most of what looks like a free choice in
+`shared.liquid` is one of those rules, and the reason is usually a picture
+somebody looked at.
+
 ## Things that have cost real time here
 
 - **A half or a quadrant is a SLOT inside the screen, not a smaller screen.** The framework pins `.screen` to the device's own size whatever the window is, so asking headless Chromium for a 400x240 window and calling the result a quadrant renders a full 800x480 board and crops the picture. Override `--full-w` / `--full-h`, which is the one knob a real mashup turns; `pageFor` in `test/layout/run.js` does this via a viewport's `slot`. Until this was found, every small-view case in the layout suite was measuring a full-size board under a small view's name. Any conclusion drawn from one before that is worth re-checking, comments included.

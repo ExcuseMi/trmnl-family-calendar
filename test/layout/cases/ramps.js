@@ -88,18 +88,39 @@ module.exports = function (test, h) {
 
   // ---- 2. attachment --------------------------------------------------
 
+  // Distance from a point to the nearest place ON a path, not to its
+  // nearest VERTEX. A straight run has no vertices in the middle of it --
+  // `roundedPath` emits the two ends and nothing between -- so a branch
+  // leaving a trunk halfway along a long flat stretch measured as a
+  // hundred pixels adrift while sitting exactly on the line. The bug this
+  // guards against is a branch starting in mid-air, and mid-air is off the
+  // LINE, not away from a corner.
+  function distToPath(pt, pts) {
+    let best = Infinity;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const len2 = dx * dx + dy * dy;
+      let t = len2 ? ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      best = Math.min(best, Math.hypot(a[0] + dx * t - pt[0], a[1] + dy * t - pt[1]));
+    }
+    if (!pts.length) return best;
+    return Math.min(best, Math.hypot(pts[0][0] - pt[0], pts[0][1] - pt[1]));
+  }
+
+
   for (const v of VIEWS) {
     test('every ramp starts on its own trunk: ' + v.name, () => {
       const rep = layout(fixtures.find((x) => x.name === 'busy-day'), v);
       const trunks = {};
-      for (const t of pathsWhere(rep, 'track')) trunks[t.owner] = t;
+      for (const t of pathsWhere(rep, 'course')) trunks[t.owner] = t;
       const bad = [];
       for (const r of pathsWhere(rep, 'fork')) {
         const trunk = trunks[r.owner];
         if (!trunk || !r.pts.length) continue;
         const s = r.pts[0];
-        let best = Infinity;
-        for (const q of trunk.pts) best = Math.min(best, Math.hypot(q[0] - s[0], q[1] - s[1]));
+        const best = distToPath(s, trunk.pts);
         // sampled every 2px along both paths, so ~3px is exact contact
         if (best > 6) bad.push('"' + r.owner + '" starts ' + best.toFixed(1) + 'px off its line');
       }

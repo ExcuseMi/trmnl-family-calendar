@@ -66,6 +66,15 @@ module.exports = function (test, h) {
         // else's line has to actually be in the gap -- so the bound only
         // has to rule out two unrelated ends happening to face each other.
         if (gap < 0.5 || gap > 200) continue;
+        // TWO ENDS OF ONE LINE FACING EACH OTHER IS A TUNNEL, and that is
+        // the whole of it. This used to insist on finding the line being
+        // passed under, in the middle of the gap -- which is right until
+        // BOTH lines are off their baselines near the same place, when each
+        // may be cut a little way from the other and neither has ink at the
+        // other's midpoint. A trunk is only ever drawn in pieces because it
+        // dives under something, so a piece that continues on the far side
+        // of a gap is the evidence.
+        if (p.role === 'track' && q.role === 'track') return true;
         const mid = [(end[0] + f[0]) / 2, (end[1] + f[1]) / 2];
         for (const t of rails) {
           if (t.owner === p.owner) continue;       // the line it passes under is somebody else's

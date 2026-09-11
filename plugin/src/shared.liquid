@@ -1231,9 +1231,16 @@
     var OCT = Math.SQRT1_2;                    // sin 45 = cos 45
     var KNEE = 1 - OCT;                        // across-extent of a rounded knee, per unit radius
     function octRadius(d) {
-      // A knee cannot eat more than half the move, or the two of them meet
-      // and there is no diagonal between them to be at 45 degrees.
-      return Math.min(CORNER, Math.abs(d) / (2 * KNEE));
+      // A knee may not eat more than a THIRD of the move. Allowed half, the
+      // two arcs meet exactly and there is no diagonal left between them:
+      // the move comes out as a smooth S, which is a curve, and a curve is
+      // the one thing this map does not draw. Every step down into a
+      // siding short enough for that was drawn as a wobble.
+      //
+      // At a third, the knees take a fifth of the cross distance between
+      // them and four fifths of the move is a straight 45. A big move hits
+      // the corner radius long before this matters.
+      return Math.min(CORNER, Math.abs(d) * 0.35);
     }
     function octRun(d, r) { return Math.abs(d) + 2 * r * (OCT - KNEE); }
     function octAt(t, d, r, R) {
@@ -3114,10 +3121,35 @@
       // `sidingRaiseAt` answered from the route and ignored the sidings
       // completely, so on a board with both, a siding was drawn against a
       // trunk that had never heard of it and ended 45px off its own line.
+      // A SHORTER SIDING WINS INSIDE A LONGER ONE.
+      //
+      // Two can cover the same minutes -- Bart is on Spring Break all day
+      // and at school from half past eight -- and two holds over one
+      // stretch leave `routeRaiseAt` answering with whichever it reaches
+      // first. Spring Break came first and covered everything, so Bart
+      // never came down to the school corridor his sister was in and the
+      // two of them were drawn as if they went to different schools.
+      //
+      // The more specific one is the shorter one, so they are laid down
+      // longest first and each new hold cuts the ones already there. Same
+      // rule the convergences use, for the same reason.
+      function addHold(p, h) {
+        var keep = [];
+        (p._route || []).forEach(function (o) {
+          if (h.a1 <= o.a0 || o.a1 <= h.a0) { keep.push(o); return; }
+          if (o.a0 < h.a0) keep.push({ a0: o.a0, a1: h.a0, lvl: o.lvl, siding: true });
+          if (o.a1 > h.a1) keep.push({ a0: h.a1, a1: o.a1, lvl: o.lvl, siding: true });
+        });
+        keep.push(h);
+        keep.sort(function (a, b) { return a.a0 - b.a0; });
+        p._route = keep;
+      }
       LEGEND.forEach(function (p) {
         p._octs = null;
         p._route = null;
-        (p._sidings || []).forEach(function (st) {
+        (p._sidings || []).slice().sort(function (a, b) {
+          return (b.a1 - b.a0) - (a.a1 - a.a0);
+        }).forEach(function (st) {
           var g = sidingGeom(p, st);
           // THE HOLD IS THE FLAT PART, and the turns either side of it stay
           // INSIDE the siding's own span. A siding is a stretch of the day,
@@ -3131,10 +3163,14 @@
           // depth actually takes, not the siding's own idea of a ramp.
           // Short by a few pixels, the trunk was still ten off its baseline
           // where the siding ended and no longer met the line it runs beside.
-          var inset = Math.max(g.rampA, octRun(lvl, octRadius(lvl)));
+          // AN ALL-DAY SIDING HAS NO ENDS TO TURN AT. It runs the width of
+          // the visible day by definition, so insetting for ramps takes the
+          // line off its own band at both edges of the board and the band is
+          // drawn longer than the line that is meant to be in it.
+          var inset = st.all_day ? 0 : Math.max(g.rampA, octRun(lvl, octRadius(lvl)));
           var b0 = st.a0 + g.shift + inset, b1 = st.a1 - g.shift - inset;
           if (!(b1 > b0)) return;
-          p._route = (p._route || []).concat([{ a0: b0, a1: b1, lvl: lvl, siding: true }]);
+          addHold(p, { a0: b0, a1: b1, lvl: lvl, siding: true });
         });
       });
 
@@ -3303,12 +3339,54 @@
           var slack = (room - CORNER * 2) - Math.abs(a - b);
           if (slack <= 0) continue;                 // no room to detour at all
           var near = Math.abs(a) < Math.abs(b) ? a : b;
-          var toward = Math.min(slack / 2, Math.abs(near));
-          var lvl = near - (near < 0 ? -1 : 1) * toward;
+          // IT SHOULD NOT TRY TO GO HOME IF THAT MEANS CROSSING.
+          //
+          // Going home between two holds means leaving the level the line
+          // is at, heading for its own lane, and coming back. Anything
+          // lying between gets passed twice -- once each way -- for a
+          // detour the reader cannot name a reason for. Out of the School
+          // Run and straight back up into Spring Break, Bart's line ducked
+          // under Marge's and back again.
+          //
+          // So the detour stops short of whatever is in the way. Every
+          // other line is sampled across the gap, in THIS line's own raise
+          // coordinates, and the nearest one lying between where the line
+          // is and where home would be sets the limit. Where nothing is in
+          // the way the line goes all the way home, which is most of the
+          // time; where something is, it goes as far as it can and holds
+          // there, which still reads as heading back.
+          var sgn = near < 0 ? -1 : 1;
+          var limit = Math.abs(near);
+          var clearAt = TRACK_STEP * 0.45;
+          var stepQ = Math.max(CORNER, (to - from) / 24);
+          LEGEND.forEach(function (q) {
+            if (q === p) return;
+            for (var aq = from; aq <= to; aq += stepQ) {
+              var r = (lineCAt(q, aq) - (spineC + p._c)) * p._sign;
+              // strictly between this line's level and its own lane
+              if (sgn > 0 ? (r < near - 0.5 && r > -0.5) : (r > near + 0.5 && r < 0.5)) {
+                limit = Math.min(limit, Math.max(0, Math.abs(near - r) - clearAt));
+              }
+            }
+          });
+          var toward = Math.min(slack / 2, limit);
+          if (toward <= CORNER * 0.5) continue;      // nowhere worth going
+          var lvl = near - sgn * toward;
           if (Math.abs(lvl - a) < 0.5 && Math.abs(lvl - b) < 0.5) continue;
           var lead = octRun(lvl - a, octRadius(lvl - a));
           var trail = octRun(b - lvl, octRadius(b - lvl));
-          if (room - lead - trail <= CORNER) continue;
+          // A DETOUR HOME HAS TO BE WORTH THE TWO CROSSINGS IT COSTS.
+          //
+          // Going home between two holds means leaving the level the line
+          // is at, passing whatever lies between it and its own lane, and
+          // passing all of it again on the way back. Over hours that is
+          // plainly a person going home. Over a few minutes it is a dip
+          // that crosses another line twice and says nothing: out of the
+          // School Run and straight back up into Spring Break, Bart's line
+          // ducked under Marge's and back for no reason a reader could
+          // name. If the flat part is not long enough to read as a stay,
+          // the line simply goes from one hold to the next.
+          if (room - lead - trail <= CORNER * 2) continue;
           out.push({ a0: from + lead, a1: to - trail, lvl: lvl, home: true });
         }
         p._route = out.filter(function (h) { return h.a1 > h.a0; })
@@ -3775,34 +3853,20 @@
       }
       return null;
     }
-    function expressThrough(p) {
-      p._sidings.forEach(function (s) {
-        if (sharedSiding(s)) return;
-        if (s.a1 - s.a0 < CORNER * 2) return;   // too short to read as a loop
-        // Only where this siding is the one that actually kinked the line.
-        // A solo siding nested inside another of its own line's sidings
-        // (Amy's "Lab Rotation" sitting inside the crew's "Delivery Run"
-        // corridor) never gets a siding: the corridor already has the line
-        // and sidingRaiseAt hands it the whole overlap. The express was
-        // drawn for it anyway, at the baseline the line had left, so it
-        // came out as a stretch of rail floating in the middle of the board
-        // with nothing at either end. No siding, no loop, nothing to close.
-        if (governingSiding(p, (s.a0 + s.a1) / 2) !== s) return;
-        // Run it a corner PAST each end of the siding. The kink's corners
-        // are drawn rounded, so the trunk leaves its baseline a corner
-        // radius before the siding's own start and comes back a radius
-        // after its end: a siding drawn between the bare vertices left a
-        // notch of bare paper at each end where neither line was on the
-        // baseline, and Homer's rail read as interrupted where "Desk
-        // booking" began.
-        var e0 = clamp(s.a0 - CORNER, axisStart, axisEnd);
-        var e1 = clamp(s.a1 + CORNER, axisStart, axisEnd);
-        var q0 = toXY(e0, flatCAt(p, e0)), q1 = toXY(e1, flatCAt(p, e1));
-        var ex = svgEl('path', { d: 'M ' + q0[0] + ' ' + q0[1] + ' L ' + q1[0] + ' ' + q1[1] });
-        ex.setAttribute('data-metro-role', 'track'); ex.setAttribute('data-metro-owner', p.key);
-        paintLine(ex, p, S, svg, 0);
-      });
-    }
+    // A SIDING IS NOT A LOOP ANY MORE, so there is no express to draw.
+    //
+    // The line used to be drawn TWICE over a siding's span: once detouring
+    // down into it, and once running straight through at the baseline, the
+    // way a transit map shows a loop with a through service. That made
+    // sense while a trunk was level and a siding was a local kink in it.
+    // It stopped making sense when the trunk started going places: the
+    // straight-through line is a second copy of somebody who is at school,
+    // and over a seven-hour school day the two run side by side for most of
+    // the board. Read as a drawing it says the track is permanently split.
+    //
+    // One line, going where the person went. The siding's own band and end
+    // bars already say where that is and for how long.
+    function expressThrough() {}
 
     // ---- tracks (full bleed), each starting at its named terminus when fanned
     // Every name already placed, so the next one can keep off it.
@@ -4643,9 +4707,23 @@
       var need = Math.abs(laneC - lineCAt(p, aElbow));
       var budget = need * 1.5 + CORNER;
       var steps = Math.max(12, Math.ceil(budget / Math.max(1, CORNER * 0.25)));
+      var f = function (a) { return Math.abs(aElbow - a) - Math.abs(laneC - lineCAt(p, a)); };
       for (var i = 1; i <= steps; i++) {
         var a = aElbow - dir * budget * (i / steps);
-        if (Math.abs(aElbow - a) >= Math.abs(laneC - lineCAt(p, a))) return a;
+        if (f(a) < 0) continue;
+        // SAMPLED TO FIND IT, BISECTED TO MEAN IT. The scan lands on the
+        // first sample past the answer, which leaves the ramp off 45 by up
+        // to a step: "Groceries runs 16 over a rise of 19" is that error and
+        // nothing else. Ten halvings put it inside a pixel.
+        var lo2 = aElbow - dir * budget * ((i - 1) / steps), hi2 = a;
+        for (var k = 0; k < 10; k++) {
+          var mid = (lo2 + hi2) / 2;
+          if (f(mid) < 0) lo2 = mid; else hi2 = mid;
+        }
+        // And a departure within a whisker of the elbow IS the elbow: a
+        // straight-down drop wants no lead-in at all, and three pixels of
+        // one is a stub of rail hanging off the trunk before its own event.
+        return Math.abs(hi2 - aElbow) < CORNER * 0.35 ? aElbow : hi2;
       }
       return aElbow;                 // no 45 available: go straight across
     }

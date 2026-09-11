@@ -31,22 +31,28 @@ module.exports = function (test, h) {
     return out.sort((a, b) => a - b);
   }
 
-  test('a solo siding leaves the main line running straight through', () => {
+  test('a solo siding TAKES the line with it, and leaves nothing behind', () => {
+    // This used to assert the opposite, and the opposite was the bug. A
+    // siding was drawn as a LOOP: the line detoured into it and an express
+    // ran straight through at the baseline, the way a transit map shows a
+    // loop with a through service. That reads as one line while a trunk is
+    // level and a siding is a local kink in it. It stopped reading the
+    // moment trunks started going places -- over a seven-hour school day
+    // the detour and the express run side by side for most of the board,
+    // and the drawing says the track is permanently split. A person at
+    // school is at school; there is no second copy of them at their desk.
     const rep = layout(solo, ROOMY);
     const st = solo.metro.sidings.find((s) => !s.group);
     const owner = st.owner;
     const w = rep.canvas.w;
-    // the line's own height well outside the siding, at both ends of the day
     const outside = heightsAt(rep, owner, w - 20);
     assert(outside.length >= 1, 'no track drawn for ' + owner);
     const baseline = outside[0];
-    // and inside it: the express line still at that height, plus a siding
     const inside = heightsAt(rep, owner, w * 0.5);
-    assert(inside.length >= 2,
-      'expected an express line and a siding inside its span, found ' + inside.length + ' line(s)');
+    assert(inside.length >= 1, 'no line at all inside the siding');
     const straight = inside.filter((y) => Math.abs(y - baseline) <= 3);
-    assert(straight.length >= 1, 'the main line is ' + Math.round(Math.min.apply(null,
-      inside.map((y) => Math.abs(y - baseline)))) + 'px off its own baseline inside the siding');
+    assert(straight.length === 0, straight.length + ' line(s) still running at the baseline '
+      + 'inside the siding: the line is drawn twice over its own span');
     const siding = inside.filter((y) => Math.abs(y - baseline) > 3);
     assert(siding.length >= 1, 'no siding drawn at all');
   });
