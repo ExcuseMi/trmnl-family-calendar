@@ -7,7 +7,7 @@
 // assistants cannot do.
 
 module.exports = function (test, h) {
-  const { loadEditor, click, assert, assertEqual, jsonOut } = h;
+  const { loadEditor, click, fireInput, assert, assertEqual, jsonOut } = h;
 
   const ICS = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'X-WR-CALNAME:Planet Express',
@@ -48,7 +48,8 @@ module.exports = function (test, h) {
     click(document.getElementById('makePrompt'));
     const p = document.getElementById('promptOut').value;
     assert(p.indexOf('https://a.example/crew.ics') >= 0, 'the URL is missing');
-    assert(/Fetch this URL yourself/.test(p), 'an unread feed should tell the assistant to fetch it');
+    assert(/ask for its \.ics TEXT/.test(p),
+      'an unread feed should send the assistant after the text, not leave it at a refusal');
     // A browser cannot read most calendar feeds -- no CORS header -- so an
     // assistant that cannot fetch either has to be able to say what WILL
     // work, or the user gets a refusal with no way forward.
@@ -109,22 +110,68 @@ module.exports = function (test, h) {
   // An assistant that cannot reach the network will happily write a
   // configuration from what a URL looks like it contains. That config parses,
   // loads, and routes nothing: every rule matches an event that was guessed.
-  // A refusal is the better answer and the prompt has to ask for one.
-  test('the prompt forces the calendars to be read, or the job refused', () => {
+  //
+  // The first answer to that was "refuse", and it worked too well: ChatGPT
+  // and DeepSeek both came back with a flat "I cannot read these feeds",
+  // which is true, correct, and of no use to anybody. Neither the browser
+  // nor the assistant can fetch a calendar feed, so a route through the
+  // network was never going to open. The .ics TEXT is the route that does
+  // work: it can be pasted into the chat or into the tool. So the rule is
+  // still "no guessing", but the instruction is to ask rather than to stop.
+  test('the prompt asks for the calendar text rather than settling for a refusal', () => {
     const document = withOneCalendar();
     click(document.getElementById('makePrompt'));
     const p = document.getElementById('promptOut').value;
-    assert(/must fetch yourself/.test(p), 'fetching an unread feed is not made compulsory');
     assert(/Do not guess what is in a feed/.test(p), 'guessing from the URL is not ruled out');
-    assert(/STOP/.test(p), 'it does not tell the assistant to stop when it cannot read a feed');
+    assert(/ASK for the calendar's \.ics text/.test(p),
+      'the prompt does not send the assistant after the text it can actually read');
+    assert(/Write no configuration until you have real events/.test(p),
+      'nothing stops it writing a configuration from nothing');
+    assert(/most assistants cannot/.test(p),
+      'the prompt still pretends fetching the URL is a route that works');
   });
 
-  test('with nothing configured the prompt still generates', () => {
+  // THE TOOL KNOWS BEFORE THE ROUND TRIP IS SPENT.
+  //
+  // A prompt with no events in it comes back as a refusal every time, and
+  // the tool can see that the moment the button is pressed: it knows how
+  // many feeds are configured and how many it has actually read.
+  test('generating a prompt with no events read says so, and says what to do', () => {
+    const document = withOneCalendar();
+    click(document.getElementById('makePrompt'));
+    const st = document.getElementById('promptStatus');
+    assert(/no events/.test(st.textContent), 'it does not warn that the prompt is empty of events');
+    assert(/Draw the map first/.test(st.textContent), 'it does not say what would fix it');
+    assert(st.className.indexOf('err') >= 0, 'a prompt that will be refused is reported as fine');
+  });
+
+  // NOTHING TO READ MEANS ASK, NOT GUESS.
+  //
+  // The prompt used to note "(none added yet)" under Calendars and then
+  // carry on with every rule about how to write the configuration. An
+  // assistant given all that and nothing to apply it to writes one anyway:
+  // it invents three people, invents their feeds, and hands back something
+  // that looks right and routes nothing. With no links the only useful
+  // answer is a question.
+  test('with no calendars the prompt asks for links instead of inviting a guess', () => {
     const { document } = loadEditor();
     click(document.getElementById('makePrompt'));
     const p = document.getElementById('promptOut').value;
-    assert(p.indexOf('(none added yet)') >= 0, 'an empty tool should say it has no calendars');
+    assert(/STOP: no calendars were given/.test(p), 'it does not say there is nothing to read');
+    assert(/Do NOT write a configuration/.test(p), 'it does not forbid writing one anyway');
+    assert(/Secret address in iCal format/.test(p), 'it does not say where to find a link');
     assert(p.indexOf('## The configuration so far') < 0, 'there is no configuration to offer yet');
+  });
+
+  test('with a calendar in, the prompt stops asking and starts working', () => {
+    const { document } = loadEditor();
+    const url = document.querySelector('#calendars .card input[type=text][placeholder*="ics"]')
+      || document.querySelectorAll('#calendars .card input[type=text]')[1];
+    fireInput(url, 'https://example.com/a.ics');
+    click(document.getElementById('makePrompt'));
+    const p = document.getElementById('promptOut').value;
+    assert(!/STOP: no calendars were given/.test(p), 'it still thinks it has nothing to read');
+    assert(p.indexOf('https://example.com/a.ics') >= 0, 'the calendar is not in the prompt');
   });
   // The bug that made this section worth rewriting: an assistant gave every calendar a
   // friendly name, one event in two of them matched no rule, and the board came back with

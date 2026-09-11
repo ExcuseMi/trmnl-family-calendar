@@ -208,8 +208,8 @@
   </div>
   <nav aria-label="Sections of this page">
     <a href="#station-demo">Examples</a>
-    <a href="#station-agent">AI</a>
     <a href="#station-start">Paste</a>
+    <a href="#station-agent">AI</a>
     <a href="#station-lines">Lines</a>
     <a href="#station-calendars">Calendars</a>
     <a href="#station-output">JSON</a>
@@ -255,21 +255,6 @@
     </div>
   </section>
 
-  <section class="station" id="station-agent">
-    <h2>Let an AI do it <small>optional, and it reads your calendars</small></h2>
-    <p class="lede">Generates a prompt describing this plugin, its configuration format and what makes a board read well, together with your ICS links and whatever the tool has already read from them. Paste it into an AI assistant and it returns a configuration you paste back into <em>Paste what you have</em>, just below, which loads the whole thing at once.</p>
-    <div class="card plain">
-      <div class="toolbar">
-        <button id="makePrompt" class="primary">Generate prompt</button>
-        <button id="copyPrompt">Copy prompt</button>
-        <span id="promptStatus" class="status" role="status" aria-live="polite"></span>
-      </div>
-      <label for="promptOut" class="sr-only">The generated prompt</label>
-      <textarea id="promptOut" rows="6" readonly placeholder="Put your ICS links in the box below, then generate."></textarea>
-      <p class="hint">Draw the map first if you can: the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. Otherwise it is told to fetch the links itself, which not every assistant can do.</p>
-    </div>
-  </section>
-
   <section class="station" id="station-start">
     <h2>Paste what you have <small>a configuration, or just ICS links</small></h2>
     <p class="lede">Already have a configuration in TRMNL, or an answer back from an assistant? Paste it here. Plain ICS links, one per line, work too: that is the whole setup for a line per calendar.</p>
@@ -282,6 +267,21 @@
         <span id="importStatus" class="status" role="status" aria-live="polite"></span>
       </div>
       <p class="hint">Loading replaces whatever is in the editor, and the Undo button at the top of the page puts it back. To go back to the three examples, use <a href="#station-demo" data-goto-stage="demo">Examples</a> in the bar above.</p>
+    </div>
+  </section>
+
+  <section class="station" id="station-agent">
+    <h2>Let an AI do it <small>optional, and it reads your calendars</small></h2>
+    <p class="lede">Generates a prompt describing this plugin, its configuration format and what makes a board read well, together with your ICS links and whatever the tool has already read from them. Paste it into an AI assistant and it returns a configuration you paste back into <em>Paste what you have</em>, just above, which loads the whole thing at once.</p>
+    <div class="card plain">
+      <div class="toolbar">
+        <button id="makePrompt" class="primary">Generate prompt</button>
+        <button id="copyPrompt">Copy prompt</button>
+        <span id="promptStatus" class="status" role="status" aria-live="polite"></span>
+      </div>
+      <label for="promptOut" class="sr-only">The generated prompt</label>
+      <textarea id="promptOut" rows="6" readonly placeholder="Put your calendar links in the box above and press Load first, then generate."></textarea>
+      <p class="hint">Draw the map first if you can: the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. Otherwise it is told to fetch the links itself, which not every assistant can do.</p>
     </div>
   </section>
 
@@ -1718,8 +1718,29 @@
     var out = [];
     out.push("You are configuring a TRMNL e-ink plugin called Metro Calendar. It draws ONE day as a transit map: one line per person, their events branching off it as stations, and the things several people are at drawn as interchanges. Your job is to read the calendars below and produce the best configuration JSON for it.");
     out.push("");
+    // NOTHING TO READ MEANS ASK, NOT GUESS.
+    //
+    // A prompt generated with no calendars in it still carried every rule
+    // about how to write the configuration, and an assistant handed all
+    // that and nothing to apply it to writes a configuration anyway: it
+    // invents three people, invents their feeds, and hands back something
+    // that looks right and routes nothing. The one useful answer here is a
+    // question, so this says so first, before the format it must not fill
+    // in yet.
+    if (!urls.length) {
+      out.push("## STOP: no calendars were given");
+      out.push("Whoever generated this prompt has not added a single calendar link yet, so there is nothing here to read and nothing to configure. Do NOT write a configuration. Do NOT invent people, events or URLs, and do not guess at a feed from a name.");
+      out.push("");
+      out.push("Reply with one short message asking for one link per calendar, and say where to find them:");
+      out.push("- Google Calendar: open that calendar's settings, copy the address under \"Secret address in iCal format\".");
+      out.push("- iCloud: share the calendar publicly, then copy the webcal:// link.");
+      out.push("- Outlook: calendar settings, publish, then copy the ICS link.");
+      out.push("");
+      out.push("Tell them they can paste the links straight back to you, one per line, and that you will write the configuration then. Say nothing else: everything below is how to write it once you have them, and none of it applies yet.");
+      out.push("");
+    }
     out.push("## What to do");
-    out.push("1. Read every calendar listed under \"Calendars\" below. Some are listed with their events already read out for you; use those as given. Any calendar listed WITHOUT its events you must fetch yourself, over the network, from the URL shown. Do not guess what is in a feed from its URL, its file name, or the name of the show or family it seems to belong to: a configuration written against guessed events routes real events nowhere. If you cannot fetch a feed, or you are not sure the fetch returned the real calendar, STOP and reply with one line saying which URLs you could not read and nothing else. A refusal that names the problem is useful. An invented configuration is not.");
+    out.push("1. Read every calendar listed under \"Calendars\" below. Some are listed with their events already read out for you; use those as given. For any calendar listed WITHOUT its events, try fetching the URL shown. Do not guess what is in a feed from its URL, its file name, or the name of the show or family it seems to belong to: a configuration written against guessed events routes real events nowhere. If you cannot fetch it, and most assistants cannot, do not stop at that: ASK for the calendar's .ics text to be pasted into this chat, naming which ones you need, and say that pasting it into the tool instead (\"Paste / upload instead\" beside that calendar) puts the events into a regenerated prompt. Write no configuration until you have real events for every calendar, from one route or the other.");
     out.push("2. Work out who the people are. A line per person is the point of this board. Look for name prefixes (\"Fry: ...\"), class or group codes (\"L6\", \"K3\"), separate feeds per person, or a shared feed everybody is in.");
     out.push("3. Write rules that route each event to the right line, then strip whatever routed it out of the title, so the board reads \"Coffee\" and not \"Fry: Coffee\".");
     out.push("4. Optimise for a small screen. Fewer, clearer lines beat completeness.");
@@ -1768,7 +1789,7 @@
     out.push("Reading it back: `Homer` is named after its line, so the one thing in it no rule catches still lands on Homer's line rather than inventing one. The school feed routes on the class codes and then strips them, so the board reads \"Maths\" and not \"L6 Maths\". The seven-hour `\"School Day\"` needs no rule of its own: because of how long it is, the layout draws Bart's and Lisa\'s lines running together for its span rather than spending a label lane on it twice. `\"Family Dinner\"` lists all four lines, so it is drawn once as an interchange. The staff meeting nobody in the house attends is hidden.");
     out.push("");
     out.push("## Calendars");
-    if (!urls.length) out.push("(none added yet)");
+    if (!urls.length) out.push("(NONE. See \"STOP: no calendars were given\" at the top: ask for the links, do not invent any.)");
     urls.forEach(function (u) {
       var c = state.calendars.filter(function (x) { return x.url.trim() === u; })[0] || {};
       var text = icsOverrides[u];
@@ -1788,7 +1809,17 @@
         // URL is often the only route left -- and plenty of assistants
         // cannot either. Say what the reliable route is, so a refusal comes
         // back with a way forward attached instead of just a dead end.
-        out.push("  Not read by the tool: the browser could not fetch it, which is usual — most calendar feeds send no CORS header. Fetch this URL yourself if you can. If you cannot, say so and say that pasting the .ics text into the editor beside this calendar (\"Paste / upload instead\") will put its events straight into this prompt.");
+        // ASK FOR THE TEXT. IT IS THE ROUTE THAT WORKS.
+        //
+        // ChatGPT and DeepSeek both come back with the same refusal: they
+        // cannot fetch any of these feeds either. The browser cannot (no
+        // CORS header) and neither can they, so "fetch this URL yourself"
+        // was the tool handing a dead end to a machine and getting a dead
+        // end back. What DOES work is the .ics text: paste it into the
+        // chat, or into the tool and regenerate. Both are one copy away,
+        // and an assistant reads iCalendar text perfectly well.
+        out.push("  NOT READ. The browser could not fetch it, which is usual: most calendar feeds send no CORS header, and you probably cannot fetch it either. Do not guess what is in it.");
+        out.push("    If you cannot read it, ask for its .ics TEXT rather than giving up: opening the link in a browser downloads a .ics file, and its contents can be pasted straight into this chat. Say that pasting it into the tool instead, beside this calendar under \"Paste / upload instead\", puts the events into this prompt and is worth doing once because everything after it gets easier.");
       }
     });
     if (cfg.calendars && cfg.calendars.length && (cfg.lines.length || (cfg.rules || []).length
@@ -1807,10 +1838,28 @@
     var ta = document.getElementById("promptOut");
     ta.value = buildAgentPrompt();
     ta.rows = 14;
+    // SAY IT HERE RATHER THAN LET THE ASSISTANT SAY IT.
+    //
+    // A prompt with no events in it comes back as a refusal, every time:
+    // neither the browser nor the assistant can fetch a calendar feed, so
+    // the answer is "I cannot read these, paste the .ics text". True, and
+    // a wasted round trip. The tool knows before the copy button is
+    // pressed, so it says so.
     var read = Object.keys(icsOverrides).length;
-    setStatus("promptStatus", read
-      ? "Ready, with the events from " + read + " calendar(s) in it."
-      : "Ready. Draw the map first and it will carry your real events too.", "ok");
+    var urlCount = state.calendars.filter(function (c) { return c.url.trim(); }).length;
+    if (!urlCount) {
+      setStatus("promptStatus", "Ready, and it asks for your calendar links, because there are none in here yet. "
+        + "Quicker: paste them above and press Load first.", "");
+    } else if (!read) {
+      setStatus("promptStatus", "Ready, but it carries no events: none of your " + urlCount
+        + " feed(s) has been read. An assistant cannot fetch them either, so it will ask you to paste the .ics text. "
+        + "Press Draw the map first, then paste or upload the .ics for any feed it could not read, and generate again.", "err");
+    } else if (read < urlCount) {
+      setStatus("promptStatus", "Ready, with the events from " + read + " of " + urlCount
+        + " calendars in it. The rest are listed as unread, and the prompt asks for their .ics text.", "ok");
+    } else {
+      setStatus("promptStatus", "Ready, with the events from all " + read + " calendars in it.", "ok");
+    }
   });
   document.getElementById("copyPrompt").addEventListener("click", function () {
     var ta = document.getElementById("promptOut");

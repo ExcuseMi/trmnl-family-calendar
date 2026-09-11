@@ -34,7 +34,7 @@ module.exports = function (test, h) {
     const { document } = loadEditor();
     const ids = [...document.querySelectorAll('.col-steps > section')].map((s) => s.id);
     assertEqual(ids, [
-      'station-demo', 'station-agent', 'station-start', 'station-lines',
+      'station-demo', 'station-start', 'station-agent', 'station-lines',
       'station-calendars', 'station-rules', 'station-output',
     ]);
     // The preview is not a step: it is the panel the steps draw into, and it
@@ -136,7 +136,7 @@ module.exports = function (test, h) {
     const { document } = loadEditor();
     const hrefs = [...document.querySelectorAll('.mc-top nav a')]
       .map((a) => a.getAttribute('href')).filter((hr) => hr.charAt(0) === '#');
-    assertEqual(hrefs, ['#station-demo', '#station-agent', '#station-start', '#station-lines',
+    assertEqual(hrefs, ['#station-demo', '#station-start', '#station-agent', '#station-lines',
       '#station-calendars', '#station-output']);
     // ids are load-bearing: they are what the nav, the docs and every deep link point at
     hrefs.forEach((hr) => assert(document.querySelector(hr), 'nav points at a section that is not there: ' + hr));
