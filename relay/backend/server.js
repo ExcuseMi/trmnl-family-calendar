@@ -238,7 +238,14 @@ const server = http.createServer(async function (req, res) {
   } catch (e) {
     stats.failed++;
     // The message, never the URL.
-    res.writeHead(502, Object.assign({ 'content-type': 'text/plain; charset=utf-8' }, cors));
+    //
+    // 422 and not 502. This sits behind Cloudflare, and Cloudflare replaces
+    // the body of any 5xx from an origin with its own "error code: 502"
+    // page, so every refusal reached the editor as a bare number and the
+    // reader never saw why: "that does not look like a calendar link" and
+    // "that address is not on the public internet" both arrived as HTTP
+    // 502. A 4xx body is passed through untouched.
+    res.writeHead(422, Object.assign({ 'content-type': 'text/plain; charset=utf-8' }, cors));
     res.end(String(e.message || e));
   }
 });

@@ -1904,7 +1904,9 @@
   // made knowing whose server it is, with the links it would send listed
   // in front of them. So: no silent use, no remembered consent across a
   // reload, and never a default.
-  var RELAY = "";  // set to the relay's https endpoint to offer it; empty hides the option
+  // Source: relay/ in this repository, running on the plugin author's own
+  // server behind trmnl.bettens.dev. Empty hides the option.
+  var RELAY = "https://trmnl.bettens.dev/metro-calendar/ics";
   var relayPending = null;
   function unreadUrls() {
     return state.calendars.map(function (c) { return c.url.trim(); })
@@ -1967,7 +1969,15 @@
     var done = 0, failed = [];
     Promise.all(urls.map(function (u) {
       return realFetch(RELAY + "?url=" + encodeURIComponent(u))
-        .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+        // The relay says WHY it refused ("that does not look like a calendar
+        // link", "the calendar answered 404"), and that sentence is the one
+        // thing the reader can act on. A bare status code is not.
+        .then(function (r) {
+          if (r.ok) return r.text();
+          return r.text().then(function (why) {
+            throw new Error((why || "").trim().slice(0, 120) || ("HTTP " + r.status));
+          });
+        })
         .then(function (t) {
           // A relay that answers with an error page rather than a calendar
           // must not be stored as if it were one: the digest would then

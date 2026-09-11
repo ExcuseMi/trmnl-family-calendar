@@ -35,16 +35,48 @@ module.exports = function (test, h) {
     assert(document.getElementById('relayOffer').hidden, 'it asked about feeds that do not exist');
   });
 
-  // A BUTTON THAT CANNOT WORK IS WORSE THAN NO BUTTON, and this one would be
-  // asking for calendar links in order to send them nowhere. Until an
-  // endpoint is set, the offer is the two routes that need no server.
-  test('with no relay configured, the relay is not offered at all', () => {
-    const document = withUnreadCalendar();
+  // OFFERED, NAMED, AND NOT USED UNTIL IT IS CHOSEN. The relay is the one
+  // route that sends a calendar key anywhere, so the offer says whose server
+  // it goes to, and nothing leaves the page merely because the dialog opened.
+  test('the relay is offered with its host named, and sends nothing until chosen', () => {
+    const calls = [];
+    const { document } = loadEditor((url) => {
+      calls.push(String(url));
+      return Promise.reject(new Error('no network in tests'));
+    });
+    fireInput(document.querySelectorAll('#calendars .card input[type=text]')[1],
+      'https://cal.example.com/secret-address.ics');
     click(document.getElementById('copyPrompt'));
-    assert(document.getElementById('relayUse').hidden,
-      'a relay with no endpoint is still being offered');
+    assert(!document.getElementById('relayUse').hidden, 'a configured relay is not being offered');
+    assert(/trmnl\.bettens\.dev/.test(document.getElementById('relayNote').textContent),
+      'the offer does not say whose server the links would go to');
+    assert(!calls.some((u) => /metro-calendar/.test(u)),
+      'the relay was called before anybody chose it');
     assert(!document.getElementById('relayPaste').hidden, 'the paste route went missing');
     assert(!document.getElementById('relaySkip').hidden, 'there is no way past the dialog');
+  });
+
+  // THE REASON, NOT THE NUMBER. The relay answers a refusal with a sentence
+  // ("that does not look like a calendar link"), and the reader can act on
+  // that sentence. It used to arrive as "HTTP 502": Cloudflare replaces a
+  // 5xx body with its own page, so the relay now refuses with a 422, and the
+  // editor reads the body rather than the status.
+  test('a refusal from the relay shows the relay\'s own reason', async () => {
+    const { document } = loadEditor((url) => {
+      if (/metro-calendar\/ics/.test(String(url))) {
+        return Promise.resolve({ ok: false, status: 422,
+          text: () => Promise.resolve('that does not look like a calendar link') });
+      }
+      return Promise.reject(new Error('no network in tests'));
+    });
+    fireInput(document.querySelectorAll('#calendars .card input[type=text]')[1],
+      'https://cal.example.com/not-a-calendar');
+    click(document.getElementById('copyPrompt'));
+    click(document.getElementById('relayUse'));
+    await new Promise((r) => setTimeout(r, 50));
+    const st = document.getElementById('relayStatus').textContent;
+    assert(/does not look like a calendar link/.test(st),
+      'the reader was told a status code instead of why: ' + st);
   });
 
   test('"copy anyway" is a way through, not a dead end', () => {
