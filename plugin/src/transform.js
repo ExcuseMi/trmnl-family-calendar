@@ -614,26 +614,32 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     });
   });
 
-  // An all-day event is the longest long event there is: it runs the whole
-  // visible day on its owner's line. It used to appear only as small text
-  // under the date, which said nothing about whose day it was; drawn on the
-  // line it reads the same way every other event does, deduped by title and
-  // owner. `all_day: true` tells the client not to let this (deliberately
-  // full-day-wide) span drag the content-fit window out to match: it renders
-  // across whatever window is chosen, clamped.
-  var seenAllDay = {};
+  // AN ALL-DAY EVENT HAS NO HOUR, SO IT GETS NO PLACE ON THE AXIS.
+  //
+  // It was drawn as an event spanning the whole visible window, which meant
+  // the board printed its OWN window back as the event's hours: every render
+  // carried "6am - 11pm / Spring Break", which is not when the holiday is,
+  // it is when the board decided to start and stop looking. On a multi-day
+  // board it was worse, because the window covers the run and a Tuesday
+  // holiday got stamped across Wednesday and Thursday too.
+  //
+  // It is a STATE a line is in, not a place it goes at a time, so it is
+  // declared once at the line's head, where the board already says who a
+  // line is. Several lines sharing one title are ONE origin named once, so
+  // the grouping happens here rather than being rediscovered per line.
+  var allDayByTitle = {};
   (allDayEvents || []).forEach(function (ev) {
     var track = trackByKey[ev.track];
     if (!track) return;
-    var key = ev.title + '|' + track.key;
-    if (seenAllDay[key]) return;
-    seenAllDay[key] = true;
-    items.push({ type: 'event', _sortMin: DAY_LO, title: ev.title,
-      start_min: DAY_LO, end_min: DAY_HI, location: null, all_day: true,
-      owner: track.key, co_owners: [], side: track.side, hue: track.hue,
-      track_width: track.line_width, track_style: track.line_style,
-      track_offset: track.track_offset });
+    var row = allDayByTitle[ev.title];
+    if (!row) {
+      // No hue, no style: presentation is the frontend's, and `owners`
+      // already says which lines' styles to draw the badge in.
+      row = allDayByTitle[ev.title] = { title: ev.title, owners: [] };
+    }
+    if (row.owners.indexOf(track.key) < 0) row.owners.push(track.key);
   });
+  var allDay = Object.keys(allDayByTitle).map(function (t) { return allDayByTitle[t]; });
 
   (weatherMilestones || []).forEach(function (w) {
     items.push({ type: 'weather', _sortMin: w.atMin, at_min: w.atMin, icon: w.icon, label: w.label });
@@ -701,7 +707,7 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     // family without saying so reads as a quiet day.
     calendars_down: (extra && extra.calendarsDown) || [],
     legend: tracks,
-    all_day: [], // an all-day event is an event now, in items, with all_day: true; the key stays for shape compatibility
+    all_day: allDay, // declared at the line's head, never on the axis: see above
     items: items,
   };
 }

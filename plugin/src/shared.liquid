@@ -291,17 +291,51 @@
   // file a declaration below its reader has cost an afternoon.
   var TRACK_STYLES = ['heavydash', 'dotted', 'dashdot', 'widedash'];
   var TONES = ['black', 'gray-25', 'gray-40', 'gray-55', 'gray-70'];
+  // THE TONE LADDER, WALKED IN HALVES.
+  //
+  // Handing the greys out in order -- black, 25, 40, 55, 70 -- puts every
+  // line next to its nearest neighbour on the ladder, so every adjacent
+  // pair on the board is the weakest contrast the palette can make. Worse,
+  // the anchor is already black, so the first non-anchor line got black
+  // too and the top two rails of the board were identical.
+  //
+  // Interleaving the halves fixes both: take the first of the dark half,
+  // then the first of the light half, and so on. For a five-line board
+  // that is black, 55, 25, 70, 40 -- no two neighbours closer than thirty
+  // percent, which is the widest the minimum can be made with five tones.
+  // Adjacency on this board is not incidental: parallel rails run the
+  // whole width a few pixels apart, and two neighbours a shade apart read
+  // as one thick line.
+  function toneOrder(len) {
+    var half = Math.ceil(len / 2), out = [];
+    for (var i = 0; i < half; i++) {
+      out.push(i);
+      if (half + i < len) out.push(half + i);
+    }
+    return out;
+  }
   function styleTracks() {
     var n = 0;
+    // The anchor is black by definition, so black is spent before the
+    // ladder is handed out and the sequence must not offer it again --
+    // which it did, and put two identical rails at the top of the board.
+    var anchored = LEGEND.some(function (p) { return p.anchor; });
+    var order = toneOrder(TONES.length).filter(function (i) { return !anchored || i !== 0; });
     LEGEND.forEach(function (p) {
       // THE WEIGHT NEVER MOVES. Every spatial number on this board is
       // derived from it, so a panel with more greys must not have thinner
       // rails: see the note on BITS.
       p.line_width = 3;
-      var tone = BITS === 1 ? 'black' : TONES[Math.min(n, TONES.length - 1)];
+      var tone = BITS === 1 ? 'black' : TONES[order[n % order.length]];
       if (!p.hue) p.hue = p.anchor ? 'black' : tone;
+      // MORE LINES THAN GREYS. Clamping the ladder at its last rung, which
+      // is what this did, gave the sixth line and the seventh the same
+      // grey as the fifth -- three rails a reader cannot tell apart on the
+      // one panel that has greys to spare. Past the end of the ladder the
+      // tones start again and the dash patterns come back in to separate
+      // them, the same way they carry the whole job at one bit.
       p.line_style = p.anchor ? 'solid'
-        : BITS >= 4 ? 'solid'
+        : (BITS >= 4 && LEGEND.length <= order.length + (anchored ? 1 : 0)) ? 'solid'
         : TRACK_STYLES[n % TRACK_STYLES.length];
       if (!p.anchor) n++;
     });
@@ -828,7 +862,9 @@
     // a lane held open across the day. See `_onTrack` in staticFacts.
     var LONG_MIN = 240;
     function runTooLongForAShelf(e) {
-      return !!e.all_day || (e.end_min - e.start_min) >= LONG_MIN;
+      // No `e.all_day` case any more: an all-day event never reaches the
+      // axis, so nothing here can be one. See METRO.all_day.
+      return (e.end_min - e.start_min) >= LONG_MIN;
     }
     var MIN_DIAG = Math.max(10 * S, 6 * 2.4 * S + 2 * S);
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
@@ -889,6 +925,14 @@
         if (i.type !== 'event') return;
         if (load[i.owner] != null) load[i.owner]++;
         (i.co_owners || []).forEach(function (k) { if (load[k] != null) load[k] += 0.5; });
+      });
+      // AN ALL-DAY EVENT IS CONTENT, even though it puts nothing on the
+      // axis. Counting only items scores a line whose whole day is a
+      // holiday at zero, and zero is the first thing dropped when a
+      // quadrant cannot hold everyone -- so the one line with something to
+      // say about today would be the one left out.
+      (METRO.all_day || []).forEach(function (a) {
+        (a.owners || []).forEach(function (k) { if (load[k] != null) load[k]++; });
       });
       var keep = LEGEND.slice().sort(function (a, b) { return load[b.key] - load[a.key]; }).slice(0, maxLines);
       var kept = {};
@@ -1098,10 +1142,6 @@
     var axisContent = [];
     METRO.items.forEach(function (i) {
       if (i.type !== 'event' || i.start_min == null) return;
-      // An all-day event is deliberately day-wide: it must not decide what
-      // the busy part of a day is, or one holiday would say the whole day
-      // is busy and there would be nothing left to compress.
-      if (i.all_day) return;
       axisContent.push({ start_min: i.start_min, end_min: i.end_min == null ? i.start_min : i.end_min });
     });
     var winLabel = ROOT.querySelector('.metro-window');
@@ -1158,6 +1198,70 @@
       var m = measure(n);
       p._nameEl = n; p._nameW = m.w; p._nameH = m.h;
       if (p._nameH1 == null) p._nameH1 = m.h;
+
+      // THE ROUTE ROW: what this line IS today, under what it is called.
+      //
+      // An all-day event has no hour, so it has no place on a scale of
+      // hours. It is a state the line is in -- half term, a shift, leave --
+      // and the board already has one place that says what a line is,
+      // which is its head. So it is declared there, once, in a second row
+      // under the name, and nothing at all is drawn between the first hour
+      // and the last.
+      //
+      // A SEPARATE ELEMENT, not a child of the name. `clampLines` puts the
+      // name into a -webkit-box to wrap it at a measured number of lines,
+      // and a box clamped to two lines cannot hold a name that wants two
+      // and a route row as well: the row would be what got clipped. Kept
+      // apart, the name wraps by its own rules and the row is simply added
+      // to the head block's height afterwards.
+      //
+      // Named ONCE where several lines share it: three people are not on
+      // three holidays, they are on one, and the same words at three heads
+      // would say there were three.
+      var mine = (METRO.all_day || []).filter(function (a) {
+        return (a.owners || [])[0] === p.key;
+      });
+      p._routeEl = null; p._routeH = 0;
+      // Whether THIS line is in an all-day event at all, which is a
+      // different question from whether it is the one that names it: a line
+      // sharing somebody else's holiday is just as much in it, and its ends
+      // are just as open.
+      p._openEnded = (METRO.all_day || []).some(function (a) {
+        return (a.owners || []).indexOf(p.key) >= 0;
+      });
+      if (mine.length) {
+        var r = el('span', 'metro-gen metro-route label label--small font--bold '
+          + 'text--black absolute flex flex--row flex--center-y gap--xsmall');
+        mine.forEach(function (a, ai) {
+          // Rule 28's concentric rings, which the rule has promised since
+          // it was written and nothing has ever drawn. Two rings, hollow,
+          // like every other marker on this board: a state is not a stop,
+          // so it gets the landmark mark rather than a station's.
+          var ring = svgEl('svg', { width: '12', height: '12', viewBox: '0 0 12 12' });
+          ring.setAttribute('class', 'metro-route-ring no-shrink');
+          [5, 2.5].forEach(function (rr) {
+            ring.appendChild(svgEl('circle', { cx: '6', cy: '6', r: String(rr),
+              fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5' }));
+          });
+          if (!ai) r.appendChild(ring);
+          var w2 = el('span', '');
+          w2.textContent = a.title;
+          r.appendChild(w2);
+        });
+        // Standing up, the name runs ALONG its line, so the route row runs
+        // with it and is set beside it across the map rather than under it.
+        if (horizontal) {
+          r.style.maxWidth = nameMax + 'px';
+        } else {
+          r.style.writingMode = 'vertical-rl';
+          r.style.maxHeight = nameMax + 'px';
+        }
+        canvas.appendChild(r);
+        var rm = measure(r);
+        p._routeEl = r; p._routeH = rm.h; p._routeW = rm.w;
+        if (horizontal) p._nameW = Math.max(p._nameW, rm.w);
+        else { p._nameW += rm.w; p._nameH = Math.max(p._nameH, rm.h); }
+      }
     });
     var nameH = LEGEND.length ? Math.max.apply(null, LEGEND.map(function (p) { return p._nameH; })) : 0;
     var maxNameW = LEGEND.length ? Math.max.apply(null, LEGEND.map(function (p) { return p._nameW; })) : 0;
@@ -5623,14 +5727,63 @@
           p._nameW = m.w; p._nameH = m.h;
           if (lines === 1 || m.h <= room) break;
         }
+        // The route row is charged here and not before: `namesAbove` is
+        // decided from `_nameH1`, the height of the NAME on one line, and
+        // it must answer the same question whether or not somebody is on
+        // holiday. The head block, on the other hand, has to be tall
+        // enough to hold both.
+        if (p._routeH) p._nameH += p._routeH;
       });
     })();
 
 
+    // ONE HOLIDAY, NOT THREE. Where several lines share an all-day title
+    // it is named once, at the first of their heads, and a dashed tie runs
+    // down to the others -- the out-of-station link a transit map uses for
+    // two stations that are one place under different names. Without it the
+    // words sit against one line and say nothing about the rest; repeated
+    // at every head they would say there were several holidays.
+    function drawOriginTies() {
+      (METRO.all_day || []).forEach(function (a) {
+        var owners = (a.owners || []).map(function (k) { return trackByKey[k]; })
+          .filter(function (q) { return q; });
+        if (owners.length < 2) return;
+        var cs = owners.map(function (q) { return spineC + q._c; });
+        var lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
+        var at = axisStart - NODE_R;
+        var b0 = toXY(at, lo), b1 = toXY(at, hi);
+        var el = svgEl('path', { d: 'M' + b0[0] + ',' + b0[1] + 'L' + b1[0] + ',' + b1[1],
+          fill: 'none', 'stroke-width': 1.5 * S, 'stroke-opacity': '0.5',
+          'stroke-dasharray': (3 * S) + ' ' + (4 * S), 'stroke-linecap': 'butt' });
+        el.style.stroke = INK;
+        el.setAttribute(ROLE_ATTR, 'origin-tie');
+        svg.appendChild(el);
+      });
+    }
+
     // ---- tracks (full bleed), each starting at its named terminus when fanned
     // Every name already placed, so the next one can keep off it.
+    //
+    // PAINTED LIGHTEST FIRST, SO THE DARKER LINE TAKES THE OVERPASS.
+    //
+    // The halo in `paintLine` makes document order the layering: a line
+    // drawn later breaks the one drawn before it. Which line that is was,
+    // until now, whatever order the legend happened to be in -- so at any
+    // given crossing the pale rail might be the one on top, and a pale line
+    // severing a black one reads as a gap in the black line rather than as
+    // a bridge over it. Depth has to be carried by contrast or it is not
+    // carried at all.
+    //
+    // Only the painting order moves. Where each line SITS was decided long
+    // before this, and the names still take each other into account in the
+    // order they are drawn -- which name yields to which changes, and that
+    // is a tie-break, not a rule.
     var placedNames = [];
-    LEGEND.forEach(function (p) {
+    function lightness(q) {
+      var m = /gray-(\d+)/.exec(q.hue || '');
+      return m ? parseInt(m[1], 10) : 0;
+    }
+    LEGEND.slice().sort(function (a, b) { return lightness(b) - lightness(a); }).forEach(function (p) {
       var c = spineC + p._c;
       if (fan) {
         var spreadC = spreadCFor(p);
@@ -5738,6 +5891,18 @@
         var nameXY = toXY(nameA, namesAbove ? nameC + nameOff : nameC - nameThick / 2);
         p._nameEl.style.left = nameXY[0] + 'px';
         p._nameEl.style.top = nameXY[1] + 'px';
+        if (p._routeEl) {
+          // Flat, the row hangs under the name; standing up, beside it.
+          // Both are "next along the cross axis", which is the direction a
+          // name is thick in, and that is the axis that swaps with the view.
+          if (horizontal) {
+            p._routeEl.style.left = nameXY[0] + 'px';
+            p._routeEl.style.top = (nameXY[1] + p._nameH - p._routeH) + 'px';
+          } else {
+            p._routeEl.style.left = (nameXY[0] + p._nameW - p._routeW) + 'px';
+            p._routeEl.style.top = nameXY[1] + 'px';
+          }
+        }
         // the axis this name occupies, so the car can keep off it: before
         // the day's first event the car sits at the head of the line, which
         // is exactly where the name is
@@ -5819,6 +5984,7 @@
         });
       }
     });
+    drawOriginTies();
 
     // ---- the ramp builder ------------------------------------------------
     //
@@ -6181,11 +6347,39 @@
     // slash and turns a crisp tick into a lozenge.
     function endSlash(a, c, p, reach, svgTarget) {
       var r = reach;
-      var b0 = toXY(a - r, c + r), b1 = toXY(a + r, c - r);
-      var el = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1],
-        'stroke-width': Math.max(2, p.line_width) * S, 'stroke-linecap': 'butt' });
+      var el;
+      if (p._openEnded) {
+        // AN OPEN CHEVRON WHERE THE DAY IS A SLICE OF SOMETHING LONGER.
+        //
+        // A slash says "the line stops here". For a line whose whole day is
+        // an all-day event that is a lie: half term did not begin at six in
+        // the morning and it will not end at eleven at night, and the board
+        // has no business implying either. The chevron is the printer's
+        // mark for a run that continues past the edge of the sheet, and it
+        // is made of the same two 45s the slash is, so it stays inside the
+        // one diagonal this map allows itself.
+        //
+        // Which way it points is decided by the end, not by the line: both
+        // ends open OUTWARD, away from the day.
+        // Bigger than the slash, and a true 45 each side. At the slash's
+        // own reach the two arms sit a stroke apart and the miter fills the
+        // gap: what comes out is a solid arrowhead, which says "this way"
+        // rather than "this continues". Open, it reads as a chevron.
+        var dir = a < axisPx / 2 ? -1 : 1;
+        var r2 = r * 1.6;
+        var t0 = toXY(a - dir * r2 * 0.4, c - r2), tip = toXY(a + dir * r2 * 0.6, c),
+            t1 = toXY(a - dir * r2 * 0.4, c + r2);
+        el = svgEl('path', { d: 'M' + t0[0] + ',' + t0[1] + 'L' + tip[0] + ',' + tip[1]
+          + 'L' + t1[0] + ',' + t1[1], fill: 'none',
+          'stroke-width': Math.max(2, p.line_width) * S,
+          'stroke-linecap': 'butt', 'stroke-linejoin': 'miter' });
+      } else {
+        var b0 = toXY(a - r, c + r), b1 = toXY(a + r, c - r);
+        el = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1],
+          'stroke-width': Math.max(2, p.line_width) * S, 'stroke-linecap': 'butt' });
+      }
       el.style.stroke = colorFor(p.hue);
-      el.setAttribute(ROLE_ATTR, 'terminal');
+      el.setAttribute(ROLE_ATTR, p._openEnded ? 'terminal-open' : 'terminal');
       el.setAttribute(OWNER_ATTR, p.key);
       (svgTarget || svg).appendChild(el);
       return el;
@@ -6725,10 +6919,30 @@
       var PITCH = 8 * S;
       if (rails.length > 1 && room >= PITCH * (rails.length - 1)) {
         var order = rails.map(function (r, i) { return i; });
-        // conflict order first, so a rail that must turn before another
-        // still does; ties settled by position so the comb reads in order
+        // CHRONOLOGICAL DEPARTURE. Conflict order still comes first -- a
+        // rail that must turn before another to avoid crossing it is a
+        // correctness constraint, not a preference -- but where two rails
+        // are free to turn in either order, the one whose line is next
+        // needed elsewhere takes the earlier column.
+        //
+        // That is what the comb is actually saying. Four people leave the
+        // same table; ordering their exits by position across the board
+        // says nothing, while ordering them by who is due somewhere first
+        // makes the fan-out a departure board, read left to right. A line
+        // with nothing later goes last, because it is not leaving at all.
+        var nextA = rails.map(function (r) {
+          var soonest = Infinity;
+          visible.forEach(function (o) {
+            if (o._dropped || o === e || !o._involved) return;
+            if (o._involved.indexOf(r.q) < 0) return;
+            if (o._nodeA > e._endA && o._nodeA < soonest) soonest = o._nodeA;
+          });
+          return soonest;
+        });
         order.sort(function (x, y) {
-          return level[x] !== level[y] ? level[x] - level[y] : rails[x].rungC - rails[y].rungC;
+          if (level[x] !== level[y]) return level[x] - level[y];
+          if (nextA[x] !== nextA[y]) return nextA[x] - nextA[y];
+          return rails[x].rungC - rails[y].rungC;
         });
         order.forEach(function (i, rank) { level[i] = rank; });
       }
@@ -8005,39 +8219,21 @@
         wa.setAttribute('fill', INK);
         wash(wa, 0.13, 'landmark-lake');
       }
-      // High ground: chevrons, at 45 like everything else, sitting on the
-      // floor of the void. Outline only -- filled peaks at this size read
-      // as blocks, and the point is a silhouette.
-      function ridge(v) {
-        // One unbroken skyline, not a row of separate tents: the pen goes
-        // down at the left edge of the void and comes up at the right, so
-        // the slopes meet in valleys the way a range does. Peaks alternate
-        // height because a row of identical triangles reads as a chart.
-        // The floor sits on the centre of the void's last free row, not on
-        // its bottom edge, for the same reason the lake insets.
-        var floor = top + (v.y + v.h - 0.5) * CELL - 3 * S;
-        var a0 = (v.x + 0.5) * CELL, a1 = (v.x + v.w - 0.5) * CELL;
-        var peaks = Math.max(2, Math.min(4, Math.floor(v.w / 3)));
-        var span = (a1 - a0) / peaks;
-        var pt0 = toXY(a0, floor), d = 'M' + pt0[0] + ',' + pt0[1];
-        for (var k = 0; k < peaks; k++) {
-          var rise = Math.min(span / 2, (v.h - 1) * CELL * 0.45) * (k % 2 ? 0.65 : 1);
-          var top2 = toXY(a0 + span * (k + 0.5), floor - rise);
-          var foot = toXY(a0 + span * (k + 1), floor);
-          d += 'L' + top2[0] + ',' + top2[1] + 'L' + foot[0] + ',' + foot[1];
-        }
-        var el2 = svgEl('path', { d: d });
-        el2.setAttribute('stroke-width', 6 * S);
-        el2.setAttribute('fill', 'none');
-        wash(el2, 0.09, 'landmark-ridge');
-      }
-      for (var n2 = 0; n2 < 2; n2++) {
+      for (var n2 = 0; n2 < 3; n2++) {
         var v2 = biggestVoid();
         // Under about this size a landmark is a smudge, not a feature.
         if (!v2 || v2.w < 4 || v2.h < 3 || v2.area < 16) break;
-        claim(v2);
-        // Wide and shallow reads as ground; anything squarer holds water.
-        if (v2.w > v2.h * 2) ridge(v2); else lake(v2);
+        claim(v2);                          // used or not, do not offer it twice
+        // WATER ONLY. A range was tried here and taken out again: a ridge
+        // is a silhouette, and a silhouette on a diagram is a picture of
+        // something, which is one more thing for the reader to interpret on
+        // a board whose whole job is that nothing on it is decorative
+        // except the water. A lake is the same wash as the river, so it
+        // reads as more of the same geography rather than as a new mark.
+        //
+        // Wide and shallow makes a smear rather than a lake, so those voids
+        // go unused.
+        if (v2.w <= v2.h * 2) lake(v2);
       }
       svg.insertBefore(el, svg.firstChild);
     })();

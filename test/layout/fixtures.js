@@ -53,7 +53,7 @@ const TRACKS = [
 function dayWindow(m) {
   var times = [];
   (m.items || []).forEach(function (i) {
-    if (i.type !== 'event' || i.all_day) return;   // a full-day band must not drag the window out
+    if (i.type !== 'event') return;
     times.push(i.start_min); times.push(i.end_min);
   });
   if (!times.length) return null;
@@ -125,12 +125,19 @@ const busyDay = base({
 // capsule (it reached for a baseline nobody was sitting on any more) and
 // what put a track's own line through its caption.
 const allDayEveryTrack = base({
-  items: [
-    longs(TRACKS)('work', 'Office Closed', 420, 1260, { all_day: true }),
-    longs(TRACKS)('alex', 'PTO', 420, 1260, { all_day: true }),
-    longs(TRACKS)('sam', 'Conference', 420, 1260, { all_day: true }),
-    longs(TRACKS)('kids', 'School Holiday', 420, 1260, { all_day: true }),
-  ].concat(busyDay.items),
+  // Declared at the heads now, not drawn across the day: an all-day event
+  // has no hour, so it has no place on a scale of hours. What this fixture
+  // tests is therefore the opposite of what it used to -- that four head
+  // rows fit above four lines without eating the board -- and the axis
+  // below is an ordinary busy day.
+  all_day: [
+    { title: 'Office Closed', owners: ['work'] },
+    { title: 'PTO', owners: ['alex'] },
+    // One title, two lines: the shared-origin case, named once with a tie
+    // down to the other head rather than written twice.
+    { title: 'School Holiday', owners: ['sam', 'kids'] },
+  ],
+  items: busyDay.items,
 });
 
 // A long solo event with a location line, spanning most of the day, with
@@ -139,9 +146,11 @@ const allDayEveryTrack = base({
 // old siding kink opened up, and is now what the reserved inward rung has
 // to be deep enough for.
 const longEventDay = base({
+  // The holiday is a head row; the desk booking is a real block with real
+  // hours, which is the distinction the two used to blur.
+  all_day: [{ title: 'Schoolfotografie', owners: ['kids'] }],
   items: [
     longs(TRACKS)('work', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
-    longs(TRACKS)('kids', 'Schoolfotografie', 420, 1260, { all_day: true }),
   ].concat(busyDay.items),
 });
 

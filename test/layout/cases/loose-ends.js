@@ -94,6 +94,7 @@ module.exports = function (test, h) {
           .concat(pathsWhere(rep, 'branch'), pathsWhere(rep, 'fork'));
         // everything drawn that can legitimately cap a rail
         const marks = rep.circles.concat(rep.rects);
+        const chevrons = pathsWhere(rep, 'terminal-open');
         const bad = [];
         for (const p of rails) {
           if (p.len < 1) continue;   // a fillet that collapsed to a point caps nothing and needs nothing
@@ -108,6 +109,11 @@ module.exports = function (test, h) {
             }
             if (met) continue;
             if (marks.some((m) => pointIn(end, inflate(m, NEAR)))) continue;
+            // An open chevron caps a rail as surely as a slash does. It is
+            // drawn as a path rather than a line, so it is not among the
+            // rects: a line whose whole day is an all-day event ends in one
+            // at both ends. See cases/all-day.js.
+            if (chevrons.some((c) => c.pts.some((pt) => dist(pt, end) <= NEAR))) continue;
             if (tunnelMouth(end, p, rails)) continue;
             bad.push(p.role + '/' + p.owner + ' ends at ' + Math.round(end[0]) + ','
               + Math.round(end[1]) + ' (' + Math.round(p.len) + 'px long) touching nothing');

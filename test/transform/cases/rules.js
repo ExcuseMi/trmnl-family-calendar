@@ -19,11 +19,11 @@ module.exports = function (test, h) {
     const r = await run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'Training' }, allDay: true }] }],
     })));
-    const items = eventItems(r.metro);
-    assertEqual(items.map((e) => e.title), ['Staff Training Day']);
-    assertEqual(items[0].all_day, true, 'the rule promoted it');
-    assertEqual([items[0].start_min, items[0].end_min], [r.metro.day_start_min, r.metro.day_end_min],
-      'and it no longer keeps the hour it arrived with');
+    // Promoted OFF the axis: an all-day event has no hour, so it is not an
+    // item at all. It is declared at the head of whichever lines are in it.
+    assertEqual(eventItems(r.metro), [], 'nothing on the timeline');
+    assertEqual(r.metro.all_day.map((a) => a.title), ['Staff Training Day'],
+      'the rule promoted it');
   });
 
   test('a rule can hide an event by title match', async () => {
@@ -309,28 +309,41 @@ module.exports = function (test, h) {
     assertEqual(items[0].owner, wardTrack.key, 'a track carrying only a long block is still "active"');
   });
 
-  test('an all-day event runs the whole day on its own line, not a header strip entry', async () => {
-    // It used to appear as small text under the date, which said nothing
-    // about whose day it was, and for a while after that as a full-day
-    // siding. Now it is an item like any other, spanning the visible
-    // window, with `all_day` set so the client knows not to let a span it
-    // chose itself drag the content-fit window out to match.
+  test('an all-day event is declared at the line\'s head, never on the axis', async () => {
+    // It was an item spanning the visible window, which made the board
+    // print its own window back as the event's hours -- "6am - 11pm /
+    // Staff Training Day", which is not when the training is, it is when
+    // the board decided to start looking. An all-day event has no hour to
+    // show, so it gets no place on a scale of hours.
     const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Staff Training Day' };
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'Training' }, allDay: true }] }],
     })));
-    assertEqual(r.metro.all_day, [], 'never duplicated into the header strip');
+    assertEqual(eventItems(r.metro), [], 'nothing between the first hour and the last');
     assertEqual(r.metro.sidings, undefined, 'and not split into a payload of its own either');
-    const items = eventItems(r.metro);
-    assertEqual(items.length, 1, 'it is an item on the timeline');
-    const st = items[0];
+    assertEqual(r.metro.all_day.length, 1, 'it is declared once');
+    const st = r.metro.all_day[0];
     assertEqual(st.title, 'Staff Training Day');
-    assertEqual(st.start_min, r.metro.day_start_min);
-    assertEqual(st.end_min, r.metro.day_end_min);
-    assertEqual(st.all_day, true, 'flagged so the client does not widen the content-fit window to match it');
     const calTrack = r.metro.legend.find((p) => p.name === 'Cal');
-    assertEqual(st.owner, calTrack.key, 'on somebody\'s line, which is the whole point of drawing it there');
+    assertEqual(st.owners, [calTrack.key], 'against the line whose day it is');
+    assertEqual(st.hue, undefined, 'presentation is the frontend\'s');
+  });
+
+  test('one all-day title shared by several lines is one origin, named once', async () => {
+    // Three people are not on three holidays; they are on one. Naming it
+    // per line would put the same words at three heads and say there were
+    // three of them.
+    const ev = { start: '20260907T140000Z', end: '20260907T150000Z', summary: 'Half Term' };
+    const fetchImpl = async () => okText(icsWithEvents([ev]));
+    const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
+      calendars: [
+        { url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'Half' }, allDay: true }] },
+        { url: 'https://example.com/b.ics', name: 'Two', rules: [{ match: { type: 'word', value: 'Half' }, allDay: true }] },
+      ],
+    })));
+    assertEqual(r.metro.all_day.length, 1, 'one row, not one per line');
+    assertEqual(r.metro.all_day[0].owners.length, 2, 'carrying both lines');
   });
 
   test('a real meeting inside a long block\'s span still renders normally alongside it', async () => {

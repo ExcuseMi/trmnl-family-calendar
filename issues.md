@@ -532,7 +532,7 @@ is open.
   the compressed segment filled with a cross-hatch or chevrons. An event
   that spans the night runs through it as one continuous stroke with a
   station at each end.
-- [ ] **E12. An all-day event belongs at the line's head, not on the axis.**
+- [x] **E12. An all-day event belongs at the line's head, not on the axis.**
   AGREED, planned, not built. An all-day event has no time of day at all:
   `transform.js` synthesises a fake timed event spanning the whole visible
   window, and the board then prints its own window back as if it were the

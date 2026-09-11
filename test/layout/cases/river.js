@@ -65,10 +65,10 @@ module.exports = function (test, h) {
   }
 
   for (const f of fixtures) {
-    test('a lake or a range sits on paper, never on a rail: ' + f.name, () => {
+    test('a lake sits on paper, never on a rail: ' + f.name, () => {
       // The river is allowed to cross a baseline -- that is the point of
-      // running top to bottom. Nothing else is: a lake over a rail has no
-      // excuse and reads as a printing fault.
+      // running top to bottom. A lake is not: it has no crossing to make,
+      // so water over a rail there reads as a printing fault.
       const rep = layout(f, ROOMY);
       const still = scenery(rep).filter((g) => !/river|shore/.test(g.role));
       if (!still.length) return;

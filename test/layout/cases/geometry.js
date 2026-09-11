@@ -312,45 +312,34 @@ module.exports = function (test, h) {
 
   // ------------------------------------------------------------ all-day events
 
-  test('an all-day event runs the width of the visible day', () => {
+  test('a line carrying an all-day event still runs the whole width', () => {
+    // The board this fixture describes changed underneath this case: an
+    // all-day event used to be drawn ON the line, spanning the visible
+    // window, and the assertion was that it spanned all of it. That was
+    // the bug -- the span was the BOARD's window, so the board printed its
+    // own window back as the holiday's hours -- and the event is declared
+    // at the line's head now, with nothing on the axis. See
+    // cases/all-day.js for what replaced it.
+    //
+    // What survives is the half of this that was never about the event: a
+    // line whose day is a holiday is still somebody's line, and it still
+    // runs from one edge of the board to the other. A line that stops
+    // short is one that was taken somewhere by its own event.
     const f = fixtures.find((x) => x.name === 'all-day-every-track');
     const rep = layout(f, ROOMY);
     // The COURSE, one per line and unbroken: the drawn line is in runs now,
     // cut wherever it passes under something, so its longest piece is not
     // its length. Where the line GOES is the question here.
-    //
-    // Every line on this board carries an all-day event, and an all-day
-    // event is drawn ON the line rather than as a band beside it, so every
-    // line still has to run the whole width of the board. A line that
-    // stops short is one that was taken somewhere by its own event.
     const byOwner = {};
     for (const t of pathsWhere(rep, 'course')) (byOwner[t.owner] = byOwner[t.owner] || []).push(t);
     const tracks = Object.keys(byOwner)
       .map((k) => byOwner[k].slice().sort((a, b) => b.len - a.len)[0]);
+    assert(tracks.length > 0, 'no courses drawn at all');
     for (const t of tracks) {
       const xs = t.pts.map((p) => p[0]);
       const span = Math.max.apply(null, xs) - Math.min.apply(null, xs);
-      assert(span > rep.canvas.w * 0.9, 'track ' + t.owner + ' only spans ' + Math.round(span) + 'px of ' + Math.round(rep.canvas.w));
-    }
-    // And the event itself runs the whole day it is on. Its own drawn span
-    // is what says how long it lasts now that nothing else about it does:
-    // no band, no kink, just a ring, an end tick and the caption between
-    // them. An all-day event covers every other event on the board, so it
-    // has to start no later than the first of them and end no earlier than
-    // the last.
-    const evs = eventsIn(rep);
-    const allDay = f.metro.items.filter((i) => i.type === 'event' && i.all_day);
-    assert(allDay.length > 0, 'this board is meant to carry all-day events');
-    const rest = evs.filter((e) => !allDay.some((a) => a.title === e.title));
-    const first = Math.min.apply(null, rest.map((e) => e.nodeA));
-    const last = Math.max.apply(null, rest.map((e) => e.endA));
-    for (const a of allDay) {
-      const e = evs.find((x) => x.title === a.title);
-      assert(e, '"' + a.title + '" was not laid out at all');
-      assert(e.nodeA <= first + 1, '"' + a.title + '" starts at ' + Math.round(e.nodeA)
-        + ', after the day\'s first event at ' + Math.round(first));
-      assert(e.endA >= last - 1, '"' + a.title + '" ends at ' + Math.round(e.endA)
-        + ', before the day\'s last event at ' + Math.round(last));
+      assert(span > rep.canvas.w * 0.9, 'track ' + t.owner + ' only spans '
+        + Math.round(span) + 'px of ' + Math.round(rep.canvas.w));
     }
   });
 
