@@ -263,6 +263,38 @@ module.exports = function (test, h) {
   // dropping vertically into that capsule is halfway down the drop and
   // outside it. Both capsules on the everyday board reach exactly the two
   // lines they join; the midpoint of one of those lines sat 50px clear.
+  // A LEADER STARTS WHERE THE PILL ENDS.
+  //
+  // It used to start at the line's own cross position, which on a
+  // convergence is a point somewhere inside a paper-filled capsule: the
+  // first several pixels were drawn under the pill and never seen, and what
+  // reached the reader was a tick beginning at whatever point of the
+  // outline the angle happened to cross. The taller the pill, the further
+  // in it began.
+  test('a leader begins outside its capsule, not somewhere inside it', () => {
+    for (const name of ['busy-day', 'all-day-every-track', 'moment-day']) {
+      const f = fixtures.find((x) => x.name === name);
+      const rep = layout(f, ROOMY);
+      const caps = (rep.rects || []).filter((r) => r.role === 'capsule');
+      const leads = (rep.rects || []).filter((r) => r.role === 'leader');
+      if (!leads.length || !caps.length) continue;
+      for (const lead of leads) {
+        for (const cap of caps) {
+          // The pill's own edge is fair game -- that is the point -- so
+          // measure against its inside, a few px in from the outline.
+          const IN = 3;
+          const inner = { x: cap.x + IN, y: cap.y + IN,
+                          w: Math.max(0, cap.w - 2 * IN), h: Math.max(0, cap.h - 2 * IN) };
+          if (inner.w <= 0 || inner.h <= 0) continue;
+          const ox = Math.min(lead.x + lead.w, inner.x + inner.w) - Math.max(lead.x, inner.x);
+          const oy = Math.min(lead.y + lead.h, inner.y + inner.h) - Math.max(lead.y, inner.y);
+          assert(ox <= 0 || oy <= 0,
+            name + ': a leader reaches ' + Math.round(Math.min(ox, oy)) + 'px into a capsule it should start against');
+        }
+      }
+    }
+  });
+
   test('a shared event reaches every line it joins', () => {
     for (const name of ['busy-day', 'all-day-every-track', 'moment-day']) {
       const f = fixtures.find((x) => x.name === name);

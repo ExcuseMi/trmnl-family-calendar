@@ -254,8 +254,8 @@
   .metro-terminus { white-space: nowrap; }
   .metro-sky { white-space: nowrap; }
   .metro-hour, .metro-axis-note, .metro-terminus, .metro-sky { padding: 1px 3px; }
-  /* no vertical padding: see the line-height note above. The horizontal
-     padding is the paper the words sit on and stays. */
+  /* nothing above or below: see the line-height note. Either side is the
+     paper the words sit on and stays. */
   .metro-label { padding: 0 3px; }
   /* Ink mixed toward the canvas: a grey in either theme, at full opacity so
      the paper outline behind the glyphs stays solid. Where color-mix is not
@@ -540,7 +540,7 @@
     // is why the numbers look back to front -- `dash: "2 4"` is two of
     // paper and four of ink, and reads as a four-long dash.
     //
-    // `core` is as wide as the line plus a margin, so the paper cuts all
+    // `core` is as wide as the line plus a little, so the paper cuts all
     // the way through rather than leaving a rail either side of it. That
     // matters: a treatment that leaves two thin rails reads as two lines
     // running together, and two lines running together is what a shared
@@ -1315,7 +1315,7 @@
     // width, which is exactly the trade a crowded board should make.
     // Whether a name will fit ABOVE its line is not knowable yet — it turns
     // on how far apart the bands end up, which is solved later — so this
-    // reserves the small head margin either way and the decision is made at
+    // reserves the small gap at the head either way and the decision is made at
     // drawing time. Standing up the names always take a column, because
     // there they run along their lines and a column is the only place for
     // them.
@@ -3316,7 +3316,7 @@
         //
         // SEP_CAP used to be a constant of a couple of track-steps, which
         // meant a board with room to spare drew its lines at that pitch in
-        // the middle of the canvas and centred the rest as margin: two
+        // the middle of the canvas and left the rest as empty border: two
         // lines on a 1300px panel used a fifth of it. The space BETWEEN two
         // lines is where the inner one's labels belong, so a surplus spent
         // there is not decoration, it is the room the map runs out of. It
@@ -7362,13 +7362,23 @@
           // of a capsule.
           var capOut = e._capOut != null ? e._capOut
             : Math.abs((spineC + e._sign * e._laneDist) - lc0);
+          // FROM THE OUTSIDE OF THE PILL, NOT FROM INSIDE IT.
+          //
+          // It started at the line's own cross position, which is a point
+          // somewhere in the middle of a paper-filled capsule: the first
+          // several pixels were drawn underneath the pill and never seen,
+          // and what the reader did see was a tick beginning at whatever
+          // point of the outline the angle happened to cross. Start it at
+          // the pill's edge, on the side the name is on, the way a leader
+          // is drawn to anything else on the board.
+          var edgeC = (away < 0 ? lo : hi) + away * capR;
+          var g0 = toXY(e._nodeA, edgeC);
           // TO WHERE THE NAME ACTUALLY IS. The caption gives way to the
           // lines and can end up a good way along the axis from its own
           // capsule; drawn straight out at the event's own minute, the
           // leader pointed at blank board while the name it belonged to
           // sat somewhere else. It leans across to meet the nearest corner
           // of the words, which is the whole job of a leader.
-          var g0 = toXY(e._nodeA, lc0);
           var toA = e._textStart == null ? e._nodeA
             : (e._textStart > e._nodeA ? e._textStart : Math.min(e._nodeA, e._textStart + e._textLen));
           var g1 = toXY(toA, lc0 + away * (capOut - LINE_GAP * 0.25));
