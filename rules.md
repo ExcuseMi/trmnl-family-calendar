@@ -143,6 +143,33 @@ Where the two disagree, this one is newer.
 33. **Clearance from a slope is measured perpendicular to it**, and it
     includes half the words' own height, or they straddle the rail they
     name.
+33a. **Octagonal angles only.** Every rail on this map runs flat, upright or
+    at 45, and a name is part of the same drawing. A name set at the angle
+    a trunk happens to be passing through at that minute, taken off an eased
+    corner, comes out at something like 41 degrees and reads as a mistake,
+    because here it is one.
+33b. **A name leans away from its own line as it reads.** There are two
+    orientations and the side of the line the words sit on chooses between
+    them:
+    - set BELOW the line, the name runs north west to south east: down to
+      the right.
+    - set ABOVE the line, the name runs south west to north east: up to the
+      right.
+    Either way it leaves the rail at its first letter and has open paper
+    for the rest. Leaning the other way turns the name back towards the line
+    it came from, so it ends up along its own rail or across it, and it
+    walks into the band where that line's neighbour and all of its labels
+    are instead of into the empty wedge beside it.
+33c. **The side decides it even on a slope.** Rule 32 says a name beside a
+    moving trunk is set ON the slope, and that is about the ANGLE. Which of
+    the two 45s it takes is still 33b's answer, not the trunk's: a name
+    above a rail that happens to be falling is still above it, and sending
+    it down after the rail runs the words back across the wedge they were
+    put in and out the far side.
+33d. **These rules are for a name set against a LINE**, which is what a mark
+    and a convergence have. A shelf's name belongs flat beside its own rail
+    (rule 34). An event that changes shape gives up the caption that went
+    with the old one.
 
 34. **A caption belongs beside its own rail**, on the outside, starting at the
     stop it names.

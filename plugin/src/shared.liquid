@@ -1804,6 +1804,19 @@
       if (e._onTrack) return;
       e._onRoute = false; e._capLead = false;
       e._lineFrom = null; e._lineTo = null;
+      // ...AND THE CAPTION IT WAS GIVEN AS A MARK.
+      //
+      // A leaning caption is computed for a name set against a LINE. Give
+      // the event its rail back and it is a shelf, whose name belongs flat
+      // beside that rail and is placed by the lane ladder -- but `_capAngle`
+      // and `_routeEdge` survived, and the drawing believes them: it drew
+      // the label turned, hung off a line the event no longer sits on, at
+      // an angle chosen for a shape it no longer has. Client Workshop,
+      // Sprint Planning and Groceries were all shelves wearing a mark's
+      // caption, which is why all three leaned the wrong way -- the rule
+      // they were breaking was not being applied to them at all.
+      e._routeEdge = null; e._capOut = null; e._capBase = null;
+      e._capAngle = null; e._capRun = null;
     }
     function makeMark(e) {
       e._stub = true;
@@ -4162,6 +4175,12 @@
       // order that matters: a name that has slid an hour from its own ring
       // has stopped pointing at it, while the same name on the other side
       // of the line is still beside it.
+      // Last attempt's answer is not this attempt's. Cleared for every
+      // event first, so an event the pass no longer handles cannot be drawn
+      // leaning on the strength of a run that is no longer there.
+      visible.forEach(function (e) {
+        if (!e._routeShared && !e._onTrack) { e._capAngle = null; e._capRun = null; }
+      });
       visible.forEach(function (e) {
         if (!e._onTrack || e._dropped) return;
         e._routeEdge = lineCAt(e._p, e._nodeA);
@@ -4270,18 +4289,39 @@
         // Preferring 45 everywhere drove one name ninety five pixels
         // through somebody else's track, so it is not a rule about slopes.
         // It is a question asked of each candidate.
+        // RULE 37: A CAPTION MAY NOT WALK PAST ANOTHER LINE TO FIND ROOM.
+        //
+        // This asked only whether a name CROSSED a rail, which is the
+        // smaller half of the rule and the half that never fired here. The
+        // perpendicular ladder offers rungs two label-heights off the line,
+        // and a 45 degree name falls its own length again over its length,
+        // so a caption could START beyond the next track and run on down
+        // without ever touching it. Four of Work's events were set in the
+        // empty band below Alex, which reads as four of Alex's events.
+        //
+        // So the question is not "does it touch a rail", it is "is there a
+        // rail between these words and the line they belong to". A name on
+        // the far side of somebody else's track is theirs, whether it
+        // crossed to get there or was put there.
+        //
+        // Sampled finely: at a third of a box the old test walked over a
+        // line crossing a name at a shallow angle and reported clean.
         function runCrosses(e, run) {
+          var mine = e._involved || [];
           for (var qi = 0; qi < LEGEND.length; qi++) {
             var q = LEGEND[qi];
-            if (q === e._p) continue;
+            if (q === e._p || mine.indexOf(q) >= 0) continue;
             for (var bi = 0; bi < run.length; bi++) {
-              // Finely enough to catch a rail that slips between two
-              // samples: at a third of a box the test walked over a line
-              // crossing the name at a shallow angle and reported clean.
               var bx = run[bi], stepA = Math.max(2 * S, (bx.a1 - bx.a0) / 8);
               for (var a = bx.a0; a <= bx.a1; a += stepA) {
                 var c = lineCAt(q, a);
-                if (c > bx.c0 && c < bx.c1) return true;
+                if (c > bx.c0 && c < bx.c1) return true;       // through the words
+                // ...or between the words and the line they name. `own` is
+                // the caption's own baseline: its line for a mark, the
+                // bundle's edge for a convergence.
+                var own = e._onTrack || e._routeEdge == null ? lineCAt(e._p, a) : e._routeEdge;
+                var mid = (bx.c0 + bx.c1) / 2;
+                if (c > Math.min(own, mid) && c < Math.max(own, mid)) return true;
               }
             }
           }
@@ -4445,17 +4485,18 @@
                   // down-to-the-right the positive slope: the preference is
                   // simply that the two agree.
                   //
-                  // UNLESS IT IS FOLLOWING THE TRACK. Where the trunk is on
-                  // the move it is already at 45 and the name is set along
-                  // it, and then the name's direction is the line's to
-                  // decide, not the wedge's: a name running with the rail
-                  // is reading the journey, and one running against it
-                  // makes an X with the thing it belongs to. That outranks
-                  // which side of the rail the words happen to sit.
-                  var follows = Math.abs(m) > 0.3;
-                  if (follows ? (mm > 0) === (m > 0) : mm * away > 0) {
-                    cost -= e._h * e._textLen * 0.025;
-                  }
+                  // AND THE SIDE DECIDES IT EVEN ON A SLOPE.
+                  //
+                  // The trunk's own direction was allowed to override this
+                  // wherever the trunk was moving, on the grounds that a
+                  // name set along a rail should read with it. That is
+                  // right about the ANGLE and wrong about the DIRECTION:
+                  // "Groceries" sits above a trunk falling to the right, so
+                  // following the trunk sent the words down across the
+                  // wedge they were put in, back towards the rail, and out
+                  // the other side. Above is above whatever the rail is
+                  // doing underneath it.
+                  if (mm * away > 0) cost -= e._h * e._textLen * 0.025;
                   // A NAME BELONGS AT ITS OWN MARK.
                   //
                   // Nothing charged these candidates for distance. The
