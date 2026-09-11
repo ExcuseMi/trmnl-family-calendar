@@ -228,6 +228,10 @@
   if (!canvas || !svg) return;
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
+  // The two attribute names the drawing writes most, named once: the
+  // built copy has to fit the server's 100KB per-file limit and these are
+  // 49 repeats of seventeen characters.
+  var ROLE_ATTR = 'data-metro-role', OWNER_ATTR = 'data-metro-owner';
   var LEGEND = METRO.legend || [];
   var SIDINGS = METRO.sidings || [];
   var DAY_START = METRO.day_start_min, DAY_END = METRO.day_end_min;
@@ -427,8 +431,8 @@
     // are joins, and stroke-linejoin still rounds them.
     node.setAttribute('stroke-linecap', 'butt');
     var ov = node.cloneNode(false);
-    ov.removeAttribute('data-metro-role');
-    ov.removeAttribute('data-metro-owner');
+    ov.removeAttribute(ROLE_ATTR);
+    ov.removeAttribute(OWNER_ATTR);
     // and not a rail of a bundle either. An overlay is a clone of the rail
     // it hollows out, so it kept the bundle tag and was reported as a
     // second, owner-less rail lying exactly on the first: the suite read
@@ -3653,7 +3657,7 @@
           var hl = svgEl('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
             'stroke-width': 1 * S, 'stroke-opacity': 0.35 });
           hl.style.stroke = INK;
-          hl.setAttribute('data-metro-role', 'express');
+          hl.setAttribute(ROLE_ATTR, 'express');
           svg.appendChild(hl);
         }
         // SPEED LINES along every rail in the stretch. The hatch says the
@@ -3686,8 +3690,8 @@
               var sl = svgEl('line', { x1: s0[0], y1: s0[1], x2: s1[0], y2: s1[1],
                 'stroke-width': 1.2 * S, 'stroke-linecap': 'round', 'stroke-opacity': 0.5 });
               sl.style.stroke = colorFor(p.hue);
-              sl.setAttribute('data-metro-role', 'speed');
-              sl.setAttribute('data-metro-owner', p.key);
+              sl.setAttribute(ROLE_ATTR, 'speed');
+              sl.setAttribute(OWNER_ATTR, p.key);
               svg.appendChild(sl);
             });
           });
@@ -3700,7 +3704,7 @@
           var pl = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
             'stroke-width': 1 * S, 'stroke-opacity': 0.28, 'stroke-dasharray': (3 * S) + ' ' + (5 * S) });
           pl.style.stroke = INK;
-          pl.setAttribute('data-metro-role', 'express');
+          pl.setAttribute(ROLE_ATTR, 'express');
           svg.appendChild(pl);
         });
       });
@@ -3728,7 +3732,7 @@
           var bar = svgEl('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
             'stroke-width': 1.5 * S });
           bar.style.stroke = INK;
-          bar.setAttribute('data-metro-role', 'midnight');
+          bar.setAttribute(ROLE_ATTR, 'midnight');
           svg.appendChild(bar);
         });
         // the day it opens, named on the bar, so the reader is told what
@@ -3773,7 +3777,7 @@
       var w = Math.abs(a1[0] - a0[0]), h = Math.abs(a1[1] - a0[1]);
       var fill = svgEl('rect', { x: x, y: y, width: w, height: h, stroke: 'none', 'fill-opacity': 0.09 });
       fill.style.fill = INK;
-      fill.setAttribute('data-metro-role', 'river');
+      fill.setAttribute(ROLE_ATTR, 'river');
       svg.appendChild(fill);
       // one hairline on the inner edge, so the strip still has a boundary
       // where the fill dithers away on a 1-bit panel
@@ -3781,7 +3785,7 @@
       var edge = svgEl('line', { x1: e0[0], y1: e0[1], x2: e1[0], y2: e1[1],
         'stroke-width': 1.2 * S, 'stroke-opacity': 0.22 });
       edge.style.stroke = INK;
-      edge.setAttribute('data-metro-role', 'river');
+      edge.setAttribute(ROLE_ATTR, 'river');
       svg.appendChild(edge);
         })();
 
@@ -3950,20 +3954,6 @@
       }
       return null;
     }
-    // A SIDING IS NOT A LOOP ANY MORE, so there is no express to draw.
-    //
-    // The line used to be drawn TWICE over a siding's span: once detouring
-    // down into it, and once running straight through at the baseline, the
-    // way a transit map shows a loop with a through service. That made
-    // sense while a trunk was level and a siding was a local kink in it.
-    // It stopped making sense when the trunk started going places: the
-    // straight-through line is a second copy of somebody who is at school,
-    // and over a seven-hour school day the two run side by side for most of
-    // the board. Read as a drawing it says the track is permanently split.
-    //
-    // One line, going where the person went. The siding's own band and end
-    // bars already say where that is and for how long.
-    function expressThrough() {}
 
     // ---- tracks (full bleed), each starting at its named terminus when fanned
     // Every name already placed, so the next one can keep off it.
@@ -4100,8 +4090,8 @@
         // question from where its ink is now that the ink has gaps in it.
         // Anything asking "is this branch on its own trunk" wants the
         // course; anything asking "what is drawn here" wants the runs.
-        path.setAttribute('data-metro-role', 'course');
-        path.setAttribute('data-metro-owner', p.key);
+        path.setAttribute(ROLE_ATTR, 'course');
+        path.setAttribute(OWNER_ATTR, p.key);
         svg.appendChild(path);
         p._trunkEl = path;
         // THE NAME'S OWN LEAD-IN, then the trunk in runs. The fan is the
@@ -4111,16 +4101,15 @@
         var leadEl = svgEl('path', { d: roundedPath(
           [[nameEnd, spreadC], [fanStart, spreadC], [merge, lineCAt(p, merge)]]
             .map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
-        leadEl.setAttribute('data-metro-role', 'track'); leadEl.setAttribute('data-metro-owner', p.key);
+        leadEl.setAttribute(ROLE_ATTR, 'track'); leadEl.setAttribute(OWNER_ATTR, p.key);
         paintLine(leadEl, p, S, svg, 0);
         trunkRuns(p, Math.min(merge, far), Math.max(merge, far)).forEach(function (run) {
           var rp = sidingPath(c, p._sign, run[0], run[1], p).map(function (pt) { return toXY(pt[0], pt[1]); });
           if (rp.length < 2) return;
           var seg = svgEl('path', { d: roundedPath(rp, CORNER) });
-          seg.setAttribute('data-metro-role', 'track'); seg.setAttribute('data-metro-owner', p.key);
+          seg.setAttribute(ROLE_ATTR, 'track'); seg.setAttribute(OWNER_ATTR, p.key);
           paintLine(seg, p, S, svg, phaseAfter(p, trunkLenAt(p, run[0]) || 0));
         });
-        expressThrough(p);
         // a terminal bar at each end, the transit-map mark for where a line
         // starts and stops rather than simply running out of canvas
         [[nameEnd, spreadC], [far, lineCAt(p, far)]].forEach(function (at) {
@@ -4128,7 +4117,7 @@
           var cap = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1],
             'stroke-width': (p.line_width + 1) * S, 'stroke-linecap': 'round' });
           cap.style.stroke = colorFor(p.hue);
-          cap.setAttribute('data-metro-role', 'terminal'); cap.setAttribute('data-metro-owner', p.key);
+          cap.setAttribute(ROLE_ATTR, 'terminal'); cap.setAttribute(OWNER_ATTR, p.key);
           svg.appendChild(cap);
         });
       } else {
@@ -4139,8 +4128,8 @@
         // anything, and the visible line is now several.
         var whole = svgEl('path', { d: roundedPath(sidingPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
         whole.style.fill = 'none'; whole.style.stroke = 'none';
-        whole.setAttribute('data-metro-role', 'course');
-        whole.setAttribute('data-metro-owner', p.key);
+        whole.setAttribute(ROLE_ATTR, 'course');
+        whole.setAttribute(OWNER_ATTR, p.key);
         svg.appendChild(whole);
         p._trunkEl = whole;
         // AND THEN IN RUNS, BROKEN WHERE IT PASSES UNDER SOMETHING.
@@ -4156,12 +4145,11 @@
           var pts = sidingPath(c, p._sign, run[0], run[1], p).map(function (pt) { return toXY(pt[0], pt[1]); });
           if (pts.length < 2) return;
           var seg = svgEl('path', { d: roundedPath(pts, CORNER) });
-          seg.setAttribute('data-metro-role', 'track'); seg.setAttribute('data-metro-owner', p.key);
+          seg.setAttribute(ROLE_ATTR, 'track'); seg.setAttribute(OWNER_ATTR, p.key);
           // the phase this piece starts at, so the texture runs on through
           // the gap rather than restarting at every crossing
           paintLine(seg, p, S, svg, phaseAfter(p, trunkLenAt(p, run[0]) || 0));
         });
-        expressThrough(p);
       }
     });
     // ---- siding markers: a hollow ring at each end, sitting exactly where
@@ -4243,7 +4231,7 @@
             });
             hub.style.stroke = colorFor(p.hue);
             hub.style.fill = i ? colorFor(p.hue) : PAPER;
-            hub.setAttribute('data-metro-role', 'station-ring'); hub.setAttribute('data-metro-owner', p.key);
+            hub.setAttribute(ROLE_ATTR, 'station-ring'); hub.setAttribute(OWNER_ATTR, p.key);
             svg.appendChild(hub);
           });
         }
@@ -4284,8 +4272,8 @@
             var bar = svgEl('line', { x1: b0[0], y1: b0[1], x2: b1[0], y2: b1[1],
               'stroke-width': NODE_STROKE * 0.9, 'stroke-linecap': 'round' });
             bar.style.stroke = INK;
-            bar.setAttribute('data-metro-role', 'capsule');
-            bar.setAttribute('data-metro-owner', p.key);
+            bar.setAttribute(ROLE_ATTR, 'capsule');
+            bar.setAttribute(OWNER_ATTR, p.key);
             svg.appendChild(bar);
           });
         }
@@ -4682,8 +4670,8 @@
     }
     function drawRamp(p, pts, phaseA, role, owner) {
       var path = svgEl('path', { d: roundedPath(pts.map(function (q) { return toXY(q[0], q[1]); }), CORNER) });
-      path.setAttribute('data-metro-role', role);
-      path.setAttribute('data-metro-owner', owner);
+      path.setAttribute(ROLE_ATTR, role);
+      path.setAttribute(OWNER_ATTR, owner);
       // The lead-in lies ON the trunk, so its rungs have to fall on the
       // trunk's own — ask the trunk how far along itself the ramp starts.
       paintLine(path, p, S, svg, phaseA == null ? null : phaseAfter(p, trunkLenAt(p, phaseA)));
@@ -4881,8 +4869,8 @@
       // test asking whether a rail stops at something has to be able to see
       // it. Without the role it was drawn, correct, and invisible to the
       // suite, which then read every properly capped rail as a loose end.
-      tb.setAttribute('data-metro-role', 'terminal');
-      tb.setAttribute('data-metro-owner', p.key);
+      tb.setAttribute(ROLE_ATTR, 'terminal');
+      tb.setAttribute(OWNER_ATTR, p.key);
       svg.appendChild(tb);
     }
     // ---- ROUTE MODE (prototype, off unless the payload asks for it) ----
@@ -5004,7 +4992,7 @@
         function bridge(a0, a1) {
           if (Math.abs(a1 - a0) < 1) return;
           var seg = svgEl('path', { d: roundedPath([toXY(a0, laneC), toXY(a1, laneC)], 0) });
-          seg.setAttribute('data-metro-role', 'branch'); seg.setAttribute('data-metro-owner', p.key);
+          seg.setAttribute(ROLE_ATTR, 'branch'); seg.setAttribute(OWNER_ATTR, p.key);
           paintLine(seg, p, S, svg, lanePhase);
         }
         // ONE ramp per group, at the earliest elbow. A group is a run of
@@ -5440,8 +5428,8 @@
           // it was rounding anyway.
           if (si) radii = last ? bend : 0;
           var el = svgEl('path', { d: roundedPath(pts, radii) });
-          el.setAttribute('data-metro-role', 'branch');
-          el.setAttribute('data-metro-owner', r.q.key);
+          el.setAttribute(ROLE_ATTR, 'branch');
+          el.setAttribute(OWNER_ATTR, r.q.key);
           // which bundle this rail belongs to, so the suite can ask about
           // one shared event's rails as a set rather than guessing from
           // position which branches are together
@@ -5468,8 +5456,8 @@
           var tick = svgEl('line', { x1: t0[0], y1: t0[1], x2: t1[0], y2: t1[1],
             'stroke-width': NODE_STROKE, 'stroke-linecap': 'round' });
           tick.style.stroke = colorFor(r.q.hue);
-          tick.setAttribute('data-metro-role', 'stop');
-          tick.setAttribute('data-metro-owner', r.q.key);
+          tick.setAttribute(ROLE_ATTR, 'stop');
+          tick.setAttribute(OWNER_ATTR, r.q.key);
           svg.appendChild(tick);
         }
       });
@@ -5552,8 +5540,8 @@
           var etick = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
             'stroke-width': NODE_STROKE, 'stroke-linecap': 'round' });
           etick.style.stroke = e._onRoute ? colorFor(p.hue) : INK;
-          etick.setAttribute('data-metro-role', 'stop');
-          etick.setAttribute('data-metro-owner', e.owner);
+          etick.setAttribute(ROLE_ATTR, 'stop');
+          etick.setAttribute(OWNER_ATTR, e.owner);
           svg.appendChild(etick);
         }
         // ONE capsule, not a bar with a circle stacked on every line. A
@@ -5576,7 +5564,7 @@
         // nothing at all: the old tie was in the DOM, the right length, in
         // the right place, and completely invisible.
         cap.style.fill = PAPER; cap.style.stroke = INK;
-        cap.setAttribute('data-metro-role', 'capsule'); cap.setAttribute('data-metro-owner', e.owner);
+        cap.setAttribute(ROLE_ATTR, 'capsule'); cap.setAttribute(OWNER_ATTR, e.owner);
         svg.appendChild(cap);
         // A LEADER FROM THE CAPSULE TO ITS NAME.
         //
@@ -5605,8 +5593,8 @@
             'stroke-width': Math.max(1, NODE_STROKE * 0.5), 'stroke-linecap': 'round',
           });
           lead.style.stroke = INK;
-          lead.setAttribute('data-metro-role', 'leader');
-          lead.setAttribute('data-metro-owner', e.owner);
+          lead.setAttribute(ROLE_ATTR, 'leader');
+          lead.setAttribute(OWNER_ATTR, e.owner);
           svg.appendChild(lead);
         }
       } else {
@@ -5694,7 +5682,7 @@
           });
           dot.style.stroke = colorFor(p.hue);
           dot.style.fill = PAPER;
-          dot.setAttribute('data-metro-role', 'stop-start'); dot.setAttribute('data-metro-owner', e.owner);
+          dot.setAttribute(ROLE_ATTR, 'stop-start'); dot.setAttribute(OWNER_ATTR, e.owner);
           svg.appendChild(dot);
         }
         // always, however short the event: the start is a dot and the end a
@@ -5723,7 +5711,7 @@
             'stroke-width': NODE_STROKE, 'stroke-linecap': 'round',
           });
           tick.style.stroke = colorFor(p.hue);
-          tick.setAttribute('data-metro-role', 'stop'); tick.setAttribute('data-metro-owner', e.owner);
+          tick.setAttribute(ROLE_ATTR, 'stop'); tick.setAttribute(OWNER_ATTR, e.owner);
           svg.appendChild(tick);
         }
       }
@@ -5822,8 +5810,8 @@
         glyph.style.fontFamily = 'inherit';
         glyph.textContent = letter;
         g.appendChild(glyph);
-        g.setAttribute('data-metro-role', 'car');
-        g.setAttribute('data-metro-owner', p.key);
+        g.setAttribute(ROLE_ATTR, 'car');
+        g.setAttribute(OWNER_ATTR, p.key);
         svg.appendChild(g);
       });
     }

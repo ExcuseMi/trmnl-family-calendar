@@ -532,6 +532,32 @@ is open.
   the compressed segment filled with a cross-hatch or chevrons. An event
   that spans the night runs through it as one continuous stroke with a
   station at each end.
+- [ ] **E11. Long events on the main track, and no more sidings.** A long
+  block -- a school day, a shift, a delivery run -- is drawn as a siding:
+  the line leaves its lane, runs a corridor for the length of the block and
+  comes back. The rule that replaces it:
+
+  - A long event is drawn ON the main track. The line does not move for it;
+    the band and its end marks say where the person is and for how long.
+  - An own event inside it branches off the main track as any own event
+    does, and rejoins.
+  - A shared event inside it needs the main track to move, so there the
+    long event becomes the branch instead: the line leaves for the long
+    event and the trunk is free to go and meet somebody.
+
+  That removes sidings as a separate thing entirely. What goes with them:
+  `SIDING_*`, `sidingGeom`, `sidingPath`, `sidingRaiseAt`, the `siding: true`
+  holds in the route model, the siding markers and captions, and the
+  `siding-day` / `shared-siding` fixtures and their cases. What has to be
+  built: a band drawn along a trunk that may itself be moving, a caption
+  that can sit beside it, and the test that says a long block moved the
+  trunk only when a shared event asked it to.
+
+  Note the ordering conflict with rule 24: a long event that becomes a
+  branch because of a shared event inside it must still not leave before
+  that shared event is over, which means the branch is the SECOND half of
+  the block, not the whole of it.
+
 - [ ] **E10. Events on a diagonal run.** An event can only be drawn one way:
   a horizontal rail in a lane, with the line branching out to it and back.
   That was fine while trunks were level. They are not any more -- a line
