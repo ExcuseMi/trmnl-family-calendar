@@ -236,11 +236,12 @@ function baseHtml(liquidExtra, page) {
 // exact (and beats a regex that would trip over nested objects).
 function swapMetro(html, metro) {
   // Matched loosely on purpose: push.sh minifies the template's script on
-  // the way to the device, which closes the spaces up to `var METRO=`. The
-  // whole reason that minifier leaves identifiers alone is so this suite can
-  // measure the artefact that actually ships, and a marker that only matched
-  // the pretty form would have quietly given that up.
-  const m = /var\s+METRO\s*=\s*/.exec(html);
+  // the way to the device, which closes the spaces up. It now renames
+  // identifiers too, so the marker this suite looks for is the `window.`
+  // form -- a property name, which the mangler leaves alone. The template
+  // writes that one first and aliases it, exactly so this keeps working and
+  // the suite can measure the artefact that actually ships.
+  const m = /window\.METRO\s*=\s*|var\s+METRO\s*=\s*/.exec(html);
   if (!m) throw new Error('could not find the METRO literal in the built page');
   const at = m.index;
   const open = html.indexOf('{', at + m[0].length - 1);

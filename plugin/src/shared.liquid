@@ -229,7 +229,18 @@
 
 <script>
 (function () {
-  var METRO = {{ metro | json }};
+  // ON `window`, AND THEN ALIASED, so the minifier cannot rename it.
+  //
+  // push.sh squeezes this script on its way to the device, and the squeeze
+  // now renames identifiers, which is 22KB on a file that had run out of
+  // room under the server's 100KB limit. A renamed `METRO` would have cost
+  // the layout suite its ability to swap a fixture into the artefact that
+  // actually ships and measure THAT rather than the source. A property name
+  // is not an identifier: `window.METRO` survives the mangler untouched,
+  // and the local alias below can be renamed to a letter for all anyone
+  // cares, because nothing outside this script looks for it.
+  window.METRO = {{ metro | json }};
+  var METRO = window.METRO;
   var SCRIPT = document.currentScript;
   var ROOT = SCRIPT && SCRIPT.parentElement ? SCRIPT.parentElement : document;
   var canvas = ROOT.querySelector('.metro-canvas');
@@ -4436,20 +4447,22 @@
                 // was drawn on top of the winner.
                 var unit = 1 / Math.sqrt(1 + mm * mm);
                 var back = e._textLen * unit + TEXT_PAD, slide = e._textLen * 0.5 * unit;
-                // CENTRED ON THE RUN IT NAMES, FIRST.
+                // THE WORDS START AT THE MARK.
                 //
-                // Every anchor here started at one END of the event: out of
-                // the start dot, out of the end tick, or back into either.
-                // None of them put the words across the middle of the thing
-                // they name, which is where a station name goes and where
-                // the eye looks for it -- so a name for a ninety minute
-                // meeting began at its first minute and was finished well
-                // before it, or began past its last. Centred, the words sit
-                // over the run, and the dot and the tick are the ends of
-                // the same gesture.
-                var mid = (e._nodeA + e._endA) / 2 - e._textLen * unit / 2;
-                var anchors = [mid,
-                               e._endA + TEXT_PAD, e._nodeA + TEXT_PAD,
+                // Centring the name on the run was wrong, and wrong in a
+                // way only the drawing shows: the text leans and the line
+                // it names does not, so the gap between them GROWS along
+                // the words. Only the first letter is ever really against
+                // the rail. Anchor the middle and the name starts half its
+                // own length before the dot, already falling away, and by
+                // the minute it belongs to it is most of a band below the
+                // line -- which is what every one of those red marks was
+                // measuring.
+                //
+                // So the start of the words goes at the start of the event
+                // and the lean carries them off into the wedge from there,
+                // which is what a transit map does with a station name.
+                var anchors = [e._nodeA + TEXT_PAD, e._endA + TEXT_PAD,
                                e._nodeA - back, e._endA - back,
                                e._endA + TEXT_PAD + slide, e._nodeA + TEXT_PAD - slide,
                                e._nodeA - back - slide, e._endA - back + slide];
@@ -4532,8 +4545,16 @@
                   // be anywhere better should still go somewhere -- but
                   // both have to be paid for out of the same purse as
                   // landing on somebody.
-                  var runMid = (run[0].a0 + run[run.length - 1].a1) / 2;
-                  cost += Math.abs(runMid - (e._nodeA + e._endA) / 2) * e._h * 0.005;
+                  // ...and how far the FIRST LETTER ended up from the
+                  // mark, measured both ways at once. Charging the middle
+                  // of the run against the middle of the event said nothing
+                  // about the gap between the words and the rail, which is
+                  // the gap the eye actually reads: a name a whole band
+                  // away scored the same as one against the line so long as
+                  // it sat over the right minute.
+                  var hd = run[0].a0 - e._nodeA;
+                  var vd = (run[0].c0 + run[0].c1) / 2 - capBase(e, e._nodeA);
+                  cost += Math.sqrt(hd * hd + vd * vd) * e._h * 0.03;
                   // CLIMBED ONLY WHEN THE RUNG BELOW IS REALLY TAKEN.
                   //
                   // At a hundredth this was nearly free, so a name went up
@@ -4637,8 +4658,7 @@
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal,
       corner: CORNER, minDiag: MIN_DIAG, win: [dayFrom, dayTo],
-      days: dayCount, segments: AXIS.segments.map(function (sg) { return [Math.round(sg.from), Math.round(sg.to), sg.rate]; }),
-      boundaries: AXIS.boundaries.map(function (b) { return b.min; }), spineC: spineC, step: step, laneStep: laneStep, colW: colW,
+      spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
@@ -4647,16 +4667,9 @@
         var br = e._laneDist == null ? null : Math.round(((spineC + e._sign * e._laneDist) - c0) * p2._sign);
         return [e.title, e._onTrack ? 'mark' : 'shelf', e._capAngle == null ? 'flat' : Math.round(e._capAngle), Math.round(e._endA - e._nodeA), br];
       }),
-      // A18: which lines exchanged places, and where on the axis. Empty on
-      // a day one order can draw, which is most of them.
-      route: LEGEND.filter(function (p) { return p._route; }).map(function (p) {
-        return { key: p.key, home: p._homeLvl == null ? null : Math.round(p._homeLvl),
-                 holds: p._route.map(function (h) { return [Math.round(h.a0), Math.round(h.a1), Math.round(h.lvl)]; }) };
-      }),
       weave: LEGEND.filter(function (p) { return p._weave; }).map(function (p) {
         return { key: p.key, atA: Math.round(p._weave.mid), from: Math.round(p._weave.fromC), to: Math.round(p._weave.toC) };
       }),
-      colors: LEGEND.map(function (p) { return p.hue + '=' + colorFor(p.hue); }),
       events: eventsDump()
     }));
 

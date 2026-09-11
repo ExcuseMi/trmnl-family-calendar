@@ -13,12 +13,22 @@
 #   1. Drop every whole-line comment, and shared.liquid's Liquid
 #      `{% comment %}` blocks. Only lines that START with the marker go, so
 #      trailing comments, string contents and `https://` URLs are untouched.
-#   2. Minify the JavaScript: whitespace and syntax only, NOT identifiers.
-#      Mangling names would buy another ~14KB a file and cost two things
-#      worth more than that: `var METRO = ` stays literal, so the layout
-#      suite can still swap a fixture into the pushed build and measure the
-#      artefact rather than the source; and a stack trace off the device
-#      still names the function it came from.
+#   2. Minify the JavaScript, identifiers included. That is worth ~22KB on
+#      shared.liquid, which had run out of room under the 100KB limit and
+#      could not be pushed at all.
+#
+#      It used to leave identifiers alone for two reasons. The first is
+#      answered rather than given up: the layout suite finds the payload by
+#      looking for the `METRO` literal so it can measure the artefact that
+#      really ships, and the template now writes `window.METRO` first and
+#      aliases it. A property name is not an identifier and the mangler
+#      leaves it alone, so the marker survives and the local alias is free
+#      to become a letter.
+#
+#      The second is a real loss: a stack trace off the device no longer
+#      names the function it came from. That is the price of the file
+#      fitting on the server at all, and the source it maps back to is one
+#      `git show` away.
 #
 # Nothing is uploaded until the squeezed copies have been built AND actually
 # run: a minifier that broke the layout would otherwise push cleanly and
@@ -47,7 +57,7 @@ LIMIT = 100 * 1024
 liquid, transform, esbuild = sys.argv[1:4]
 
 def minify(js, why):
-    r = subprocess.run([esbuild, '--minify-whitespace', '--minify-syntax'],
+    r = subprocess.run([esbuild, '--minify'],
                        input=js, capture_output=True, text=True)
     if r.returncode != 0:
         print('could not minify %s:\n%s' % (why, r.stderr.strip()), file=sys.stderr)
