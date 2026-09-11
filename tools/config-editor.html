@@ -392,7 +392,10 @@
             <select id="pDevice">
               <option value="og">TRMNL OG &middot; 800&times;480 &middot; 1-bit</option>
               <option value="ogv2">TRMNL OG V2 &middot; 800&times;480 &middot; 2-bit</option>
-              <option value="x">TRMNL X &middot; 1872&times;1404 &middot; landscape</option>
+              <!-- Selected: the X is the biggest panel and the one this plugin is
+                   built around, so it is the board somebody should be looking at
+                   while they decide whether the map is worth setting up. -->
+              <option value="x" selected>TRMNL X &middot; 1872&times;1404 &middot; landscape</option>
               <option value="xp">TRMNL X &middot; 1404&times;1872 &middot; portrait</option>
               <option value="hh">OG half (horizontal)</option>
               <option value="hv">OG half (vertical)</option>
@@ -1885,8 +1888,16 @@
   var DEVICES = {
     og:   { w: 800,  h: 480,  zoom: 1, view: "full",            classes: "screen--og screen--md screen--1bit screen--density-1x" },
     ogv2: { w: 800,  h: 480,  zoom: 1, view: "full",            classes: "screen--ogv2 screen--md screen--2bit screen--density-1x" },
-    x:    { w: 1872, h: 1404, zoom: 2, view: "full",            classes: "screen--v2 screen--lg screen--4bit screen--density-2x" },
-    xp:   { w: 1404, h: 1872, zoom: 2, view: "full",            classes: "screen--v2 screen--lg screen--4bit screen--density-2x screen--portrait" },
+    // ZOOM IS THE FRAMEWORK'S PIXEL RATIO, AND FOR THE X IT IS 1.8, NOT 2.
+    //
+    // `screen--v2` declares `--screen-w: 1040px` and `--pixel-ratio: 1.8`:
+    // 1040 CSS px rendered at 1.8 is the panel's 1872. Sized here at
+    // 1872/2 = 936 the element was 104px narrower than the 1040 the layout
+    // engine measures and lays out to, so the X preview drew a board that
+    // ran off its own right edge and out of the bottom, and nothing else on
+    // the page did, because every other device has a ratio of 1.
+    x:    { w: 1872, h: 1404, zoom: 1.8, view: "full",          classes: "screen--v2 screen--lg screen--4bit screen--density-2x" },
+    xp:   { w: 1404, h: 1872, zoom: 1.8, view: "full",          classes: "screen--v2 screen--lg screen--4bit screen--density-2x screen--portrait" },
     hh:   { w: 800,  h: 480,  zoom: 1, view: "half_horizontal", classes: "screen--og screen--md screen--1bit screen--density-1x", mashup: "1Tx1B" },
     hv:   { w: 800,  h: 480,  zoom: 1, view: "half_vertical",   classes: "screen--og screen--md screen--1bit screen--density-1x", mashup: "1Lx1R" },
     q:    { w: 800,  h: 480,  zoom: 1, view: "quadrant",        classes: "screen--og screen--md screen--1bit screen--density-1x", mashup: "2x2" },
