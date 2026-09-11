@@ -512,6 +512,47 @@ is open.
 
 ## E. New features
 
+- [ ] **E18. TRMNL Companion: blocked upstream, one line of their Swift away.**
+  Companion is an iOS app that reads the phone's own calendars through
+  EventKit and POSTs them to a plugin, which would remove this plugin's
+  worst friction at a stroke: finding five ICS links is what makes people
+  give up, and ticking five calendars in an app is not.
+
+  It cannot work today, because the merged feed does not say which calendar
+  an event came from. The README calls the field `calendar_identifier` and
+  the payload calls it `calname` -- the same name TRMNL's own convention
+  uses for a calendar's NAME, and the same one `parseIcs` reads
+  `X-WR-CALNAME` into here -- but the value is
+  `event.calendarItemExternalIdentifier`, which is a per-EVENT iCalendar
+  UID. Their own comment says so: it is there for deduplication.
+  `event.calendar.title` is read only by the phone's own mapping UI and is
+  never sent. A line on this map IS a calendar, so five people's calendars
+  arrive as one undifferentiated list and every event lands on one line.
+  Nothing on this side can work around its absence.
+
+  Two more blockers behind that one. Companion's `getPluginSettings`
+  defaults to the plugin id `"calendars"`, so a private or serverless plugin
+  never appears in its mapping list (their issue #5 asks for this). And a
+  plugin instance is ONE strategy: this one is `polling`, which Serverless
+  requires, so a webhook means a second plugin, which cannot call this
+  `run(input)` at all. The documented webhook cap is 2kb (5kb for TRMNL+)
+  against a 37-day window of a household's events, which is off by an order
+  of magnitude either way.
+
+  Worth knowing for when it unblocks: the seam here is clean. Everything
+  downstream of `applyCalendarRules` is source-agnostic, so the adapter is
+  one function turning the pushed events into `parseIcs`'s own
+  `{ timed, allDay, calName }` shape, grouped by source calendar. About 310
+  lines of ICS parsing get bypassed out of 3219, and EventKit has already
+  expanded recurrences, so the FREQ=WEEKLY-only limitation would go with it.
+  `calendarDown`/`calendarNames` are keyed by feed URL and would need to
+  become "no push since".
+
+  What would change the answer: Companion sending `event.calendar.title` or
+  `calendar.calendarIdentifier` per event. Ask TRMNL in the same breath
+  whether a serverless `run(input)` can be fed a pushed payload at all, and
+  whether the 2kb cap applies to the endpoint Companion posts to.
+
 > **E2, E3 and E4 assume a multi-day board, and this plugin has never drawn
 > one.** There is one day in the payload (`day_start_min` / `day_end_min`),
 > the weather is fetched with `forecast_days: 1`, and the template has no
