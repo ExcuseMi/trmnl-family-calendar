@@ -3521,7 +3521,25 @@
         var travel = (c1 - c0) * p._sign;
         if (Math.abs(travel) < MIN_DIAG * 2) return;         // the trunk is going nowhere
         var branch = ((spineC + e._sign * e._laneDist) - c0) * p._sign;
-        if (!branch || (branch > 0) === (travel > 0)) return;
+        if (!branch) return;
+        // TWO WAYS A BRANCH IS THE MOVE AGAIN.
+        //
+        // It doubles back: the trunk climbs to dinner and the rail drops
+        // the other way, so the line goes up, the rail goes down, and
+        // nothing says they are the same person. That is Lisa's saxophone
+        // lesson.
+        //
+        // Or it goes the SAME way and the trunk has already got there:
+        // Marge leaves the school run falling at 45 all morning, and her
+        // book club at nine is a rail dropped a little further in the
+        // direction she is already falling. Drawn as a branch that is the
+        // same move twice, one of them ending in a stub.
+        //
+        // The second needs a floor or it takes every event on a board with
+        // convergences, which is what it did the first time this was tried
+        // (E10): the trunk has to be doing most of the branch's work, not
+        // merely leaning the same way.
+        if ((branch > 0) === (travel > 0) && Math.abs(travel) < Math.abs(branch) * 0.6) return;
         e._diagStick = true; e._onTrack = true; e._onRoute = true; e._capLead = true;
         changed = true;
       });
