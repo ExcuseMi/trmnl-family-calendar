@@ -166,6 +166,13 @@ Where the two disagree, this one is newer.
     above a rail that happens to be falling is still above it, and sending
     it down after the rail runs the words back across the wedge they were
     put in and out the far side.
+33e. **Either orientation, out of necessity.** 33b is a preference, not a
+    law. Where the preferred lean cannot be placed without crossing a rail
+    or another name, the name takes the other 45 rather than being pushed
+    away from the mark it belongs to: a name leaning the less good way
+    beside its own stop still says which stop it is, and a name shoved a
+    band away to keep its slope does not. Swim Training is the case: the
+    only clean run out of it is the one 33b would not have picked.
 33d. **These rules are for a name set against a LINE**, which is what a mark
     and a convergence have. A shelf's name belongs flat beside its own rail
     (rule 34). An event that changes shape gives up the caption that went

@@ -4275,9 +4275,14 @@
         // Closer to the mark than a lane label sits to its rail: a lane
         // label keeps a ring's radius clear because a ring is drawn there,
         // and a name against the trunk has only the rail to clear.
+        // Closer still. A lane label keeps a whole LINE_GAP because a
+        // ring is drawn out there and the label has to clear it; a name
+        // leaning off a mark has only the rail's own half width under it,
+        // and the rest was air. Half a gap reads as "attached to this line"
+        // where a whole one reads as "somewhere near it".
         function capPerp(e, m) {
           var rail = Math.max(2, e._p.line_width) * S * weightScale / 2;
-          return (LINE_GAP + rail + e._h / 2) * Math.sqrt(1 + m * m);
+          return (LINE_GAP * 0.5 + rail + e._h / 2) * Math.sqrt(1 + m * m);
         }
         // A LEANING NAME MAY NOT CROSS A LINE.
         //
@@ -4431,7 +4436,20 @@
                 // was drawn on top of the winner.
                 var unit = 1 / Math.sqrt(1 + mm * mm);
                 var back = e._textLen * unit + TEXT_PAD, slide = e._textLen * 0.5 * unit;
-                var anchors = [e._endA + TEXT_PAD, e._nodeA + TEXT_PAD,
+                // CENTRED ON THE RUN IT NAMES, FIRST.
+                //
+                // Every anchor here started at one END of the event: out of
+                // the start dot, out of the end tick, or back into either.
+                // None of them put the words across the middle of the thing
+                // they name, which is where a station name goes and where
+                // the eye looks for it -- so a name for a ninety minute
+                // meeting began at its first minute and was finished well
+                // before it, or began past its last. Centred, the words sit
+                // over the run, and the dot and the tick are the ends of
+                // the same gesture.
+                var mid = (e._nodeA + e._endA) / 2 - e._textLen * unit / 2;
+                var anchors = [mid,
+                               e._endA + TEXT_PAD, e._nodeA + TEXT_PAD,
                                e._nodeA - back, e._endA - back,
                                e._endA + TEXT_PAD + slide, e._nodeA + TEXT_PAD - slide,
                                e._nodeA - back - slide, e._endA - back + slide];
@@ -4516,7 +4534,15 @@
                   // landing on somebody.
                   var runMid = (run[0].a0 + run[run.length - 1].a1) / 2;
                   cost += Math.abs(runMid - (e._nodeA + e._endA) / 2) * e._h * 0.005;
-                  cost += extra * e._textLen * 0.01;
+                  // CLIMBED ONLY WHEN THE RUNG BELOW IS REALLY TAKEN.
+                  //
+                  // At a hundredth this was nearly free, so a name went up
+                  // the ladder for a few pixels of tidiness and ended up a
+                  // whole label height off the line it belongs to: "Yoga"
+                  // sat fifty pixels under Alex with nothing in between.
+                  // Standing off the line is the expensive thing here, not
+                  // the cheap one.
+                  cost += extra * e._textLen * 0.05;
                   if (!bestA || cost < bestA.cost) {
                     bestA = { cost: cost, raw: raw, at: at, away: away, run: run, m: mm,
                               out: capPerp(e, mm) + extra };
