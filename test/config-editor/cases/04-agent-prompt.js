@@ -7,7 +7,7 @@
 // assistants cannot do.
 
 module.exports = function (test, h) {
-  const { loadEditor, click, assert, jsonOut } = h;
+  const { loadEditor, click, assert, assertEqual, jsonOut } = h;
 
   const ICS = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'X-WR-CALNAME:Planet Express',
@@ -162,6 +162,42 @@ module.exports = function (test, h) {
     const parsed = document.defaultView.parseConfig(JSON.stringify(ex));
     assert(parsed.calendars.length === ex.calendars.length, 'the worked example does not survive parseConfig');
     assert(Object.keys(parsed.tracks).length === ex.tracks.length, 'the example\'s tracks do not survive parseConfig');
+
+    // EVERY RULE IN IT HAS TO DO SOMETHING.
+    //
+    // `compileRule` drops any rule that names no track, hides nothing,
+    // rewrites nothing and sets no allDay -- `rename` on its own is not an
+    // effect. The example carried one of those for a long time
+    // (`{"contains": "Plant Shift", "rename": false}`) and nothing noticed,
+    // because parsing the config still succeeded: the rule was simply gone.
+    //
+    // An example inside a prompt teaches by imitation, and an assistant
+    // cannot tell an inert line from a subtle one. It will copy either.
+    for (let i = 0; i < ex.calendars.length; i++) {
+      const wrote = (ex.calendars[i].rules || []).length;
+      const kept = (parsed.calendars[i].rules || []).length;
+      assertEqual(kept, wrote, 'calendar ' + i + ' of the worked example: '
+        + (wrote - kept) + ' of its ' + wrote + ' rules compile to nothing and are '
+        + 'dropped. A rule needs an effect -- a track, a hide, a rewrite or an '
+        + 'allDay -- and `rename` alone is not one.');
+    }
+  });
+
+  // The one mistake in this prompt that costs nothing to make and gives
+  // nothing back: `and` and `or` take a list called `matchers`, and `not`
+  // takes a single `matcher`. Told otherwise, an assistant writes
+  // `{"type":"not","matchers":[...]}`, `compileMatcher` returns null for the
+  // missing `spec.matcher`, and `compileRule` then drops the whole rule --
+  // no error, no warning, just a rule that quietly is not there.
+  test('the prompt gets the shape of `not` right', () => {
+    const document = withOneCalendar();
+    click(document.getElementById('makePrompt'));
+    const text = document.getElementById('promptOut').value;
+    assert(/\bnot.{0,80}\bmatcher\b/s.test(text),
+      'the prompt never says `not` takes a single `matcher`');
+    assert(!/`not`\s*taking\s*`matchers`/.test(text)
+      && !/`and`\s*\/\s*`or`\s*\/\s*`not`\s*taking\s*`matchers`/.test(text),
+      'the prompt still says `not` takes `matchers`, which compiles to a dropped rule');
   });
 
   // timeZone and locale are account settings. An assistant has no way to know either, and a

@@ -1359,7 +1359,6 @@
         name: "Homer",
         rules: [
           { match: { type: "any" }, track: "Homer" },
-          { match: { type: "contains", value: "Plant Shift" }, rename: false },
           { match: { type: "contains", value: "Out of office" }, hide: true }
         ]
       },
@@ -1449,14 +1448,19 @@
     out.push("```json");
     out.push(schemaText());
     out.push("```");
-    out.push("- Matchers: `any`, `all`, `exact`, `word`, `contains`, `regex`, `status`, `weekday`, `duration` (`min`/`max` in minutes), `time` (`from`/`to` as \"HH:MM\", `from` inclusive and `to` exclusive), and `and` / `or` / `not` taking `matchers`.");
+    out.push("- Matchers: `any`, `all`, `exact`, `word`, `contains`, `regex`, `status`, `weekday`, `duration` (`min`/`max` in minutes, both inclusive), `time` (`from`/`to` as \"HH:MM\", `from` inclusive and `to` exclusive). Combine with `{\"type\": \"and\", \"matchers\": [...]}` or `\"or\"`; negate with `{\"type\": \"not\", \"matcher\": {...}}` — ONE matcher there, not a list. A `not` written with `matchers` compiles to nothing and its whole rule is dropped, silently.");
+    out.push("- `status` is the ORGANISER's status for the event — `confirmed`, `tentative` or `cancelled` — and never your own reply. Whether YOU declined an invitation is not in the feed as far as this plugin is concerned, so there is no way to match on it. Do not write a rule that tries.");
     out.push("- A text matcher reads the title, plus the description when the calendar has one. Give it `\"field\"` to read something else: `title`, `location`, `description`, `categories` or `any`. Route on `location` when the titles are uninformative but the place is not (a school, an office, a pitch), and on `categories` when the feed sets them. Naming `description` or `any` turns `includeDescription` on by itself.");
     out.push("- Rules run in order; the last match wins for each effect. A calendar's own rules beat the top-level ones.");
     out.push("- A calendar's `name` is NOT a caption: an event that no rule routes falls back to it, and that fallback name is drawn as a LINE on the map. So name a calendar after the person whose line it is, or leave `name` off entirely when the calendar's rules route every event somewhere. A calendar called \"Deliveries\" or \"Planet Express\" with one unrouted event in it puts a \"Deliveries\" line on a board that was supposed to have one line per person.");
     out.push("- The fallback order in full: the calendar's `name`, else the first entry in `tracks`, else the feed's own name. Count the lines your configuration produces before you send it: it is one per entry in `tracks`, PLUS one for every named calendar that can still leak an unrouted event. That total must match the number of people you found.");
     out.push("- `rename` defaults to true for a rule that names a track, which rewrites the matched text into that track's name. Set `\"rename\": false` when you only want to route, not retitle.");
+    out.push("- The exception: on an `any` or `all` match `rename` defaults to FALSE, because there is no particular matched text to rename and silently overwriting every title would be surprising. A catch-all that routes a whole calendar to one person needs no `rename` key at all.");
+    out.push("- A regex `value` has its leading and trailing spaces stripped before it is compiled. To eat the space around a separator — \"Mila - Ballet\", \"Mila: Ballet\" — put `\\\\s*` or `\\\\s+` in the pattern rather than a literal space at either end, or the space survives into the rewritten title.");
     out.push("- Only events that recur with `RRULE:FREQ=WEEKLY` (with or without BYDAY/UNTIL), or that fall on today, are drawn.");
     out.push("- `\"hideIfEmpty\": false` on a track or a calendar keeps its line on the board on a day it has nothing.");
+    out.push("- `\"allDay\": true` on a rule moves a normally TIMED event into the all-day strip, which is drawn at the head of the line rather than anywhere on the clock. Use it for something a calendar exported as a full day of hours — midnight to midnight, or 00:00 to 23:59 — which is a holiday or a leave day wearing a timed event's clothes. A genuine all-day entry needs no rule.");
+    out.push("- Two feeds often carry the same real event. It is drawn ONCE, as an interchange joining those people's lines, only if after your rules run the title, the start and the end all match exactly. If the same thing arrives with different wording in each feed — bare in the family calendar, prefixed with a name in somebody's own export — write the `rewrite` rules so both come out character for character identical. Anything less and it is drawn twice.");
     out.push("");
     out.push("## A worked example");
     out.push("A finished configuration for a household of four with three feeds: one feed that is one person, one school feed split by class code, and one shared feed where every title is prefixed with a name. Note what it does NOT do: no `side`, no `color`, no `timeZone`, no `locale`, and no `name` on the two calendars whose rules route everything, because a name there would have drawn a line called \"School\" and a line called \"Family\".");
