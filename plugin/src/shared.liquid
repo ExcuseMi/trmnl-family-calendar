@@ -1184,12 +1184,21 @@
       // runs straight -- which is the whole point of having only three
       // angles. Kept a corner wide so the two ends can still be rounded.
       if (R > room) {
-        // As near vertical as a drawn line can be. Given most of a corner
-        // to do it in, a two-hundred-pixel drop came out as a twelve-to-one
-        // diagonal, which is not one of the two legal angles and reads as a
-        // mistake rather than as a decision; given almost none, it is the
-        // 90 it is meant to be and the corner radius rounds both ends of it.
-        var vr = Math.min(room, Math.max(1, CORNER * 0.25));
+        // VERTICAL, NOT NEARLY VERTICAL.
+        //
+        // A quarter of a corner is about four pixels of axis, and the
+        // sampler puts a breakpoint at each end of a transition, so the
+        // drop really was drawn over those four pixels. On a two hundred
+        // pixel fall that is a slant of about 87 degrees: not one of the
+        // three angles this map allows, and near enough to 90 that it reads
+        // as a 90 drawn badly rather than as a decision.
+        //
+        // One pixel. Not nothing -- at a hundredth the two corner arcs have
+        // no straight between them to round against, overlap, and the
+        // "vertical" comes back out as a long soft V. One pixel of run is
+        // invisible over a fall of two hundred and still gives the fillets
+        // something to sit on.
+        var vr = Math.min(room, 1 * S);
         return { a0: where < 0 ? to - vr : from, R: vr, r: 0 };
       }
       if (where < 0) return { a0: to - R, R: R, r: r };
