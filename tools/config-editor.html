@@ -1245,6 +1245,7 @@
     document.getElementById("importIn").value = "";
     icsOverrides = {};
     icsFromExample = {};
+    feedsChanged();
     selectedPreset = "";
     lastLoaded = null;
     paintPresets();
@@ -1486,6 +1487,7 @@
       icsOverrides[u] = sampleIcs(preset.sample[u]);
       icsFromExample[u] = true;
     });
+    feedsChanged();
     renderSources();
   }
 
@@ -2078,6 +2080,7 @@
         .catch(function (e) { failed.push(u.replace(/^https?:\/\//, "").slice(0, 40) + ": " + e.message); });
     })).then(function () {
       btn.disabled = false;
+      if (done) feedsChanged();
       renderSources();
       document.getElementById("promptOut").value = buildAgentPrompt();
       if (!failed.length) {
@@ -2104,6 +2107,16 @@
   var icsOverrides = {}; // url -> ICS text (fetched, pasted or uploaded)
   var icsFromExample = {}; // url -> true for the ones an example brought with it
   var fetchErrors = {};  // url -> why the last draw could not read it
+  // WHICH CALENDAR TEXT THE PAGE IS HOLDING IS PART OF WHAT A MAP IS.
+  //
+  // The drawn board greys out when the configuration or a preview setting
+  // has moved on from it, and the feeds decide what is on that board just as
+  // much as either. Counting the changes is enough for the fingerprint and
+  // costs nothing: the alternative is hashing however many megabytes of ICS
+  // are in hand, on every keystroke. A draw's OWN fetches deliberately do
+  // not count, since whatever they read is in the board they produced.
+  var feedsVersion = 0;
+  function feedsChanged() { feedsVersion++; refreshStale(); }
   // Is `u`, the address something actually asked for, this configured feed?
   // The two are usually identical; they differ when the plugin rewrites a
   // webcal:// link to https:// before fetching it, which is the only form
@@ -2155,6 +2168,7 @@
       ta.addEventListener("input", function () {
         delete icsFromExample[url];
         if (ta.value.trim()) icsOverrides[url] = ta.value; else delete icsOverrides[url];
+        feedsChanged();
         syncPromptControls();
       });
       var paste = el("button", { class: "small", text: "Paste / upload instead" });
@@ -2162,7 +2176,13 @@
       file.addEventListener("change", function () {
         var f = file.files && file.files[0]; if (!f) return;
         var rd = new FileReader();
-        rd.onload = function () { ta.value = String(rd.result || ""); ta.hidden = false; icsOverrides[url] = ta.value; status.textContent = "Loaded " + f.name; status.className = "status ok"; };
+        rd.onload = function () {
+          ta.value = String(rd.result || ""); ta.hidden = false;
+          icsOverrides[url] = ta.value;
+          status.textContent = "Loaded " + f.name; status.className = "status ok";
+          feedsChanged();
+          syncPromptControls();
+        };
         rd.readAsText(f);
       });
       paste.addEventListener("click", function () { ta.hidden = false; file.click(); });
@@ -2203,7 +2223,7 @@
   // drawn, and the picture greys out and says so the moment they differ.
   var drawnSig = null;
   function previewSignature() {
-    return JSON.stringify([buildConfig(), ["pDevice", "pLocale", "pTime", "pNow", "pLatLon", "pTz"].map(function (id) {
+    return JSON.stringify([buildConfig(), feedsVersion, ["pDevice", "pLocale", "pTime", "pNow", "pLatLon", "pTz"].map(function (id) {
       var n = document.getElementById(id); return n ? n.value : "";
     })]);
   }
