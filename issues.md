@@ -512,6 +512,32 @@ is open.
 
 ## E. New features
 
+- [ ] **E20. Captions walk past a neighbouring rail, so they read as
+  somebody else's.** `rules.md` rule 37: "A caption may not walk past another
+  line to find room. A name on the far side of somebody else's rail reads as
+  theirs." Nothing checked it. The rule-check skill found it by eye on a
+  rendered board: "Skate Park" belongs to Bart, whose dot and end tick carry
+  it, but the words sit below Lisa's rail and read as Lisa's evening.
+
+  Measuring it took two attempts, and the first one is worth recording as
+  wrong. Asking which line is NEAREST a caption marks about thirty of them
+  across ten boards, and it is the wrong question: captions hang in lanes
+  that stack outward, so a caption two lanes from its own rail is naturally
+  nearer the neighbour without ever having passed it. That reading would have
+  condemned the lane model rather than found a bug.
+
+  Walking PAST is what the rule names and it is exactly checkable: is another
+  line's rail between the words and the line they name, at the caption's own
+  point along the day. Measured that way it happens in fourteen places on ten
+  boards, and two boards are clean, which is the shape of a bug rather than
+  of a rule that is wrong. `test/layout/cases/caption-side.js` now holds it,
+  with the ten boards that break it marked known against this entry.
+
+  Same root as E19: placement is greedy and takes the least-bad spot left,
+  and on these boards that spot is across a neighbour. A placer that saw a
+  whole side at once could rule those positions out entirely, since being on
+  the wrong side of a rail is not a matter of degree.
+
 - [x] **E19. The caption overlaps cannot be priced away: placement is
   greedy, so every local improvement reshuffles somebody else.** Fixed, by
   drawing the board both ways round rather than by pricing. The remaining overlap failures (long-event-day,
