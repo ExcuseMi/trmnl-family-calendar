@@ -3059,15 +3059,44 @@
           return { q: q, lvl: lvl };
         });
         if (!ok) return;
-        // only if every one of them is free at that minute: a line already
-        // converging somewhere else really does have to stay a bundle
+        // Only if every one of them is free at that minute: a line already
+        // converging somewhere else really does have to stay a bundle.
+        //
+        // A SIDING IS NOT A REASON TO STAY A BUNDLE. It says what kind of
+        // day this is — Spring Break, a desk booking, a school day — not
+        // where somebody is standing at seven in the evening, and being on
+        // Spring Break has never stopped anybody having dinner. Counted as
+        // a clash, one all-day siding on one child turned every convergence
+        // on the board back into a dead-end bundle, which is exactly what
+        // the device was drawing.
         var clash = want.some(function (w) {
-          return (w.q._route || []).some(function (h) { return e._nodeA <= h.a1 && h.a0 <= e._endA; });
+          return (w.q._route || []).some(function (h) {
+            return !h.siding && e._nodeA <= h.a1 && h.a0 <= e._endA;
+          });
         });
         if (clash) return;
         want.forEach(function (w) {
-          w.q._route = (w.q._route || []).concat([{ a0: e._nodeA, a1: e._endA, lvl: w.lvl, shared: true }]);
-          w.q._route.sort(function (a, b) { return a.a0 - b.a0; });
+          // The corridor takes precedence for its own span, so the siding
+          // gives way around it rather than overlapping it: two holds over
+          // the same minutes would leave `routeRaiseAt` answering with
+          // whichever it reached first, and the line would be drawn in one
+          // place and marked in another.
+          var keep = [];
+          (w.q._route || []).forEach(function (h) {
+            if (!h.siding || e._endA <= h.a0 || h.a1 <= e._nodeA) { keep.push(h); return; }
+            // FLUSH TO THE CORRIDOR, with no room left for a ramp. Inset by
+            // the length an octilinear turn would like, the siding's own
+            // tail was cut away whenever the dinner fell near the end of it,
+            // and the line never came back up to the level its band and its
+            // caption are still drawn at. The line steps out for the event
+            // and steps straight back, which is the truth and is what the
+            // two legal angles allow when there is no room for the third.
+            if (h.a0 < e._nodeA) keep.push({ a0: h.a0, a1: e._nodeA, lvl: h.lvl, siding: true });
+            if (h.a1 > e._endA) keep.push({ a0: e._endA, a1: h.a1, lvl: h.lvl, siding: true });
+          });
+          keep.push({ a0: e._nodeA, a1: e._endA, lvl: w.lvl, shared: true });
+          keep.sort(function (a, b) { return a.a0 - b.a0; });
+          w.q._route = keep;
           w.q._octs = null;                       // the spans are memoised off it
         });
         e._onRoute = true;

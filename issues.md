@@ -532,6 +532,29 @@ is open.
   the compressed segment filled with a cross-hatch or chevrons. An event
   that spans the night runs through it as one continuous stroke with a
   station at each end.
+- [ ] **E9. Drop `siding` from the config; let the algorithm find them.**
+  A siding is currently something the user declares (`siding: true`, read
+  into `metro.sidings`), and it is the last piece of layout the config still
+  dictates. It should not be: a siding is "this line is somewhere else for a
+  stretch of the day", and that is a fact about the EVENTS, not a setting.
+  An all-day or most-of-day event on one line, a long block that swallows
+  several shorter ones, a stretch two lines spend together — the layout can
+  see all of it and decide, the way it now decides convergences.
+
+  Two reasons it matters beyond tidiness. A declared siding is a promise the
+  drawing has to keep even when the board has no room for it, which is where
+  several of the standing layout failures live. And it was a declared siding
+  that broke the device: an all-day "Spring Break" counted as a clash and
+  turned every convergence on the board back into a dead-end bundle, because
+  the code had two ideas of where a line goes and only one of them knew
+  about the other.
+
+  Removing it touches `parseConfig`, the editor's importer, `metro.sidings`,
+  `CONFIG.md`, and the `siding-day` / `shared-siding` fixtures. `station:
+  true` is already kept as an undocumented alias for configs written before
+  the rename, so there is a precedent for reading the old key and ignoring
+  it.
+
 - [ ] **E7. Rivers and lakes as natural obstacles.** Mini Metro's water is
   the thing that makes its maps look like maps: lines run where the ground
   lets them, they bunch up to share the few crossings, and a bridge is
