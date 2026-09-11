@@ -99,6 +99,11 @@ var I18N = {
         clear: 'Clear', partly_cloudy: 'Partly cloudy', cloudy: 'Cloudy', foggy: 'Foggy', rain: 'Rain', snow: 'Snow', storms: 'Storms',
         rain_starts: 'Rain starts', rain_stops: 'Rain stops', sunrise: 'Sunrise', sunset: 'Sunset',
         feed_down: '{n} unavailable', weather_stale: 'Forecast may be out of date',
+        // "Day 3 of 5". A week-long half term is a different fact on the
+        // Monday than on the Thursday, and the one day the board draws is
+        // somewhere inside it. Both numbers are named, because a language
+        // may want them in the other order.
+        holiday_day: 'Day {n} of {m}',
         // The service alert banner. One key per kind rather than a
         // condition plus a shared "at {t}" frame, because the preposition
         // is not shared: it is "um" in German, "a las" in Spanish, "à" in
@@ -705,6 +710,44 @@ function buildMetro(lines, events, weatherMilestones, headerWeather, nowMin, win
     calendars_down: (extra && extra.calendarsDown) || [],
     legend: lines,
     all_day: allDay, // declared at the line's head, never on the axis: see above
+    // WHAT THE DAY IS, next to the date that says which day it is.
+    //
+    // A holiday is not one person's state, so it is not a line's anything:
+    // it has no hour to be drawn at, no owner to be declared under, and
+    // nothing about it says a line's day is a slice of something longer.
+    // It is a property of THE DAY, and the board already has one place
+    // that says what the day is, which is the header.
+    //
+    // ONE NAME. Two people in a house may both subscribe to the same
+    // national calendar, so the same day arrives twice and is deduplicated
+    // here; and a day can genuinely carry two different ones, a public
+    // holiday and a school one. The header is a single row that already
+    // holds a date and a forecast, and two names on it came out as
+    // "Christmas D" and "School Holid", each cut mid word, with the
+    // ordinal wrapped underneath. Naming the day is the header's job and
+    // enumerating it is not, so the first wins: the first feed listed,
+    // which is the one order the config author controls.
+    holidays: (function (list, st) {
+      var seen = {}, out = [];
+      (list || []).forEach(function (h) {
+        var key = String(h.title == null ? '' : h.title).trim().toLowerCase();
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        var span = Math.max(1, h.span || 1);
+        var ix = Math.min(span - 1, Math.max(0, h.index || 0));
+        out.push({
+          title: h.title,
+          day_index: ix,
+          day_span: span,
+          // Composed and translated HERE, the way the service alert's text
+          // is: a braced placeholder inside a Liquid output tag ends the
+          // tag and takes the whole template down with it, and a day that
+          // is not inside a range has no ordinal to state at all.
+          day_label: span > 1 ? fmt(tr(st, 'holiday_day'), { n: ix + 1, m: span }) : null,
+        });
+      });
+      return out.slice(0, 1);
+    })((extra && extra.holidays) || [], (extra && extra.strings) || I18N.en),
     // TWO LISTS, NOT ONE MIXED ONE.
     //
     // This was `items`, one list of three kinds sorted by minute, and every
@@ -1576,6 +1619,37 @@ function weeklyRruleMatchesToday(rruleValue, dtstartCivil, todayY, todayMo, toda
   return startWeekday2 === todayWeekday;
 }
 
+// FREQ=YEARLY, for whole-day entries only, which is what a public-holiday
+// subscription is made of. Google writes one dated VEVENT per year and
+// needs nothing here; Apple's holiday calendars and most school-holiday
+// exports write Christmas Day once with a yearly rule. Read as an
+// unsupported pattern, the second kind drew an empty board every year
+// after the one it was written in and said nothing about why.
+//
+// Deliberately not general, the same bounded-subset reasoning the weekly
+// rule is written to. The anniversary of DTSTART is the answer, with
+// UNTIL and INTERVAL honoured; an ORDINAL BYDAY ("the fourth Thursday in
+// November") moves the date every year, so it is refused outright rather
+// than answered approximately. A feed that needs one is exactly why the
+// per-year form exists, and that form still works.
+function yearlyRruleMatchesToday(rruleValue, dtstartCivil, todayY, todayMo, todayD) {
+  var parts = {};
+  rruleValue.split(';').forEach(function (kv) {
+    var i = kv.indexOf('=');
+    if (i > 0) parts[kv.slice(0, i)] = kv.slice(i + 1);
+  });
+  if ((parts.FREQ || '').toUpperCase() !== 'YEARLY') return false;
+  if (parts.BYDAY && /\d/.test(parts.BYDAY)) return false;
+  if (todayMo !== dtstartCivil.mo || todayD !== dtstartCivil.d) return false;
+  if (todayY < dtstartCivil.y) return false;
+  if (parts.UNTIL) {
+    var um = /^(\d{4})(\d{2})(\d{2})/.exec(parts.UNTIL);
+    if (um && Date.UTC(todayY, todayMo - 1, todayD) > Date.UTC(+um[1], +um[2] - 1, +um[3])) return false;
+  }
+  var interval = Math.max(1, parseInt(parts.INTERVAL, 10) || 1);
+  return (todayY - dtstartCivil.y) % interval === 0;
+}
+
 // `includeDescription` (a per-calendar config flag, off by default) is the
 // only thing that makes parseIcs pay for DESCRIPTION at all — it's usually
 // a large multi-line blob and most calendars' rules never need it.
@@ -1676,13 +1750,25 @@ function parseIcs(text, tz, days, includeDescription) {
       var endOrd = (ev.dtend && ev.dtend.isAllDay) ? Date.UTC(ev.dtend.y, ev.dtend.mo - 1, ev.dtend.d) : startOrd + DAY_MS;
       dayInfo.forEach(function (di, dayIx) {
         var isDirectSpan = di.ordinal >= startOrd && di.ordinal < endOrd;
-        var isWeeklySpan = !isDirectSpan && ev.rrule && (endOrd - startOrd) <= DAY_MS
-          && weeklyRruleMatchesToday(ev.rrule, ev.dtstart, di.d.y, di.d.mo, di.d.d, di.weekday, tz);
-        if (!isDirectSpan && !isWeeklySpan) return;
+        var isRepeatSpan = !isDirectSpan && ev.rrule && (endOrd - startOrd) <= DAY_MS
+          && (weeklyRruleMatchesToday(ev.rrule, ev.dtstart, di.d.y, di.d.mo, di.d.d, di.weekday, tz)
+            || yearlyRruleMatchesToday(ev.rrule, ev.dtstart, di.d.y, di.d.mo, di.d.d));
+        if (!isDirectSpan && !isRepeatSpan) return;
         if (!ev.recurrenceId && ev.uid && overriddenDates[ev.uid + '|' + di.key]) return;
         if (ev.exdates && ev.exdates[di.key]) return;   // taken out of the series
+        // HOW LONG IT RUNS, AND HOW FAR INTO IT THIS DAY IS. A board that
+        // draws one day out of a week of half term can say which day of it
+        // that is, and that ordinal is the only thing distinguishing the
+        // Monday of Spring Break from the Thursday. Counted off DTSTART and
+        // the exclusive DTEND rather than off the run of days the board
+        // gathered, so a range that began last week still says "day 5 of 9".
+        var spanDays = Math.max(1, Math.round((endOrd - startOrd) / DAY_MS));
         allDay.push({ title: ev.title, desc: ev.desc || '', status: ev.status || '',
-          location: ev.location || '', categories: ev.categories || [], day: dayIx });
+          location: ev.location || '', categories: ev.categories || [], day: dayIx,
+          // Each firing of a recurrence is one day of its own, whatever
+          // span the master's own dates describe.
+          span: isRepeatSpan ? 1 : spanDays,
+          index: isRepeatSpan ? 0 : Math.max(0, Math.round((di.ordinal - startOrd) / DAY_MS)) });
       });
       return;
     }
@@ -1875,6 +1961,13 @@ function compileRule(spec) {
   if (!m) return null;
   var line = normalizeNameList(spec.line);
   var allDay = spec.allDay === true;
+  // A HOLIDAY IS A PROPERTY OF THE DAY, NOT A STATE OF A LINE. `allDay`
+  // declares an event at ONE line's head, which is right for one person's
+  // leave and wrong for Christmas Day: routed by whichever rule happened
+  // to match, a national holiday landed on the first configured line and
+  // said that person alone was off. This takes the event off the line
+  // model altogether, so it resolves no owner and can create no line.
+  var holiday = spec.holiday === true;
   var hide = spec.hide === true;
   // `siding` (and the `station` it shipped as) used to live here: a rule
   // could declare that an event's own line leaves the running line for its
@@ -1886,7 +1979,7 @@ function compileRule(spec) {
 
   var rewrite = typeof spec.rewrite === 'string' ? spec.rewrite : null;
   var rewriteFull = spec.rewriteFull === true;
-  if (!line && !allDay && !hide && rewrite === null) return null; // a no-op rule is dropped, not kept
+  if (!line && !allDay && !holiday && !hide && rewrite === null) return null; // a no-op rule is dropped, not kept
   var isAnyMatch = spec.match && (spec.match.type === 'any' || spec.match.type === 'all');
   // rename defaults to true (a rule assigning a track also renames the
   // title to that track, historically the common case) EXCEPT on an
@@ -1894,7 +1987,7 @@ function compileRule(spec) {
   // overwriting every title would be surprising — there it defaults to
   // false and must be opted into.
   var rename = line ? (isAnyMatch ? spec.rename === true : spec.rename !== false) : false;
-  return { match: m.test, rx: m.rx, usesDesc: !!m.usesDesc, line: line, allDay: allDay, hide: hide, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
+  return { match: m.test, rx: m.rx, usesDesc: !!m.usesDesc, line: line, allDay: allDay, holiday: holiday, hide: hide, rename: rename, rewrite: rewrite, rewriteFull: rewriteFull };
 }
 
 function usesDesc(rule) { return !!(rule && rule.usesDesc); }
@@ -2051,8 +2144,16 @@ function parseConfig(raw) {
     // The same switch on the calendar rather than the track: for the common
     // setup where one calendar IS one line, this is where the line is
     // declared, and there may be no lines[] entry to hang it off at all.
+    // ONE WORD FOR A HOLIDAY SUBSCRIPTION. "Holidays in Belgium" is not a
+    // person and has no line: everything in that feed belongs to the day.
+    // Set here it applies to the whole calendar, which is the setup almost
+    // everyone has, and it stops the feed both from leaking a ghost line
+    // named after itself and from stamping the whole country's Christmas
+    // on whoever happens to be first in `lines`. A rule can say the same
+    // thing per event, for a feed that carries both kinds.
     calendars.push({ name: name, url: item.url.trim(), rules: rules, headers: headers,
-      includeDescription: includeDescription, keepEmpty: item.hideIfEmpty === false });
+      includeDescription: includeDescription, keepEmpty: item.hideIfEmpty === false,
+      holiday: item.holiday === true });
   });
 
   return { calendars: calendars, lines: lines, timeZone: timeZone, locale: locale, timeFormat: timeFormat, temperatureUnit: temperatureUnit, globalRules: globalRules, everyoneLine: everyoneLine };
@@ -2094,12 +2195,14 @@ function applyCalendarRules(ev, weekday, cal, globalRules, everyoneLine) {
   var renameRule = null;
   var rewriteRule = null;
   var allDay = false;
+  var holiday = false;
   var hide = false;
 
   globalRules.concat(cal.rules).forEach(function (rule) {
     if (!rule.match(ctx)) return;
     if (rule.hide) hide = true;
     if (rule.allDay) allDay = true;
+    if (rule.holiday) holiday = true;
 
     if (rule.line) {
       lineNames = rule.line;
@@ -2128,7 +2231,7 @@ function applyCalendarRules(ev, weekday, cal, globalRules, everyoneLine) {
   // family member, no rules needed) never got their events attributed to
   // themselves at all.
 
-  return { title: finalTitle, lineNames: lineNames, allDay: allDay, hide: hide };
+  return { title: finalTitle, lineNames: lineNames, allDay: allDay, holiday: holiday, hide: hide };
 }
 
 // Converts a config track's `color` (a plain framework hue name like
@@ -2544,6 +2647,19 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   var deadline = (extra && extra.deadline) || (Date.now() + RENDER_BUDGET_MS);
   var events = [];
   var allDayEvents = [];
+  // THE DAY'S OWN, BELONGING TO NOBODY. A holiday never touches the line
+  // registry: no line is added for it, no weight is tallied, no empty line
+  // is kept alive by it. That is the whole of the fix, because everything
+  // that went wrong downstream followed from a holiday having had an owner
+  // at all -- a ghost line named after the feed, a whole country's holiday
+  // declared at one person's head, and a line kept on a cramped panel
+  // ahead of somebody with a real day because a holiday made it look busy.
+  var holidays = [];
+  function addHoliday(title, dayIx, span, index) {
+    if (!title) return;
+    holidays.push({ title: title, day: dayIx || 0,
+      span: Math.max(1, span || 1), index: Math.max(0, index || 0) });
+  }
 
   // A named calendar that is kept when empty is kept when it is UNREACHABLE
   // too: a feed being down for an hour should not silently remove somebody
@@ -2606,6 +2722,15 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
       parsedIcs.timed.forEach(function (ev) {
         var resolved = applyCalendarRules(ev, todayWeekday, cal, parsed.globalRules, parsed.everyoneLine);
         if (resolved.hide) return;
+        // A holiday written as a timed 00:00-23:59 block is still a
+        // holiday. Plenty of feeds emit one that way, and which of the two
+        // shapes a feed picked is a fact about the exporter, not about the
+        // day. Taken before any line is resolved: that is what makes it
+        // impossible for one to be created.
+        if (cal.holiday || resolved.holiday) {
+          addHoliday(resolved.title, Math.floor(ev.startMin / 1440), 1, 0);
+          return;
+        }
         var lineNames = resolved.lineNames || (cal.name ? [cal.name] : null)
           || (parsed.everyoneLine ? [parsed.everyoneLine] : null) || (calLabel ? [calLabel] : null);
         if (!lineNames || !lineNames.length) return;
@@ -2613,7 +2738,11 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         // that lists "Public Holiday" as a timed 00:00 entry) — that now
         // routes into the all-day strip instead of the timeline, same as a
         // genuine ICS all-day entry, rather than being silently dropped.
-        if (resolved.allDay) { allDayEvents.push({ line: registry.add(lineNames[0], 0.25).key, title: resolved.title }); return; }
+        if (resolved.allDay) {
+          allDayEvents.push({ line: registry.add(lineNames[0], 0.25).key, title: resolved.title,
+            day: Math.floor(ev.startMin / 1440) });
+          return;
+        }
         // A LONG BLOCK IS AN EVENT LIKE ANY OTHER.
         //
         // A school day, a shift, a desk booking, a delivery used to be a
@@ -2650,10 +2779,22 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
       parsedIcs.allDay.forEach(function (ev) {
         var resolved = applyCalendarRules(ev, todayWeekday, cal, parsed.globalRules, parsed.everyoneLine);
         if (resolved.hide) return;
+        // The range travels with it: parseIcs already counted which day of
+        // the holiday this is, and nothing further down can work it out
+        // once the entry has been cut down to a day.
+        if (cal.holiday || resolved.holiday) {
+          addHoliday(resolved.title, ev.day, ev.span, ev.index);
+          return;
+        }
         var lineNames = resolved.lineNames || (cal.name ? [cal.name] : null)
           || (parsed.everyoneLine ? [parsed.everyoneLine] : null) || (calLabel ? [calLabel] : null);
         if (!lineNames || !lineNames.length) return;
-        allDayEvents.push({ line: registry.add(lineNames[0], 0.25).key, title: resolved.title });
+        // WHICH DAY IT IS ON, carried rather than assumed. Dropped here,
+        // every all-day entry read as day 0: a holiday that is tomorrow's
+        // was declared on today's board, and on a board set to tomorrow
+        // the filter below threw every one of them away.
+        allDayEvents.push({ line: registry.add(lineNames[0], 0.25).key, title: resolved.title,
+          day: ev.day || 0 });
       });
     } catch (e) {
       // one calendar failing shouldn't blank the whole render — skip it,
@@ -2734,6 +2875,10 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   }
   events = onShownDay(events);
   allDayEvents = allDayEvents.filter(function (e) { return (e.day || 0) === showIx; });
+  // A holiday is a fact about ONE day, so the board states it only on that
+  // day: Christmas is not Christmas Eve's business, and a board set to
+  // tomorrow has to be able to say that tomorrow is the holiday.
+  holidays = holidays.filter(function (h) { return (h.day || 0) === showIx; });
 
   events = mergeAcrossLines(events);
   linkMerged(events);
@@ -2796,7 +2941,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         weekday: localeDatePart(extra.locale || 'en', 'long', 'weekday', shownDay.y, shownDay.mo, shownDay.d),
         weather: shownWx || (snapIx === 0 && weather && weather.header) || null,
       }],
-      sun: ofShownDay('sun'), calendarsDown: downNames })
+      sun: ofShownDay('sun'), calendarsDown: downNames, holidays: holidays })
   );
 }
 

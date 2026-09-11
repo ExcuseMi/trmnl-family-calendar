@@ -16,6 +16,7 @@
   "sunset": "Sonnenuntergang",
   "feed_down": "{n} nicht verfügbar",
   "weather_stale": "Vorhersage möglicherweise veraltet",
+  "holiday_day": "Tag {n} von {m}",
   "alert_label": "BETRIEBSSTÖRUNG",
   "alert_rain": "Starkregen Erwartet um {t} ({p}%)",
   "alert_snow": "Starker Schneefall Erwartet um {t} ({p}%)",

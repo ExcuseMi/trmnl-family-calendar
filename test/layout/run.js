@@ -107,7 +107,7 @@ function localizedCss(css) {
 
 // ---------------------------------------------------------------- page building
 
-// The demo `metro:` block in .trmnlp.yml reaches the built page TWICE: as
+// The demo `data:` block in .trmnlp.yml reaches the built page TWICE: as
 // the runtime `var METRO` the script lays the map out from (swapMetro below
 // replaces that, which is what a fixture is), and through the Liquid tags
 // that draw everything the script never touches: the header, and the

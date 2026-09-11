@@ -164,6 +164,11 @@ Three details worth knowing.
   The board draws one day, and which day of the holiday that is is the only
   thing telling the Monday from the Thursday. A one-day holiday says just
   its name.
+- **The day gets one name.** Two feeds that both fire on the same day
+  (a national calendar and a school one) are read, deduplicated and then
+  cut to the first: the header is a single row that already carries a date
+  and a forecast, and two names on it cut each other short. List the feed
+  whose names you want first.
 - **A holiday is not the same thing as an all-day event.** One person's
   leave IS a state of their line, and it stays where it was: declared at
   that line's head, with both ends of the line drawn as open chevrons.

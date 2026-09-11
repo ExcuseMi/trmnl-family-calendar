@@ -16,6 +16,7 @@
   "sunset": "Atardecer",
   "feed_down": "{n} no disponible",
   "weather_stale": "La previsión puede estar desactualizada",
+  "holiday_day": "Día {n} de {m}",
   "alert_label": "AVISO DE SERVICIO",
   "alert_rain": "Lluvia Intensa Previsto a las {t} ({p}%)",
   "alert_snow": "Nieve Intensa Prevista a las {t} ({p}%)",

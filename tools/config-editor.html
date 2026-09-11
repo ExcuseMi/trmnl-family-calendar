@@ -1626,6 +1626,20 @@
     top.appendChild(el("span", { class: "metro-title title title--large font--bold",
       text: metro.title_word || (metro.i18n && metro.i18n.today) || "Today" }));
     if (metro.date_label) top.appendChild(el("span", { class: "metro-date metro-pill label label--base font--bold", text: metro.date_label }));
+    // WHAT THE DAY IS, beside the date that says which day it is. A holiday
+    // has no hour and no owner, so it is neither on the scale nor at any
+    // line's head; the header is the one part of the board that already
+    // answers "what day is this". Mirrors the template's block, which is
+    // what 07-header-mirror.js compares class for class.
+    var holiday = (metro.holidays || [])[0];
+    if (holiday) {
+      var holBox = el("span", { class: "metro-holiday flex flex--row flex--center-y gap--xsmall" });
+      var holRing = el("span", { html: '<svg class="metro-holiday-ring no-shrink" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="6" r="5"></circle><circle cx="6" cy="6" r="2.5"></circle></svg>' });
+      if (holRing.firstChild) holBox.appendChild(holRing.firstChild);
+      holBox.appendChild(el("span", { class: "metro-holiday-name label label--base font--bold", text: holiday.title }));
+      if (holiday.day_label) holBox.appendChild(el("span", { class: "metro-holiday-day label label--small metro-quiet", text: "\u00b7 " + holiday.day_label }));
+      top.appendChild(holBox);
+    }
     top.appendChild(el("div", { class: "grow" }));
     var w = metro.header_weather || {};
     if (w.hi) {

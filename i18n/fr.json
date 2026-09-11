@@ -16,6 +16,7 @@
   "sunset": "Coucher du soleil",
   "feed_down": "{n} indisponible",
   "weather_stale": "Prévisions peut-être obsolètes",
+  "holiday_day": "Jour {n} sur {m}",
   "alert_label": "ALERTE SERVICE",
   "alert_rain": "Pluie Forte Prévu à {t} ({p}%)",
   "alert_snow": "Neige Forte Prévue à {t} ({p}%)",

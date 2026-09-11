@@ -70,6 +70,37 @@
       <span class="metro-title title title--large font--bold">{% if data.title_word %}{{ data.title_word }}{% else %}{{ data.i18n.today | default: "Today" }}{% endif %}</span>
       {% if data.date_label %}<span class="metro-date metro-pill label label--base font--bold">{{ data.date_label }}</span>{% endif %}
       {%- comment -%}
+        WHAT THE DAY IS, beside the date that says which day it is.
+
+        A public holiday is not one person's state. It has no hour, so the
+        hour scale is the wrong place for it and drawing it there prints
+        the board's own window back as the holiday's hours; it has no
+        owner, so a line's head is the wrong place for it and puts a whole
+        country's Christmas against whoever the rules happened to route it
+        to; and a line of its own is the worst of the three, because a line
+        costs a band of the cross axis and a holiday is not a person.
+
+        The header already answers "what day is this", it is the one part
+        of the board that costs the map no depth it was using, and on a day
+        with no holiday this is nothing at all. Deliberately not a second
+        pill: the date is the header's one hard anchor and two ink badges
+        side by side compete for that job. The rings are rule 28's
+        landmark, the same mark the line heads use for an all-day event.
+
+        It rides with the date, which means it goes when the date goes: a
+        panel too small for a header is a panel that has already given up
+        saying which day it is, and inventing a second place for a holiday
+        to live would be inventing a second thing to keep in step.
+      {%- endcomment -%}
+      {%- assign holiday = data.holidays | first -%}
+      {% if holiday %}
+        <span class="metro-holiday flex flex--row flex--center-y gap--xsmall">
+          <svg class="metro-holiday-ring no-shrink" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="6" r="5"></circle><circle cx="6" cy="6" r="2.5"></circle></svg>
+          <span class="metro-holiday-name label label--base font--bold">{{ holiday.title }}</span>
+          {%- if holiday.day_label %}<span class="metro-holiday-day label label--small metro-quiet">&middot; {{ holiday.day_label }}</span>{% endif -%}
+        </span>
+      {% endif %}
+      {%- comment -%}
         The window the board covers ("06:00 23:00") used to be stated as a
         pill here. The hour scale directly below says the same thing and
         says it in the right place, so the pill was a second answer to a
@@ -168,6 +199,10 @@
   .metro-label { line-height: 1.05; }
   .metro-hour, .metro-axis-note { white-space: nowrap; }
   .metro-header--compact .metro-window, .metro-header--compact .metro-cond { display: none; }
+  /* Which day of a week-long holiday this is goes the way the condition
+     and the alert lines go when the header is squeezed: it is an
+     explanation, and the NAME of the day is what has to survive. */
+  .metro-header--compact .metro-holiday-day { display: none; }
   /* the alert lines are the first thing to go when the header is squeezed:
      they are an explanation, and a squeezed header has no room to explain */
   .metro-header--compact .metro-alerts { display: none; }
@@ -183,6 +218,21 @@
   .metro-header--large .metro-mark { width: 42px; height: 42px; }
   .metro-header--tiny .metro-mark { width: 22px; height: 22px; }
   .metro-header--large .metro-wicon { width: 40px; height: 40px; }
+  /* Concentric rings, sized to sit on the date's own line rather than to
+     be a mark in its own right: this one is punctuation in front of a
+     name, not a station on a map. */
+  .metro-holiday-ring { width: 14px; height: 14px; }
+  .metro-header--large .metro-holiday-ring { width: 18px; height: 18px; }
+  /* THE HEADER IS ONE ROW, and its height comes off the map. A name long
+     enough pushed the weather onto a second line and took 85px of canvas
+     with it, which is exactly the cost this whole shape exists to avoid,
+     so the holiday is what gives way: a third of the row at most, and a
+     name longer than that is cut rather than wrapped. The ordinal never
+     breaks either -- "Day 5 of 14" set over two lines made the header
+     taller for four characters. */
+  .metro-holiday { min-width: 0; max-width: 34%; }
+  .metro-holiday-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .metro-holiday-day { white-space: nowrap; }
   /* A solid ink badge with the text knocked out of it. On e-ink this is the
      highest-contrast mark available, and it gives the header two fixed
      anchors — what day it is, and how much of it is on screen — that read at
@@ -750,6 +800,10 @@
       function swap(sel, cls) { var n = header.querySelector(sel); if (n) n.className = n.className.replace(/(^|\s)(title|label)--[a-z]+/g, '') + ' ' + cls; }
       swap('.metro-title', tiny ? 'title--small' : compact ? 'title--base' : 'title--xlarge');
       swap('.metro-date', large ? 'label--large' : 'label--base');
+      // The holiday is the same kind of statement about the day that the
+      // date is, so it steps with the date rather than on a ladder of its
+      // own.
+      swap('.metro-holiday-name', large ? 'label--large' : 'label--base');
       swap('.metro-temp', large ? 'title--large' : compact ? 'title--small' : 'title--base');
       swap('.metro-cond', large ? 'label--base' : 'label--small');
     }
@@ -1478,6 +1532,17 @@
           // cannot fit at the floor overruns its share of the evening
           // rather than collapsing. Illegible is the worse failure.
           if (prev.trailMax > room) step = Math.max(8 * S, step * (room / prev.trailMax));
+        }
+        // THE RUN HOME TAKES THE MINIMUM PITCH. The inbound stagger is a
+        // corner and a bit, because those turns happen among the captions
+        // and the rungs of an event still in progress and need the room.
+        // Leaving is clear board: the fan only has to be wide enough to
+        // read as separate channels, and spread wider than that it stops
+        // looking like one group leaving together and starts looking like
+        // four lines that happen to turn near each other. Eight pixels is
+        // the floor everywhere else on this board, so it is the width here.
+        if (i >= hs.length) {
+          step = Math.min(step, 8 * S);
         }
         from += (prev.rank || 0) * step;
       }

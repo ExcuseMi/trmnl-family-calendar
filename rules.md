@@ -335,11 +335,13 @@ it is what THE DAY is, the way the date is which day it is.
 61. **A holiday opens nobody's ends.** Rule 55's chevrons say THIS LINE's
     day is a slice of something longer, which is a claim about a person.
     On a public holiday every line still starts and ends on that day.
-62. **It is named once, however many feeds carry it.** Two people in a
-    house subscribe to the same national calendar; the day did not happen
-    twice. Two names at most on the row: a day carrying three is a feed
-    listing observances, and naming the day is the header's job where
-    enumerating it is not.
+62. **The day gets ONE name, however many feeds carry it.** Two people in
+    a house subscribe to the same national calendar and the day did not
+    happen twice. Where a day genuinely carries two (a public holiday and
+    a school one), the header still names one: the row already holds a
+    date and a forecast, and two names on it came out as "Christmas D" and
+    "School Holid", each cut mid word with the ordinal wrapped underneath.
+    Naming the day is the header's job; enumerating it is not.
 63. **It rides with the date.** Where the panel is too small for a header
     the holiday goes with it. A board that has already stopped saying which
     day it is has not got room to say what the day is, and a second home
