@@ -319,6 +319,17 @@ function localeDatePart(locale, width, kind, y, mo, d) {
 
 // "Tue 8 Sep" / "Di 8 sep" / "Mar 8 sept" — header date, in the board's own
 // language.
+// The day as a machine reads it: "2026-09-08", no locale in it anywhere.
+//
+// `date_label` is for a person and is therefore useless as an identity --
+// it has no year in it and it changes with the language. This is what the
+// drawing seeds its generator from, so that whatever the board decides by
+// chance it decides the same way every time it redraws the same day, on
+// every device, in every language.
+function isoDate(civil) {
+  if (!civil) return null;
+  return civil.y + '-' + pad2(civil.mo) + '-' + pad2(civil.d);
+}
 function dateLabel(civil, locale) {
   if (!civil) return null;
   var loc = locale || 'en';
@@ -660,6 +671,8 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     // caller, which cannot know it until the events are in
     window_label: timeLabel12(DAY_LO, extra) + ' ' + timeLabel12(DAY_HI, extra),
     date_label: (extra && extra.dateLabel) || null,
+    // the seed for anything the drawing decides by chance; see `isoDate`
+    date_iso: (extra && extra.dateIso) || null,
     // What the header calls the day. "Today" only when it is: a board set
     // to tomorrow that says Today is naming the wrong day, and the day's
     // own name is more use than the word "Tomorrow" anyway, because it is
@@ -2751,6 +2764,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     allDayEvents,
     Object.assign({}, extra, {
       dateLabel: dateLabel(shownDay, extra.locale),
+      dateIso: isoDate(shownDay),
       // Composed against the day being shown and the clock on it, so it
       // can neither warn about a day nobody is looking at nor about an
       // hour that has gone.

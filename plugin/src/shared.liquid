@@ -308,6 +308,42 @@
     var any = LEGEND.some(function (p) { return p.line_style === 'solid'; });
     if (!any && LEGEND.length) LEGEND[0].line_style = 'solid';
   }
+  // THE DAY'S OWN GENERATOR.
+  //
+  // Anything this board decides by chance -- where a landmark meanders, how
+  // a tie in `markRoom` is broken -- has to decide it the same way every
+  // time it draws the same day. An e-ink panel redraws every few minutes
+  // and two of those redraws differing by a pixel of scenery is a flicker
+  // the reader will notice and cannot explain, and a device that disagrees
+  // with the one in the next room is worse.
+  //
+  // So there is no `Math.random` anywhere in this file. The seed is the
+  // date as a machine reads it, which is the same string on every device
+  // in every language, and the generator is mulberry32: thirty-two bits of
+  // state, no dependencies, and the same sequence everywhere because it is
+  // all integer arithmetic.
+  //
+  // `rngFor(tag)` gives each consumer its own stream off that seed, so
+  // adding a second thing that draws at random cannot shift what the first
+  // one drew -- which would be the same flicker by a longer route.
+  function hash32(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = (h + (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24)) >>> 0;
+    }
+    return h >>> 0;
+  }
+  var DAY_SEED = hash32(String(METRO.date_iso || METRO.date_label || 'board'));
+  function rngFor(tag) {
+    var a = (DAY_SEED ^ hash32(String(tag))) >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
   var DAY_START = METRO.day_start_min, DAY_END = METRO.day_end_min;
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -6817,6 +6853,40 @@
         cap.style.fill = PAPER; cap.style.stroke = INK;
         cap.setAttribute(ROLE_ATTR, 'capsule'); cap.setAttribute(OWNER_ATTR, e.owner);
         svg.appendChild(cap);
+        // A UNION HUB GETS THE SECOND RING.
+        //
+        // Two people meeting and the whole household meeting were drawn
+        // with the same mark at two sizes, and size alone is a weak signal
+        // on a board where the capsule's height is already dictated by how
+        // far apart those particular lines happen to live: a tall capsule
+        // can mean "five people" or it can mean "two people who sit at
+        // opposite ends of the map".
+        //
+        // The double ring is the printed convention for a major
+        // interchange and it is categorical rather than proportional --
+        // either this is where the day converges or it is not. Three lines
+        // is the threshold because two is a meeting and three is everyone
+        // who was free.
+        //
+        // Drawn as an inset outline with no fill, so it cannot mask
+        // anything the outer ring has not already masked.
+        if (e._involved.length >= 3) {
+          var inset = NODE_STROKE * 1.7;
+          var iw = Math.abs(k1[0] - k0[0]) - inset * 2;
+          var ih = Math.abs(k1[1] - k0[1]) - inset * 2;
+          if (iw > 1 && ih > 1) {
+            var inner = svgEl('rect', {
+              x: Math.min(k0[0], k1[0]) + inset, y: Math.min(k0[1], k1[1]) + inset,
+              width: iw, height: ih,
+              rx: Math.max(0, capR - inset), ry: Math.max(0, capR - inset),
+              'stroke-width': NODE_STROKE * 0.8,
+            });
+            inner.style.fill = 'none'; inner.style.stroke = INK;
+            inner.setAttribute(ROLE_ATTR, 'union');
+            inner.setAttribute(OWNER_ATTR, e.owner);
+            svg.appendChild(inner);
+          }
+        }
         // A LEADER FROM THE CAPSULE TO ITS NAME.
         //
         // A branch carries its caption on the rail it hangs off, so there
