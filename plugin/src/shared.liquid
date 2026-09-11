@@ -1611,8 +1611,6 @@
     // on the first solve, because it can only be answered by a board that
     // has been drawn; `settleSides` fills it in and solves again.
     var inwardNeed = {};
-    var tierLog = [];
-    var lastConsidered = null;
     // The lanes a track was found to need once there were TRUNKS to measure
     // against, remembered across attempts. Without this the knowledge is
     // thrown away every time: each attempt re-measures from a board of
@@ -3056,7 +3054,6 @@
     }
     function applyCross() {
       step = cross.step; sep = cross.sep; packedFallback = cross.packed;
-      lastConsidered = cross.considered || null;
       alloc = cross.alloc;
       LEGEND.forEach(function (p) {
         p._dist = cross.dist[p.key];
@@ -3874,9 +3871,6 @@
     var bestTier = null, bestQ = Infinity;
     for (var ti = 0; ti < tiers.length; ti++) {
       var q = attempt(tiers[ti]);
-      tierLog.push([ti, Math.round(q), packedFallback ? 'PACKED' : 'bands',
-                     Math.round(needA), Math.round(needB), Math.round(crossPx),
-                     Math.round(maxLabelThick)]);
       if (q < bestQ) { bestQ = q; bestTier = ti; }
       if (q === 0) break;
       if (ti > bestTier + 1) break; // two smaller steps without improvement — stop
@@ -4224,14 +4218,12 @@
       boundaries: AXIS.boundaries.map(function (b) { return b.min; }), spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
-      packed: !!packedFallback, tiers: tierLog, considered: lastConsidered,
-      diag: visible.filter(function (e) { return e._diagStick; }).map(function (e) { return e.title; }),
+      packed: !!packedFallback,
       shapes: visible.filter(function (e) { return !e._dropped && e._involved && e._involved.length < 2 && e.end_min > e.start_min; }).map(function (e) {
         var p2 = e._p, c0 = lineCAt(p2, e._nodeA);
         var br = e._laneDist == null ? null : Math.round(((spineC + e._sign * e._laneDist) - c0) * p2._sign);
         return [e.title, e._onTrack ? 'mark' : 'shelf', e._capAngle == null ? 'flat' : Math.round(e._capAngle), Math.round(e._endA - e._nodeA), br];
       }),
-      diagWhy: visible.filter(function (e) { return !e._dropped && e._involved && e._involved.length < 2 && e.end_min > e.start_min && e._laneDist != null; }).map(function (e) { var p2 = e._p, c0 = lineCAt(p2, e._nodeA), c1 = lineCAt(p2, e._endA); return [e.title, Math.round((c1 - c0) * p2._sign), Math.round(((spineC + e._sign * e._laneDist) - c0) * p2._sign)]; }),
       // A18: which lines exchanged places, and where on the axis. Empty on
       // a day one order can draw, which is most of them.
       route: LEGEND.filter(function (p) { return p._route; }).map(function (p) {
