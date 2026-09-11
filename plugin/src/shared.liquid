@@ -7206,7 +7206,24 @@
         // its own sidings (e.g. an all-day band) sits kinked out to "siding
         // level" here, and the capsule has to reach the line where it really
         // is, not where it'd be on an ordinary day
-        var cs = e._involved.map(function (q) { return lineCAt(q, e._nodeA); });
+        //
+        // AND WHERE IT IS *DURING* THE EVENT, not at the first minute of it.
+        // Sampled at `_nodeA` this read the lines where they still were on
+        // the way in: people arriving at a shared event converge over a
+        // ramp, so at the very minute it starts they are still climbing.
+        // School Day's pill came out 71px below the corridor its two lines
+        // spend the next seven hours in -- marking a place they occupy for
+        // one instant, and hanging under the thing it was supposed to
+        // enclose.
+        //
+        // The middle of the hold is the honest sample: the level is
+        // constant across a hold, so any minute inside it gives the same
+        // answer, and the middle is the one minute guaranteed to be past
+        // the ramp at both ends however short the event is. The capsule
+        // still sits at `_nodeA` along the axis -- when it starts is right;
+        // only where it sits across the board was wrong.
+        var capAt = e.end_min > e.start_min ? (e._nodeA + e._endA) / 2 : e._nodeA;
+        var cs = e._involved.map(function (q) { return lineCAt(q, capAt); });
         var lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
         // A thin tie between the lines with a ring on each, rather than one
         // solid capsule spanning them: now that each track has its own band
@@ -7681,7 +7698,11 @@
                       c0: Math.min(rc0, rc1), c1: Math.max(rc0, rc1) });
         }
         if (e._involved.length < 2) return;
-        var cs = e._involved.map(function (q) { return lineCAt(q, e._nodeA); });
+        // The same sample the capsule itself uses: this reserves the paper
+        // the capsule will occupy, so reading the lines at a different
+        // minute would book a box the drawing never fills.
+        var capAt = e.end_min > e.start_min ? (e._nodeA + e._endA) / 2 : e._nodeA;
+        var cs = e._involved.map(function (q) { return lineCAt(q, capAt); });
         var lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
         var r = NODE_R * 1.15 + 3 * S;
         caps.push({ e: e, a0: e._nodeA - r, a1: e._nodeA + r, c0: lo - r, c1: hi + r });

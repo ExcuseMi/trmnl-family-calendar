@@ -291,6 +291,21 @@ module.exports = function (test, h) {
         // any sample inside it, not the average of a line in mid-turn.
         const cap = caps.find((c) => Math.abs(c.x + c.w / 2 - laid.nodeA * (rep.debug.Z || 1)) <= 12);
         if (cap) {
+          // The capsule marks WHEN it starts, so its x is the node. Where it
+          // sits across the board has to be where the lines are DURING the
+          // event, not at its first minute: people converge over a ramp, so
+          // at the minute it starts they are still climbing. Sampled there,
+          // School Day's pill sat 71px under the corridor its two lines
+          // spend the next seven hours in.
+          const mid = ((laid.nodeA + laid.endA) / 2) * (rep.debug.Z || 1);
+          for (const owner of want) {
+            const ys = ysAt(owner, mid);
+            if (!ys.length) continue;
+            assert(ys.some((y) => y >= cap.y - 6 && y <= cap.y + cap.h + 6),
+              name + ': ' + item.title + "'s capsule is not where " + owner
+              + ' runs during it (line at ' + Math.round(Math.min(...ys))
+              + ', capsule ' + Math.round(cap.y) + '..' + Math.round(cap.y + cap.h) + ')');
+          }
           const top = cap.y - 3, bot = cap.y + cap.h + 3;
           for (const owner of want) {
             const ys = ysAt(owner, cap.x + cap.w / 2);
