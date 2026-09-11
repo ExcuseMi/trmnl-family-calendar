@@ -646,6 +646,16 @@
     return c.negate ? { type: "not", matcher: inner } : inner;
   }
   function ruleValue(r) {
+    // A rule the editor cannot show goes back out as it came in, except for
+    // the line names, which follow a rename or a removal like any others.
+    if (r.raw) {
+      var kept = JSON.parse(JSON.stringify(r.raw));
+      if (r.hasLine && r.lines.join("\n") !== r.origLines.join("\n")) {
+        if (!r.lines.length) delete kept.line;
+        else kept.line = r.lines.length === 1 ? r.lines[0] : r.lines.slice();
+      }
+      return kept;
+    }
     var conds = r.conditions.map(conditionValue).filter(Boolean);
     if (!conds.length) return null;
     var out = { match: conds.length === 1 ? conds[0] : { type: r.combinator, matchers: conds } };
@@ -767,7 +777,101 @@
     return MATCH_FIELDS.some(function (x) { return x[0] === f; }) ? f : "";
   }
 
+  // WHAT THIS EDITOR CAN SHOW WITHOUT CHANGING IT.
+  //
+  // A rule card covers one level: conditions joined by and/or, each of them
+  // optionally negated, and a short list of effects. Configurations written
+  // by hand or by an assistant go deeper than that -- an `or` holding an
+  // `and`, a `not` around a group -- and the prompt itself invites those.
+  // Every one of them used to arrive here, be misread as an empty word
+  // matcher, and disappear from the JSON with nothing said: the rule was
+  // simply gone from the configuration the user then pasted into TRMNL.
+  // A rule this page cannot show faithfully is kept exactly as it came.
+  function textValueEditable(v) {
+    // A comma in one of these becomes a list separator on the way out, so a
+    // value carrying one cannot be shown in a single box without changing it.
+    return typeof v === "string" && v.trim() !== "" && v.indexOf(",") === -1;
+  }
+  function baseMatcherEditable(m) {
+    if (!m || typeof m !== "object") return false;
+    var t = m.type;
+    if (t === "any" || t === "all") return true;
+    if (t === "status") return typeof m.value === "string" && m.value.trim() !== "";
+    if (t === "weekday") {
+      var vals = Array.isArray(m.value) ? m.value : [m.value];
+      // every day has to survive the trip, or one of them is dropped in silence
+      return vals.length > 0 && vals.every(function (v) {
+        return typeof v === "string" && WEEKDAYS.some(function (w) { return w[0] === v.trim().toUpperCase().slice(0, 2); });
+      });
+    }
+    if (t === "duration") {
+      if (m.min === undefined && m.max === undefined) return false;
+      return (m.min === undefined || typeof m.min === "number") && (m.max === undefined || typeof m.max === "number");
+    }
+    if (t === "time") {
+      if (m.from === undefined && m.to === undefined) return false;
+      return (m.from === undefined || typeof m.from === "string") && (m.to === undefined || typeof m.to === "string");
+    }
+    if (t === "regex") return typeof m.value === "string" && m.value.trim() !== "";
+    if (TEXT_TYPES.indexOf(t) !== -1) return textValueEditable(m.value);
+    // The one nested "or" a single row can show: same type, same field, plain
+    // string values. That is exactly what a comma-separated list compiles to.
+    if (t === "or" && Array.isArray(m.matchers) && m.matchers.length) {
+      var first = m.matchers[0];
+      return !!first && ["word", "contains", "exact"].indexOf(first.type) !== -1
+        && m.matchers.every(function (sm) {
+          return sm && sm.type === first.type && (sm.field || "") === (first.field || "")
+            && textValueEditable(sm.value);
+        });
+    }
+    return false;
+  }
+  function conditionEditable(m) {
+    if (!m || typeof m !== "object") return false;
+    // One "not", around one condition: the row has a single toggle, so a
+    // `not` of a `not` would come back out as neither.
+    if (m.type === "not") return baseMatcherEditable(m.matcher);
+    return baseMatcherEditable(m);
+  }
+  function ruleEditable(rv) {
+    var m = rv.match;
+    if (!m || typeof m !== "object") return false;
+    var subs = (m.type === "and" || m.type === "or") && Array.isArray(m.matchers) ? m.matchers : null;
+    if (subs) { if (!subs.length || !subs.every(conditionEditable)) return false; }
+    else if (!conditionEditable(m)) return false;
+    if (rv.line !== undefined) {
+      var names = Array.isArray(rv.line) ? rv.line : [rv.line];
+      if (!names.length || !names.every(function (n) { return typeof n === "string" && n.trim(); })) return false;
+    }
+    // `rename: true` on an any/all match is the one effect a rule card
+    // cannot say. The box is ticked by default, and the plugin reads a
+    // missing key on an any match as FALSE, so writing this rule back out
+    // would turn "route everything here" into "retitle everything".
+    if (rv.rename === true && (m.type === "any" || m.type === "all")) return false;
+    if (rv.rewrite !== undefined && typeof rv.rewrite !== "string") return false;
+    return true;
+  }
+  // Is this rule nothing but "everything in this calendar goes on that
+  // line"? That, and only that, is what the calendar's line picker says, so
+  // anything else on the rule means it has to stay a rule.
+  function isPlainOwnerRule(rv) {
+    if (!rv || !rv.match || (rv.match.type !== "any" && rv.match.type !== "all")) return false;
+    if (rv.rename === true) return false;
+    var names = Array.isArray(rv.line) ? rv.line : typeof rv.line === "string" ? [rv.line] : [];
+    if (!names.length || !names.every(function (n) { return typeof n === "string" && n.trim(); })) return false;
+    return Object.keys(rv).every(function (k) { return k === "match" || k === "line" || k === "rename"; });
+  }
+  // Kept verbatim, with only the line names still tracked, so renaming or
+  // removing a line up in Lines reaches in here the same as anywhere else.
+  function rawRuleFrom(rv) {
+    var names = (Array.isArray(rv.line) ? rv.line : typeof rv.line === "string" ? [rv.line] : [])
+      .filter(function (n) { return typeof n === "string" && n.trim(); })
+      .map(function (n) { return n.trim(); });
+    return { _id: uid(), raw: JSON.parse(JSON.stringify(rv)), hasLine: rv.line !== undefined,
+      lines: names, origLines: names.slice() };
+  }
   function ruleFrom(rv) {
+    if (!ruleEditable(rv)) return rawRuleFrom(rv);
     var r = newRule();
     var m = rv.match;
     if (m && (m.type === "and" || m.type === "or") && Array.isArray(m.matchers)) { r.combinator = m.type; r.conditions = m.matchers.map(conditionFrom); }
@@ -815,9 +919,16 @@
         var o = newCalendar();
         o.url = c.url.trim();
         o.name = typeof c.name === "string" ? c.name.trim() : "";
-        var rules = (Array.isArray(c.rules) ? c.rules : []).filter(function (r) { return r && r.match; }).map(ruleFrom);
-        // a leading "any event → line" rule is the calendar's owner; keep it as the simple picker
-        if (rules.length && rules[0].conditions.length === 1 && rules[0].conditions[0].type === "any" && rules[0].lines.length && !rules[0].rewrite && !rules[0].hide) {
+        var rawRules = (Array.isArray(c.rules) ? c.rules : []).filter(function (r) { return r && r.match; });
+        var rules = rawRules.map(ruleFrom);
+        // A leading "any event -> line" rule is the calendar's owner, and the
+        // picker at the top of the card says that better than a rule card
+        // does. Only when that is ALL the rule says, though: one that also
+        // carried a holiday, an allDay, a rewrite or a negated match was
+        // folded into the picker just the same, and everything except the
+        // line was dropped. A `{"not": {"any"}}` rule came back as its own
+        // opposite, routing every event it had been written to exclude.
+        if (rawRules.length && isPlainOwnerRule(rawRules[0])) {
           o.assign = rules.shift().lines;
         }
         o.rules = rules;
@@ -1119,9 +1230,26 @@
     add.addEventListener("click", function () { rule.conditions.push(newCondition()); renderConditions(rule, container, onChange); onChange(); });
     container.appendChild(add);
   }
+  // A RULE THE EDITOR CANNOT SHOW IS STILL THE USER'S RULE.
+  //
+  // Shown as the JSON it is, rather than as controls that would misdescribe
+  // it, and passed through to the configuration untouched. It can still be
+  // removed from here, and the JSON box below is where it is edited.
+  function rawRuleCard(r, list, i, container) {
+    var card = el("div", { class: "rule" });
+    card.appendChild(el("div", { class: "rule-step", text: "Kept as written" }));
+    card.appendChild(el("p", { class: "hint", text: "This rule is written in a shape this page has no controls for, so it is shown as it arrived and goes into your configuration unchanged. Edit it in the JSON at the bottom of the page, or remove it here." }));
+    card.appendChild(el("pre", { class: "hint", style: "overflow-x:auto; margin:6px 0" },
+      [el("code", { text: JSON.stringify(ruleValue(r), null, 2) })]));
+    var rm = el("button", { class: "ghost small", text: "Remove rule" });
+    rm.addEventListener("click", function () { snapshot("remove a rule"); list.splice(i, 1); renderRules(list, container); renderJson(); });
+    card.appendChild(el("div", { style: "text-align:right" }, [rm]));
+    return card;
+  }
   function renderRules(list, container) {
     container.innerHTML = "";
     list.forEach(function (r, i) {
+      if (r.raw) { container.appendChild(rawRuleCard(r, list, i, container)); return; }
       var card = el("div", { class: "rule" });
       var conds = el("div", {});
       var warn = el("div", { class: "status err" });
@@ -1194,7 +1322,9 @@
       function routesEverything() {
         if (c.assign.length) return true;
         return c.rules.some(function (r) {
-          return r.lines.length && !r.hide && r.conditions.length === 1
+          // a rule kept verbatim has no conditions to read; it is not a
+          // catch-all as far as this warning can tell
+          return r.conditions && r.lines.length && !r.hide && r.conditions.length === 1
             && r.conditions[0].type === "any" && !r.conditions[0].negate;
         });
       }

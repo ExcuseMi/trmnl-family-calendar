@@ -48,4 +48,107 @@ module.exports = function (test, h) {
     assertEqual(document.querySelector('#calendars .rule .cond-value').value, PATTERN);
     assert(true);
   });
+
+  // A RULE THIS PAGE CANNOT DRAW IS STILL THE USER'S RULE.
+  //
+  // The rule card shows one level of conditions. The format nests deeper
+  // than that, the AI prompt hands an assistant the nesting in writing, and
+  // a configuration written by hand can use all of it. Anything deeper
+  // arrived, was read as an empty word matcher, and vanished out of the JSON
+  // without a word: the user pasted the result into TRMNL with a rule
+  // missing and nothing anywhere to say which.
+  function loadCfg(cfg) {
+    const { window, document } = loadEditor();
+    document.getElementById('importIn').value = JSON.stringify(cfg);
+    click(document.getElementById('loadImport'));
+    return { window, document };
+  }
+
+  test('a rule whose matchers nest deeper than the card survives untouched', () => {
+    const nested = {
+      match: { type: 'or', matchers: [
+        { type: 'and', matchers: [{ type: 'word', value: 'L6' }, { type: 'contains', value: 'Maths' }] },
+        { type: 'word', value: 'K3' },
+      ] },
+      line: 'Bart',
+      rename: false,
+    };
+    const cfg = { lines: [{ name: 'Bart' }], calendars: [{ url: 'https://a.example/s.ics', rules: [nested] }] };
+    const { window, document } = loadCfg(cfg);
+
+    assertEqual(jsonOut(document).calendars[0].rules, [nested],
+      'the nested rule was rewritten or dropped on its way through the editor');
+    // it is on the page, as what it is, and can be taken out
+    const card = document.querySelector('#calendars .rule');
+    assert(/Kept as written/.test(card.textContent),
+      'a rule the editor cannot show should say so rather than pretend: ' + card.textContent);
+    assert(/L6/.test(card.querySelector('code').textContent), 'the rule is not shown at all');
+    // and the plugin compiles what came back out
+    const parsed = window.parseConfig(document.getElementById('jsonOut').value);
+    assertEqual(parsed.calendars[0].rules.length, 1, 'the rule the editor returned does not compile');
+  });
+
+  test('a kept-as-written rule follows a line rename, and can be removed', () => {
+    const nested = {
+      match: { type: 'not', matcher: { type: 'and', matchers: [
+        { type: 'word', value: 'Staff' }, { type: 'word', value: 'Meeting' }] } },
+      line: 'Bart',
+    };
+    const { document } = loadCfg({
+      lines: [{ name: 'Bart' }], calendars: [{ url: 'https://a.example/s.ics', rules: [nested] }],
+    });
+    const field = document.querySelector('#lines .card .title-input');
+    fireInput(field, 'Bartholomew');
+    fireChange(field);
+    assertEqual(jsonOut(document).calendars[0].rules[0].line, 'Bartholomew',
+      'a rule kept as written was left routing to the old line name');
+    assertEqual(jsonOut(document).calendars[0].rules[0].match, nested.match,
+      'the matcher was rewritten when the line was renamed');
+
+    const remove = [...document.querySelectorAll('#calendars .rule button')]
+      .find((b) => b.textContent === 'Remove rule');
+    click(remove);
+    assert(!jsonOut(document).calendars[0].rules, 'the rule could not be removed');
+  });
+
+  // THE PICKER SAYS "EVERYTHING HERE GOES ON THAT LINE", AND NOTHING ELSE.
+  //
+  // A leading "any event -> line" rule is shown as the calendar's line
+  // picker, which reads better than a rule card. Any rule whose match was
+  // any-shaped was folded in the same way, and everything on it except the
+  // line was thrown away: a holiday, an allDay, a rewrite. The worst of them
+  // was a negated match -- `{"not": {"any"}}` came back as plain `any`, so a
+  // rule written to route nothing routed everything.
+  test('a leading "any" rule that carries more than a line stays a rule', () => {
+    [
+      { match: { type: 'any' }, line: 'Mia', holiday: true },
+      { match: { type: 'any' }, line: 'Mia', allDay: true },
+      { match: { type: 'any' }, line: 'Mia', rewrite: '' },
+      { match: { type: 'any' }, line: 'Mia', rename: true },
+      { match: { type: 'not', matcher: { type: 'any' } }, line: 'Mia' },
+    ].forEach((rule) => {
+      const { document } = loadCfg({
+        lines: [{ name: 'Mia' }], calendars: [{ url: 'https://a.example/m.ics', rules: [rule] }],
+      });
+      assertEqual(jsonOut(document).calendars[0].rules, [rule],
+        'folded into the line picker and stripped of everything else: ' + JSON.stringify(rule));
+    });
+  });
+
+  test('a plain "any" rule is still shown as the calendar\'s line picker', () => {
+    const rule = { match: { type: 'any' }, line: 'Mia' };
+    const { document } = loadCfg({
+      lines: [{ name: 'Mia' }], calendars: [{ url: 'https://a.example/m.ics', rules: [rule] }],
+    });
+    assertEqual(jsonOut(document).calendars[0].rules, [rule]);
+    const picked = [...document.querySelector('#calendars select[multiple]').selectedOptions].map((o) => o.value);
+    assertEqual(picked, ['Mia'], 'the calendar owner should be shown in the picker, not as a rule card');
+  });
+
+  test('a value with a comma in it is not split into two words', () => {
+    const rule = { match: { type: 'exact', value: 'Dinner, Bath' }, hide: true };
+    const { document } = loadCfg({ calendars: [{ url: 'https://a.example/m.ics', rules: [rule] }] });
+    assertEqual(jsonOut(document).calendars[0].rules, [rule],
+      'an exact title containing a comma was turned into an "or" of two different titles');
+  });
 };
