@@ -1595,8 +1595,27 @@
     // lanes are solved, so it cannot be an obstacle on the first pass — the
     // layout is run twice, and the second run knows where the bars landed.
     var barBlocks = { A: [], B: [] };
+    // WHERE THE NAMES PLACED AGAINST THE TRUNKS ENDED UP.
+    //
+    // A convergence's name and a mark-on-the-trunk's name are the only two
+    // decided AFTER the lanes, because they are the only two that have to
+    // see where the lines went. That made them the ones that gave way: an
+    // own event's label took its rung first and the shared name was moved
+    // off whatever it landed on, every time, for a meeting one person went
+    // to. A shared event is three people being in one place; it has the
+    // better claim on the paper.
+    //
+    // So where they landed is fed back, and an own label that wants the
+    // same paper is CHARGED for it rather than forbidden. Forbidden was
+    // tried: as a hard obstacle it squeezed the bands, threw Homer's
+    // branches into long steep ramps and dropped Book Club outright, and a
+    // dropped event is worth more than a nudged caption. Charged, the own
+    // label moves when there is anywhere to move to and sits there behind
+    // its own paper outline when there is not.
+    var capBlocks = { A: [], B: [] };
     var lastPlaceCrossings = 0; // set by placeSide: how many placements had to accept a crossing
     var lastPlaceDrift = 0;     // ...and how many ended up far from the rail they name
+    var lastPlaceCapOver = 0;   // ...and how many had to be written over a name placed against a trunk
     function layoutAttempt(tier) {
     titleClass = tier.cls; tagClass = tier.tag; showTime = tier.time; showLocation = tier.loc;
     canvas.querySelectorAll('.metro-label').forEach(function (n) { n.remove(); });
@@ -1946,7 +1965,20 @@
         // pierced caption is not in fact worse than a pushed one. Two
         // labels ON TOP of each other is worse than either.
         var pushed = slid + Math.max(0, slid - len * 0.2) * 4;
-        return { k: k, dir: dir, elbow: elbow, diagFrom: diagFrom, shift: shift, ld: rowDist, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift, inward: inward,
+        // ...and what writing over a name that is already placed costs. In
+        // proportion to how much of this label lands on it, so clipping a
+        // corner is cheap and covering it is not.
+        var overCap = 0, caps = capBlocks[sideKey] || [];
+        var lc0 = spineC + e._sign * rowDist;
+        var ls0 = inward ? -e._sign : e._sign;
+        var tc0 = ls0 > 0 ? lc0 + LINE_GAP : lc0 - LINE_GAP - e._h;
+        for (var ci = 0; ci < caps.length; ci++) {
+          var cp = caps[ci];
+          if (ts >= cp.a1 || cp.a0 >= ts + len) continue;
+          if (tc0 >= cp.c1 || cp.c0 >= tc0 + e._h) continue;
+          overCap += (Math.min(ts + len, cp.a1) - Math.max(ts, cp.a0)) / Math.max(1, len);
+        }
+        return { k: k, dir: dir, elbow: elbow, diagFrom: diagFrom, shift: shift, ld: rowDist, crossing: crossing, trunc: trunc, joined: joined, textStart: ts, elbowShift: elbowShift, inward: inward, overCap: overCap,
                  // Depth is charged at what it actually costs the reader:
                  // the dive. A lane one further out is not "one lane
                  // worse", it is a diagonal that much longer raking across
@@ -1971,7 +2003,8 @@
                  // for it drove events off placements that were fine.
                  // Bounded under the cost of a crossing, since a line
                  // through a caption costs the reader the word.
-                 + Math.abs(dy) * 0.5 + (dir < 0 ? 260 * S : 0) + (crossing ? 220 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0) };
+                 + Math.abs(dy) * 0.5 + (dir < 0 ? 260 * S : 0) + (crossing ? 220 * S : 0) + (trunc ? (len - trunc) * 0.3 : 0)
+                 + overCap * 300 * S };
       }
       evs.forEach(function (e, idx) {
         e._dropped = false;
@@ -2002,7 +2035,7 @@
         }
         if (!best) { e._dropped = true; return; }
         e._lane = best.k; e._elbow = best.elbow; e._diagFrom = best.diagFrom; e._laneDist = best.ld; e._dir = best.dir; e._joined = best.joined;
-        e._crossing = best.crossing; e._elbowShift = best.elbowShift;
+        e._crossing = best.crossing; e._elbowShift = best.elbowShift; e._overCap = best.overCap;
         e._labelSign = best.inward ? -e._sign : e._sign;
         e._textStart = best.textStart;
         lane(best.k).items.push({ a0: Math.min(best.diagFrom, best.elbow), a1: Math.max(best.diagFrom, best.elbow), owner: null, kind: 'diag', dir: best.dir, d: best.ld, side: best.inward ? -1 : 1 });
@@ -2100,10 +2133,18 @@
       var used = 0;
       lastPlaceCrossings = 0;
       lastPlaceDrift = 0;
+      lastPlaceCapOver = 0;
       evs.forEach(function (e) {
         if (e._dropped || e._onTrack) return;   // no rung taken, none to count
         used = Math.max(used, e._lane + 1);
         if (e._crossing) lastPlaceCrossings++;
+        // A label that could only be fitted by writing over a name already
+        // placed against the trunks wants another lane, the same way one
+        // that could only be fitted by crossing does. This is the half the
+        // first attempt was missing: the bands are solved from what the
+        // tracks ask for, and nobody was asking for the room these names
+        // take up, so the only answers left were shove or drop.
+        if (e._overCap) lastPlaceCapOver++;
         // How far a label ended up from the rail it names. A lane that is
         // full slides labels along it instead of refusing them, and the
         // slides accumulate: on a line with five wide labels the last one
@@ -2757,6 +2798,9 @@
       // Same for a label that had to slide most of its own width away from
       // its rail to find room: another lane puts it back beside it.
       if (lastPlaceDrift) want++;
+      // and for a label that could only be fitted on top of a name already
+      // placed against the trunks
+      if (lastPlaceCapOver) want++;
       demand[p.key] = Math.max(want, mine ? 1 : 0, laneFloor[p.key] || 0);
     });
     }
@@ -3481,7 +3525,21 @@
     }
     buildTrunks();
 
+    function collectCaps() {
+      var out = { A: [], B: [] };
+      visible.forEach(function (e) {
+        if (e._dropped || e._textStart == null) return;
+        if (!e._routeShared && !e._onTrack) return;
+        if (e._routeEdge == null || e._capOut == null) return;
+        var away = e._labelSign == null ? e._sign : e._labelSign;
+        var c0 = away > 0 ? e._routeEdge + e._capOut : e._routeEdge - e._capOut - e._h;
+        out[e._sideKey].push({ a0: e._textStart - TEXT_PAD, a1: e._textStart + e._textLen + TEXT_PAD,
+                               c0: c0, c1: c0 + e._h });
+      });
+      return out;
+    }
     function attempt(tier) {
+      capBlocks = collectCaps();
       barBlocks = { A: [], B: [] };
       var q1 = layoutAttempt(tier);
       var bars = collectBars();
