@@ -532,6 +532,48 @@ is open.
   the compressed segment filled with a cross-hatch or chevrons. An event
   that spans the night runs through it as one continuous stroke with a
   station at each end.
+- [ ] **E12. An all-day event belongs at the line's head, not on the axis.**
+  AGREED, planned, not built. An all-day event has no time of day at all:
+  `transform.js` synthesises a fake timed event spanning the whole visible
+  window, and the board then prints its own window back as if it were the
+  event's hours. Every render today carries "6am - 11pm / Spring Break".
+  On a multi-day board it is worse, because the window covers the run: a
+  Tuesday holiday is stamped across Wednesday and Thursday.
+
+  It is a STATE the line is in, not a place it goes at a time, so it is
+  declared once where the board already says who a line is:
+
+  - A concentric-ring badge plus a second row of words in the terminus
+    block under the line's name. Nothing at all between `axisStart` and
+    `axisEnd`. No dot, no tick, no band, no lane, no leader. This finally
+    draws rule 28's concentric rings, which the rule has promised since it
+    was written and no code has ever produced.
+  - Both terminal bars become open chevrons, so the day reads as a slice
+    of something longer rather than as a thing that began at six and ended
+    at eleven.
+  - Several lines sharing one title are one origin, named once, with the
+    dashed out-of-station tie between the heads.
+
+  It is the only option costed that gives depth BACK on a board that is
+  96% spent: every all-day event stops buying an inward rung, and the head
+  row is charged once per board through `nameH`, which the solver already
+  reads. It is also the best behaviour on a cropped panel, because the
+  head is the one thing a narrowed time window cannot crop.
+
+  What to touch, in order: `buildMetro` stops synthesising the fake event
+  and repopulates `metro.all_day`; `staticFacts` drops the `e.all_day ||`
+  clause from `_long`; **`fitLines` must count `METRO.all_day` in its load
+  tally**, or a line whose only content is a holiday scores zero and is the
+  first dropped on a quadrant; the name-building pass appends the route row
+  into `p._nameEl` so the existing measurement covers it; `decideNamePlacement`
+  must drop the route row before flipping `namesAbove`; the terminal-bar
+  block draws chevrons with a new role, which `cases/loose-ends.js` has to
+  learn or it fails on every all-day board.
+
+  Known debt it adds: A8 (a wrapped track name overlapping the first event
+  label) gets worse, and that is the price. Rules 27 and 28 need amending
+  and two new rules writing; the full wording is in the plan.
+
 - [ ] **E11. Long events on the main track, and no more sidings.** A long
   block -- a school day, a shift, a delivery run -- is drawn as a siding:
   the line leaves its lane, runs a corridor for the length of the block and
