@@ -1254,6 +1254,7 @@
       if (a >= w.a1) return w.toC - w.fromC;
       return (w.toC - w.fromC) * rampEase((a - w.a0) / (w.a1 - w.a0));
     }
+    function centreOf(mem) { return (mem[0]._c + mem[mem.length - 1]._c) / 2; }
     function spreadCFor(p) { return spineC + p._c; }
     function lineCAt(p, a) {
       var flat = spineC + p._c + weaveDelta(p, a) + p._sign * raiseAt(p, a);
@@ -3328,7 +3329,50 @@
         if (e._dropped || !e._involved || e._involved.length < 2) return;
         if (!(e.end_min > e.start_min)) return;    // a moment keeps its tie
         var mem = e._involved.slice().sort(function (a, b) { return a._c - b._c; });
-        var pitch = LINE_GAP * 0.65 + Math.max(2, e._p.line_width) * S * weightScale;
+        // A CORRIDOR IS AS DEEP AS WHAT COMES NEXT NEEDS IT TO BE.
+        //
+        // The tight bundle -- rails a hair apart -- is what "these people
+        // are in one place" looks like, and while there is a quiet evening
+        // after it that is the right drawing. It is the wrong one when the
+        // next thing starts twenty minutes later: every line leaves from
+        // the same height, so every line has the FULL distance back to its
+        // own lane to travel, all five turn within a few pixels of each
+        // other, and the event that follows gets a branch off a trunk that
+        // is still climbing. Bart's detention at half past three, straight
+        // out of a school day, is that.
+        //
+        // Opened out, each line sits nearer where it already was, so the
+        // run back is shorter, the turns are spread, and the event after
+        // has flat trunk to hang off. It is paid for in what the corridor
+        // says: opened all the way it stops reading as together at all. So
+        // it opens in proportion to how soon somebody needs it to, and
+        // never more than halfway to where the lines would be anyway.
+        var tight = LINE_GAP * 0.65 + Math.max(2, e._p.line_width) * S * weightScale;
+        var natural = mem.length > 1
+          ? Math.abs(mem[mem.length - 1]._c - mem[0]._c) / (mem.length - 1) : tight;
+        var soonest = Infinity;
+        visible.forEach(function (o) {
+          if (o === e || o._dropped || o._involved.length > 1) return;
+          if (mem.indexOf(o._p) < 0 || o._nodeA <= e._endA) return;
+          soonest = Math.min(soonest, o._nodeA - e._endA);
+        });
+        // What the deepest member would have to travel to get home, which
+        // is the axis a 45 needs and therefore the room "soon" is measured
+        // against.
+        var farthest = 0;
+        mem.forEach(function (q) { farthest = Math.max(farthest, Math.abs(q._c - centreOf(mem))); });
+        var urgency = isFinite(soonest) && farthest > 0
+          ? clamp(1 - soonest / Math.max(1, farthest), 0, 1) : 0;
+        // Capped in ABSOLUTE terms, not as a fraction of how far apart these
+        // particular lines happen to live. Half the distance home sounds
+        // modest and is not: the school run joins Marge to Bart, most of
+        // the board apart, so half of it opened a corridor two hundred
+        // pixels deep and the capsule across it read as a wall rather than
+        // as three people in a car. A track-step of daylight is enough to
+        // turn one rail into three and to give whatever follows somewhere
+        // flat to leave from.
+        var pitch = Math.max(tight, Math.min(tight + TRACK_STEP,
+          tight + (natural - tight) * urgency * 0.5));
         var centre = (mem[0]._c + mem[mem.length - 1]._c) / 2;
         var ok = true;
         var want = mem.map(function (q, i) {
