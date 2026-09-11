@@ -1501,7 +1501,10 @@
       // day are together, and together is a convergence, which is the
       // ordinary drawing for a shared event of any length.
       e._long = e.all_day || (e.end_min - e.start_min) >= LONG_MIN;
-      e._onTrack = !!e._long && involved.length < 2;
+      // ...or an event the drawing found sitting ON a move its own line is
+      // already making (`settleDiagonals`). Sticky, because staticFacts
+      // runs again between attempts and the finding would be lost.
+      e._onTrack = (!!e._long && involved.length < 2) || !!e._diagStick;
       // and its marks sit where the line IS, which is what `_onRoute`
       // already means for the other event that has no rail of its own.
       //
@@ -1578,6 +1581,14 @@
     // on the first solve, because it can only be answered by a board that
     // has been drawn; `settleSides` fills it in and solves again.
     var inwardNeed = {};
+    // The lanes a track was found to need once there were TRUNKS to measure
+    // against, remembered across attempts. Without this the knowledge is
+    // thrown away every time: each attempt re-measures from a board of
+    // level lines, one tier got Bart's afternoon down to no dropped events
+    // at all, and the re-run that was supposed to redraw that tier started
+    // from scratch and lost them again. Only ever raised, and only when a
+    // re-solve actually recovered an event.
+    var laneFloor = {};
     // An interchange is drawn as a heavy bar straight down the board at one
     // minute: the capsule across the lines, then the spur dropping from it
     // to its own lane. WHICH lanes that bar crosses is not known until the
@@ -2157,7 +2168,14 @@
         // missing line rather than as the middle of the map.
         tracks.forEach(function (t, i) {
           var gap = (i ? k.trackStep + sepPx : (k.trackStep + sepPx) / 2);
-          var want = lanesFor(t);
+          // What the track asked for is its OUTWARD lanes. Rungs on the
+          // inward side are ADDED to that, not taken out of it: a long
+          // event's name and a pierced track's escape are both extra needs,
+          // and paying for them out of the outward ladder is how a track
+          // ends up with fewer places to write than it has things to say.
+          var wantOut = lanesFor(t);
+          var inNeed = Math.min(2, longIn(t) + (t.needIn ? 1 : 0));
+          var want = wantOut + inNeed;
 
           // A15: A TRACK CARRIES EVENTS ON BOTH SIDES OF ITS LINE.
           //
@@ -2211,11 +2229,11 @@
           // solver cannot see: it is arithmetic on sizes and the clashes
           // are only known once the labels are placed.
           var inN = 0;
-          if (opts.bothSides && want > 1 && !t.shared) {
-            var bestCost = gap + rungRoom(k, t, want, stepPx), bestN = 0;
-            for (var c = 1; c <= want - 1; c++) {
+          if (opts.bothSides && wantOut > 1 && !t.shared) {
+            var bestCost = gap + rungRoom(k, t, wantOut, stepPx), bestN = 0;
+            for (var c = 1; c <= wantOut - 1; c++) {
               var cost = Math.max(gap, rungRoom(k, t, c, stepPx))
-                + rungRoom(k, t, want - c, stepPx);
+                + rungRoom(k, t, wantOut - c, stepPx);
               // strictly cheaper, so a tie keeps everything on one side:
               // two sides of labels is more for the eye to follow and is
               // only worth it when it actually buys depth
@@ -2234,7 +2252,7 @@
           // drawing and fed back in. Scarce on purpose: a side whose every
           // track asks for the gap at once does not fit and the whole board
           // drops to the packed fallback.
-          inN = Math.max(inN, Math.min(want, longIn(t) + (t.needIn ? 1 : 0)));
+          inN += inNeed;
           inward[t.key] = inN;
           // What is left after the inward rungs have taken their share of
           // the gap; never less than the gap itself, so a track that wants
@@ -2705,16 +2723,23 @@
     // Story" ended up 6px into each other, and on the small panel two
     // morning captions slid off their rails.
     step = laneStep;
-    function measureDemand() {
+    // `extra` is obstacles the FIRST pass cannot have: where the trunks go.
+    // Nothing has a route until buildTrunks has run, and buildTrunks runs
+    // after the bands are solved, so the first measurement is always taken
+    // on a board of level lines. `settleDemand` below takes it again once
+    // there are trunks to measure against.
+    function measureDemand(extra) {
     demand = {};
     LEGEND.forEach(function (p) {
+      var obs = obstacles[p._sideKey];
+      if (extra && extra[p._sideKey]) obs = obs.concat(extra[p._sideKey]);
       var probe = [], start = p._dist + laneBase(p);
       for (var j = 0; j < 24; j++) probe.push({ dist: start + j * step, owner: p.key });
       var mine = visible.some(function (e) { return e._laneOwner === p.key; });
       // a track with events always keeps at least one lane even if the
       // probe placed none (an obstacle can block every rung it tried),
       // otherwise it would get no band and drop everything it has
-      var want = placeSide(p._sideKey, probe, obstacles[p._sideKey], p.key);
+      var want = placeSide(p._sideKey, probe, obs, p.key);
       // A track that could only fit its own events by letting one of its
       // branches cross another of its own labels wants one more lane, not
       // the crossing: two meetings starting within a lane-reach of each
@@ -2723,7 +2748,7 @@
       // Same for a label that had to slide most of its own width away from
       // its rail to find room: another lane puts it back beside it.
       if (lastPlaceDrift) want++;
-      demand[p.key] = Math.max(want, mine ? 1 : 0);
+      demand[p.key] = Math.max(want, mine ? 1 : 0, laneFloor[p.key] || 0);
     });
     }
     measureDemand();
@@ -2909,6 +2934,58 @@
       usedB = placeSide('B', cross.lanes.B, obstacles.B.concat(barBlocks.B, corridorBlocks('B')));
     }
     placeBoth();
+    // SOLVE, LOOK, SOLVE AGAIN: an event ON the move its line is making.
+    //
+    // An event can be drawn one way -- a horizontal rail in a lane, with
+    // the line branching out to it and back -- and that was fine while
+    // trunks were level. They are not: a line climbing out of the school
+    // corridor towards dinner spends the whole afternoon at 45. Lisa's
+    // saxophone lesson at four happens DURING that climb, and the branch
+    // for it turned the other way, dropped below her, ran a flat rail and
+    // stopped. The line goes up, the rail goes down, and nothing on the
+    // board says they are the same person.
+    //
+    // A branch that doubles back on a moving trunk is drawing the move
+    // twice, in opposite directions. So where the trunk travels a real
+    // distance across the event's own span and the branch would go the
+    // OTHER way, the event is a mark on the trunk instead: a ring where it
+    // starts, a tick where it ends, the caption alongside. Narrow on
+    // purpose -- "the trunk is moving" on its own swallows nearly every
+    // event on a board with convergences, which is what it did the first
+    // time this was tried.
+    // SOLVE, LOOK, SOLVE AGAIN: how many lanes a track actually needs.
+    //
+    // The first measurement is taken before a single trunk exists, because
+    // nothing has a route until the bands are solved. So it counts the
+    // lanes a track's labels need on a board of LEVEL LINES, and then the
+    // trunks are drawn through them. Bart comes out of the school corridor
+    // at three and climbs to dinner, and that climb sweeps every lane he
+    // has -- which is one, because one was all his labels needed when the
+    // board was flat. Detention and Skate Park had nowhere left and were
+    // dropped, which is the worst thing this map can do to an event.
+    //
+    // So: if anything was dropped, measure again with the trunks in the
+    // way and solve again. Kept only if fewer events are lost.
+    function dropCount() { var n = 0; visible.forEach(function (e) { if (e._dropped) n++; }); return n; }
+    (function settleDemand() {
+      if (!horizontal || cross.packed) return;
+      var n0 = dropCount();
+      if (!n0) return;
+      var keepCross = cross, keepDemand = demand;
+      measureDemand({ A: corridorBlocks('A'), B: corridorBlocks('B') });
+      var re = solveCross(null);
+      if (re && !re.packed) {
+        cross = re; applyCross(); recomputeTrackDists(); placeBoth();
+        if (dropCount() < n0) {
+          LEGEND.forEach(function (p) {
+            laneFloor[p.key] = Math.max(laneFloor[p.key] || 0, demand[p.key] || 0);
+          });
+          return;
+        }
+      }
+      demand = keepDemand; cross = keepCross;
+      applyCross(); recomputeTrackDists(); placeBoth();
+    })();
     // SOLVE, LOOK, SOLVE AGAIN: which side of its own line a track's labels
     // belong on.
     //
@@ -3218,9 +3295,17 @@
         // a clash, one all-day siding on one child turned every convergence
         // on the board back into a dead-end bundle, which is exactly what
         // the device was drawing.
+        // TOUCHING IS NOT OVERLAPPING. The school run ends at half past
+        // eight and the school day starts at half past eight, so tested
+        // with <= they clash, School Day gave up and drew itself as a
+        // bundle, and Lisa spent the day on a rail she shares with nobody
+        // while her own caption sat at the bottom of the board next to
+        // nothing. A hold that ends where the next one starts is a line
+        // going straight from one to the other, which is the whole point
+        // of the route model.
         var clash = want.some(function (w) {
           return (w.q._route || []).some(function (h) {
-            return e._nodeA <= h.a1 && h.a0 <= e._endA;
+            return e._nodeA < h.a1 && h.a0 < e._endA;
           });
         });
         if (clash) return;
@@ -3410,6 +3495,34 @@
       if (ti > bestTier + 1) break; // two smaller steps without improvement — stop
     }
     if (bestTier !== ti) attempt(tiers[bestTier]);
+    // The routes for the board that was actually chosen. Everything below
+    // reads where the lines really go, which is not knowable from inside an
+    // attempt: an attempt is handed the routes the PREVIOUS one left behind.
+    buildTrunks();
+
+    (function settleDiagonals() {
+      if (!horizontal || packedFallback) return;
+      var changed = false;
+      visible.forEach(function (e) {
+        if (e._dropped || e._onTrack || e._merge) return;
+        if (!e._involved || e._involved.length > 1) return;  // already on the trunk
+        if (!(e.end_min > e.start_min)) return;              // a moment has no run to sit on
+        if (e._laneDist == null) return;
+        var p = e._p, c0 = lineCAt(p, e._nodeA), c1 = lineCAt(p, e._endA);
+        var travel = (c1 - c0) * p._sign;
+        if (Math.abs(travel) < MIN_DIAG * 2) return;         // the trunk is going nowhere
+        var branch = ((spineC + e._sign * e._laneDist) - c0) * p._sign;
+        if (!branch || (branch > 0) === (travel > 0)) return;
+        e._diagStick = true; e._onTrack = true; e._onRoute = true; e._capLead = true;
+        changed = true;
+      });
+      if (!changed) return;
+      // and lay the board out again now that those events want no lane: the
+      // bands are solved from what each track asks for, and some of them
+      // have just stopped asking.
+      attempt(tiers[bestTier]);
+      buildTrunks();
+    })();
 
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
     buildTrunks();
@@ -3506,6 +3619,8 @@
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
+      diag: visible.filter(function (e) { return e._diagStick; }).map(function (e) { return e.title; }),
+      diagWhy: visible.filter(function (e) { return !e._dropped && e._involved && e._involved.length < 2 && e.end_min > e.start_min && e._laneDist != null; }).map(function (e) { var p2 = e._p, c0 = lineCAt(p2, e._nodeA), c1 = lineCAt(p2, e._endA); return [e.title, Math.round((c1 - c0) * p2._sign), Math.round(((spineC + e._sign * e._laneDist) - c0) * p2._sign)]; }),
       // A18: which lines exchanged places, and where on the axis. Empty on
       // a day one order can draw, which is most of them.
       route: LEGEND.filter(function (p) { return p._route; }).map(function (p) {
