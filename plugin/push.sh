@@ -83,7 +83,7 @@ report('transform.js', len(src), len(out))
 
 # ---- shared.liquid: an HTML template with one big inline <script>.
 # Only the script is JavaScript, and the one Liquid expression inside it is
-# swapped for a placeholder first: a minifier reads `{{ metro | json }}` as
+# swapped for a placeholder first: a minifier reads `{{ data | json }}` as
 # a syntax error, and putting it back afterwards is exact because the token
 # cannot occur in the source.
 src = open(liquid).read()
@@ -92,12 +92,12 @@ body = uncomment(body)
 i = body.index('<script>') + len('<script>')
 j = body.index('</script>', i)
 PLACEHOLDER = '__METRO_PAYLOAD_LIQUID__'
-js = body[i:j].replace('{{ metro | json }}', PLACEHOLDER)
+js = body[i:j].replace('{{ data | json }}', PLACEHOLDER)
 if PLACEHOLDER not in js:
     print('shared.liquid: the METRO payload expression moved; teach push.sh the new one',
           file=sys.stderr)
     sys.exit(1)
-js = minify(js, "shared.liquid's inline script").replace(PLACEHOLDER, '{{ metro | json }}')
+js = minify(js, "shared.liquid's inline script").replace(PLACEHOLDER, '{{ data | json }}')
 out = body[:i] + '\n' + js + body[j:]
 open(liquid, 'w').write(out)
 report('shared.liquid', len(src), len(out))
