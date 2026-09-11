@@ -556,6 +556,11 @@
   // end up a track-step apart a 6px line is a third of the gap to the next
   // one, and the map turns into stripes. Set once the bands are solved.
   var weightScale = 1;
+  // Which way the board is lying, mirrored out here for the same reason
+  // `weightScale` is: `paintLine` is a top-level helper and the drawing's
+  // own `horizontal` lives inside the function that calls it. Set once,
+  // beside it.
+  var isHorizontal = true;
   function styleStroke(node, p, S) {
     // through style, not the attribute: a colour can be a CSS variable now
     // and an SVG presentation attribute does not accept var()
@@ -577,6 +582,60 @@
   // so it follows every bend without being computed twice; it carries no
   // data-metro-role, because it is not a line — it is a hole in one.
   function paintLine(node, p, S, parent, phase) {
+    // AN OVERPASS HALO, SO A CROSSING READS AS ONE LINE OVER ANOTHER.
+    //
+    // Two rails meeting at a right angle with no halo make a junction: four
+    // arms of ink leaving one point, which on a transit map means a place
+    // where you can change lines. Nobody changes lines at ten past nine
+    // because Marge happens to be going down and Bart happens to be going
+    // along. What is drawn there is one person passing another, and every
+    // printed map in the world draws that by breaking the line underneath.
+    //
+    // A band of paper under this line's own stroke, six pixels proud of it
+    // on each side -- the same six pixels every caption keeps -- severs
+    // whatever was drawn before it and leaves whatever comes after alone.
+    // Document order is therefore the layering: a line drawn later passes
+    // OVER one drawn earlier, consistently, for the whole board.
+    //
+    // ONLY WHERE THE PATH ACTUALLY TURNS.
+    //
+    // A halo under every stroke erased the board. Two lines running FLAT
+    // never cross each other -- they are parallel by construction -- so the
+    // only thing a halo can do on a level run is rub out whatever else is
+    // running level near it, and in a shared corridor the rails are six
+    // pixels apart on purpose. A twelve pixel halo obliterated them: the
+    // whole of Family Dinner came out as white paper with one line left in
+    // it.
+    //
+    // A crossing needs a vertical or a diagonal, because that is the only
+    // way one line gets from one side of another to the other side. So the
+    // halo goes on the pieces that turn, and a flat run is painted as it
+    // always was. Read off the path's own points, since that is the thing
+    // being drawn and nothing else here knows its shape.
+    var dAttr = node.getAttribute('d') || '';
+    var ys = [], mY;
+    (dAttr.match(/-?\d+\.?\d*[ ,]-?\d+\.?\d*/g) || []).forEach(function (pair) {
+      var v = pair.split(/[ ,]/);
+      if (v.length === 2) ys.push(parseFloat(isHorizontal ? v[1] : v[0]));
+    });
+    var turns = false;
+    for (var yi = 1; yi < ys.length; yi++) {
+      if (Math.abs(ys[yi] - ys[0]) > 1) { turns = true; break; }
+    }
+    if (turns) {
+      var halo = node.cloneNode(false);
+      halo.removeAttribute(ROLE_ATTR);
+      halo.removeAttribute(OWNER_ATTR);
+      halo.removeAttribute('data-metro-bundle');
+      halo.setAttribute('stroke-width', p.line_width * S * weightScale + 12 * S);
+      halo.setAttribute('stroke-linecap', 'butt');
+      halo.setAttribute('stroke-linejoin', 'round');
+      halo.setAttribute('fill', 'none');
+      halo.removeAttribute('stroke-dasharray');
+      halo.style.stroke = PAPER;
+      halo.style.fill = 'none';
+      parent.appendChild(halo);
+    }
     styleStroke(node, p, S);
     parent.appendChild(node);
     var t = treatmentFor(p.line_style, S, p.line_width);
@@ -666,6 +725,7 @@
     var horizontal = METRO.orientation === 'horizontal' ? true
       : METRO.orientation === 'vertical' ? false
       : W > H * 1.1;
+    isHorizontal = horizontal;
     var axisPx = horizontal ? W : H, crossPx = horizontal ? H : W;
 
     // Header density follows the whole view, not the view name (a TRMNL X
@@ -6638,10 +6698,41 @@
       // line. The steps close up to fit; never to nothing, because two
       // rails that turn on the same pixel are the crossing the stagger
       // exists to prevent.
+      // NO TWO DROPS ON THE SAME COLUMN.
+      //
+      // The levels above are derived from CONFLICTS: a rail only had to
+      // turn before another where its own drop passed through where that
+      // one was going to lie, and rails that pass nothing of each other's
+      // shared a level and turned on the same minute. That was defended as
+      // tidier and truer, and it is neither once there are three of them:
+      // two verticals on one column at two different heights read as one
+      // line with a gap in it, and the eye has no way to tell which of the
+      // two people it is following.
+      //
+      // So every rail gets its own column where the event is long enough to
+      // pay for it -- eight pixels apiece, which is the same paper a
+      // caption keeps -- and falls back to the conflict grouping where it
+      // is not. A fifteen minute meeting five lines wide has no room for
+      // five columns and the grouping is the better of the two answers
+      // there: its drops are short enough to read as a comb.
+      var room = (e._endA - e._nodeA) - bend * 2;
+      var PITCH = 8 * S;
+      if (rails.length > 1 && room >= PITCH * (rails.length - 1)) {
+        var order = rails.map(function (r, i) { return i; });
+        // conflict order first, so a rail that must turn before another
+        // still does; ties settled by position so the comb reads in order
+        order.sort(function (x, y) {
+          return level[x] !== level[y] ? level[x] - level[y] : rails[x].rungC - rails[y].rungC;
+        });
+        order.forEach(function (i, rank) { level[i] = rank; });
+      }
       var maxLevel = 0;
       level.forEach(function (l) { maxLevel = Math.max(maxLevel, l); });
-      var room = (e._endA - e._nodeA) - bend * 2;
-      var st = maxLevel > 0 ? Math.min(stagger, Math.max(1.5 * S, room / maxLevel)) : 0;
+      var st = maxLevel > 0
+        ? Math.max(PITCH, Math.min(stagger, Math.max(1.5 * S, room / maxLevel)))
+        : 0;
+      // never past the event's own end, whatever the pitch asked for
+      if (maxLevel > 0 && st * maxLevel > room) st = Math.max(1.5 * S, room / maxLevel);
       rails.forEach(function (r, i) { r.dropA = e._nodeA + level[i] * st; });
       // the caption hangs off whichever end of the bundle faces away from
       // the spine, so it clears every rung in it rather than sitting on the
@@ -6828,8 +6919,13 @@
           // a convergence gets exactly the tick every other stop gets, on
           // its own line, in its own colour — the vocabulary intact and
           // nothing claiming the corridor ends.
+          // ...and the same rule as every other tick: only on level rail.
+          // A convergence ends where its lines part company, which is by
+          // definition where they are all about to turn, so this is the
+          // mark most likely to land on a fillet and lie flat in open paper.
           var sh = markOut(p, NODE_R);
           var atC = function (a) { return e._onRoute ? lineCAt(p, a) : laneC0; };
+          if (e._onRoute && Math.abs(slopeNear(p, e._endA)) >= 0.02) return;
           var q0 = tickEnd(e, e._endA, -sh, atC), q1 = tickEnd(e, e._endA, sh, atC);
           var etick = svgEl('line', { x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
             'stroke-width': NODE_STROKE, 'stroke-linecap': 'round' });
@@ -7045,7 +7141,12 @@
         // and when it does the honest thing is to say nothing -- the event
         // has its dot, its name and its times, and a glyph that has to be
         // explained is worse than no glyph.
-        var endFlat = Math.abs(slopeNear(p, e._endA)) < 0.3;
+        // STRICTLY horizontal, not roughly. A third of a slope is seventeen
+        // degrees, which is nowhere near flat and is exactly the part of a
+        // fillet where a tick starts to lean: the mark only makes sense on
+        // rail that is actually running level. The tolerance left is for
+        // floating point on a flat stretch, not for a shallow one.
+        var endFlat = Math.abs(slopeNear(p, e._endA)) < 0.02;
         if (endFlat && e.end_min > e.start_min && e._endA >= lo - 1 && e._endA <= hi + 1) {
           var tc = spurC(e._endA);
           var half = markOut(p, NODE_R);

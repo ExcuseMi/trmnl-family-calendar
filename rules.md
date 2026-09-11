@@ -154,6 +154,17 @@ Where the two disagree, this one is newer.
     climb passed through Amy that way for three hours. Where anything lies
     between here and there the move goes square, which crosses in one place
     at a right angle and is unmistakably a crossing rather than a merge.
+29e. **A start is a dot, an end is a tick, and a tick needs level rail.**
+    A dot sits ON the line, so it can mark a corner: a start usually lands
+    on a bend and the dot reads as a mark on this line rather than as a
+    second line crossing it. A tick stands SQUARE to the rail, which means
+    that where the rail is vertical the tick is horizontal -- a stray bar
+    lying flat in open paper with the line running past it. Book Club ends
+    at ten and Marge is dropping toward the school run at ten.
+    So a tick is drawn only where the rail is running level, and where the
+    end lands on a fillet or a transition it is not drawn at all. The event
+    still has its dot, its name and its times, and a glyph that has to be
+    explained is worse than no glyph.
 29c. **A line ends on a 45 slash.** Its own mark, not the crossbar an
     event's end tick uses: three different things drawn with one glyph can
     only be told apart by position. Nothing else on this map is drawn at 45,
