@@ -78,6 +78,77 @@ module.exports = function (test, h) {
       'a holiday was declared at a line\'s head: it is nobody\'s state');
   });
 
+  // ---------------------------------------------------------- whose, exactly
+  //
+  // `holiday` does not mean "goes in the header". It means this is a STATE
+  // rather than an appointment -- the distinction E12 drew for all-day
+  // events -- and WHERE it is drawn falls out of whether anybody owns it.
+  //
+  // Both kinds arrive through the same subscription. Christmas Day is
+  // nobody's and belongs to the day. Half term is precisely the children's
+  // and precisely not the parent's, who still goes to work, and a line's
+  // head row is exactly what says so. Forcing both into the header throws
+  // away the one fact that makes the second one useful.
+
+  test('a holiday a rule gives to somebody goes to their head, not the header', async () => {
+    const r = await runTransform(serve(allDayIcs([
+      { start: '20261225', end: '20261226', summary: 'Half Term' },
+    ])), NOW).run(baseInput(NOW, cfgWith(config({
+      calendars: [
+        { url: 'https://example.com/ada.ics', name: 'Ada',
+          rules: [{ match: { type: 'any' }, line: 'Ada' }] },
+        { url: 'https://example.com/hol.ics', holiday: true,
+          rules: [{ match: { type: 'contains', value: 'Half Term' }, line: 'Bo', rename: false }] },
+      ],
+    }))));
+    assertEqual(r.data.holidays, [], 'a holiday somebody owns is not the day\'s');
+    assertEqual(r.data.all_day.map((a) => a.title), ['Half Term'], 'it should be at a head');
+    const bo = r.data.legend.find((p) => p.name === 'Bo');
+    assert(bo, 'Bo got no line, so the holiday had nowhere to be declared');
+    assertEqual(r.data.all_day[0].owners, [bo.key], 'declared against the wrong line');
+    assertEqual(eventItems(r.data), [], 'and still nothing on the axis');
+  });
+
+  test('two lines sharing one are one origin, named once', async () => {
+    const r = await runTransform(serve(allDayIcs([
+      { start: '20261225', end: '20261226', summary: 'Half Term' },
+    ])), NOW).run(baseInput(NOW, cfgWith(config({
+      lines: [{ name: 'Ada' }, { name: 'Bo' }, { name: 'Cy' }],
+      calendars: [
+        { url: 'https://example.com/ada.ics', name: 'Ada',
+          rules: [{ match: { type: 'any' }, line: 'Ada' }] },
+        { url: 'https://example.com/hol.ics', holiday: true,
+          rules: [{ match: { type: 'contains', value: 'Half Term' },
+                   line: ['Bo', 'Cy'], rename: false }] },
+      ],
+    }))));
+    assertEqual(r.data.all_day.length, 1, 'two children are not on two holidays');
+    assertEqual(r.data.all_day[0].owners.length, 2, 'both should own it');
+    assertEqual(r.data.holidays, [], 'and it is not also the day\'s');
+  });
+
+  test('the fallback chain is never consulted for a holiday', async () => {
+    // This is the whole failure being fixed. A subscribed feed that no rule
+    // routes has not told us whose day it changes -- it has told us it is
+    // nobody's. Letting it fall back to the calendar's name invents a line
+    // called "Holidays in Belgium"; letting it fall back to `lines[0]`
+    // declares the entire country's Christmas to be Ada's.
+    const r = await runTransform(serve(allDayIcs([
+      { start: '20261225', end: '20261226', summary: 'Christmas Day' },
+    ])), NOW).run(baseInput(NOW, cfgWith(config({
+      calendars: [
+        { url: 'https://example.com/ada.ics', name: 'Ada',
+          rules: [{ match: { type: 'any' }, line: 'Ada' }] },
+        { url: 'https://example.com/hol.ics', name: 'Holidays in Belgium', holiday: true },
+      ],
+    }))));
+    assertEqual(r.data.holidays.map((x) => x.title), ['Christmas Day'], 'it is the day\'s');
+    assertEqual(r.data.all_day, [], 'and nobody\'s');
+    assert(!r.data.legend.some((p) => /Holiday/i.test(p.name)),
+      'the feed\'s own name became a line: '
+      + JSON.stringify(r.data.legend.map((p) => p.name)));
+  });
+
   test('a holiday feed puts no line on the board', async () => {
     // The ghost line. A named calendar's name becomes a LINE for anything
     // no rule routes, so a subscribed "Holidays in Belgium" drew a rail of

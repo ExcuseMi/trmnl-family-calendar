@@ -312,7 +312,18 @@ a state a line is in, not a place it goes at a time.
 A public holiday is not one person's state. It has no hour and no owner:
 it is what THE DAY is, the way the date is which day it is.
 
-58. **A holiday is stated in the header, beside the date.** The three other
+58. **Where a holiday is drawn follows from whose day it changes.** The
+    config already answers that: a rule naming lines has said whose, a rule
+    naming none has said nobody's. So `holiday` does not mean "the header",
+    it means this is a STATE rather than an appointment -- rule 54's
+    distinction -- and the place falls out. Christmas Day is nobody's and
+    goes to the day; half term is the children's and not the parent's who
+    still works, so it goes to their heads like any other state, named once
+    with the tie between them. Only an explicit `line` counts: the fallback
+    chain is what put a country's Christmas on whoever was first in the
+    list.
+
+59. **A holiday nobody owns is stated in the header, beside the date.** The three other
     places costed all charge the map for it. A band or a marker on the hour
     scale puts a thing with no hour on a scale of hours, which is what
     rule 54 already refuses for an all-day event, and it prints the board's
@@ -324,25 +335,25 @@ it is what THE DAY is, the way the date is which day it is.
     while a real one is dropped. The header is the one part of the board
     already answering "what day is this", and it has the room on a row it
     draws anyway.
-59. **It costs nothing on a day without one.** Like the service banner: no
+60. **It costs nothing on a day without one.** Like the service banner: no
     holiday, no element, and the same board as before. That is the other
     half of the reason it is in the header rather than on the map.
-60. **Inside a range it says which day of it this is.** "Spring Break" runs
+61. **Inside a range it says which day of it this is.** "Spring Break" runs
     a week and the board draws one day. Day 3 of 5 is the only thing
     telling the Monday from the Thursday, and it is the fact a household
     wants, because it answers when the thing ends. A one-day holiday has no
     ordinal, and "Day 1 of 1" is a sentence about nothing.
-61. **A holiday opens nobody's ends.** Rule 55's chevrons say THIS LINE's
+62. **A holiday opens nobody's ends.** Rule 55's chevrons say THIS LINE's
     day is a slice of something longer, which is a claim about a person.
     On a public holiday every line still starts and ends on that day.
-62. **The day gets ONE name, however many feeds carry it.** Two people in
+63. **The day gets ONE name, however many feeds carry it.** Two people in
     a house subscribe to the same national calendar and the day did not
     happen twice. Where a day genuinely carries two (a public holiday and
     a school one), the header still names one: the row already holds a
     date and a forecast, and two names on it came out as "Christmas D" and
     "School Holid", each cut mid word with the ordinal wrapped underneath.
     Naming the day is the header's job; enumerating it is not.
-63. **It rides with the date.** Where the panel is too small for a header
+64. **It rides with the date.** Where the panel is too small for a header
     the holiday goes with it. A board that has already stopped saying which
     day it is has not got room to say what the day is, and a second home
     for it would be a second thing to keep in step.

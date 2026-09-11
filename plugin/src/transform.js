@@ -2660,6 +2660,33 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     holidays.push({ title: title, day: dayIx || 0,
       span: Math.max(1, span || 1), index: Math.max(0, index || 0) });
   }
+  // WHOSE DAY DOES IT CHANGE? That is the question, and the config already
+  // answers it: a rule that names lines has said whose, and one that names
+  // none has said nobody's.
+  //
+  // Christmas Day is nobody's -- it is a fact about the day, and the header
+  // states it. Half term is precisely Bart's and Lisa's and precisely NOT
+  // Homer's, who still goes to work, and that is what a line's head row is
+  // for. Both arrive through the same subscription and the same word, so
+  // `holiday` cannot mean "goes in the header": it means this is a STATE
+  // rather than an appointment, which is the distinction E12 already drew.
+  // Where it is drawn falls out of whether anybody owns it.
+  //
+  // Only an explicit `line` counts. The fallback chain is deliberately not
+  // consulted: falling back is what put a whole country's Christmas on
+  // whoever happened to be first in `lines[]`, and a holiday feed with no
+  // name has not told us whose it is -- it has told us it is nobody's.
+  function placeHoliday(resolved, dayIx, span, index) {
+    var named = resolved.lineNames;
+    if (!named || !named.length) { addHoliday(resolved.title, dayIx, span, index); return; }
+    // One push per line, because `buildMetro` groups all-day entries by
+    // title and collects their owners: that is what makes several lines
+    // sharing one holiday ONE origin, named once, with the dashed tie
+    // between their heads.
+    named.forEach(function (n) {
+      allDayEvents.push({ line: registry.add(n, 0.25).key, title: resolved.title, day: dayIx || 0 });
+    });
+  }
 
   // A named calendar that is kept when empty is kept when it is UNREACHABLE
   // too: a feed being down for an hour should not silently remove somebody
@@ -2728,7 +2755,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         // day. Taken before any line is resolved: that is what makes it
         // impossible for one to be created.
         if (cal.holiday || resolved.holiday) {
-          addHoliday(resolved.title, Math.floor(ev.startMin / 1440), 1, 0);
+          placeHoliday(resolved, Math.floor(ev.startMin / 1440), 1, 0);
           return;
         }
         var lineNames = resolved.lineNames || (cal.name ? [cal.name] : null)
@@ -2783,7 +2810,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         // the holiday this is, and nothing further down can work it out
         // once the entry has been cut down to a day.
         if (cal.holiday || resolved.holiday) {
-          addHoliday(resolved.title, ev.day, ev.span, ev.index);
+          placeHoliday(resolved, ev.day, ev.span, ev.index);
           return;
         }
         var lineNames = resolved.lineNames || (cal.name ? [cal.name] : null)

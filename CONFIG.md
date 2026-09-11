@@ -100,7 +100,7 @@ answers.
   "rewrite"?: string,             // replace the matched text (or the whole title with rewriteFull)
   "rewriteFull"?: boolean,
   "hide"?: boolean,
-  "holiday"?: boolean             // this event belongs to the day, not to a line (see Public holidays)
+  "holiday"?: boolean             // a state, not an appointment: the day's if no `line`, that line's head if there is one
 }
 ```
 
@@ -157,6 +157,28 @@ For a feed that carries both kinds, say it per event instead:
 { "match": { "type": "categories", "value": "Public holiday" }, "holiday": true }
 ```
 
+#### Whose day does it change?
+
+`holiday` does not mean "put it in the header". It means this is a **state**
+rather than an appointment. Where it is drawn follows from whether anybody
+owns it, and the rule that routes it is what says:
+
+```json
+{ "match": { "type": "contains", "value": "Half Term" },
+  "holiday": true, "line": ["Bart", "Lisa"] }
+```
+
+Christmas Day is nobody's, so it belongs to the day and reads in the header.
+Half term is precisely the children's and precisely **not** the parent who
+still goes to work, so it reads at their heads, exactly as one person's
+leave does, named once with the dashed tie between them. Both arrive through
+the same subscription; a school feed can route its term dates to the
+children and its INSET days to nobody.
+
+Only a rule's own `line` counts. A feed nobody has routed has not told the
+board whose day it changes, so it is the day's: that is what stops a
+national calendar landing on whoever happens to be first in `lines`.
+
 Three details worth knowing.
 
 - **A range says which day of it this is.** "Spring Break" running from the
@@ -172,7 +194,9 @@ Three details worth knowing.
 - **A holiday is not the same thing as an all-day event.** One person's
   leave IS a state of their line, and it stays where it was: declared at
   that line's head, with both ends of the line drawn as open chevrons.
-  `holiday` is for the days nobody owns. A rule that sets both is read as a
+  `holiday` on its own is for the days nobody owns; `holiday` with a `line`
+  puts a state at that line's head, which is the same drawing an all-day
+  event gets. A rule that sets both `allDay` and `holiday` is read as a
   holiday, because that is the more specific claim about the same event.
 - **It rides with the date.** A panel too small to carry a header has
   already given up saying which day it is, and the holiday goes with it
