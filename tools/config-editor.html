@@ -621,11 +621,22 @@
       if (String(c.to).trim() !== "") t.to = String(c.to).trim();
       return (t.from == null && t.to == null) ? null : Object.assign({ type: "time" }, t);
     }
-    var values = (c.value || "").split(",").map(function (v) { return v.trim(); }).filter(Boolean);
-    if (!values.length) return null;
     // The field rides on each matcher, so a comma-separated list still
     // fans out into an "or" and every branch of it reads the same field.
     var one = function (v) { var o = { type: c.type, value: v }; if (c.field) o.field = c.field; return o; };
+    // A COMMA IS A LIST SEPARATOR IN A WORD AND A QUANTIFIER IN A REGEX.
+    //
+    // "Dentist, Piano" means either of two words, which is the whole point
+    // of the split. `^L[0-9]{1,2}` means one pattern, and split at the comma
+    // it became "^L[0-9]{1", which does not compile and is dropped by the
+    // plugin without a word, and "2}", which matches the literal text "2}".
+    // A regex is taken whole.
+    if (c.type === "regex") {
+      var rx = (c.value || "").trim();
+      return rx ? one(rx) : null;
+    }
+    var values = (c.value || "").split(",").map(function (v) { return v.trim(); }).filter(Boolean);
+    if (!values.length) return null;
     if (values.length === 1) return one(values[0]);
     return { type: "or", matchers: values.map(one) };
   }
