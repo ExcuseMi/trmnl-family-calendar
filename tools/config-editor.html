@@ -281,7 +281,34 @@
       </div>
       <label for="promptOut" class="sr-only">The generated prompt</label>
       <textarea id="promptOut" rows="6" readonly placeholder="Put your calendar links in the box above and press Load first, then generate."></textarea>
-      <p class="hint">Draw the map first if you can: the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. Otherwise it is told to fetch the links itself, which not every assistant can do.</p>
+      <p class="hint">Draw the map first if you can: the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. A prompt with no events in it comes back as "I cannot read these feeds", because neither this page nor the assistant can fetch a calendar link.</p>
+      <!-- THE OFFER MADE AT THE MOMENT IT IS NEEDED.
+           Copying a prompt whose feeds are all unread is the one press that
+           is certainly wasted, so this is where the ways out are listed,
+           and where the relay is offered: it is the only one of them that
+           involves sending anything anywhere, so it is asked for rather
+           than assumed, every session, with the URLs it would send named. -->
+      <div id="relayOffer" class="card" hidden>
+        <div class="card-head"><strong>These calendars have not been read</strong></div>
+        <p class="hint" id="relayWhy"></p>
+        <ul class="steps" id="relayList"></ul>
+        <p class="hint">A calendar link is a <strong>password in a URL</strong>: anyone holding it can read that calendar. Three ways forward, most private first.</p>
+        <div class="choice">
+          <button id="relayPaste" type="button">
+            <strong>Paste the .ics myself</strong>
+            <span class="note">Open each link in a browser, which downloads a file, and paste its text into the feed's box under the map. Nothing leaves this page.</span>
+          </button>
+          <button id="relayUse" type="button">
+            <strong>Fetch them through the relay</strong>
+            <span class="note" id="relayNote">Sends the links above to this plugin's own small server, which fetches each calendar and hands back the text. It is the author's server, not TRMNL's.</span>
+          </button>
+          <button id="relaySkip" type="button">
+            <strong>Copy the prompt anyway</strong>
+            <span class="note">The assistant will ask you for the calendar text. You can paste it into the chat.</span>
+          </button>
+        </div>
+        <span id="relayStatus" class="status" role="status" aria-live="polite"></span>
+      </div>
     </div>
   </section>
 
@@ -1861,10 +1888,108 @@
       setStatus("promptStatus", "Ready, with the events from all " + read + " calendars in it.", "ok");
     }
   });
-  document.getElementById("copyPrompt").addEventListener("click", function () {
+  // ------------------------------------------------------------ the relay
+  //
+  // WHY THIS EXISTS. A calendar feed sends no CORS header, so this page
+  // cannot read one, and no assistant can fetch one either. Both routes
+  // that do not involve a server are: paste the .ics yourself, or paste it
+  // into the chat. The relay is a third: a small server that fetches the
+  // link and hands back the text, which is the only thing standing between
+  // a working page and a page that says "I cannot read these feeds".
+  //
+  // WHY IT IS ASKED FOR EVERY TIME. A calendar link is a password in a
+  // URL: Google calls it a "secret address", and anyone holding it can
+  // read that calendar until it is regenerated. Sending one to a server
+  // hands it over. That is a decision for the person whose calendar it is,
+  // made knowing whose server it is, with the links it would send listed
+  // in front of them. So: no silent use, no remembered consent across a
+  // reload, and never a default.
+  var RELAY = "";  // set to the relay's https endpoint to offer it; empty hides the option
+  var relayPending = null;
+  function unreadUrls() {
+    return state.calendars.map(function (c) { return c.url.trim(); })
+      .filter(function (u) { return u && !icsOverrides[u]; });
+  }
+  function hideRelayOffer() { document.getElementById("relayOffer").hidden = true; }
+  // Shows the offer and returns true when it took over; false means there
+  // is nothing to ask about and the caller should just get on with it.
+  function relayOffer(afterCopy) {
+    var urls = unreadUrls();
+    if (!urls.length) return false;
+    relayPending = afterCopy || null;
+    var box = document.getElementById("relayOffer");
+    document.getElementById("relayWhy").textContent = plural(urls.length, "calendar", "calendars")
+      + " could not be read from this page, so the prompt carries no events from "
+      + (urls.length === 1 ? "it" : "them") + " and the assistant will say so.";
+    var list = document.getElementById("relayList");
+    list.innerHTML = "";
+    urls.forEach(function (u) { list.appendChild(el("li", { text: u })); });
+    // No endpoint, no offer: a button that cannot work is worse than no
+    // button, and this one would be asking for calendar links to send
+    // nowhere.
+    var useBtn = document.getElementById("relayUse");
+    useBtn.hidden = !RELAY;
+    if (RELAY) document.getElementById("relayNote").textContent =
+      "Sends the links above to " + RELAY.replace(/^https?:\/\//, "").split("/")[0]
+      + ", this plugin's own small server, which fetches each calendar and hands back the text. "
+      + "It is the author's server, not TRMNL's.";
+    setStatus("relayStatus", "", "");
+    box.hidden = false;
+    return true;
+  }
+  function copyPromptNow() {
     var ta = document.getElementById("promptOut");
     if (!ta.value) ta.value = buildAgentPrompt();
     copyFrom(ta, "promptStatus");
+  }
+  document.getElementById("copyPrompt").addEventListener("click", function () {
+    var ta = document.getElementById("promptOut");
+    if (!ta.value) ta.value = buildAgentPrompt();
+    if (relayOffer(copyPromptNow)) return;
+    copyPromptNow();
+  });
+  document.getElementById("relaySkip").addEventListener("click", function () {
+    hideRelayOffer();
+    if (relayPending) relayPending();
+  });
+  document.getElementById("relayPaste").addEventListener("click", function () {
+    hideRelayOffer();
+    show("station-preview");
+    setStatus("promptStatus", "Each unread feed has a box under the map: press "
+      + "\u201cPaste / upload instead\u201d, put the .ics text in, then generate the prompt again.", "");
+  });
+  document.getElementById("relayUse").addEventListener("click", function () {
+    var urls = unreadUrls();
+    if (!RELAY || !urls.length) return;
+    var btn = document.getElementById("relayUse");
+    btn.disabled = true;
+    setStatus("relayStatus", "Fetching " + plural(urls.length, "calendar", "calendars") + "\u2026", "");
+    var done = 0, failed = [];
+    Promise.all(urls.map(function (u) {
+      return realFetch(RELAY + "?url=" + encodeURIComponent(u))
+        .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+        .then(function (t) {
+          // A relay that answers with an error page rather than a calendar
+          // must not be stored as if it were one: the digest would then
+          // report a feed with no events, which reads as "your calendar is
+          // empty" rather than "this did not work".
+          if (!/BEGIN:VCALENDAR/i.test(t)) throw new Error("that was not a calendar");
+          icsOverrides[u] = t; delete icsFromExample[u]; delete fetchErrors[u]; done++;
+        })
+        .catch(function (e) { failed.push(u.replace(/^https?:\/\//, "").slice(0, 40) + ": " + e.message); });
+    })).then(function () {
+      btn.disabled = false;
+      renderSources();
+      document.getElementById("promptOut").value = buildAgentPrompt();
+      if (!failed.length) {
+        hideRelayOffer();
+        setStatus("promptStatus", "Read " + plural(done, "calendar", "calendars")
+          + " through the relay, and the prompt now carries their events. Press Copy prompt again.", "ok");
+      } else {
+        setStatus("relayStatus", "Read " + done + ", could not read " + failed.length + ": "
+          + failed.join("; ") + ". Paste those by hand.", "err");
+      }
+    });
   });
 
   document.getElementById("copyJson").addEventListener("click", function () {
