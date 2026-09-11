@@ -228,8 +228,13 @@ module.exports = function (test, h) {
       const bad = [];
       for (const e of eventsIn(rep)) {
         if (e.status !== 'ok') continue;
-        const want = e.dir > 0 ? e.elbow : e.elbow - e.textLen;
-        const drift = Math.abs(e.textStart - want);
+        // A mark's rail is the stretch of its own line between its start
+        // dot and its end tick; there is no elbow to measure from. The
+        // words belong over that run or near either end of it.
+        const drift = e.mark
+          ? (e.textStart > e.endA ? e.textStart - e.endA
+             : e.textStart + e.textLen < e.nodeA ? e.nodeA - (e.textStart + e.textLen) : 0)
+          : Math.abs(e.textStart - (e.dir > 0 ? e.elbow : e.elbow - e.textLen));
         if (drift > e.textLen) bad.push('"' + e.title + '" is ' + Math.round(drift)
           + 'px from its rail (label is ' + Math.round(e.textLen) + 'px wide)');
       }

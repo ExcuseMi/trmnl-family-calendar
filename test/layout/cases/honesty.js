@@ -86,12 +86,26 @@ module.exports = function (test, h) {
         const bad = [];
         for (const e of eventsIn(rep)) {
           if (e.status === 'dropped' || e.textStart == null) continue;
-          // where the caption belongs: just past the elbow, on the side the
-          // branch runs
-          const want = e.dir > 0 ? e.elbow : e.elbow - e.textLen;
-          const off = Math.abs(e.textStart - want);
+          let off;
+          if (e.mark) {
+            // A mark has no branch and no elbow. What it has is the stretch
+            // of its own line from its start dot to its end tick, and its
+            // name belongs beside that: overlapping it, or near enough
+            // either end to read as the same thing. Measured as the gap
+            // between the two spans along the axis, which is zero whenever
+            // the words sit over the run they name.
+            off = e.textStart > e.endA ? e.textStart - e.endA
+                : e.textStart + e.textLen < e.nodeA ? e.nodeA - (e.textStart + e.textLen)
+                : 0;
+          } else {
+            // where the caption belongs: just past the elbow, on the side the
+            // branch runs
+            const want = e.dir > 0 ? e.elbow : e.elbow - e.textLen;
+            off = Math.abs(e.textStart - want);
+          }
           if (off > e.textLen * 0.6 + 12) {
-            bad.push('"' + e.title + '" is ' + Math.round(off) + 'px from its own branch (label is '
+            bad.push('"' + e.title + '" is ' + Math.round(off) + 'px from its own '
+              + (e.mark ? 'run' : 'branch') + ' (label is '
               + Math.round(e.textLen) + 'px wide)');
           }
         }

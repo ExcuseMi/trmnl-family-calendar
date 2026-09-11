@@ -1702,6 +1702,26 @@
     // everything written the last time round would otherwise survive and
     // downstream code would draw a rail leaving the line from a point the
     // line has never been.
+    // ...AND THE EXACT INVERSE, which has to be exact.
+    //
+    // The withdrawal used to put back `_diagStick` and `_onTrack` and stop
+    // there, leaving `_onRoute` set for good. Route mode reads `_onRoute`
+    // as "the line itself goes there", and a group whose members are all on
+    // the route is drawn as the trunk leaning out to the lane, with no spur
+    // at all -- so an event marked in one attempt and given its rail back
+    // in the next kept the flag and never got a rail again. On busy-day
+    // that was every branch on the board: five shelves with lanes, a
+    // caption each, and not one rail drawn under any of them.
+    //
+    // Anything that can be withdrawn is by definition not shared (see
+    // canMark), so clearing these cannot touch a convergence's caption.
+    function unmakeMark(e) {
+      e._stub = false; e._diagStick = false;
+      e._onTrack = e._involved.length < 2 && runTooLongForAShelf(e);
+      if (e._onTrack) return;
+      e._onRoute = false; e._capLead = false;
+      e._lineFrom = null; e._lineTo = null;
+    }
     function makeMark(e) {
       e._stub = true;
       // AN EVENT ON THE LINE OCCUPIES A STRETCH OF THE LINE.
@@ -1719,8 +1739,7 @@
       e._lane = null; e._rampEl = null;
     }
     visible.forEach(function (e) {
-      if (e._stub) { e._stub = false; e._diagStick = false;
-      e._onTrack = e._involved.length < 2 && runTooLongForAShelf(e); }
+      if (e._stub) unmakeMark(e);
       if (e._dropped || !canMark(e)) return;
       if ((e._endA - e._nodeA) >= e._textLen * 0.5) return;
       makeMark(e);
@@ -3044,10 +3063,7 @@
         cross = solveCross(null);
       }
       if (cross.packed) {
-        gave.forEach(function (e) {
-          e._stub = false; e._diagStick = false;
-      e._onTrack = e._involved.length < 2 && runTooLongForAShelf(e);
-        });
+        gave.forEach(unmakeMark);
         measureDemand();
         cross = solveCross(null);
       }
@@ -4210,7 +4226,7 @@
 
       recomputeTrackDists();
     }
-    function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA)]; }); }
+    function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA), e._onTrack ? 'mark' : 'shelf']; }); }
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal,
       corner: CORNER, minDiag: MIN_DIAG, win: [dayFrom, dayTo],

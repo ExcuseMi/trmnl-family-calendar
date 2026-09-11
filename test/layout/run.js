@@ -607,6 +607,14 @@ function eventsIn(rep) { return (rep.debug.events || []).map((e) => ({
   title: e[0], side: e[1], status: e[2], lane: e[3], dir: e[4],
   nodeA: e[5], elbow: e[6], textStart: e[7], textLen: e[8], trackDist: e[9],
   merged: e[10] === 'merge', diagFrom: e[11], laneDist: e[12], sign: e[13], endA: e[14],
+  // Which SHAPE it was drawn as. There are two, and nearly every claim a
+  // caption test makes has to be asked differently of each: a shelf hangs
+  // its name off a rail in a lane, so the name belongs beside the elbow; a
+  // mark is a dot and a tick on the line itself with no rail at all, so the
+  // name belongs beside the stretch of line between them. Asked the first
+  // question, a mark answers with an elbow of zero and looks adrift by the
+  // width of the board.
+  mark: e[15] === 'mark',
 })); }
 
 // ---------------------------------------------------------------- viewports

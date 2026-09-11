@@ -239,7 +239,17 @@ module.exports = function (test, h) {
     test('every branch leaves its line from a point on that line: ' + f.name, () => {
       const rep = layout(f, ROOMY);
       const forks = pathsWhere(rep, 'fork');
-      assert(forks.length > 0, 'no junction fillets drawn at all');
+      // A board can honestly have no junctions on it. An event drawn as a
+      // mark has no rail to fork off to, and in route mode a line with
+      // nothing but marks on it simply runs straight: quiet-day is three
+      // events and all three are marks. So the guard against this test
+      // passing vacuously is not "there is always a fork", it is "there is
+      // a fork wherever there is a rail to fork off to".
+      const shelves = eventsIn(rep).filter((e) => e.status === 'ok' && !e.mark);
+      if (!shelves.length) return;
+      assert(forks.length > 0, shelves.length
+        + ' event(s) drawn as rails and no junction fillets at all: '
+        + shelves.slice(0, 4).map((e) => e.title).join(', '));
       const adrift = [];
       for (const fk of forks) {
         const mine = pathsWhere(rep, 'course').filter((t) => t.owner === fk.owner);
