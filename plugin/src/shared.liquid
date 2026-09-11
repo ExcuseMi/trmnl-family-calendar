@@ -1977,10 +1977,28 @@
       e._laneDist = null; e._elbow = null; e._diagFrom = null;
       e._lane = null; e._rampEl = null;
     }
+    // EVERY SOLO EVENT IS AN INLINE STOP.
+    //
+    // There used to be a test here -- a short event became a mark, a longer
+    // one kept a rail out in a lane -- and the rail is what moved the line.
+    // In route mode a group of a line's own events IS the line, so Maggie's
+    // afternoon nap lifted her whole track a band for ninety minutes and
+    // put it back, which reads as a person changing platform rather than as
+    // a person having a nap. On a flat board that bump is the only thing
+    // the eye finds, and it means nothing.
+    //
+    // A baseline is the one thing on this map that says "this is where this
+    // person is". Only an enclosure -- somewhere two people really are
+    // together -- is worth leaving it for. Everything a person does alone
+    // is a stop on the line they were already on: a dot where it starts, a
+    // tick where it ends, and the name written flat beside it.
+    //
+    // That also takes the lanes out of it, which is where the collisions
+    // were: no ramp to cross another line, no shelf to hold a lane open
+    // over somebody else's afternoon, and nothing to stagger.
     visible.forEach(function (e) {
       if (e._stub) unmakeMark(e);
       if (e._dropped || !canMark(e)) return;
-      if ((e._endA - e._nodeA) >= e._textLen * 0.5) return;
       makeMark(e);
     });
     // ---- lane placement, one side at a time (chronological: the earlier
