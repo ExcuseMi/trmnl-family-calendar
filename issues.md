@@ -512,6 +512,41 @@ is open.
 
 ## E. New features
 
+- [ ] **E19. The four caption overlaps cannot be priced away, because the
+  rails move afterwards.** The remaining overlap failures (long-event-day,
+  double-booked, crew-day) are all the same shape: on a crowded line every
+  candidate position for a caption is bad, and the search buys the least-bad
+  one. `costAt` prices everything by area, charging a caption over a rail at
+  0.35 and a caption over a caption at 1.0, while stepping out to the next
+  row costs `oi * h * textLen * 0.03`. For "Desk booking" that made a four
+  pixel collision (about 136) cheaper than the row it could have moved to,
+  once that row's own rail penalty was counted.
+
+  Measured, not guessed. Two attempts, each a full suite run:
+
+  * Prefer any position with no caption under it: long-event-day and
+    double-booked went clean and crew-day halved, but FIVE boards gained a
+    rail through a caption (busy-day, all-day-every-track, long-event-day,
+    crew-day at two sizes). 6 failures became 8.
+  * Prefer only positions with neither fault, falling back to the old choice
+    otherwise: worse still, 10 failures, with eight pierces.
+
+  The second result is the interesting one, because a preference that only
+  ever selects an already-clean candidate should not be able to CREATE a
+  pierce. It can here: `recomputeLineDists()` runs after the captions are
+  placed, so the rails move under captions chosen to avoid them. Any change
+  that perturbs caption positions reshuffles which captions get pierced,
+  which is why tuning the cost model walks sideways instead of converging.
+
+  So this is not a weights problem. Either the caption pass has to run after
+  the line distances settle (or iterate to a fixed point), or the placer has
+  to know that its own choices move the rails. Worth doing with the
+  measurements above in hand; not worth another round of tuning.
+
+  One thing that did come out of it: with captions placed differently,
+  `no two captions overlap standing up: tight-pair/x-portrait` passes. It is
+  still marked known (E13) and still fails on the current code.
+
 - [ ] **E18. TRMNL Companion: blocked upstream, one line of their Swift away.**
   Companion is an iOS app that reads the phone's own calendars through
   EventKit and POSTs them to a plugin, which would remove this plugin's

@@ -6,7 +6,7 @@
 // wrong colour, it is pointing at the wrong person's day.
 
 module.exports = function (test, h) {
-  const { layout, VIEWPORTS, fixtures, pathsWhere, textLabels, overlap, assert } = h;
+  const { layout, VIEWPORTS, fixtures, pathsWhere, textLabels, overlap, eventsIn, assert } = h;
 
   const byName = (n) => VIEWPORTS.find((v) => v.name === n);
   const ROOMY = byName('x-landscape');
@@ -79,23 +79,40 @@ module.exports = function (test, h) {
     }
   });
 
-  test('a car rides the spur of whatever that person is doing right now', () => {
-    const rep = layout(busy, ROOMY);
-    const nowMin = busy.metro.now_min;
-    // who is mid-event at now_min
-    const busyNow = busy.metro.events
-      .filter((i) => i.start_min <= nowMin && i.end_min >= nowMin).map((i) => i.owner);
-    assert(busyNow.length > 0, 'fixture has nobody mid-event at now_min — nothing to test');
-    for (const owner of busyNow) {
-      const car = cars(rep).filter((c) => c.owner === owner)[0];
-      assert(car, 'no car for ' + owner);
-      const cy = car.y + car.h / 2;
-      const track = pathsWhere(rep, 'track').filter((p) => p.owner === owner)[0];
-      assert(track, 'no track for ' + owner);
-      const trackY = track.pts.map((p) => p[1]);
-      const flat = trackY.reduce((a, b) => a + b, 0) / trackY.length;
-      assert(Math.abs(cy - flat) > 3,
-        owner + ' is mid-event but the car is still sitting on the trunk');
+  // A CAR STANDS IN WHATEVER THAT PERSON IS DOING RIGHT NOW.
+  //
+  // This used to demand the opposite of what the board now draws: that a car
+  // belonging to somebody mid-event sat OFF their trunk, because an event
+  // was a siding and being at one meant being off the line. Solo events are
+  // stops ON the line now, so a car on the trunk is exactly right, and the
+  // case failed on a board that was drawing the correct picture. (It also
+  // compared against the AVERAGE height of every point of the line, which is
+  // not the trunk on any line that climbs.)
+  //
+  // What is still worth guaranteeing is the pairing: the car marks now, now
+  // is inside that event, so the car belongs within the stretch of board the
+  // event is drawn across. Two neighbouring cases already hold the rest,
+  // that a car sits on its own rail and that every car reads one clock.
+  test('a car stands inside whatever that person is doing right now', () => {
+    const longDay = fixtures.find((f) => f.name === 'long-event-day');
+    for (const f of [busy, longDay]) {
+      const rep = layout(f, ROOMY);
+      const Z = rep.debug.Z || 1;
+      const nowMin = f.metro.now_min;
+      const onNow = f.metro.events.filter((i) => i.start_min <= nowMin && i.end_min >= nowMin);
+      assert(onNow.length > 0, f.name + ': nobody is mid-event at now_min, so this proves nothing');
+      for (const item of onNow) {
+        const car = cars(rep).filter((c) => c.owner === item.owner)[0];
+        assert(car, f.name + ': no car for ' + item.owner);
+        const laid = eventsIn(rep).find((e) => e.title === item.title);
+        assert(laid, f.name + ': ' + item.title + ' was not laid out');
+        // In the engine's own px, which is what the debug dump reports.
+        const cx = (car.x + car.w / 2) / Z;
+        const from = Math.min(laid.nodeA, laid.endA) - 8, to = Math.max(laid.nodeA, laid.endA) + 8;
+        assert(cx >= from && cx <= to, f.name + ': ' + item.owner + ' is in "' + item.title
+          + '" (drawn ' + Math.round(from) + ' to ' + Math.round(to) + ') but the car is at '
+          + Math.round(cx));
+      }
     }
   });
 
