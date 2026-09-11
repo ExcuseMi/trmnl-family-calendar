@@ -1,10 +1,11 @@
 # Metro Calendar for TRMNL
 
-Your family's day drawn as a transit map. One line per line runs along a
-central spine with the hour axis down its middle; events are stations,
-labels sit on 45° branches, long events loop out and rejoin their line, and
-the whole thing lays itself out to the screen it lands on: TRMNL OG, OG V2,
-TRMNL X in landscape or portrait, and every mashup size.
+Your family's day drawn as a transit map. One line per person runs along a
+central spine with the hour axis down its middle; events are stations on
+their line, the people at a shared event converge and travel together for
+it, a holiday is named beside the date and a day off is named at the line's
+head. The whole thing lays itself out to the screen it lands on: TRMNL OG,
+OG V2, TRMNL X in landscape or portrait, and every mashup size.
 
 ![TRMNL X, landscape](docs/trmnl-x-landscape.png)
 
@@ -30,8 +31,13 @@ No server of your own.
 ## Setup
 
 1. In TRMNL: **Plugins → Private Plugins → New**, name it, save. Then from
-   this repo's `plugin/` folder run `trmnlp push` (it uploads settings,
+   this repo's `plugin/` folder run `./push.sh` (it uploads settings,
    templates and `transform.js`).
+
+   Not `trmnlp push`. The server takes 100KB per file and the sources are
+   several times that, so `push.sh` strips the comments and minifies before
+   it uploads. It also refuses to upload a build that does not render, which
+   plain `trmnlp push` has no way to check.
 2. The plugin starts on a demo board. **Demo Board** picks which one; see
    [the demo folder](demo/) for what each shows.
 3. To show your own calendars, turn **Use Demo Data** off and paste your ICS
@@ -71,7 +77,7 @@ No server of your own.
   "calendars": [
     { "name": "Work", "url": "https://…/work.ics", "rules": [{ "match": { "type": "any" }, "line": "Sam" }] },
     { "name": "Alex", "url": "https://…/alex.ics", "rules": [{ "match": { "type": "any" }, "line": "Alex" }] },
-    { "name": "School", "url": "https://…/school.ics",
+    { "url": "https://…/school.ics",
       "rules": [{ "match": { "type": "word", "value": "L2" }, "line": "Kids" }, { "match": { "type": "contains", "value": "staff" }, "hide": true }] }
   ]
 }
@@ -93,9 +99,14 @@ Rules match on the title (`word`, `contains`, `exact`, `regex`, `status`,
 rewrite the title, or hide the event. Everything is documented in
 [CONFIG.md](CONFIG.md); the design of the map itself in [DESIGN.md](DESIGN.md).
 
-Limits worth knowing: recurring events are expanded for `FREQ=WEEKLY` rules
-(with `BYDAY`/`UNTIL`) plus any single occurrence dated today; all-day events
-are not drawn.
+Limits worth knowing: recurring events are expanded for `FREQ=WEEKLY`
+(with `BYDAY`, `UNTIL` and `INTERVAL`), for `FREQ=YEARLY` on whole-day
+entries, which is what a subscribed public-holiday calendar is made of, and
+for any single occurrence dated today. `EXDATE` and `RECURRENCE-ID`
+overrides are honoured. An ordinal weekday rule (`BYDAY=4TH`, the American
+Thanksgiving) is refused rather than answered approximately, because the
+anniversary of the start date would be the wrong date rather than a near
+one.
 
 ## Development
 

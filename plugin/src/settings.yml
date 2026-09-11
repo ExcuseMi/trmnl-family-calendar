@@ -9,6 +9,11 @@ serverless_language: node
 polling_url: ''
 polling_headers: ''
 polling_body: ''
+# The plugin id this repo's own copy pushes to, written here by trmnlp when
+# it last pulled. It is not portable: your TRMNL account has its own id, and
+# `push.sh` targets whatever is in this field with whatever key is in your
+# environment. Create your private plugin first, then let trmnlp write your
+# own id here rather than pushing at this one.
 id: 471753
 oauth_enabled: 'false'
 oauth_pkce_enabled: 'no'
