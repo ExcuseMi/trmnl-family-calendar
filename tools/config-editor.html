@@ -2042,6 +2042,14 @@
   var icsOverrides = {}; // url -> ICS text (fetched, pasted or uploaded)
   var icsFromExample = {}; // url -> true for the ones an example brought with it
   var fetchErrors = {};  // url -> why the last draw could not read it
+  // Is `u`, the address something actually asked for, this configured feed?
+  // The two are usually identical; they differ when the plugin rewrites a
+  // webcal:// link to https:// before fetching it, which is the only form
+  // iCloud hands out.
+  function feedMatches(k, u) {
+    return u === k || u.indexOf(k) === 0
+      || (k.indexOf("webcal://") === 0 && u.indexOf("https://" + k.slice(9)) === 0);
+  }
   function fetchIcs(url) {
     var u = url.indexOf("webcal://") === 0 ? "https://" + url.slice(9) : url;
     return realFetch(u).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); });
@@ -2316,15 +2324,24 @@
     var failures = [];
     window.fetch = function (url, opts) {
       var u = String(url);
-      var key = Object.keys(icsOverrides).find(function (k) { return u === k || u.indexOf(k) === 0 || (k.indexOf("webcal://") === 0 && u === "https://" + k.slice(9)); });
+      var key = Object.keys(icsOverrides).find(function (k) { return feedMatches(k, u); });
       if (key) return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(icsOverrides[key]); } });
-      var isCal = urls.some(function (k) { return u === k || u.indexOf(k) === 0 || (k.indexOf("webcal://") === 0 && u === "https://" + k.slice(9)); });
-      if (isCal) return fetchIcs(u).then(function (t) { icsOverrides[u] = t; return { ok: true, status: 200, text: function () { return Promise.resolve(t); } }; })
+      // FILED UNDER THE LINK THAT WAS TYPED, NOT THE ONE THAT ANSWERED.
+      //
+      // A webcal:// link cannot be fetched by anything, so the plugin
+      // rewrites it to https:// first, and what came back used to be stored
+      // under the rewritten address. Every other part of this page looks a
+      // feed up by the address in the calendar card, so a webcal feed that
+      // had just been read still counted as unread -- the prompt said "NOT
+      // READ", the relay offered to fetch it -- and a webcal feed that
+      // failed had no card to show its reason on.
+      var cal = urls.find(function (k) { return feedMatches(k, u); });
+      if (cal) return fetchIcs(u).then(function (t) { icsOverrides[cal] = t; return { ok: true, status: 200, text: function () { return Promise.resolve(t); } }; })
         .catch(function (e) {
-          failures.push(u);
+          failures.push(cal);
           // A browser reports every blocked cross-origin request as a bare
           // "Failed to fetch", which tells the reader nothing they can act on.
-          fetchErrors[u] = /^HTTP /.test(e.message)
+          fetchErrors[cal] = /^HTTP /.test(e.message)
             ? "The feed answered " + e.message + ". Check this is the ICS address and that it does not need a password."
             : "This browser could not read the feed (" + e.message + "). Most calendar services refuse requests made from a web page; the device itself has no such limit, so the board will still work. To see it here, paste or upload the .ics below.";
           return { ok: false, status: 0, text: function () { return Promise.resolve(""); } };
