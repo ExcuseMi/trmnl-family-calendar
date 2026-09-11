@@ -6124,6 +6124,13 @@
       (svgTarget || svg).appendChild(el);
       return el;
     }
+    // How steeply a line is running at one minute, as a slope in board
+    // units. Sampled rather than derived: the answer has to be about the
+    // line as DRAWN, including the corner it is rounding.
+    function slopeNear(p, a) {
+      var d = Math.max(1, CORNER * 0.4);
+      return (lineCAt(p, a + d) - lineCAt(p, a - d)) / (2 * d);
+    }
     function terminus(a, laneC, p) {
       // The mark that caps a rail is the only thing at that end of it, so
       // a test asking whether a rail stops at something has to be able to
@@ -7022,7 +7029,24 @@
         // the dot to say it. One mark is the truth, and it is the same
         // answer the caption gives when it prints one time instead of the
         // same time twice.
-        if (e.end_min > e.start_min && e._endA >= lo - 1 && e._endA <= hi + 1) {
+        // AND NOT ON A TURN.
+        //
+        // A tick stands square to the rail, which is right and which means
+        // that where the rail is vertical the tick is HORIZONTAL: a stray
+        // bar lying flat in open paper with the line running past it. Book
+        // Club ends at ten, Marge is dropping toward the school run at ten,
+        // and the mark for the end of her book club was drawn as a little
+        // horizontal dash floating beside the descent.
+        //
+        // The same reasoning already governs the START: a dot is used there
+        // rather than a tick precisely because a start usually lands on a
+        // bend, and a bar across a corner reads as a second line crossing
+        // rather than as a mark on this one. An end can land on a bend too,
+        // and when it does the honest thing is to say nothing -- the event
+        // has its dot, its name and its times, and a glyph that has to be
+        // explained is worse than no glyph.
+        var endFlat = Math.abs(slopeNear(p, e._endA)) < 0.3;
+        if (endFlat && e.end_min > e.start_min && e._endA >= lo - 1 && e._endA <= hi + 1) {
           var tc = spurC(e._endA);
           var half = markOut(p, NODE_R);
           // ACROSS THE RAIL, not across the axis. A tick means "the line
