@@ -4402,10 +4402,35 @@
         LEGEND.forEach(function (q) {
           var half = Math.max(2, q.line_width) * S * weightScale / 2 + LINE_GAP * 0.5;
           var stepA = Math.max(CORNER, (axisEnd - axisStart) / 140);
+          // A VERTICAL DROP IS A WALL, NOT A RAIL TO WRITE OVER.
+          //
+          // Every stretch of every line is sampled here as an obstacle, and
+          // all of it was SOFT -- a line behind words is untidy and better
+          // than an event falling off the board, so a caption is allowed to
+          // pay a third of the usual price and sit on one. That reasoning
+          // is about a rail running ALONG under a line of text, where the
+          // words stay readable and the eye follows the rule straight
+          // through.
+          //
+          // It is not about a rail crossing the words at a right angle.
+          // A vertical cuts a caption in half, and since every transition
+          // on this board is now either flat or a 90, the only thing a
+          // caption can cross is exactly the case the discount was never
+          // meant for: "Family Dinner" was written across Homer's drop into
+          // it, and "School Run" across Marge's rise out.
+          //
+          // So a sample that falls further than it runs is hard, and keeps
+          // a name's clearance either side of it.
+          var HARD_DROP = 16 * S;
           for (var a = axisStart; a < axisEnd; a += stepA) {
             var b = Math.min(axisEnd, a + stepA);
             var u0 = lineCAt(q, a), u1 = lineCAt(q, b);
-            busy.push({ a0: a, a1: b, c0: Math.min(u0, u1) - half, c1: Math.max(u0, u1) + half, soft: true });
+            if (Math.abs(u1 - u0) > (b - a)) {
+              busy.push({ a0: a - HARD_DROP, a1: b + HARD_DROP, q: q,
+                          c0: Math.min(u0, u1) - half, c1: Math.max(u0, u1) + half });
+              continue;
+            }
+            busy.push({ a0: a, a1: b, q: q, c0: Math.min(u0, u1) - half, c1: Math.max(u0, u1) + half, soft: true });
           }
         });
         // every branch rail and every caption the lane machinery already
@@ -4423,10 +4448,20 @@
           busy.push({ a0: o._textStart - TEXT_PAD, a1: o._textStart + o._textLen + TEXT_PAD,
                       c0: t0, c1: t0 + o._h });
         });
-        function costAt(b) {
+        // A CONVERGENCE IS NOT IN ITS OWN WAY.
+        //
+        // The rails dropping into an enclosure belong to the enclosure: they
+        // are the four people arriving, and its name is the name of them
+        // arriving. Counted against it, the caption was pushed out of the
+        // one place that belongs to the whole thing -- above the pill,
+        // across its middle -- by the very lines it is describing, and ended
+        // up back under the corridor among the other events' names.
+        function costAt(b, e) {
+          var mine = e && e._involved && e._involved.length > 1 ? e._involved : null;
           var cost = 0;
           for (var i = 0; i < busy.length; i++) {
             var t = busy[i];
+            if (mine && t.q && mine.indexOf(t.q) >= 0) continue;
             if (b.a0 >= t.a1 || t.a0 >= b.a1 || b.c0 >= t.c1 || t.c0 >= b.c1) continue;
             var ov = (Math.min(b.a1, t.a1) - Math.max(b.a0, t.a0))
                    * (Math.min(b.c1, t.c1) - Math.max(b.c0, t.c0));
@@ -4552,8 +4587,31 @@
           return out;
         }
         var ANGLED_CAPTIONS = false;
-        shared.sort(function (a, b) { return a._nodeA - b._nodeA; });
+        // CONVERGENCES FIRST. A shared event's name has one right place
+        // and a solo event's name has the whole board; placed in time order
+        // they competed as equals, and whichever happened to be earlier in
+        // the day took the spot.
+        shared.sort(function (a, b) {
+          var sa = a._routeShared ? 0 : 1, sb = b._routeShared ? 0 : 1;
+          return sa !== sb ? sa - sb : a._nodeA - b._nodeA;
+        });
         shared.forEach(function (e) {
+          // A CONVERGENCE'S NAME IS PLACED ALREADY, AND IT IS PINNED.
+          //
+          // The corridor pass put it above the pill and across its middle,
+          // which is the one spot on a convergence that belongs to the
+          // whole thing. Letting the search move it defeats the point: it
+          // is not looking for the best free paper, it is naming a
+          // particular station, and every pixel it slides makes that less
+          // clear. So it keeps its place and joins the obstacle list, and
+          // the solo events either side arrange themselves around it.
+          if (e._routeShared && e._textStart != null && e._capOut != null) {
+            var sc = e._labelSign < 0 ? e._routeEdge - e._capOut - e._h
+                                      : e._routeEdge + e._capOut;
+            busy.push({ a0: e._textStart - TEXT_PAD, a1: e._textStart + e._textLen + TEXT_PAD,
+                        c0: sc, c1: sc + e._h });
+            return;
+          }
           // EVERY SHAPE THE NAME CAN TAKE, AND THE CHEAPEST ONE WINS.
           //
           // A name against a trunk has more than one place to be, and which
@@ -4678,7 +4736,7 @@
                  [0, perpRow, perpRow * 2].forEach(function (extra) {
                   var run = angledRun(e, at, away, mm, extra), cost = 0, off = false;
                   run.forEach(function (bx) {
-                    cost += costAt(bx);
+                    cost += costAt(bx, e);
                     if (bx.c0 < bandLo || bx.c1 > crossPx - EDGE || bx.a1 > axisEnd - EDGE) off = true;
                   });
                   var raw = cost;
@@ -4805,7 +4863,7 @@
                 var c0 = away > 0 ? e._routeEdge + outs[oi] : e._routeEdge - outs[oi] - e._h;
                 var b = { a0: at - TEXT_PAD, a1: at + e._textLen + TEXT_PAD, c0: c0, c1: c0 + e._h };
                 if (c0 < bandLo || c0 + e._h > crossPx - EDGE) continue;
-                var raw = costAt(b);
+                var raw = costAt(b, e);
                 // A FLAT NAME MAY NOT CROSS A LINE EITHER.
                 //
                 // The leaning candidates are asked this and rejected for
