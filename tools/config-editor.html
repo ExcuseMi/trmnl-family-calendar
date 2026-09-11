@@ -548,6 +548,13 @@
     state.rules = top.state.rules;
     state.timeZone = top.state.timeZone;
     state.locale = top.state.locale;
+    // THE TWO WITH NO CONTROL ON THE PAGE ARE THE TWO UNDO FORGOT.
+    // A snapshot copies the whole of `state`, but putting it back was a
+    // hand-written list of fields, and the clock and the temperature unit
+    // were not on it. Nothing on screen shows either, so a config that came
+    // in reading "12h" survived an undo that had thrown its config away.
+    state.timeFormat = top.state.timeFormat || "";
+    state.temperatureUnit = top.state.temperatureUnit || "";
     document.getElementById("importIn").value = top.paste;
     selectedPreset = top.preset;
     lastLoaded = null;
