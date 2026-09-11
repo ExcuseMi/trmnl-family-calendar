@@ -38,8 +38,13 @@ module.exports = function (test, h) {
   for (const f of fixtures) {
     test('a ramp is drawn in its own line\'s stroke: ' + f.name, () => {
       const rep = layout(f, ROOMY);
+      // The COURSE, not the drawn runs. A trunk is broken wherever it
+      // passes under something, so its ink has gaps in it and the nearest
+      // drawn point to a departure can be on the far side of one. Where the
+      // line goes is a different question from what is drawn, and the
+      // course is the answer to the first.
       const trunks = {};
-      for (const t of pathsWhere(rep, 'track')) trunks[t.owner] = t;
+      for (const t of pathsWhere(rep, 'course')) trunks[t.owner] = t;
       const bad = [];
       for (const r of ramps(rep)) {
         const trunk = trunks[r.owner];

@@ -58,7 +58,14 @@ module.exports = function (test, h) {
       if (q === p || q.owner !== p.owner || q.len < 1) continue;
       for (const f of endsOf(q)) {
         const gap = dist(end, f);
-        if (gap < 0.5 || gap > 60) continue;
+        // A TUNNEL GAP IS AS WIDE AS THE CROSSING IS SHALLOW. It used to be
+        // a fixed clearance, so sixty pixels covered every case; now it is
+        // set by how fast the two lines close, and a trunk cutting across
+        // another at a narrow angle stays within a stroke of it for a long
+        // way. The midpoint test below is what makes this safe -- somebody
+        // else's line has to actually be in the gap -- so the bound only
+        // has to rule out two unrelated ends happening to face each other.
+        if (gap < 0.5 || gap > 200) continue;
         const mid = [(end[0] + f[0]) / 2, (end[1] + f[1]) / 2];
         for (const t of rails) {
           if (t.owner === p.owner) continue;       // the line it passes under is somebody else's

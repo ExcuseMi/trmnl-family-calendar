@@ -1257,7 +1257,12 @@
       // runs straight -- which is the whole point of having only three
       // angles. Kept a corner wide so the two ends can still be rounded.
       if (R > room) {
-        var vr = Math.min(room, CORNER * 0.8);
+        // As near vertical as a drawn line can be. Given most of a corner
+        // to do it in, a two-hundred-pixel drop came out as a twelve-to-one
+        // diagonal, which is not one of the two legal angles and reads as a
+        // mistake rather than as a decision; given almost none, it is the
+        // 90 it is meant to be and the corner radius rounds both ends of it.
+        var vr = Math.min(room, Math.max(1, CORNER * 0.25));
         return { a0: where < 0 ? to - vr : from, R: vr, r: 0 };
       }
       if (where < 0) return { a0: to - R, R: R, r: r };
@@ -1276,6 +1281,10 @@
       var lvl = i < hs.length ? hs[i].lvl : 0;
       var to = i < hs.length ? hs[i].a0 : axisEnd;
       var from = prevEnd == null ? axisStart : prevEnd;
+      // the staggered exit and entry a corridor hands out, so several lines
+      // leaving one place do not all turn on the same minute
+      if (prev && prev.trail) from += prev.trail;
+      if (i < hs.length && hs[i].lead) to = Math.max(from + 1, to - hs[i].lead);
       // ...and past the previous stop's own name, when that is the way we
       // are going. A move the other way passes nothing and waits for nothing.
       var prev = i ? hs[i - 1] : null;
@@ -1302,9 +1311,25 @@
       // up. So the run home happens when there is room to draw it properly
       // and does not happen at all when there is not: the line simply
       // carries on at the level it reached and ends there.
+      // A LINE DOES NOT HAVE TO GET HOME, BUT IT SHOULD TRY.
+      //
+      // It has to START the day on its own lane, because that is where its
+      // name is written. It does not have to END there: after the last
+      // thing somebody did there is nothing more to say. But refusing the
+      // whole move whenever the full 45 would not fit left Maggie running
+      // out of the evening at dinner height with her own lane empty above
+      // her, which reads as an unfinished drawing rather than a decision.
+      //
+      // So it goes as far as the room buys at 45 and stops there. Usually
+      // that is all the way; when it is not, the line is visibly on its way
+      // back, which is the truth.
       if (i === hs.length && lvl !== prevLvl) {
+        var room = to - from - CORNER;
         var want = octRun(lvl - prevLvl, octRadius(lvl - prevLvl));
-        if (to - from < want) lvl = prevLvl;
+        if (room < want) {
+          var reach = Math.max(0, room - CORNER * 2);
+          lvl = prevLvl - (prevLvl < 0 ? -1 : 1) * Math.min(reach, Math.abs(prevLvl));
+        }
       }
       // ...and between two events it cannot refuse: leaving at once and
       // arriving on time are the same demand when the two nearly touch, and
@@ -1555,7 +1580,7 @@
       // board that bundled an event once and does not bundle it now would
       // read a caption position from a picture that is no longer on the
       // screen. Cleared before anything reads them.
-      e._bundleOut = null; e._drawnLaneC = null;
+      e._bundleOut = null; e._drawnLaneC = null; e._onDiagonal = false;
       e._capOut = null; e._capRow = 0; e._routeLvl = null; e._capLead = false;
       e._rampEl = null;
       e._onRoute = false; e._routeShared = false; e._routeEdge = null;
@@ -3118,6 +3143,23 @@
           });
         });
         if (clash) return;
+        // A STAGGERED EXIT, so the turns do not pile up on one minute.
+        //
+        // Five lines leaving a corridor all turned at the same instant, and
+        // five corners in one place is a knot: the rounded elbows overlap
+        // each other and the rails they cross, and the whole exit reads as
+        // a smudge rather than as five lines going five ways. So they peel
+        // off in order, a corner's width apart, and the fan opens.
+        //
+        // The one with furthest to go leaves first, because it is the one
+        // that will be crossing the others: given the head start it clears
+        // them before they move.
+        var byTravel = want.slice().sort(function (x, y) { return Math.abs(y.lvl) - Math.abs(x.lvl); });
+        byTravel.forEach(function (w, ix) { w.rank = ix; });
+        // Wide enough that the rounded elbows clear each other: a corner's
+        // width apart still overlapped, because a corner is what each turn
+        // occupies and two of them a corner apart touch.
+        var STAGGER = CORNER * 2.2;
         want.forEach(function (w) {
           // The corridor takes precedence for its own span, so the siding
           // gives way around it rather than overlapping it: two holds over
@@ -3137,7 +3179,8 @@
             if (h.a0 < e._nodeA) keep.push({ a0: h.a0, a1: e._nodeA, lvl: h.lvl, siding: true });
             if (h.a1 > e._endA) keep.push({ a0: e._endA, a1: h.a1, lvl: h.lvl, siding: true });
           });
-          keep.push({ a0: e._nodeA, a1: e._endA, lvl: w.lvl, shared: true });
+          keep.push({ a0: e._nodeA, a1: e._endA, lvl: w.lvl, shared: true,
+                      lead: w.rank * STAGGER, trail: w.rank * STAGGER });
           keep.sort(function (a, b) { return a.a0 - b.a0; });
           w.q._route = keep;
           w.q._octs = null;                       // the spans are memoised off it
@@ -3169,13 +3212,27 @@
         shared.push(e);
       });
 
-      // A LINE GOES HOME BETWEEN CONVERGENCES. Two corridors and nothing in
-      // between is one long ramp from the first to the second, which says
-      // the two of them were one event: Alex would have left lunch and
-      // arrived at dinner without ever being at work. So a stretch at its
-      // own lane is booked in the gap wherever there is room for the two
-      // ramps and some straight track between them, and where there is not,
-      // the line goes from one to the other, which by then is the truth.
+      // A LINE GOES HOME BETWEEN CONVERGENCES.
+      //
+      // Two corridors and nothing in between is one long ramp from the
+      // first to the second, which says the two of them were one event:
+      // Alex would have left lunch and arrived at dinner without ever being
+      // at work. So a stretch at its own lane is booked in every gap long
+      // enough to hold one.
+      //
+      // "Long enough" used to mean room for both ramps AT 45 plus some
+      // straight track, and that is a much higher bar than it sounds: the
+      // climb to a corridor is as long as the corridor is far, and for the
+      // outermost line on the board that is most of an afternoon. Lisa left
+      // school at two, went straight up to dinner height, and sat there
+      // until seven -- so the bottom of the board was empty from breakfast
+      // on and the name at the left pointed at a line that left and never
+      // came back.
+      //
+      // A line being at its own lane is worth more than the ramps being
+      // pretty, and there is a second legal angle for exactly this case. So
+      // the gap only has to hold the flat part, and each ramp takes a third
+      // of what is left and whatever angle that allows.
       LEGEND.forEach(function (p) {
         if (!p._route || !p._route.length) return;
         var out = [], hs = p._route;
@@ -3183,12 +3240,36 @@
           var prev = i ? hs[i - 1] : null;
           var next = i < hs.length ? hs[i] : null;
           if (prev) out.push(prev);
-          var from = prev ? prev.a1 : axisStart;
-          var to = next ? next.a0 : axisEnd;
-          var runA = prev ? octRun(prev.lvl, octRadius(prev.lvl)) : 0;
-          var runB = next ? octRun(next.lvl, octRadius(next.lvl)) : 0;
-          if (to - from <= runA + runB + CORNER * 2) continue;
-          out.push({ a0: from + runA + CORNER, a1: to - runB - CORNER, lvl: 0, home: true });
+          // The SAME from and to `routeSpan` will use, stagger included. A
+          // corridor hands its members different departure minutes so their
+          // turns do not pile up, and booking the home stretch against the
+          // unstaggered ones handed the approach less room than it had been
+          // promised: short by exactly the stagger, every ramp into dinner
+          // gave up and went vertical.
+          var from = prev ? prev.a1 + (prev.trail || 0) : axisStart;
+          var to = next ? next.a0 - (next.lead || 0) : axisEnd;
+          var room = to - from;
+          if (room <= CORNER * 6) continue;
+          // AS FAR HOME AS 45 DEGREES ALLOWS, and no further.
+          //
+          // Squeezing the two ramps into a third of the gap each got the
+          // line home, and got it there down a 90: a right angle is the
+          // last resort on this map, not a way of making room. The travel a
+          // gap can pay for at 45 is what it is, so the line spends it
+          // going as near its own lane as that buys and holds there. On a
+          // long gap that is the lane itself; on a short one it is a step
+          // toward it, which still says "this is over" without a cliff.
+          var a = prev ? prev.lvl : 0, b = next ? next.lvl : 0;
+          var slack = (room - CORNER * 2) - Math.abs(a - b);
+          if (slack <= 0) continue;                 // no room to detour at all
+          var near = Math.abs(a) < Math.abs(b) ? a : b;
+          var toward = Math.min(slack / 2, Math.abs(near));
+          var lvl = near - (near < 0 ? -1 : 1) * toward;
+          if (Math.abs(lvl - a) < 0.5 && Math.abs(lvl - b) < 0.5) continue;
+          var lead = octRun(lvl - a, octRadius(lvl - a));
+          var trail = octRun(b - lvl, octRadius(b - lvl));
+          if (room - lead - trail <= CORNER) continue;
+          out.push({ a0: from + lead, a1: to - trail, lvl: lvl, home: true });
         }
         p._route = out.filter(function (h) { return h.a1 > h.a0; })
                       .sort(function (a, b) { return a.a0 - b.a0; });
@@ -3810,10 +3891,34 @@
         // up — which is what made the vertical views look scrambled.
         var fanPts = [[nameEnd, spreadC], [fanStart, spreadC]].concat(legPts)
           .map(function (pt) { return toXY(pt[0], pt[1]); });
+        // Drawn once and not shown, for the length lookups everything
+        // downstream does against it, exactly as in the plain case below.
         var path = svgEl('path', { d: roundedPath(fanPts, CORNER) });
-        path.setAttribute('data-metro-role', 'track'); path.setAttribute('data-metro-owner', p.key);
-        paintLine(path, p, S, svg, 0);
+        path.style.fill = 'none'; path.style.stroke = 'none';
+        // Its own role: this is where the line GOES, which is a different
+        // question from where its ink is now that the ink has gaps in it.
+        // Anything asking "is this branch on its own trunk" wants the
+        // course; anything asking "what is drawn here" wants the runs.
+        path.setAttribute('data-metro-role', 'course');
+        path.setAttribute('data-metro-owner', p.key);
+        svg.appendChild(path);
         p._trunkEl = path;
+        // THE NAME'S OWN LEAD-IN, then the trunk in runs. The fan is the
+        // stretch between the name and where the line settles, and nothing
+        // crosses it -- it is outside every other line by construction --
+        // so it is drawn whole and only the running line is broken.
+        var leadEl = svgEl('path', { d: roundedPath(
+          [[nameEnd, spreadC], [fanStart, spreadC], [merge, lineCAt(p, merge)]]
+            .map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
+        leadEl.setAttribute('data-metro-role', 'track'); leadEl.setAttribute('data-metro-owner', p.key);
+        paintLine(leadEl, p, S, svg, 0);
+        trunkRuns(p, Math.min(merge, far), Math.max(merge, far)).forEach(function (run) {
+          var rp = sidingPath(c, p._sign, run[0], run[1], p).map(function (pt) { return toXY(pt[0], pt[1]); });
+          if (rp.length < 2) return;
+          var seg = svgEl('path', { d: roundedPath(rp, CORNER) });
+          seg.setAttribute('data-metro-role', 'track'); seg.setAttribute('data-metro-owner', p.key);
+          paintLine(seg, p, S, svg, phaseAfter(p, trunkLenAt(p, run[0]) || 0));
+        });
         expressThrough(p);
         // a terminal bar at each end, the transit-map mark for where a line
         // starts and stops rather than simply running out of canvas
@@ -3833,6 +3938,8 @@
         // anything, and the visible line is now several.
         var whole = svgEl('path', { d: roundedPath(sidingPath(c, p._sign, axisStart, axisEnd, p).map(function (pt) { return toXY(pt[0], pt[1]); }), CORNER) });
         whole.style.fill = 'none'; whole.style.stroke = 'none';
+        whole.setAttribute('data-metro-role', 'course');
+        whole.setAttribute('data-metro-owner', p.key);
         svg.appendChild(whole);
         p._trunkEl = whole;
         // AND THEN IN RUNS, BROKEN WHERE IT PASSES UNDER SOMETHING.
@@ -4292,7 +4399,9 @@
     // running where it always runs keeps its ink and the one leaning across
     // the board to get somewhere dives under it, which is both the easier
     // read and the honest one -- the crossing is the traveller's doing.
-    function trunkRuns(p) {
+    function trunkRuns(p, lo, hi) {
+      if (lo == null) lo = axisStart;
+      if (hi == null) hi = axisEnd;
       var base = spineC + p._c;
       var step = Math.max(1.5 * S, (axisEnd - axisStart) / 500);
       var cuts = [];
@@ -4320,7 +4429,7 @@
       LEGEND.forEach(function (q) {
         if (q === p) return;
         crossings(function (a) { return lineCAt(q, a); },
-          Math.max(2, q.line_width) * S * weightScale, spineC + q._c, axisStart, axisEnd);
+          Math.max(2, q.line_width) * S * weightScale, spineC + q._c, lo, hi);
       });
       // and the rails, which are as much a drawn line as a trunk is
       visible.forEach(function (o) {
@@ -4329,16 +4438,24 @@
         var oc = o._drawnLaneC != null ? o._drawnLaneC : spineC + o._sign * o._laneDist;
         crossings(function () { return oc; },
           Math.max(2, (o._p ? o._p.line_width : 3)) * S * weightScale, null,
-          Math.min(o._lineFrom, o._lineTo), Math.max(o._lineFrom, o._lineTo));
+          Math.max(lo, Math.min(o._lineFrom, o._lineTo)),
+          Math.min(hi, Math.max(o._lineFrom, o._lineTo)));
       });
       cuts.sort(function (x, y) { return x[0] - y[0]; });
-      var runs = [], at = axisStart;
+      var runs = [], at = lo;
       cuts.forEach(function (g) {
         if (g[0] > at + 1) runs.push([at, g[0]]);
         at = Math.max(at, g[1]);
       });
-      if (at < axisEnd - 1) runs.push([at, axisEnd]);
-      if (!runs.length) runs.push([axisStart, axisEnd]);
+      if (at < hi - 1) runs.push([at, hi]);
+      // A SLIVER BETWEEN TWO GAPS IS NOT A LINE. Where a trunk crosses two
+      // things close together, the piece left between the two tunnels can be
+      // shorter than the corner that would round it, and it comes out as a
+      // stray dash floating beside the rails with nothing either side of it.
+      // The eye carries a line through a gap perfectly well; it cannot make
+      // anything of a fragment.
+      runs = runs.filter(function (r) { return r[1] - r[0] > CORNER; });
+      if (!runs.length) runs.push([lo, hi]);
       return runs;
     }
     // Where a drawn path actually IS at axis position `a`, in canvas px.

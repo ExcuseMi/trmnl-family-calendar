@@ -418,6 +418,12 @@ module.exports = function (test, h) {
       const bad = [];
       for (const el of rep.painted || []) {
         if (!el.w && !el.h) continue;                       // not laid out
+        // The COURSE is deliberately unpainted. It is where a line goes,
+        // kept as one unbroken path so anything downstream can ask how far
+        // along itself the line is at a given minute; the visible line is
+        // drawn separately, in runs, because it breaks wherever it passes
+        // under something. Nothing is meant to see this one.
+        if (el.role === 'course') continue;
         // A <line> cannot be filled — only its stroke draws anything — and
         // its computed fill defaults to black, so counting fill as paint let
         // the strokeless tie through. This test passed on the broken build

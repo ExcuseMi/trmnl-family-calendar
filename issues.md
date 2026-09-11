@@ -532,6 +532,31 @@ is open.
   the compressed segment filled with a cross-hatch or chevrons. An event
   that spans the night runs through it as one continuous stroke with a
   station at each end.
+- [ ] **E10. Events on a diagonal run.** An event can only be drawn one way:
+  a horizontal rail in a lane, with the line branching out to it and back.
+  That was fine while trunks were level. They are not any more -- a line
+  climbing back from the school run or leaning down towards dinner spends a
+  good part of the day at 45 -- and where an event happens DURING one of
+  those runs, the branch draws a second version of a move the line is
+  already making. Marge's Book Club at 9am sits on a little horizontal shelf
+  beside her own 45, as though the two were unrelated. It should be a dot on
+  the diagonal, a tick further up it, and the caption alongside.
+
+  The rule is easy to state and I got it wrong once already: "if the trunk
+  is on the move for the length of the event, the event is a mark ON the
+  trunk". Applied as written it swallows nearly every event on the board,
+  because with convergences the trunks are moving for much of the day, and
+  every caption then has to be placed against a sloping line with nothing
+  to hang off. It needs to be narrower -- probably "the run the line is
+  making is the same move the branch would have made", measured, plus a
+  caption placer that can work beside a 45 -- and the caption side of it is
+  the real work, not the marks.
+
+  Also wanted, from the same picture: where an event genuinely cannot go on
+  the diagonal, the branch it gets should leave and MERGE BACK quickly
+  rather than running on to a terminus, so a short detour reads as a short
+  detour.
+
 - [ ] **E9. Drop `siding` from the config; let the algorithm find them.**
   A siding is currently something the user declares (`siding: true`, read
   into `metro.sidings`), and it is the last piece of layout the config still
