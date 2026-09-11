@@ -273,21 +273,41 @@
   // at one stroke weight for all of them. Weight used to be the other half
   // of telling lines apart and it made the board look like some people's
   // days mattered more than others.
+  // ...AND WHICH ENCODING DEPENDS ON HOW MANY GREYS THE PANEL HAS.
+  //
+  //   1-bit  there is one ink. The pattern is the whole identity, so all
+  //          four textures are used and every line is full black.
+  //   2-bit  three greys to hand. Grey and pattern together, so two lines
+  //          never share both.
+  //   4-bit  sixteen greys. A tonal ladder reads more quietly than four
+  //          textures at this weight, so the lines go SOLID at descending
+  //          tones and the dash patterns are kept back for the corridors,
+  //          where they say "these two are running together" rather than
+  //          "this is Bart".
+  //
+  // Called AFTER the bit depth is read. Written as an IIFE up here it ran
+  // before `BITS` had a value -- `var` hoists the name and not the number --
+  // and every panel got the 1-bit table. That is the third time in this
+  // file a declaration below its reader has cost an afternoon.
   var TRACK_STYLES = ['heavydash', 'dotted', 'dashdot', 'widedash'];
-  (function styleTracks() {
+  var TONES = ['black', 'gray-25', 'gray-40', 'gray-55', 'gray-70'];
+  function styleTracks() {
     var n = 0;
     LEGEND.forEach(function (p) {
+      // THE WEIGHT NEVER MOVES. Every spatial number on this board is
+      // derived from it, so a panel with more greys must not have thinner
+      // rails: see the note on BITS.
       p.line_width = 3;
-      if (!p.hue) p.hue = 'black';
-      // the anchor is the line the eye should find first, and unbroken ink
-      // is how it does; everybody else takes the next pattern in turn
-      p.line_style = p.anchor ? 'solid' : TRACK_STYLES[n++ % TRACK_STYLES.length];
+      var tone = BITS === 1 ? 'black' : TONES[Math.min(n, TONES.length - 1)];
+      if (!p.hue) p.hue = p.anchor ? 'black' : tone;
+      p.line_style = p.anchor ? 'solid'
+        : BITS >= 4 ? 'solid'
+        : TRACK_STYLES[n % TRACK_STYLES.length];
+      if (!p.anchor) n++;
     });
-    // ...unless nobody was named the anchor, in which case the first line
-    // on the board takes the solid, so there is always exactly one.
     var any = LEGEND.some(function (p) { return p.line_style === 'solid'; });
     if (!any && LEGEND.length) LEGEND[0].line_style = 'solid';
-  })();
+  }
   var DAY_START = METRO.day_start_min, DAY_END = METRO.day_end_min;
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -335,7 +355,22 @@
   // them apart — a dithered gray 3px line is just speckle. Grayscale panels
   // get the framework-resolved shade for each track's hue.
   var screenEl = canvas.closest('.screen');
-  var ONE_BIT = !!(screenEl && screenEl.classList.contains('screen--1bit'));
+  // HOW MANY GREYS THE PANEL HAS, and nothing else.
+  //
+  // Bit depth decides what a line is PAINTED with. It decides nothing about
+  // where anything is: the stroke weight is the same three pixels on every
+  // panel, so `laneBase`, `markRoom`, the isolation ring and every caption
+  // position come out identical whatever this says. That is the whole point
+  // of reading it here and only here -- a board that rearranges itself
+  // because the device has more greys is a different board, and the one
+  // thing a calendar may not do is look like a different day.
+  var BITS = screenEl && screenEl.classList.contains('screen--1bit') ? 1
+           : screenEl && screenEl.classList.contains('screen--2bit') ? 2 : 4;
+  var ONE_BIT = BITS === 1;
+  styleTracks();
+  // Crisp pixels where there are no greys to blend with, smooth vectors
+  // where there are. Paint only: neither changes a coordinate.
+  canvas.setAttribute('shape-rendering', BITS === 1 ? 'crispEdges' : 'geometricPrecision');
   // Ink and paper, as the THEME defines them, not as hex. A device in dark
   // mode paints a black canvas and white text; a marker filled with a
   // literal #fff was then a solid white blob where a hollow ring should be,
