@@ -4038,11 +4038,27 @@
         // Set clear of the capsule and joined back to it by a thin tick,
         // which is what a transit map does with any name it cannot write
         // directly against its station.
-        e._capOut = LINE_GAP + Math.max(NODE_R * 1.6, sharedRailWidth(e._p) * S * weightScale);
+        // THE ENCLOSURE'S OWN NAME GOES ABOVE IT, CENTRED.
+        //
+        // It used to hang off whichever end of the bundle faced away from
+        // the spine, which put it in the corridor: the rails come in from
+        // both sides and leave the same way, and the words sat among them
+        // with nothing saying which of the four lines they belonged to.
+        // Worse, that is exactly where the individual events either side of
+        // dinner want to be, so "Mensa Meeting" was written through the
+        // bottom of the pill and into "Family Dinner" underneath it.
+        //
+        // Above the pill and across its middle is the one place on a
+        // convergence that belongs to all of it and to none of the lines.
+        // The leader still runs back to the capsule, so the pairing is
+        // stated rather than implied.
+        e._routeEdge = Math.min(lo2, hi2);
+        e._labelSign = -1;
+        e._capOut = LINE_GAP * 1.5 + Math.max(NODE_R * 1.6, sharedRailWidth(e._p) * S * weightScale);
         e._capLead = true;
-        e._labelSign = e._sign;
-        e._textStart = e._nodeA + TEXT_PAD;
-        if (e._textStart + e._textLen > axisEnd - EDGE) e._textStart = e._endA - TEXT_PAD - e._textLen;
+        e._textStart = (e._nodeA + e._endA) / 2 - e._textLen / 2;
+        if (e._textStart + e._textLen > axisEnd - EDGE) e._textStart = axisEnd - EDGE - e._textLen;
+        if (e._textStart < axisStart + EDGE) e._textStart = axisStart + EDGE;
         shared.push(e);
       });
 
