@@ -1445,7 +1445,7 @@
       // read a caption position from a picture that is no longer on the
       // screen. Cleared before anything reads them.
       e._bundleOut = null; e._drawnLaneC = null; e._onDiagonal = false;
-      e._capOut = null; e._capRow = 0; e._routeLvl = null; e._capLead = false;
+      e._capOut = null; e._capRow = 0; e._routeLvl = null; e._capLead = false; e._capAngle = null;
       e._rampEl = null;
       e._onRoute = false; e._routeShared = false; e._routeEdge = null;
       e._capMinA = null; e._capMaxA = null;
@@ -3729,8 +3729,74 @@
           }
           return cost;
         }
+        // A NAME ON A SLOPE IS SET ON THE SLOPE.
+        //
+        // A mark on a climbing trunk has no horizontal anything to sit
+        // beside, so a horizontal name beside it points at the paper rather
+        // than at the rail. Set at the rail's own angle, starting past the
+        // end tick and running outward, it reads as belonging to the line
+        // the way a station name on a transit map does, and it lives in the
+        // WEDGE between two lines, which is paper no lane can use. That
+        // last part is the point: a lane costs the board a lane-step of
+        // depth and a wedge costs nothing, and depth is what this board has
+        // run out of.
+        //
+        // Approximated for clash-testing by a run of small boxes along its
+        // own centre line rather than by one upright box round the whole
+        // thing: at 45 degrees that bounding box is half again as big as
+        // the words in it and refuses places the name would have fitted.
+        function slopeAt(p, a) {
+          var d = Math.max(1, CORNER * 0.4);
+          return (lineCAt(p, a + d) - lineCAt(p, a - d)) / (2 * d);
+        }
+        // Clearance is measured PERPENDICULAR to the rail, so the drop in
+        // c has to be the hypotenuse: offset straight down by the same
+        // number on a 45 leaves only seven tenths of it between the words
+        // and the line, and the name is written along the rail.
+        // ...and the offset is to the box's MIDDLE, so half its own height
+        // has to be in it or the words straddle the rail they name.
+        function capPerp(e, m) { return (e._capOut + e._h / 2) * Math.sqrt(1 + m * m); }
+        function angledRun(e, at, away, m) {
+          var unit = 1 / Math.sqrt(1 + m * m), n = Math.max(2, Math.round(e._textLen / (e._h * 0.8)));
+          var c0 = lineCAt(e._p, at) + away * capPerp(e, m);
+          var out = [], stepL = e._textLen / n, half = e._h / 2;
+          for (var i = 0; i < n; i++) {
+            var a0 = at + i * stepL * unit, a1 = at + (i + 1) * stepL * unit;
+            var k0 = c0 + (a0 - at) * m, k1 = c0 + (a1 - at) * m;
+            out.push({ a0: Math.min(a0, a1), a1: Math.max(a0, a1),
+                       c0: Math.min(k0, k1) - half, c1: Math.max(k0, k1) + half });
+          }
+          return out;
+        }
         shared.sort(function (a, b) { return a._nodeA - b._nodeA; });
         shared.forEach(function (e) {
+          // On a slope, the name goes on the slope: anchored just past the
+          // end tick and running outward at the rail's own angle.
+          var m = e._onTrack ? slopeAt(e._p, (e._nodeA + e._endA) / 2) : 0;
+          if (Math.abs(m) > 0.3) {
+            var bestA = null;
+            [1, -1].forEach(function (sg) {
+              var away = sg * e._sign;
+              [e._endA + TEXT_PAD, e._nodeA + TEXT_PAD].forEach(function (at) {
+                var run = angledRun(e, at, away, m), cost = 0, off = false;
+                run.forEach(function (bx) {
+                  cost += costAt(bx);
+                  if (bx.c0 < bandLo || bx.c1 > crossPx - EDGE || bx.a1 > axisEnd - EDGE) off = true;
+                });
+                if (off) return;
+                if (!bestA || cost < bestA.cost) bestA = { cost: cost, at: at, away: away, run: run };
+              });
+            });
+            if (bestA) {
+              e._textStart = bestA.at;
+              e._labelSign = bestA.away;
+              e._routeEdge = lineCAt(e._p, bestA.at);
+              e._capOut = capPerp(e, m);
+              e._capAngle = Math.atan(m) * 180 / Math.PI;
+              bestA.run.forEach(function (bx) { busy.push(bx); });
+              return;
+            }
+          }
           var row = e._h + LINE_GAP * 0.6;
           var outs = [e._capOut, e._capOut + row, e._capOut + row * 2, e._capOut + row * 3];
           var slides = [0, e._textLen * 0.3, -e._textLen * 0.3,
@@ -5756,7 +5822,16 @@
       // A caption set out beyond the rail keeps its own distance: that
       // distance is why it fits, and it is the thing the leader draws.
       var gap = e._capOut != null ? e._capOut : LINE_GAP;
-      if (horizontal) {
+      if (horizontal && e._capAngle != null) {
+        // Anchored at the rail and turned to match it. The origin is the
+        // left edge at the text's own middle, which is the point the search
+        // above measured from.
+        var axy = toXY(e._textStart, lineC + ls * gap);
+        b.style.left = axy[0] + 'px';
+        b.style.top = (axy[1] - e._h / 2) + 'px';
+        b.style.transformOrigin = '0 50%';
+        b.style.transform = 'rotate(' + e._capAngle.toFixed(2) + 'deg)';
+      } else if (horizontal) {
         b.style.left = e._textStart + 'px';
         if (ls < 0) b.style.top = (lineC - gap - duck - e._h) + 'px';
         else b.style.top = (lineC + gap + duck) + 'px';

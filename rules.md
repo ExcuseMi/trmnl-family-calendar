@@ -114,10 +114,16 @@ Where the two disagree, this one is newer.
 27. **Four hours or more is a siding**, decided from the clock. Every long
     block in every demo calendar is a school day, a shift, a desk booking or a
     delivery, and nothing under four hours is.
-28. **The vocabulary of marks is fixed.** A filled dot is a stop the line
-    calls at; a tick across the rail is where it stops being there; a hollow
-    ring is an interchange; a capsule spans every line at a convergence. A
-    moment (no duration) gets one mark, not two.
+28. **The vocabulary of marks is fixed, and it is sized, not filled.** A
+    small paper-filled dot is a stop the line calls at; a tick across the
+    rail is where it stops being there; a larger paper-filled ring is an
+    interchange; concentric rings are an all-day landmark; a capsule spans
+    every line at a convergence. A moment (no duration) gets one mark, not
+    two. Every shape is paper inside with a heavy outline and they differ by
+    SIZE, which is the Mini Metro convention: a mark filled with its own
+    line's ink is the one mark that cannot be seen, because it is the same
+    ink as the rail it sits on. (This rule used to say "a filled dot", which
+    the drawing has never done and never should.)
 29. **A tick stands square to the rail it marks**, not to the clock.
 30. **A convergence ends in a tick on one rail**, in that line's own colour --
     not a bar across the corridor, which says the lines all stop there.
@@ -126,40 +132,52 @@ Where the two disagree, this one is newer.
 
 ## 5. Words
 
-32. **A caption belongs beside its own rail**, on the outside, starting at the
+32. **A name on a slope is set on the slope.** A mark on a climbing trunk
+    has no horizontal anything to sit beside, so a horizontal name beside it
+    points at paper rather than at the rail. Set at the rail's own angle,
+    starting past the end tick and running outward, it reads as belonging to
+    the line the way a station name on a transit map does, and it lives in
+    the WEDGE between two lines, which is paper no lane can use. That last
+    part is the reason to do it at all: a lane costs the board a lane-step
+    of depth and a wedge costs nothing.
+33. **Clearance from a slope is measured perpendicular to it**, and it
+    includes half the words' own height, or they straddle the rail they
+    name.
+
+34. **A caption belongs beside its own rail**, on the outside, starting at the
     stop it names.
-33. **Nothing is written over anything.** Captions are placed against the
+35. **Nothing is written over anything.** Captions are placed against the
     board: the other captions, the rails, the moving trunks, the line names,
     the clock badge.
-34. **A caption gives way by sliding along its own rail first**, then by
+36. **A caption gives way by sliding along its own rail first**, then by
     changing sides, and only then by moving further out.
-35. **A caption may not walk past another line to find room.** A name on the
+37. **A caption may not walk past another line to find room.** A name on the
     far side of somebody else's rail reads as theirs.
-36. **A line behind words is untidy; an event not on the board is worse.**
+38. **A line behind words is untidy; an event not on the board is worse.**
     Every caption carries a paper outline, so a rail passing behind it is a
     last resort that is still better than dropping the event.
 
 ## 6. Which order the lines go in
 
-37. **Fewest crossings.** Every line sitting between two people who share an
+39. **Fewest crossings.** Every line sitting between two people who share an
     event is a line their lines must cross to reach each other, and since a
     shared event moves the trunks that crossing is real ink. The order with
     the fewest is chosen exactly for up to eight lines; greed above that.
-38. **Closest pairs adjacent** breaks a tie between orders that cross equally
+40. **Closest pairs adjacent** breaks a tie between orders that cross equally
     often.
-39. **A weave is a tie-break, never part of the score.** An order that is only
+41. **A weave is a tie-break, never part of the score.** An order that is only
     good once somebody weaves it is not good, because the client decides
     weaves for itself and nothing upstream can promise one.
-40. **The order survives to the drawing.** Renumbering to close the gaps left
+42. **The order survives to the drawing.** Renumbering to close the gaps left
     by dropped lines sorts by the offset the solver gave, or every ordering
     decision is thrown away one function later.
 
 ## 7. Panels
 
-41. **The same board at four sizes**, plus half and quadrant slots. Nothing is
+43. **The same board at four sizes**, plus half and quadrant slots. Nothing is
     laid out twice: the layout measures the canvas it is given.
-42. **Spare depth is spent on separating the lines**, then on lane pitch.
-43. **An event that will not fit is dropped and counted**, at the end of the
+44. **Spare depth is spent on separating the lines**, then on lane pitch.
+45. **An event that will not fit is dropped and counted**, at the end of the
     axis, rather than drawn on top of something.
 
 ---
@@ -168,9 +186,19 @@ Where the two disagree, this one is newer.
 
 Known gaps, so nobody reads this as a description of a board that exists:
 
-- **33** is the weakest. Nine captions on the layout suite still have a line
+- **35** is the weakest. Ten captions on the layout suite still have a line
   through them, nearly all of them a trunk crossing a caption that the lane
   machinery placed against a board of level lines.
+- **32/33** are drawn but not yet MEASURED. The layout suite reads a label's
+  box with getBoundingClientRect, which for a turned label is the upright box
+  around it: at 45 degrees that is half again as big as the words in it, so
+  three cases now report an overlap that is not there. The tests need the
+  turned quad, not the box around it, before their verdict on an angled name
+  means anything.
+- **13 between two abutting holds.** Where a corridor ends on the same minute
+  the next one starts there is no gap to turn in, so the line climbs dead
+  vertical: Bart and Lisa go straight up out of the school run into the
+  school day. The rule says hold short instead, and nothing does.
 - **16/17** is newly written and newly implemented; the clearance it keeps is
   a fixed fraction of a track step rather than anything measured against the
   events that need the space.
