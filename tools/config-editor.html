@@ -1736,14 +1736,14 @@
   function loadPreset(id) {
     var preset = null;
     PRESETS.forEach(function (p) { if (p.id === id) preset = p; });
-    if (!preset) return;
+    if (!preset) return false;
     // A preset replaces everything. Undo puts it back, and the button at the
     // top of the page says which load it would undo, but work that exists only
     // in this editor and nowhere else is still worth one question first. An
     // untouched page, or a preset nobody has edited yet, swaps silently.
     if (editorHasWork() && !window.confirm("Loading “" + preset.label + "” replaces everything in the editor. You can undo it afterwards. Continue?")) {
       setStatus("presetStatus", "Left as it was.", "");
-      return;
+      return false;
     }
     snapshot("load " + preset.label);
     loadConfig(JSON.parse(JSON.stringify(preset.config)));
@@ -1754,6 +1754,7 @@
     markLoaded();
     setStatus("importStatus", "", "");
     setStatus("presetStatus", preset.label + " loaded, with example feeds of its own, so it draws without any links. " + preset.note, "ok");
+    return true;
   }
   // What a load found, in one line: how much came in, anything that had to be
   // repaired before it could be read, and anything left out on the way.
@@ -2689,7 +2690,11 @@
     // Nothing picked yet is not a reason to make somebody pick: the first
     // example is a family of four, which is what most of the people reading
     // this page have. Draw it.
-    if (!selectedPreset) loadPreset(PRESETS[0].id);
+    //
+    // Unless loading it was declined, because the editor has work in it. The
+    // example is then not what would be drawn -- their own configuration is,
+    // under a status line saying nothing had changed.
+    if (!selectedPreset && !loadPreset(PRESETS[0].id)) return;
     document.getElementById("runPreview").click();
     show("station-preview", "nearest");
   });
