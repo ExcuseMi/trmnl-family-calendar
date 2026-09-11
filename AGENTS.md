@@ -29,6 +29,21 @@ somebody looked at.
 
 ## Things that have cost real time here
 
+- **A failing suite is a question, not a verdict.** The most expensive habit
+  in this project has been: try a change, watch the layout number drop, revert,
+  report that it "regressed". That is giving up on a half built solution and
+  calling the tests the reason. The number moving is the START of the work.
+  Find out WHICH cases and WHY. Three separate times the answer was a real bug
+  that took twenty minutes once it was actually chased: a branch rail drawn at
+  x = -219 on a board whose first pixel is 4; an event converted to a mark
+  keeping the lane it no longer had; a packing rule that read "more rungs than
+  banding" as "fits more content", which stopped being true the moment events
+  could be drawn without a rung at all. Every one of those was hiding behind a
+  revert.
+  Also: do not stack four changes and measure once. One variable, one run, and
+  when the number moves, read the failure text before touching anything.
+
+
 - **A half or a quadrant is a SLOT inside the screen, not a smaller screen.** The framework pins `.screen` to the device's own size whatever the window is, so asking headless Chromium for a 400x240 window and calling the result a quadrant renders a full 800x480 board and crops the picture. Override `--full-w` / `--full-h`, which is the one knob a real mashup turns; `pageFor` in `test/layout/run.js` does this via a viewport's `slot`. Until this was found, every small-view case in the layout suite was measuring a full-size board under a small view's name. Any conclusion drawn from one before that is worth re-checking, comments included.
 - **A placeholder in a Liquid output tag ends the tag.** An output tag whose default string contains a braced placeholder takes the whole template down with a syntax error that shows up only as a 900-byte build. Build the string with an assign tag first, the way `rain_pct` does. The same bites markdown in this repo: GitHub Pages runs every `.md` through Liquid, so do not write such an example into a doc.
 - **The inline-style lint scans the raw markup for property names, comments included.** `LimitedInlineStyles` counts `justify-content`, `padding`, `margin`, `background-color`, `border-radius`, `text-align`, `object-fit` and `font-size` anywhere in the file, with a budget of 6 for the whole template. Naming one in a comment costs exactly as much as using it.

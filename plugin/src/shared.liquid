@@ -583,7 +583,12 @@
     // them. Decided here rather than upstream, because which drawing an
     // event gets is a question about this board and nothing else knows the
     // board.
+    // Beyond this a shelf stops being a rail with a name on it and becomes
+    // a lane held open across the day. See `_onTrack` in staticFacts.
     var LONG_MIN = 240;
+    function runTooLongForAShelf(e) {
+      return !!e.all_day || (e.end_min - e.start_min) >= LONG_MIN;
+    }
     var MIN_DIAG = Math.max(10 * S, 6 * 2.4 * S + 2 * S);
     var SHIFT_TOL = 10 * S, MAX_SHIFT = Math.max(40 * S, axisPx * (horizontal ? 0.15 : 0.25)); // how far a label may ride along its owner's spur
     // Paper between the rails where a group of lines runs together. Three
@@ -1501,11 +1506,33 @@
       // Shared, it is not this at all: two children at the same school all
       // day are together, and together is a convergence, which is the
       // ordinary drawing for a shared event of any length.
-      e._long = e.all_day || (e.end_min - e.start_min) >= LONG_MIN;
-      // ...or an event the drawing found sitting ON a move its own line is
-      // already making (`settleDiagonals`). Sticky, because staticFacts
-      // runs again between attempts and the finding would be lost.
-      e._onTrack = (!!e._long && involved.length < 2) || !!e._diagStick;
+      // EVERY EVENT IS AN EVENT. There is one shape here, not two.
+      //
+      // There used to be a "long event", drawn on the line, and everything
+      // else, drawn as a branch. Marks took that distinction away: a nine
+      // hour booking on the line and a fifteen minute handover on the line
+      // are now the same drawing to the pixel -- the same dot at the start,
+      // the same tick at the end, the same stretch of line between them,
+      // the same name set against the rail -- and two names for one shape
+      // is two places for the same rule to be got wrong.
+      //
+      // So there is one question, asked of the whole range: does a shelf
+      // earn its lane? A shelf is a ramp out to a lane and a flat run
+      // carrying the name, and it earns the lane in the middle of the range
+      // and at neither end. A quarter of an hour is twelve pixels of shelf
+      // on a hundred pixel climb, which is a diagonal with a stub on it. A
+      // nine hour booking is a lane held open from breakfast to teatime
+      // that nobody else on that line can use, and the line spends its day
+      // off its own track while its name at the head points at empty paper.
+      // An all-day event is the second case at its limit.
+      //
+      // A convergence is not ours to move either way: two people in the
+      // same place is a bundle of rails, whatever its length.
+      // ...and `_diagStick` is an event the DRAWING found sitting on a move
+      // its own line was already making, or one the board could not afford
+      // a lane for. Sticky, because staticFacts runs again between attempts
+      // and the finding would be lost.
+      e._onTrack = (involved.length < 2 && runTooLongForAShelf(e)) || !!e._diagStick;
       // and its marks sit where the line IS, which is what `_onRoute`
       // already means for the other event that has no rail of its own.
       //
@@ -1518,6 +1545,8 @@
       if (e._onTrack) {
         e._onRoute = true;
         e._capLead = true;
+        // ...and it occupies the stretch of line it runs along; see makeMark.
+        e._lineFrom = e._nodeA; e._lineTo = e._endA;
       }
     });
     }
@@ -1582,6 +1611,8 @@
     // on the first solve, because it can only be answered by a board that
     // has been drawn; `settleSides` fills it in and solves again.
     var inwardNeed = {};
+    var tierLog = [];
+    var lastConsidered = null;
     // The lanes a track was found to need once there were TRUNKS to measure
     // against, remembered across attempts. Without this the knowledge is
     // thrown away every time: each attempt re-measures from a board of
@@ -1632,6 +1663,70 @@
       maxLabelThick = Math.max(maxLabelThick, e._thick);
     });
     laneStep = maxLabelThick + LINE_GAP + LANE_GAP;
+
+    // WHICH SHAPE AN EVENT IS, DECIDED BEFORE THE BANDS ARE SIZED.
+    //
+    // This used to be settled at the very end, in `settleDiagonals`, once
+    // the trunks were final. That is the right moment to ask the question
+    // it asks (is this branch the same move the line is already making?)
+    // and the wrong moment for the answer to be worth anything: the bands
+    // had already been solved as though every event were a shelf, so the
+    // lanes were bought, the ladder was paid for, and an event that then
+    // gave up its rung handed the depth back to nobody. The board still
+    // could not fit its bands, still dropped to the packed fallback, and
+    // still stepped the text down a tier to try to make it fit, which is
+    // why the marks came back flat and small.
+    //
+    // Part of the question needs no trunks at all. A branch is a ramp out
+    // to a lane and a flat run carrying the name; when the run is shorter
+    // than half the name there is no shelf to speak of, just a diagonal
+    // with a stub on the end, and that is a fact about a fifteen minute
+    // handover and the width of the words "Shift Handover". Both are known
+    // here, as soon as the labels are measured for this tier. So it is
+    // asked here, the marks take no rung, and the demand the solver is
+    // handed is the demand the board actually has.
+    //
+    // Re-asked every attempt, because the name's width is a tier's fact:
+    // `_stub` remembers which marks are this rule's to withdraw, and
+    // leaves alone the ones `settleDiagonals` found from the trunks.
+    // An event that could be either shape. A convergence is not ours to
+    // move, a long event is already on the line, and a moment has no run to
+    // sit on.
+    // `dropped` is deliberately not asked about: an event on its way off
+    // the board is the one that most needs the shape that costs nothing,
+    // and the rescue in placeBoth asks this about exactly those.
+    function canMark(e) {
+      return !e._onTrack && !e._merge
+        && e._involved && e._involved.length < 2 && e.end_min > e.start_min;
+    }
+    // Drawn on the line instead of on a rail of its own, and made to FORGET
+    // the lane it no longer has: placeSide returns early for a mark, so
+    // everything written the last time round would otherwise survive and
+    // downstream code would draw a rail leaving the line from a point the
+    // line has never been.
+    function makeMark(e) {
+      e._stub = true;
+      // AN EVENT ON THE LINE OCCUPIES A STRETCH OF THE LINE.
+      //
+      // `_lineFrom`/`_lineTo` is where an event's ink is along the axis,
+      // and it was only ever written by the lane placer, for the rail it
+      // hangs off. A mark has no rail, so it had no span, so the guard that
+      // draws its start dot and its end tick compared a minute against NaN
+      // and drew neither. It is also what every obstacle pass reads to keep
+      // out of an event's way. The span of a mark is simply the run it sits
+      // on, which is the line itself from its start to its end.
+      e._lineFrom = e._nodeA; e._lineTo = e._endA;
+      e._diagStick = true; e._onTrack = true; e._onRoute = true; e._capLead = true;
+      e._laneDist = null; e._elbow = null; e._diagFrom = null;
+      e._lane = null; e._rampEl = null;
+    }
+    visible.forEach(function (e) {
+      if (e._stub) { e._stub = false; e._diagStick = false;
+      e._onTrack = e._involved.length < 2 && runTooLongForAShelf(e); }
+      if (e._dropped || !canMark(e)) return;
+      if ((e._endA - e._nodeA) >= e._textLen * 0.5) return;
+      makeMark(e);
+    });
     // ---- lane placement, one side at a time (chronological: the earlier
     // event keeps the inner lane so its label stays next to its time)
     //
@@ -1652,7 +1747,13 @@
     function placeSide(sideKey, slots, obstacles, onlyOwner) {
       var maxLanes = slots.length;
       // whether this side has a long event wanting the gap kept for it
-      var trackLong = visible.some(function (e) { return e._onTrack && e._sideKey === sideKey; });
+      // A LONG event, not a mark. A mark takes no rung at all (it returns
+      // below), so it has no business closing the inward side of the ladder
+      // to everybody else on this side: with marks the common shape, one of
+      // them anywhere on a side turned off A15 for every track on it.
+      var trackLong = visible.some(function (e) {
+        return e._onTrack && !e._diagStick && e._sideKey === sideKey;
+      });
       var evs = visible.filter(function (e) { return e._sideKey === sideKey && (!onlyOwner || e._laneOwner === onlyOwner); }).sort(function (a, b) { return a._nodeA - b._nodeA; });
       // The earlier event normally keeps the inner lane, so its label sits
       // next to its own time. But when the next event's ring falls UNDER
@@ -2185,18 +2286,33 @@
       function laneBase(k, t) {
         return k.nodeR + Math.max(k.lineGap, k.minDiag);
       }
-      // A LONG EVENT'S NAME NEEDS A RUNG OF ITS OWN, ON THE INWARD SIDE.
+      // A TRACK ASKS FOR THE GAP BESIDE IT, NOT A RUNG.
       //
-      // A long event is drawn ON the line, so it has no branch running out
-      // to a lane and its name has to sit against the line itself. Outward
-      // is where that line's branches already write, so the name goes
-      // inward, into the gap between this line and the one inside it -- and
-      // the gap has to be wide enough to hold it, which is the whole point:
-      // "why is Desk booking not south of Homer's line" is the same
+      // There were two inputs here, `long` and `marks`, because there were
+      // two shapes. They drew the same thing and they wanted the same
+      // thing: an event ON the line has no branch running out to a lane, so
+      // its name sits against the line itself, in the gap between this line
+      // and the one inside it, and the gap has to be wide enough to hold
+      // it. "Why is Desk booking not south of Homer's line" is the same
       // question as "why is there not a caption's worth of board between
-      // Homer and Marge", and the answer to both is that nobody was asking
-      // for it.
-      function longIn(t) { return t.long || 0; }
+      // Homer and Marge", and the answer to both was that nobody was asking
+      // for it. One question now, asked once.
+      //
+      // Taking the rung away from marks was right and left them with
+      // nothing at all, which is worse: six tracks asked for no depth
+      // between them, the solver drew the bundle at its minimum pitch and
+      // spent the whole board outside it, and the caption pass went looking
+      // for paper beside a line that had none. Fourteen names ended up
+      // scattered across the middle of the board pointing at nothing.
+      //
+      // What a mark's name actually needs is a name's thickness of clear
+      // board beside its own line. Not the ring clearance a branch needs,
+      // because there is no branch; not a lane step, because there is no
+      // ladder; and once for the track however many marks it carries,
+      // because the caption pass slides them along the line past each
+      // other. That is a third of what a rung costs and it is the whole
+      // difference between a name beside its line and a name adrift.
+      function markRoom(k, t) { return t.marks ? k.lineGap + k.maxLabelThick : 0; }
 
       // One side, laid out as BANDS: each track gets its baseline, its
       // siding room, then its own lanes, and the next track starts beyond
@@ -2225,7 +2341,7 @@
           // and paying for them out of the outward ladder is how a track
           // ends up with fewer places to write than it has things to say.
           var wantOut = lanesFor(t);
-          var inNeed = Math.min(2, longIn(t) + (t.needIn ? 1 : 0));
+          var inNeed = t.needIn ? 1 : 0;
           var want = wantOut + inNeed;
 
           // A15: A TRACK CARRIES EVENTS ON BOTH SIDES OF ITS LINE.
@@ -2314,7 +2430,8 @@
           // only way to give two lines on opposite sides room to exchange
           // places (A18) rather than cross in a slot narrower than either
           // of them is wide.
-          acc += Math.max(gap, rungRoom(k, t, inN, stepPx), i ? 0 : (opts.minFirst || 0));
+          acc += Math.max(gap, rungRoom(k, t, inN, stepPx), markRoom(k, t),
+                          i ? 0 : (opts.minFirst || 0));
 
           // A17: A CORRIDOR NEEDS A GAP WIDE ENOUGH TO RUN DOWN.
           //
@@ -2336,8 +2453,22 @@
           }
           var n = want - inN, start = acc + laneBase(k, t);
           for (var j = 0; j < n; j++) slots.push({ dist: start + j * stepPx, owner: t.key, side: 1 });
+          // What stands beyond a track that has no lanes on this side.
+          //
+          // `laneBase` is the distance out to a track's FIRST RUNG: a
+          // ring's radius and the clearance round it. Where there are no
+          // rungs there is no ring to stand off the line, so it was 23px a
+          // track of reserved air for something never drawn. That went
+          // unnoticed while a lane-less track meant a line with nothing on
+          // it; with marks it is the common case, and over five tracks it
+          // was the whole difference between a banded board and a packed
+          // one.
+          //
+          // What a line still needs beyond itself is room for its own name.
+          // Its marks' names go in the caption gap booked on the inward
+          // side, which is what `markRoom` is.
           acc = n ? start + (n - 1) * stepPx + k.lineGap + k.maxLabelThick
-                  : acc + Math.max(laneBase(k, t), k.nameH / 2);
+                  : acc + k.nameH / 2;
           // where this track's band stops: its line, its siding room and
           // all of its own lanes. Anything beyond belongs to the next.
           bandEnd[t.key] = acc;
@@ -2560,13 +2691,36 @@
         } else if (!fits(bGrown.sol)) {
           packed = true;
         } else {
-          packed = fits(pGrown.sol) && packedRungs > bandedRungs;
+          // A RUNG IS NOT CONTENT ANY MORE.
+          //
+          // "Packing has to earn it by fitting MORE content" was written
+          // when every event needed a rung, so more rungs did mean more
+          // events on the board. It does not now: an event drawn as a mark
+          // on its own line needs no rung at all. So a banded board where
+          // most events are marks hands out very few rungs, the packed
+          // board always builds a full shared ladder, `packedRungs >
+          // bandedRungs` is trivially true, and packing won every time
+          // regardless of depth. Every text tier packed, including the
+          // smallest, on a board whose bands needed 663px of the 701 it
+          // had.
+          //
+          // Packing can only be fitting more content if banding left
+          // somebody SHORT of what they asked for. If every track got its
+          // lanes, there is nothing for packing to win.
+          var asked = 0;
+          ['A', 'B'].forEach(function (sk) {
+            sides[sk].forEach(function (t) { asked += demand[t.key] || 0; });
+          });
+          packed = fits(pGrown.sol) && bandedRungs < asked && packedRungs > bandedRungs;
         }
         var chosen = packed ? pGrown : bGrown;
         var sol = chosen.sol;
         step = chosen.step; sep = chosen.sep;
         var considered = { bandedRungs: bandedRungs, bandedFits: fits(bGrown.sol),
-          packedRungs: packedRungs, packedFits: fits(pGrown.sol) };
+          packedRungs: packedRungs, packedFits: fits(pGrown.sol),
+          bandedNeed: Math.round(bGrown.sol.needA + bGrown.sol.needB),
+          packedNeed: Math.round(pGrown.sol.needA + pGrown.sol.needB),
+          room: Math.round(room) };
 
         // How close the tracks ended up. A line drawn at full weight when
         // the next one is a track-step away turns the map into stripes, so
@@ -2736,14 +2890,25 @@
     // inflated its band by a kink it never makes, and a four-line day that
     // had a band each was tipped into the packed fallback by three family
     // dinners.
-    function longOnTrack(p) {
+    // Events drawn ON this line with their names set against it: the ones
+    // that need the gap beside the line rather than a rung out from it.
+    //
+    // Every one of them counted, whatever its length. Counting only the
+    // long ones booked a rung per track, each a full label height, and six
+    // tracks wanted 996px of a board with 674; counting none of them left
+    // the bundle at minimum pitch with fourteen names adrift in the middle
+    // of the board. What they all want is the same gap, once.
+    function marksOnTrack(p) {
       var n = 0;
-      visible.forEach(function (e) { if (e._onTrack && e._p === p) n++; });
+      visible.forEach(function (e) {
+        if (e._onTrack && !e._dropped && e._p === p) n++;
+      });
       return n;
     }
     function crossTracks(sideKey) {
       return sides[sideKey].map(function (p) {
-        return { key: p.key, long: longOnTrack(p), shared: sharedCount(p),
+        return { key: p.key, shared: sharedCount(p),
+                 marks: marksOnTrack(p) ? 1 : 0,
                  needIn: inwardNeed[p.key] ? 1 : 0 };
       });
     }
@@ -2763,7 +2928,7 @@
       return n;
     }
     // the same shape CrossSolver reads, so the two cannot drift
-    function laneBase(p) { return CrossSolver.laneBase(crossConsts(), { long: longOnTrack(p) }); }
+    function laneBase(p) { return CrossSolver.laneBase(crossConsts(), { key: p.key }); }
 
     // pass 1: what does each track want on its own, with room to spare?
     //
@@ -2786,7 +2951,17 @@
       if (extra && extra[p._sideKey]) obs = obs.concat(extra[p._sideKey]);
       var probe = [], start = p._dist + laneBase(p);
       for (var j = 0; j < 24; j++) probe.push({ dist: start + j * step, owner: p.key });
-      var mine = visible.some(function (e) { return e._laneOwner === p.key; });
+      // ...but only events that are going to ASK for a rung. The floor is
+      // here so an obstacle blocking every rung the probe tried cannot take
+      // a track's whole band away with it, which is a statement about
+      // events that need a rung and have been denied one. An event drawn on
+      // the line never wanted one. With most events marks, this floor was
+      // the entire remaining demand: every track still booked a lane, each
+      // lane still cost its band a label's thickness, and the ladder went
+      // on wanting more board than the board has.
+      var mine = visible.some(function (e) {
+        return e._laneOwner === p.key && !e._onTrack && !e._dropped;
+      });
       // a track with events always keeps at least one lane even if the
       // probe placed none (an obstacle can block every rung it tried),
       // otherwise it would get no band and drop everything it has
@@ -2830,8 +3005,58 @@
       });
     }
     var cross = solveCross(null);
+
+    // SHELVES ARE GIVEN UP, WEAKEST FIRST, UNTIL THE BOARD BANDS.
+    //
+    // Which shape an event takes is not a property of the event. A branch
+    // and a mark both draw a one hour meeting perfectly well, and which is
+    // right depends on whether the board can afford the lane: that is the
+    // whole of "whichever fits best" and it cannot be answered by a
+    // threshold, because the threshold does not know how much room is left.
+    //
+    // The fixed rule above settles the events that are not a judgement call
+    // -- a fifteen minute handover has no shelf worth the name at any size.
+    // This settles the rest, and it asks the only question that matters:
+    // the board has been solved and it does not fit, so is there a shelf
+    // here worth less than banding? Packing costs every track on the board
+    // its bands, which is every branch that can no longer reach across a
+    // neighbour; one meeting drawn as a dot and a tick instead of a rail
+    // costs that meeting a rail. It is not close.
+    //
+    // Weakest first: the shelf with the least run to stand on per pixel of
+    // name, which is the same measure the fixed rule uses, applied to a
+    // board rather than to an event.
+    //
+    // And abandoned whole if it does not get there. A board that has given
+    // up six shelves AND packed anyway is strictly worse than the one it
+    // started from: it has lost the rails and kept none of the depth.
+    if (cross.packed) {
+      var gave = [];
+      for (var cv = 0; cv < 16 && cross.packed; cv++) {
+        var cand = null;
+        visible.forEach(function (e) {
+          if (e._dropped || !canMark(e)) return;
+          var ratio = (e._endA - e._nodeA) / Math.max(1, e._textLen);
+          if (!cand || ratio < cand.ratio) cand = { e: e, ratio: ratio };
+        });
+        if (!cand) break;
+        makeMark(cand.e);
+        gave.push(cand.e);
+        measureDemand();
+        cross = solveCross(null);
+      }
+      if (cross.packed) {
+        gave.forEach(function (e) {
+          e._stub = false; e._diagStick = false;
+      e._onTrack = e._involved.length < 2 && runTooLongForAShelf(e);
+        });
+        measureDemand();
+        cross = solveCross(null);
+      }
+    }
     function applyCross() {
       step = cross.step; sep = cross.sep; packedFallback = cross.packed;
+      lastConsidered = cross.considered || null;
       alloc = cross.alloc;
       LEGEND.forEach(function (p) {
         p._dist = cross.dist[p.key];
@@ -2986,6 +3211,31 @@
     function placeBoth() {
       usedA = placeSide('A', cross.lanes.A, obstacles.A.concat(barBlocks.A, corridorBlocks('A')));
       usedB = placeSide('B', cross.lanes.B, obstacles.B.concat(barBlocks.B, corridorBlocks('B')));
+      // NOTHING IS DROPPED FOR WANT OF A LANE ANY MORE.
+      //
+      // A dropped event is the worst thing this map can do, and until there
+      // was a second shape it was sometimes the only thing left: the track
+      // had one lane, the lane was full, and the event went. There is a
+      // second shape now, and it needs no lane at all. A one hour meeting
+      // drawn as a dot and an end tick on its own line with the name set
+      // beside it is a smaller thing than a rail in a lane; it is an
+      // enormously bigger thing than nothing.
+      //
+      // So the ladder's failures are swept up rather than thrown away, and
+      // the side is placed again without them in it, which also hands their
+      // rungs back to whoever else was short. Bart lost Detention and Skate
+      // Park to a board that had given up two other shelves to fit.
+      var rescued = false;
+      visible.forEach(function (e) {
+        if (!e._dropped || !canMark(e)) return;
+        e._dropped = false;
+        makeMark(e);
+        rescued = true;
+      });
+      if (rescued) {
+        usedA = placeSide('A', cross.lanes.A, obstacles.A.concat(barBlocks.A, corridorBlocks('A')));
+        usedB = placeSide('B', cross.lanes.B, obstacles.B.concat(barBlocks.B, corridorBlocks('B')));
+      }
     }
     placeBoth();
     // SOLVE, LOOK, SOLVE AGAIN: an event ON the move its line is making.
@@ -3074,6 +3324,11 @@
       ask.forEach(function (k) { inwardNeed[k] = 0; });
       cross = keep; applyCross(); recomputeTrackDists(); placeBoth();
     })();
+    // The trunks as this attempt leaves them, and then the names that can
+    // only be placed against them. Both have to happen before the counting
+    // below or the counting is of a board that was never drawn.
+    buildTrunks();
+    placeOnTrackCaptions();
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0, adrift = 0;
     visible.forEach(function (e) {
@@ -3086,6 +3341,24 @@
       // wide captions the slides accumulate and the last one sat two hours
       // right of its own branch — which reads as a caption with no branch
       // at all, not as a caption that moved.
+      if (e._onTrack) {
+        // A MARK'S NAME COMES LOOSE THE SAME WAY, and until now it was the
+        // one caption on the board that could not be counted: it has no
+        // elbow, so the branch test below read NaN and scored nothing. A
+        // board with every name adrift came out at zero and the largest
+        // text won every time.
+        //
+        // Two ways it comes loose. It slides along until it is no longer
+        // beside the run it names, and it steps outward row by row until
+        // there is a lane's worth of paper between the words and the line.
+        // The second is the one that was happening: names three and four
+        // rows off a bundle of lines drawn at minimum pitch.
+        var near = e._textStart + e._textLen < e._nodeA ? e._nodeA - (e._textStart + e._textLen)
+                 : e._textStart > e._endA ? e._textStart - e._endA : 0;
+        if (near > e._textLen * 0.6) adrift++;
+        if (e._capBase != null && e._capOut > e._capBase + e._h * 0.75) adrift++;
+        return;
+      }
       var want = e._dir > 0 ? e._elbow + TEXT_PAD : e._elbow - TEXT_PAD - e._textLen;
       if (Math.abs(e._textStart - want) > e._textLen * 0.6) adrift++;
     });
@@ -3601,6 +3874,9 @@
     var bestTier = null, bestQ = Infinity;
     for (var ti = 0; ti < tiers.length; ti++) {
       var q = attempt(tiers[ti]);
+      tierLog.push([ti, Math.round(q), packedFallback ? 'PACKED' : 'bands',
+                     Math.round(needA), Math.round(needB), Math.round(crossPx),
+                     Math.round(maxLabelThick)]);
       if (q < bestQ) { bestQ = q; bestTier = ti; }
       if (q === 0) break;
       if (ti > bestTier + 1) break; // two smaller steps without improvement — stop
@@ -3621,9 +3897,23 @@
         if (e._laneDist == null) return;
         var p = e._p, c0 = lineCAt(p, e._nodeA), c1 = lineCAt(p, e._endA);
         var travel = (c1 - c0) * p._sign;
-        if (Math.abs(travel) < MIN_DIAG * 2) return;         // the trunk is going nowhere
         var branch = ((spineC + e._sign * e._laneDist) - c0) * p._sign;
         if (!branch) return;
+        // A SHELF IS WORTH ITS LANE ONLY WHEN THE SHELF IS THE SHAPE.
+        //
+        // A branch is a ramp out to a lane and then a flat run carrying the
+        // name. When the flat run is the bigger part of that, the shape
+        // reads as a rail and the lane it costs is earned. When the ramp is
+        // the bigger part, what is drawn is a diagonal with a stub on the
+        // end: a fifteen minute handover is twelve pixels of shelf on a
+        // hundred pixel climb, and an hour is still less shelf than climb
+        // wherever the lanes are more than an hour deep.
+        //
+        // Then the dot and the tick go on the main track instead and the
+        // name goes beside it, which costs no rung at all. A rung is a lane
+        // step of a board that has none of its depth left to spare.
+        var stubby = (e._endA - e._nodeA) < e._textLen * 0.5;
+        if (!stubby && Math.abs(travel) < MIN_DIAG * 2) return;   // the trunk is going nowhere
         // TWO WAYS A BRANCH IS THE MOVE AGAIN.
         //
         // It doubles back: the trunk climbs to dinner and the rail drops
@@ -3641,8 +3931,20 @@
         // convergences, which is what it did the first time this was tried
         // (E10): the trunk has to be doing most of the branch's work, not
         // merely leaning the same way.
-        if ((branch > 0) === (travel > 0) && Math.abs(travel) < Math.abs(branch) * 0.6) return;
+        if (!stubby
+            && (branch > 0) === (travel > 0)
+            && Math.abs(travel) < Math.abs(branch) * 0.6) return;
+        // AND IT FORGETS THE LANE IT NO LONGER HAS.
+        //
+        // placeSide returns early for a mark, so everything it wrote the
+        // last time round survived: the rung, the elbow, the point the
+        // diagonal left from. Downstream code that asks "does this event
+        // have a lane" then answered yes and drew a rail leaving the line
+        // from a place the line had never been, which is four boards'
+        // worth of "every branch leaves its line from a point on that line".
         e._diagStick = true; e._onTrack = true; e._onRoute = true; e._capLead = true;
+        e._laneDist = null; e._elbow = null; e._diagFrom = null;
+        e._lane = null; e._rampEl = null;
         changed = true;
       });
       if (!changed) return;
@@ -3655,8 +3957,19 @@
 
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
     buildTrunks();
+    placeOnTrackCaptions();
 
-    {
+    // CALLED ONCE PER ATTEMPT, not once at the end.
+    //
+    // Placing these after the tier loop meant no attempt was ever scored
+    // with its marks' names on the board: the score counted branches that
+    // had drifted from their rails and could not count a mark's name at
+    // all, so a board where every name was adrift scored a clean zero and
+    // the biggest text won. That is the same mistake as deciding the shapes
+    // last, one level up, and it has the same answer: place them inside the
+    // attempt, score what is actually drawn, and let the tiers compete on
+    // equal terms.
+    function placeOnTrackCaptions() {
       // A MARK ON THE TRUNK NAMES ITSELF THE SAME WAY A CONVERGENCE DOES.
       //
       // Neither has a rail hanging off it to carry a name, so neither can
@@ -3672,6 +3985,9 @@
         e._routeEdge = lineCAt(e._p, e._nodeA);
         e._capOut = LINE_GAP + Math.max(NODE_R * 1.2,
           Math.max(2, e._p.line_width) * S * weightScale / 2);
+        // the offset a name beside its own line WANTS, kept so the score
+        // can tell a name against its mark from a name three rows out
+        e._capBase = e._capOut;
         e._capLead = true;
         e._labelSign = e._sign;
         e._textStart = e._nodeA + TEXT_PAD;
@@ -3755,7 +4071,37 @@
         // and the line, and the name is written along the rail.
         // ...and the offset is to the box's MIDDLE, so half its own height
         // has to be in it or the words straddle the rail they name.
-        function capPerp(e, m) { return (e._capOut + e._h / 2) * Math.sqrt(1 + m * m); }
+        // Closer to the mark than a lane label sits to its rail: a lane
+        // label keeps a ring's radius clear because a ring is drawn there,
+        // and a name against the trunk has only the rail to clear.
+        function capPerp(e, m) {
+          var rail = Math.max(2, e._p.line_width) * S * weightScale / 2;
+          return (LINE_GAP + rail + e._h / 2) * Math.sqrt(1 + m * m);
+        }
+        // A LEANING NAME MAY NOT CROSS A LINE.
+        //
+        // Beside a SLOPING trunk the wedge is empty, because the trunk is
+        // leaning away from its neighbour and the paper beside it goes the
+        // same way. Beside a LEVEL trunk it depends entirely on where the
+        // trunk is: above the outermost line there is nothing but the edge
+        // of the board, and in the middle the next rail is a lane away.
+        // Preferring 45 everywhere drove one name ninety five pixels
+        // through somebody else's track, so it is not a rule about slopes.
+        // It is a question asked of each candidate.
+        function runCrosses(e, run) {
+          for (var qi = 0; qi < LEGEND.length; qi++) {
+            var q = LEGEND[qi];
+            if (q === e._p) continue;
+            for (var bi = 0; bi < run.length; bi++) {
+              var bx = run[bi], stepA = Math.max(2 * S, (bx.a1 - bx.a0) / 3);
+              for (var a = bx.a0; a <= bx.a1; a += stepA) {
+                var c = lineCAt(q, a);
+                if (c > bx.c0 && c < bx.c1) return true;
+              }
+            }
+          }
+          return false;
+        }
         function angledRun(e, at, away, m) {
           var unit = 1 / Math.sqrt(1 + m * m), n = Math.max(2, Math.round(e._textLen / (e._h * 0.8)));
           var c0 = lineCAt(e._p, at) + away * capPerp(e, m);
@@ -3806,11 +4152,13 @@
                     if (bx.c0 < bandLo || bx.c1 > crossPx - EDGE || bx.a1 > axisEnd - EDGE) off = true;
                   });
                   if (off) return;
-                  // A leaning name is a little harder to read than a flat
-                  // one, so it has to be BETTER, not merely equal: charged a
-                  // token amount so the board only leans when leaning buys
-                  // something.
-                  cost += e._h * e._textLen * 0.02;
+                  if (runCrosses(e, run)) return;
+                  // ...and with that asked, leaning is the PREFERRED look for
+                  // a name against a trunk rather than a fallback. There the
+                  // lean is what pairs the words with the line, it is what a
+                  // transit map does with every station it cannot label
+                  // square, and it is the only way into the wedge.
+                  cost -= e._h * e._textLen * 0.02;
                   if (!bestA || cost < bestA.cost) {
                     bestA = { cost: cost, at: at, away: away, run: run, m: mm };
                   }
@@ -3876,8 +4224,13 @@
       boundaries: AXIS.boundaries.map(function (b) { return b.min; }), spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
-      packed: !!packedFallback,
+      packed: !!packedFallback, tiers: tierLog, considered: lastConsidered,
       diag: visible.filter(function (e) { return e._diagStick; }).map(function (e) { return e.title; }),
+      shapes: visible.filter(function (e) { return !e._dropped && e._involved && e._involved.length < 2 && e.end_min > e.start_min; }).map(function (e) {
+        var p2 = e._p, c0 = lineCAt(p2, e._nodeA);
+        var br = e._laneDist == null ? null : Math.round(((spineC + e._sign * e._laneDist) - c0) * p2._sign);
+        return [e.title, e._onTrack ? 'mark' : 'shelf', e._capAngle == null ? 'flat' : Math.round(e._capAngle), Math.round(e._endA - e._nodeA), br];
+      }),
       diagWhy: visible.filter(function (e) { return !e._dropped && e._involved && e._involved.length < 2 && e.end_min > e.start_min && e._laneDist != null; }).map(function (e) { var p2 = e._p, c0 = lineCAt(p2, e._nodeA), c1 = lineCAt(p2, e._endA); return [e.title, Math.round((c1 - c0) * p2._sign), Math.round(((spineC + e._sign * e._laneDist) - c0) * p2._sign)]; }),
       // A18: which lines exchanged places, and where on the axis. Empty on
       // a day one order can draw, which is most of them.
@@ -4534,6 +4887,22 @@
       return a1 < a0 ? pts.slice().reverse() : pts;
     }
     function rampOut(p, aFrom, aElbow, laneC, dir, fromRing, tailTo) {
+      // A RAIL IS ON THE BOARD.
+      //
+      // Every position here is an axis coordinate and nothing was stopping
+      // one running off the end. A backward branch takes its lead-in one way
+      // and its tail the other, so an event near the start of the day could
+      // put both its departure and its tail to the left of axisStart, and
+      // the rail was drawn at x = -219 on a board whose first pixel is 4.
+      // The pierce and adrift tests read it as a branch leaving its line
+      // from somewhere the line has never been, which is exactly what it is.
+      //
+      // It went unnoticed while every event had a lane of its own, because a
+      // forward placement was almost always available. Take lanes away and
+      // backward placements become common, and so does this.
+      aFrom = clamp(aFrom, axisStart, axisEnd);
+      aElbow = clamp(aElbow, axisStart, axisEnd);
+      if (tailTo != null) tailTo = clamp(tailTo, axisStart, axisEnd);
       // The tail runs a fixed lead past the elbow so the bend into the lane
       // has room to be a bend. On an event SHORTER than that lead it ran
       // past the event's own end, so the end tick sat mid-rail with line
@@ -4541,6 +4910,7 @@
       // which is never closer than a corner radius, so the bend still fits.
       var tail = aElbow + dir * RAMP_LEAD;
       if (tailTo != null) tail = dir > 0 ? Math.min(tail, tailTo) : Math.max(tail, tailTo);
+      tail = clamp(tail, axisStart, axisEnd);
       // A SHARED event's branch starts AT its interchange ring, with no
       // lead-in. The lead-in exists so the departure is an interior vertex
       // and gets filleted like every other bend, and it is invisible because
@@ -4575,7 +4945,7 @@
       // simply carries straight on while the trunk keeps falling, with no
       // elbow at all, which is what a junction on a real map looks like.
       // On a level trunk nothing moves, because nothing can be nearer.
-      var dep = departAt(p, aFrom, aElbow, laneC, dir);
+      var dep = clamp(departAt(p, aFrom, aElbow, laneC, dir), axisStart, axisEnd);
       // The lead-in exists to make the departure an interior vertex so it
       // gets filleted like every other bend, and it is invisible because it
       // lies on the trunk in the trunk's own stroke. That stops being true
@@ -4598,7 +4968,7 @@
       if (Math.abs(dep - aElbow) < 0.5) {
         return [[aElbow, lineCAt(p, aElbow)], [aElbow, laneC], [tail, laneC]];
       }
-      return trunkSlice(p, dep - dir * RAMP_LEAD, dep)
+      return trunkSlice(p, clamp(dep - dir * RAMP_LEAD, axisStart, axisEnd), dep)
         .concat([[aElbow, laneC], [tail, laneC]]);
     }
     // WHERE A RAIL MAY LEAVE ITS OWN LINE AND STILL ARRIVE AT 45 DEGREES.
@@ -5873,6 +6243,20 @@
         b.style.top = (axy[1] - e._h / 2) + 'px';
         b.style.transformOrigin = '0 50%';
         b.style.transform = 'rotate(' + e._capAngle.toFixed(2) + 'deg)';
+        // BOTH ROWS START ON THE SAME DIAGONAL. The time and the title are
+        // stacked, so once the box is turned the lower row is displaced
+        // along the slope and the two read as a staircase rather than as one
+        // name. Indenting the row that falls behind by a row height times
+        // the tangent puts their left edges back on one line, which at 45
+        // degrees is simply the row's own height.
+        var rows = b.children, tan = Math.tan(e._capAngle * Math.PI / 180);
+        if (rows.length > 1 && Math.abs(tan) > 0.01) {
+          var rowH = e._h / rows.length, lead = rowH * tan;
+          for (var ri = 0; ri < rows.length; ri++) {
+            var d = lead > 0 ? lead * ri : -lead * (rows.length - 1 - ri);
+            rows[ri].style.marginLeft = d + 'px';
+          }
+        }
       } else if (horizontal) {
         b.style.left = e._textStart + 'px';
         if (ls < 0) b.style.top = (lineC - gap - duck - e._h) + 'px';

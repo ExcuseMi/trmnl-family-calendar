@@ -7,7 +7,7 @@
 // carefully the rest of the file draws it.
 
 module.exports = function (test, h) {
-  const { solve, board, assert } = h;
+  const { solve, board, consts, assert } = h;
 
   test('one track\'s band never reaches into the next one\'s', () => {
     for (const b of [
@@ -54,24 +54,27 @@ module.exports = function (test, h) {
     }
   });
 
-  test("a long event's name gets the gap beside its own line", () => {
-    // A long event is drawn ON the line, so it has no branch running out to
-    // a lane and its name has to sit against the line itself. Outward is
-    // where that line's branches already write, so it goes inward, into the
-    // gap between this line and whatever is inside it -- and the gap has to
-    // widen to hold it, which is the whole claim. It used to be the room a
-    // 32px kink needed, back when a long block moved the line instead.
-    // On a board with lines either side of it, so the widening is the
-    // thing being measured. Alone on a roomy canvas the line does not have
-    // to move at all: the gap beside it was already a caption deep, and the
-    // rung simply goes there.
+  test('an event on the line gets the gap beside its own line', () => {
+    // An event drawn ON the line has no branch running out to a lane, so
+    // its name has to sit against the line itself, in the gap between this
+    // line and whatever is inside it -- and the gap has to be wide enough
+    // to hold a name, which is the whole claim.
+    //
+    // It used to be asked for as a RUNG, and only by events over four
+    // hours. Both of those are gone: an event on the line is an event on
+    // the line whatever its length, and what it needs is a gap rather than
+    // a place on the ladder. A rung costs three times as much and buys the
+    // clearance for a ring that is never drawn.
+    const k = consts();
     const plain = solve(board(['a:1', 'b:1'], ['c:1']));
-    const long = solve(board(['a:1|long', 'b:1'], ['c:1']));
-    const inward = long.lanes.A.filter((l) => l.side === -1 && l.owner === 'a');
-    assert(inward.length === 1, 'a long event got ' + inward.length + ' rungs inward, not one');
-    assert(inward[0].dist < long.dist.a, 'the rung is meant to be between the line and the spine');
-    assert(long.dist.a - plain.dist.a >= 30, 'the line moved out only '
-      + Math.round(long.dist.a - plain.dist.a) + 'px, which is not a caption');
+    const onLine = solve(board(['a:1|mark', 'b:1'], ['c:1']));
+    assert(onLine.lanes.A.filter((l) => l.side === -1 && l.owner === 'a').length === 0,
+      'an event on the line took a rung on the ladder, which it has no rail to reach');
+    assert(onLine.dist.a >= k.maxLabelThick + k.lineGap,
+      'the gap beside the line is ' + Math.round(onLine.dist.a)
+      + 'px, which will not hold a ' + k.maxLabelThick + 'px name');
+    assert(onLine.dist.a > plain.dist.a,
+      'the line did not move out at all to make room for its own name');
   });
 
   test('a track the drawing found pierced is given the same gap', () => {

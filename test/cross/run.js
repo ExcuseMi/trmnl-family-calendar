@@ -61,9 +61,13 @@ function consts(over) {
   return k;
 }
 
-// A board: `spec` is a list like ['a:2', 'b:1|long'] per side. The flag says
-// what the track carries beyond a count of lanes: `long` is a long event
-// drawn ON the line, whose name has nowhere to go but the gap beside it, and
+// A board: `spec` is a list like ['a:2', 'b:1|mark'] per side. The flag says
+// what the track carries beyond a count of lanes: `mark` is a track carrying
+// events drawn ON the line as a dot and a tick, of any length, whose names
+// are set against the line by the caption pass rather than hung off a rung.
+// Those need a name's thickness of clear board beside the line and nothing
+// else, which is about a third of what a rung costs, and getting it wrong in
+// either direction is what these cases are about.
 // `needin` is a track the DRAWING found to have somebody else's trunk
 // through its labels with no rung outward that escapes (shared.liquid's
 // settleSides measures that and feeds it back in). Both ask the solver for a
@@ -76,7 +80,9 @@ function board(aSpec, bSpec, over) {
     for (const s of spec) {
       const [key, rest] = s.split(':');
       const [lanes, flag] = (rest || '1').split('|');
-      sides[side].push({ key: key, long: flag === 'long' ? 1 : 0, needIn: flag === 'needin' ? 1 : 0 });
+      sides[side].push({ key: key,
+                         marks: (flag === 'mark' || flag === 'long') ? 1 : 0,
+                         needIn: flag === 'needin' ? 1 : 0 });
       demand[key] = Number(lanes);
     }
   }
