@@ -761,6 +761,26 @@ is open.
   presets, where somebody is reading a configuration rather than a day,
   and that is where it is.
 
+- [ ] **E17. The rejoin branch is unreachable, and two rules disagree because
+  of it.** A solo event of four hours or more is `_onLine`
+  (`runTooLongForAShelf`, shared.liquid): it is drawn along its own line
+  with a leader back from the caption, and never takes a lane. The rejoin
+  gate needs four hours too -- `MIN_REJOIN_MIN`, the same 240 -- so by the
+  time an event is long enough to loop back to its line it is long enough
+  never to have left it. Measured: zero rejoins across all fourteen
+  fixtures at both landscape sizes.
+
+  So `if (best.dir > 0 && !best.joined && !shared && longEnough)` and
+  everything under it is dead, and both `plugin/AGENTS.md` ("only a solo
+  event of four hours or more climbs back") and the ramp-builder comment
+  above it describe a shape the board no longer draws.
+
+  Not removed here, deliberately: it is forty lines of layout code that
+  nothing can currently exercise, so deleting it is a change no test can
+  confirm. It wants doing as its own commit, with the two documents fixed
+  in the same breath. `test/layout/cases/rails.js` now pins what the board
+  really does, so the deletion cannot quietly change behaviour.
+
 - [ ] **E16. The rule editor has no control for `allDay` or for deleting the
   matched text.** Both survive a round trip now -- a config carrying either
   loads, keeps it and writes it back, where before the editor dropped them

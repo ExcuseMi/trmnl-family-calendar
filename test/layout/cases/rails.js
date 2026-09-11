@@ -39,41 +39,49 @@ module.exports = function (test, h) {
     return rep.canvas.w / (to - from);
   }
 
-  test('a rail is as long as its event, not as long as its label', () => {
-    const f = fixtures.find((x) => x.name === 'busy-day');
-    const rep = layout(f, ROOMY);
-    const pxPerMin = scale(rep);
-    const byTitle = {};
-    f.metro.events.forEach((e) => { byTitle[e.title] = e; });
+  // AN EVENT IS AS LONG AS IT IS, NOT AS LONG AS ITS NAME.
+  //
+  // The defect this guards is a real one and it has happened: a rail drawn
+  // to fit its caption rather than its hours, so a fifteen-minute stand-up
+  // occupied an hour of board and the reader had no way to know it had not.
+  //
+  // It used to look for that on a flat SPUR -- a rail out in a lane with the
+  // line branching to it and back. There are none left to look at: on every
+  // fixture in the suite, at every size, the count of `branch` paths is
+  // zero. An event is drawn ON its line now (`_onLine`), or as a
+  // convergence, and the lane holds only the words. The case was asserting
+  // against a shape the board had stopped drawing, so it failed on boards
+  // with nothing wrong with them.
+  //
+  // The guarantee survives the shape change, so it is asked of what is
+  // actually drawn: the stretch of line an event claims, from its node to
+  // its end, against the minutes it really lasts. Its caption may be any
+  // length at all and must not move either end.
+  test('an event claims as much line as it lasts, not as much as its label', () => {
+    for (const name of ['busy-day', 'long-event-day', 'crew-day']) {
+      const f = fixtures.find((x) => x.name === name);
+      const rep = layout(f, ROOMY);
+      const pxPerMin = scale(rep);
+      const byTitle = {};
+      f.metro.events.forEach((e) => { byTitle[e.title] = e; });
 
-    // The longest FLAT run inside each branch, in axis px. Measured as the
-    // whole path it would charge a rail for its own drop; measured only on
-    // paths that are flat end to end it skipped every rail of a bundle,
-    // which is one path carrying a drop, a bend and then its rung: a rail
-    // drawn 120px past its own end went through unnoticed.
-    const flats = pathsWhere(rep, 'branch').map((p) => {
-      let best = 0, from = null;
-      for (let i = 1; i < p.pts.length; i++) {
-        if (Math.abs(p.pts[i][1] - p.pts[i - 1][1]) < 0.5) {
-          if (from == null) from = p.pts[i - 1][0];
-          best = Math.max(best, Math.abs(p.pts[i][0] - from));
-        } else from = null;
+      let checked = 0;
+      for (const e of eventsIn(rep).filter((x) => x.status === 'ok')) {
+        const src = byTitle[e.title];
+        if (!src || src.end_min == null) continue;
+        const drawn = Math.abs(e.endA - e.nodeA);
+        const want = (src.end_min - src.start_min) * pxPerMin;
+        // A moment has no length to check, and a corner radius is the
+        // tolerance: an event's ends are rounded, not mitred.
+        if (want < 4) continue;
+        assert(drawn <= want + 16, name + ': "' + e.title + '" lasts '
+          + (src.end_min - src.start_min) + 'min (' + Math.round(want)
+          + 'px) but claims ' + Math.round(drawn) + 'px of line'
+          + (e.textLen ? ', with a ' + Math.round(e.textLen) + 'px caption' : ''));
+        checked++;
       }
-      return { len: best };
-    }).filter((r) => r.len > 1);
-
-    assert(flats.length > 0, 'no flat spur runs found at all');
-
-    // The longest event in the fixture is 90 minutes; nothing should draw a
-    // flat rail dramatically longer than the longest event, which is what a
-    // label-length rail did.
-    const longestMin = Math.max.apply(null, f.metro.events.map((e) => e.end_min - e.start_min));
-    const budget = (longestMin + 30) * pxPerMin;
-    const over = flats.filter((r) => r.len > budget);
-    assert(over.length === 0,
-      over.length + ' rail(s) longer than the longest event (' + longestMin
-      + 'min): ' + over.map((r) => Math.round(r.len) + 'px').join(', ')
-      + ' vs a budget of ' + Math.round(budget) + 'px');
+      assert(checked > 0, name + ': no event with a real duration was laid out');
+    }
   });
 
   test('every event is marked at its start, and its end is either ticked or rejoined', () => {
@@ -146,13 +154,26 @@ module.exports = function (test, h) {
     });
   }
 
-  test('a long solo event still does rejoin — the rule is not "never"', () => {
+  // A LONG SOLO EVENT NEVER LEAVES ITS LINE, SO IT NEVER COMES BACK.
+  //
+  // This used to assert the opposite: that a five-hour block loops out to a
+  // lane and rejoins. It does not, and cannot. `runTooLongForAShelf` makes
+  // any solo event of four hours or more `_onLine` -- drawn along its own
+  // line with a leader back from the caption, no rail and no lane -- and the
+  // rejoin gate needs four hours too (`MIN_REJOIN_MIN`, the same 240). An
+  // event long enough to rejoin is by then long enough to have never left.
+  // Measured: zero rejoins across all fourteen fixtures at both sizes.
+  //
+  // So the guarantee worth holding is the one the board actually offers --
+  // the block stays ON the line, which is what lets its hours be read off
+  // the line's own length. The dead branch is issues.md E17.
+  test('a long solo event stays on its line rather than looping out to a lane', () => {
     const f = fixtures.find((x) => x.name === 'quiet-day');
     const rep = layout(f, ROOMY);
-    const merged = eventsIn(rep).filter((e) => e.merged).map((e) => e.title);
-    assert(merged.indexOf('Rehearsal Day') >= 0,
-      'the five-hour block should loop back to its line, got rejoins on: '
-      + (merged.join(', ') || 'nothing'));
+    const laid = eventsIn(rep).find((e) => e.title === 'Rehearsal Day');
+    assert(laid, 'the five-hour block was not laid out at all');
+    assert(laid.mark, 'the five-hour block took a lane instead of its own line');
+    assert(!laid.merged, 'it rejoined, which means it left, which it should not have');
   });
 
   // A spur that drops straight down needs no run-up. The lane spine starts a
