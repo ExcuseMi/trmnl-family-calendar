@@ -1291,7 +1291,21 @@
       // from one hold to the next, and THAT is the move that was crossing
       // the board: Lisa rose two hours at 45 from her saxophone lesson to
       // dinner through everybody in between.
-      if (i < hs.length) from = Math.max(from, to - pxPerHour * 0.75);
+      // ...AND THE CAP IS A CORNER, NOT AN APPROACH.
+      //
+      // Three quarters of an hour is about a hundred pixels, and a 45 only
+      // needs as many pixels as it has bands to climb -- so for anything
+      // short of a four-band move the cap never bound and the line took its
+      // 45 anyway. Bart came out of the school day at three on a diagonal
+      // across open canvas to reach detention, which is the shape this was
+      // put in to stop.
+      //
+      // A level change is an orthogonal step now: a corner to turn, the
+      // move, a corner to straighten. Anything that will not fit in that
+      // falls through to the 90, which is everything but the smallest
+      // nudge. The line runs flat until the moment it has to be somewhere
+      // else, and then goes there.
+      if (i < hs.length) from = Math.max(from, to - CORNER * 3);
       // GOING HOME IS OPTIONAL. A line has to START the day on its own
       // lane, because that is where its name is written and the reader
       // needs the two to agree. It does not have to END there: after the
@@ -1334,7 +1348,7 @@
       // dinner and its own lane and held there, which is a level that means
       // nothing.
       if (i === hs.length && lvl !== prevLvl) {
-        to = Math.min(to, from + pxPerHour * 0.5 + CORNER * 2);
+        to = Math.min(to, from + CORNER * 3);
       }
       // ...and between two events it cannot refuse: leaving at once and
       // arriving on time are the same demand when the two nearly touch, and
@@ -4448,20 +4462,24 @@
           busy.push({ a0: o._textStart - TEXT_PAD, a1: o._textStart + o._textLen + TEXT_PAD,
                       c0: t0, c1: t0 + o._h });
         });
-        // A CONVERGENCE IS NOT IN ITS OWN WAY.
+        // NO EXEMPTION FOR A CONVERGENCE'S OWN MEMBERS.
         //
-        // The rails dropping into an enclosure belong to the enclosure: they
-        // are the four people arriving, and its name is the name of them
-        // arriving. Counted against it, the caption was pushed out of the
-        // one place that belongs to the whole thing -- above the pill,
-        // across its middle -- by the very lines it is describing, and ended
-        // up back under the corridor among the other events' names.
+        // Excusing them looked right -- the rails dropping into an enclosure
+        // ARE the people arriving, and its name is the name of them
+        // arriving -- and it excused far too much: a member's line is a line
+        // for the whole width of the board, not only where it dives into
+        // the pill. Every caption the suite found a rail through was one of
+        // these, pierced by one of its own members half an hour away from
+        // the thing they were sharing. "School Run" through Sam, "Family
+        // Dinner" through Alex, "Crew Debrief" through Fry.
+        //
+        // What it was really working around is that a pinned caption had no
+        // search at all, so the only way to keep it above the pill was to
+        // stop counting what was in the way. It has one now, below.
         function costAt(b, e) {
-          var mine = e && e._involved && e._involved.length > 1 ? e._involved : null;
           var cost = 0;
           for (var i = 0; i < busy.length; i++) {
             var t = busy[i];
-            if (mine && t.q && mine.indexOf(t.q) >= 0) continue;
             if (b.a0 >= t.a1 || t.a0 >= b.a1 || b.c0 >= t.c1 || t.c0 >= b.c1) continue;
             var ov = (Math.min(b.a1, t.a1) - Math.max(b.a0, t.a0))
                    * (Math.min(b.c1, t.c1) - Math.max(b.c0, t.c0));
@@ -4606,10 +4624,39 @@
           // clear. So it keeps its place and joins the obstacle list, and
           // the solo events either side arrange themselves around it.
           if (e._routeShared && e._textStart != null && e._capOut != null) {
-            var sc = e._labelSign < 0 ? e._routeEdge - e._capOut - e._h
-                                      : e._routeEdge + e._capOut;
-            busy.push({ a0: e._textStart - TEXT_PAD, a1: e._textStart + e._textLen + TEXT_PAD,
-                        c0: sc, c1: sc + e._h });
+            // ABOVE THE PILL, AND CLEAR.
+            //
+            // Centred over the corridor is where this name belongs and it
+            // is not always free: another line runs past at that height, or
+            // its own drop comes down through the words. So the position is
+            // a preference rather than a decree -- it slides along the axis
+            // first, which keeps it over the thing it names, and only steps
+            // further out when sliding cannot find paper. Charged for both,
+            // so the centred spot wins whenever it is clear.
+            var row0 = e._h + LINE_GAP * 0.6, mid0 = e._textStart;
+            var bestS = null;
+            for (var oi0 = 0; oi0 < 4; oi0++) {
+              var out0 = e._capOut + oi0 * row0;
+              var c0s = e._labelSign < 0 ? e._routeEdge - out0 - e._h : e._routeEdge + out0;
+              if (c0s < bandLo || c0s + e._h > crossPx - EDGE) continue;
+              for (var si0 = 0; si0 < 7; si0++) {
+                var slide0 = [0, 0.35, -0.35, 0.7, -0.7, 1.1, -1.1][si0] * e._textLen;
+                var at0 = mid0 + slide0;
+                if (at0 < axisStart + EDGE || at0 + e._textLen > axisEnd - EDGE) continue;
+                var bx0 = { a0: at0 - TEXT_PAD, a1: at0 + e._textLen + TEXT_PAD,
+                            c0: c0s, c1: c0s + e._h };
+                var cost0 = costAt(bx0, e)
+                          + oi0 * e._h * e._textLen * 0.05
+                          + Math.abs(slide0) * e._h * 0.02;
+                if (!bestS || cost0 < bestS.cost) bestS = { cost: cost0, at: at0, out: out0, box: bx0 };
+                if (cost0 === 0) { oi0 = 4; break; }
+              }
+            }
+            if (bestS) {
+              e._textStart = bestS.at;
+              e._capOut = bestS.out;
+              busy.push(bestS.box);
+            }
             return;
           }
           // EVERY SHAPE THE NAME CAN TAKE, AND THE CHEAPEST ONE WINS.
