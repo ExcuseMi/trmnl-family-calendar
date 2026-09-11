@@ -1617,6 +1617,79 @@
       return by;
     }
     function pierceTotal(by) { var n = 0; Object.keys(by).forEach(function (k) { n += by[k]; }); return n; }
+
+    // WHERE EVERY NAME ON THE BOARD ACTUALLY IS.
+    //
+    // The scoring could see a caption the trunk pass put on top of another,
+    // because that pass measures its own damage. It could not see any other
+    // pair: two lane labels, a lane label and a caption, two captions from
+    // different attempts. It did not need to while the lane ladder placed
+    // nearly everything, since a ladder refuses a rung that is taken -- but
+    // a ladder only refuses within one side, and a label is now routinely
+    // wider and taller than the band it hangs in.
+    //
+    // So the board's own suite had a test for this from the beginning and
+    // the board itself had no idea. That gap is the whole reason the tier
+    // loop kept choosing the largest text: every term it could see did get
+    // better, and the one that got worse was the one nobody was reading.
+    //
+    // A leaning name is reported as the run of small boxes along its own
+    // centre line rather than as one upright box round the whole thing: at
+    // 45 that bounding box is half again as big as the words in it and
+    // would report clashes with paper the name never touches.
+    function labelBoxes() {
+      var out = [];
+      if (!horizontal) return out;
+      visible.forEach(function (e) {
+        if (e._dropped || e._textStart == null) return;
+        if (e._capRun && e._capRun.length) {
+          e._capRun.forEach(function (bx) {
+            out.push({ e: e, a0: bx.a0, a1: bx.a1, c0: bx.c0, c1: bx.c1 });
+          });
+          return;
+        }
+        if (e._laneDist == null && e._routeEdge == null) return;
+        // the same arithmetic the drawing does, and for the same reason
+        // piercedBy repeats it: a box predicted from anything else is a box
+        // that is not on the board.
+        var lineC = e._routeEdge != null ? e._routeEdge
+          : e._bundleOut != null ? e._bundleOut : spineC + e._sign * e._laneDist;
+        var ls = (e._bundleOut != null || e._labelSign == null) ? e._sign : e._labelSign;
+        var gap = e._capOut != null ? e._capOut : LINE_GAP;
+        var c0 = ls < 0 ? lineC - gap - e._h : lineC + gap;
+        out.push({ e: e, a0: e._textStart, a1: e._textStart + e._textLen,
+                   c0: c0, c1: c0 + e._h });
+      });
+      return out;
+    }
+    // Pairs of EVENTS whose names touch, not pairs of boxes: a leaning name
+    // is several boxes and would otherwise be charged several times over
+    // for one collision.
+    function labelOverlaps() {
+      var bs = labelBoxes(), seen = {}, n = 0;
+      for (var i = 0; i < bs.length; i++) {
+        for (var j = i + 1; j < bs.length; j++) {
+          var a = bs[i], b = bs[j];
+          if (a.e === b.e) continue;
+          if (a.a0 >= b.a1 || b.a0 >= a.a1 || a.c0 >= b.c1 || b.c0 >= a.c1) continue;
+          var k = a.e.title < b.e.title ? a.e.title + '\u0000' + b.e.title
+                                        : b.e.title + '\u0000' + a.e.title;
+          if (seen[k]) continue;
+          seen[k] = 1; n++;
+        }
+      }
+      return n;
+    }
+    // DECLARED BEFORE THE THING THAT READS THEM.
+    //
+    // These live with `placeOnTrackCaptions`, which is written below the
+    // tier loop that calls it. `var` hoists the name and not the value, so
+    // during every attempt these were `undefined`, and the score they were
+    // added to came out NaN -- which compares false against everything, so
+    // the loop's "is this tier better" question answered no to all of them.
+    // The scoring changes that followed were being made against a number
+    // nobody was computing.
+    var capClashes = 0, capPierces = 0;
     // Which tracks were found to need the gap beside their own line. Empty
     // on the first solve, because it can only be answered by a board that
     // has been drawn; `settleSides` fills it in and solves again.
@@ -3395,7 +3468,14 @@
     // Otherwise: a dropped event is unacceptable, a caption that no longer
     // sits by its own rail nearly as bad, a diagonal through a label or a
     // slid elbow ugly, a backward branch mildly so.
-    var lost = (tier.time ? 0 : 200) + (tier.loc ? 0 : 15);
+    // 200 was "more than any single crossing", which was the right size
+    // when a crossing was 40 and there were one or two. There are thirteen
+    // leaning captions on a board now and a clash is charged 120, so two of
+    // them outpriced the clock: the board quietly bought itself a tidier
+    // afternoon by not saying when anything was. A calendar that does not
+    // say when is not a calendar, so this is dearer than any amount of
+    // untidiness and the text steps down through every size it has first.
+    var lost = (tier.time ? 0 : 900) + (tier.loc ? 0 : 15);
     // A caption that has come loose is a rail with no name beside a name
     // with no rail, and the reader pairs the name with whatever rail is
     // nearest: they cannot recover it by looking harder, which is why it
@@ -3415,8 +3495,27 @@
     // charged what a caption adrift is charged: in both the words are there
     // and cannot be read as belonging to what they name. Without it the
     // board could buy a bigger text with other people's names.
-    return dropped * 1000 + lost + (adrift + capClashes) * 120
-      + (crossings + barPierces()) * 40 + slides * 15 + backwards * 10;
+    // ...and a line drawn through one of these names is a crossing like
+    // any other. The lane placer reports its own (`_crossing`); nothing
+    // reported these, because nothing placed them through the ladder.
+    // AND PACKING IS A COST, NOT A FREE ALTERNATIVE.
+    //
+    // "Bands are the better drawing and win every tie" is decided inside
+    // the solver, on whether the bands fit. The tier loop then scores what
+    // came back and had no idea which it was looking at, so a packed board
+    // at the largest text could beat a banded one at a smaller text over
+    // and over: packing gives up every branch's reach across its
+    // neighbours, and none of the terms here can see that, because the
+    // branches that would have crossed were never drawn.
+    //
+    // Priced between a caption and an event: worth stepping the text down
+    // two or three sizes to keep, never worth losing an event for.
+    // `labelOverlaps` subsumes what `capClashes` counted and sees the rest
+    // of the board besides, so the pass's own tally is not added again.
+    var _ov = labelOverlaps();
+    return dropped * 1000 + (packedFallback ? 300 : 0) + lost
+      + (adrift + _ov) * 120
+      + (crossings + barPierces() + capPierces) * 40 + slides * 15 + backwards * 10;
     }
 
     // Where each interchange bar ends up, as an obstacle for the next run:
@@ -3876,6 +3975,23 @@
         if (e._dropped || e._textStart == null) return;
         if (!e._routeShared && !e._onTrack) return;
         if (e._routeEdge == null || e._capOut == null) return;
+        // WHAT THE CAPTION ACTUALLY COVERS.
+        //
+        // This described every caption as an upright box hung `_capOut` off
+        // the rail, which a leaning one is not: it runs away at 45 and ends
+        // a name's length along and a name's length out. Reported as the
+        // upright box it is not, the next attempt routed its lanes around
+        // a rectangle that was not there and left the real one uncovered,
+        // and the demand it measured was of a board nobody was drawing.
+        // That is what collapsed the bands the first time a convergence was
+        // allowed to lean.
+        if (e._capRun && e._capRun.length) {
+          var lo = e._capRun[0], hi = e._capRun[e._capRun.length - 1];
+          var ca = Math.min(lo.a0, hi.a0), cb = Math.max(lo.a1, hi.a1);
+          var cc = Math.min(lo.c0, hi.c0), cd = Math.max(lo.c1, hi.c1);
+          out[e._sideKey].push({ a0: ca - TEXT_PAD, a1: cb + TEXT_PAD, c0: cc, c1: cd });
+          return;
+        }
         var away = e._labelSign == null ? e._sign : e._labelSign;
         var c0 = away > 0 ? e._routeEdge + e._capOut : e._routeEdge - e._capOut - e._h;
         out[e._sideKey].push({ a0: e._textStart - TEXT_PAD, a1: e._textStart + e._textLen + TEXT_PAD,
@@ -3884,6 +4000,24 @@
       return out;
     }
     function attempt(tier) {
+      // EVERY TIER IS ASKED THE SAME QUESTION, FROM THE SAME PLACE.
+      //
+      // `laneFloor` and `inwardNeed` are things the board LEARNED by being
+      // drawn: this track needed one more lane than its sizes suggested,
+      // that one had a trunk through its labels. Both only ever grow, and
+      // both were carried from one text size into the next, so the floors
+      // learned at the largest text were still binding at the smallest --
+      // where the labels are half the size and want nothing like as much
+      // room. The smaller tiers could not shed the lanes and dropped into
+      // the packed fallback, and the loop concluded, correctly given what
+      // it was shown, that the largest text was the best this board could
+      // do. Every tier before this compared a fresh board against a board
+      // carrying the last one's debts.
+      //
+      // They are findings about a board at a size. A new size is a new
+      // board, and it learns its own.
+      laneFloor = {};
+      inwardNeed = {};
       capBlocks = collectCaps();
       barBlocks = { A: [], B: [] };
       var q1 = layoutAttempt(tier);
@@ -3904,7 +4038,14 @@
       var q = attempt(tiers[ti]);
       if (q < bestQ) { bestQ = q; bestTier = ti; }
       if (q === 0) break;
-      if (ti > bestTier + 1) break; // two smaller steps without improvement — stop
+      // Two smaller steps without improvement, and STOP ONLY IF the board
+      // it settled on is actually good. The early exit is there so a clean
+      // board does not grind through four more sizes for nothing; applied
+      // to a board that is still carrying seven names written over each
+      // other it stops the search exactly where it matters, three sizes
+      // before the one that would have fitted. A board scoring in the
+      // thousands has not found its answer yet.
+      if (ti > bestTier + 1 && bestQ < 400) break;
     }
     if (bestTier !== ti) attempt(tiers[bestTier]);
     // The routes for the board that was actually chosen. Everything below
@@ -4009,9 +4150,8 @@
     // tip the tier loop into the largest text on a packed board with six
     // names through each other, and it scored that as an improvement,
     // because every term it had did improve.
-    var capClashes = 0;
     function placeOnTrackCaptions() {
-      capClashes = 0;
+      capClashes = 0; capPierces = 0;
       // A MARK ON THE TRUNK NAMES ITSELF THE SAME WAY A CONVERGENCE DOES.
       //
       // Neither has a rail hanging off it to carry a name, so neither can
@@ -4135,7 +4275,10 @@
             var q = LEGEND[qi];
             if (q === e._p) continue;
             for (var bi = 0; bi < run.length; bi++) {
-              var bx = run[bi], stepA = Math.max(2 * S, (bx.a1 - bx.a0) / 3);
+              // Finely enough to catch a rail that slips between two
+              // samples: at a third of a box the test walked over a line
+              // crossing the name at a shallow angle and reported clean.
+              var bx = run[bi], stepA = Math.max(2 * S, (bx.a1 - bx.a0) / 8);
               for (var a = bx.a0; a <= bx.a1; a += stepA) {
                 var c = lineCAt(q, a);
                 if (c > bx.c0 && c < bx.c1) return true;
@@ -4150,9 +4293,9 @@
         function capBase(e, at) {
           return e._onTrack || e._routeEdge == null ? lineCAt(e._p, at) : e._routeEdge;
         }
-        function angledRun(e, at, away, m) {
+        function angledRun(e, at, away, m, extra) {
           var unit = 1 / Math.sqrt(1 + m * m), n = Math.max(2, Math.round(e._textLen / (e._h * 0.8)));
-          var c0 = capBase(e, at) + away * capPerp(e, m);
+          var c0 = capBase(e, at) + away * (capPerp(e, m) + (extra || 0));
           // A LEANING ROW IS THICKER THAN IT IS, MEASURED STRAIGHT DOWN.
           //
           // Each sampled box got half a row's height above and below its
@@ -4207,10 +4350,30 @@
           // capBase. A bundle runs level, so both 45s are on the table.
           var m = e._onTrack ? slopeAt(e._p, (e._nodeA + e._endA) / 2) : 0;
           var bestA = null;
-          if (e._onTrack) {
-            // the trunk's own slope where it has one, and both 45s where it
-            // does not, because a level trunk still has two wedges beside it
-            var slopes = Math.abs(m) > 0.3 ? [m] : [1, -1];
+          // A CONVERGENCE LEANS TOO. It has exactly the problem the lean
+          // was invented for: no rail of its own to hang a name off, and an
+          // afternoon where the flat rows either side are already taken.
+          // The wedge beside a bundle is the same free paper as the wedge
+          // beside a trunk. It was excluded only because the lean arrived
+          // as a fix for marks.
+          if (e._onTrack || e._routeEdge != null) {
+            // OCTAGONAL ANGLES ONLY.
+            //
+            // This used the trunk's own slope where it had one, and a
+            // trunk's own slope at a given minute is whatever `slopeAt`
+            // measured: on the eased corner where a line leaves one level
+            // for another that is any number between nothing and one. So
+            // "Groceries" was set at 41 degrees on a board where everything
+            // else is at 45, which reads as a mistake rather than as a
+            // choice, because on this map it is one. Every rail here runs
+            // flat, upright or at 45; a name is part of the same drawing
+            // and obeys the same grammar.
+            //
+            // Both 45s are on the table wherever the name will fit -- a
+            // level trunk has a wedge either side of it, and a sloping one
+            // is already at 45 itself, so snapping to the nearer of the two
+            // IS following the trunk.
+            var slopes = Math.abs(m) > 0.3 ? [m > 0 ? 1 : -1, m > 0 ? -1 : 1] : [-1, 1];
             slopes.forEach(function (mm) {
               [1, -1].forEach(function (sg) {
                 var away = sg * e._sign;
@@ -4228,11 +4391,26 @@
                 // was drawn on top of the winner.
                 var unit = 1 / Math.sqrt(1 + mm * mm);
                 var back = e._textLen * unit + TEXT_PAD, slide = e._textLen * 0.5 * unit;
-                [e._endA + TEXT_PAD, e._nodeA + TEXT_PAD,
-                 e._nodeA - back, e._endA - back,
-                 e._endA + TEXT_PAD + slide, e._nodeA + TEXT_PAD - slide,
-                 e._nodeA - back - slide, e._endA - back + slide].forEach(function (at) {
-                  var run = angledRun(e, at, away, mm), cost = 0, off = false;
+                var anchors = [e._endA + TEXT_PAD, e._nodeA + TEXT_PAD,
+                               e._nodeA - back, e._endA - back,
+                               e._endA + TEXT_PAD + slide, e._nodeA + TEXT_PAD - slide,
+                               e._nodeA - back - slide, e._endA - back + slide];
+                // A LADDER FOR THE LEANING NAMES TOO.
+                //
+                // The flat fallback steps its candidate outward a row at a
+                // time; the leaning search had one distance and one only, so
+                // two marks a few minutes apart on the same line leaned out
+                // of very nearly the same point and were drawn through each
+                // other. Team Standup at eight and Quick Sync at twenty past
+                // are the whole of that: no anchor along the line is far
+                // enough away when the line is where they both are, and the
+                // only way past each other is for one of them to stand
+                // further off it. Which is what a transit map does with two
+                // stops it cannot name side by side.
+                var perpRow = e._h * 1.15;
+                anchors.forEach(function (at) {
+                 [0, perpRow, perpRow * 2].forEach(function (extra) {
+                  var run = angledRun(e, at, away, mm, extra), cost = 0, off = false;
                   run.forEach(function (bx) {
                     cost += costAt(bx);
                     if (bx.c0 < bandLo || bx.c1 > crossPx - EDGE || bx.a1 > axisEnd - EDGE) off = true;
@@ -4246,16 +4424,63 @@
                   // transit map does with every station it cannot label
                   // square, and it is the only way into the wedge.
                   cost -= e._h * e._textLen * 0.02;
-                  // AND IT LEANS NORTH EAST BY PREFERENCE: up and to the
-                  // right, reading from the mark away into clear paper. A
-                  // name falling to the south east reads as running down
-                  // off its own line and away from the day, and half a
-                  // board of them leaning each way reads as neither. `c`
-                  // grows downward, so north east is the negative slope.
-                  if (mm < 0) cost -= e._h * e._textLen * 0.025;
-                  if (!bestA || cost < bestA.cost) {
-                    bestA = { cost: cost, raw: raw, at: at, away: away, run: run, m: mm };
+                  // A NAME LEANS AWAY FROM ITS OWN LINE AS IT READS.
+                  //
+                  // Which way is not a fact about the board, it is a fact
+                  // about this candidate: the side of the line the words
+                  // were put on. Set BELOW the line, a name should run down
+                  // to the right, north west to south east, so that it
+                  // leaves the rail at its first letter and has open paper
+                  // under it for the rest. Set above, the mirror: up to the
+                  // right, south west to north east.
+                  //
+                  // Leaning the other way turns the name back towards the
+                  // line it came from. It ends up either lying along its
+                  // own rail or crossing it, and it is walking into the
+                  // band where that line's neighbour and all of its labels
+                  // are, which is the busiest paper on the map, instead of
+                  // into the empty wedge two pixels away.
+                  //
+                  // `c` grows downward, so below is the positive `away` and
+                  // down-to-the-right the positive slope: the preference is
+                  // simply that the two agree.
+                  //
+                  // UNLESS IT IS FOLLOWING THE TRACK. Where the trunk is on
+                  // the move it is already at 45 and the name is set along
+                  // it, and then the name's direction is the line's to
+                  // decide, not the wedge's: a name running with the rail
+                  // is reading the journey, and one running against it
+                  // makes an X with the thing it belongs to. That outranks
+                  // which side of the rail the words happen to sit.
+                  var follows = Math.abs(m) > 0.3;
+                  if (follows ? (mm > 0) === (m > 0) : mm * away > 0) {
+                    cost -= e._h * e._textLen * 0.025;
                   }
+                  // A NAME BELONGS AT ITS OWN MARK.
+                  //
+                  // Nothing charged these candidates for distance. The
+                  // anchors reach a full name's length back along the line
+                  // and the ladder now reaches two rows off it, and all of
+                  // that was free, so the search happily put "Quick Sync"
+                  // at twenty past eight three rows below the line and an
+                  // hour to the left of its own dot. A leader was drawn to
+                  // it, which is the map admitting it has lost the thread.
+                  //
+                  // Two distances, both charged the way the flat fallback
+                  // charges its own: how far along the line the words ended
+                  // up from the run they name, and how far off the line
+                  // they stand. Neither is forbidden -- a name that cannot
+                  // be anywhere better should still go somewhere -- but
+                  // both have to be paid for out of the same purse as
+                  // landing on somebody.
+                  var runMid = (run[0].a0 + run[run.length - 1].a1) / 2;
+                  cost += Math.abs(runMid - (e._nodeA + e._endA) / 2) * e._h * 0.005;
+                  cost += extra * e._textLen * 0.01;
+                  if (!bestA || cost < bestA.cost) {
+                    bestA = { cost: cost, raw: raw, at: at, away: away, run: run, m: mm,
+                              out: capPerp(e, mm) + extra };
+                  }
+                 });
                 });
               });
             });
@@ -4276,8 +4501,9 @@
               e._textStart = bestA.at;
               e._labelSign = bestA.away;
               if (e._onTrack) e._routeEdge = lineCAt(e._p, bestA.at);
-              e._capOut = capPerp(e, bestA.m);
+              e._capOut = bestA.out;
               e._capAngle = Math.atan(bestA.m) * 180 / Math.PI;
+              e._capRun = bestA.run;
               bestA.run.forEach(function (bx) { busy.push(bx); });
               return;
             }
@@ -4297,9 +4523,22 @@
                 var b = { a0: at - TEXT_PAD, a1: at + e._textLen + TEXT_PAD, c0: c0, c1: c0 + e._h };
                 if (c0 < bandLo || c0 + e._h > crossPx - EDGE) continue;
                 var raw = costAt(b);
-                var cost = raw + oi * e._h * e._textLen * 0.03
+                // A FLAT NAME MAY NOT CROSS A LINE EITHER.
+                //
+                // The leaning candidates are asked this and rejected for
+                // it; the flat ones were not asked at all, and the line
+                // samples in `busy` are soft, so a rail through the middle
+                // of a name cost about a third of what a name through a
+                // name costs and was regularly the cheapest thing going.
+                // Charged rather than refused: this is the fallback, and it
+                // has to be able to return something.
+                var thru = runCrosses(e, [b]);
+                var cost = raw + (thru ? e._h * e._textLen * 0.4 : 0)
+                         + oi * e._h * e._textLen * 0.03
                          + Math.abs(slides[si]) * e._h * 0.02;
-                if (!best || cost < best.cost) best = { cost: cost, raw: raw, at: at, out: outs[oi], sign: away, box: b };
+                if (!best || cost < best.cost) {
+                  best = { cost: cost, raw: raw, thru: thru, at: at, out: outs[oi], sign: away, box: b };
+                }
                 if (cost === 0) { oi = outs.length; sg = -3; break; }
               }
             }
@@ -4310,13 +4549,16 @@
             e._textStart = bestA.at;
             e._labelSign = bestA.away;
             if (e._onTrack) e._routeEdge = lineCAt(e._p, bestA.at);
-            e._capOut = capPerp(e, bestA.m);
+            e._capOut = bestA.out;
             e._capAngle = Math.atan(bestA.m) * 180 / Math.PI;
+            e._capRun = bestA.run;
             bestA.run.forEach(function (bx) { busy.push(bx); });
             return;
           }
           if (!best) return;
           if (best.raw > 0) capClashes++;
+          if (best.thru) capPierces++;
+          e._capAngle = null; e._capRun = null;
           e._textStart = best.at; e._capOut = best.out; e._labelSign = best.sign;
           busy.push(best.box);
         });
@@ -6365,14 +6607,17 @@
         // of it. So every row was indented by the average row's worth and
         // none of them by its own, which is the staircase this was put in
         // to remove.
-        var rows = b.children, tan = Math.tan(e._capAngle * Math.PI / 180);
-        if (rows.length > 1 && Math.abs(tan) > 0.01) {
-          var mid = b.offsetHeight / 2, tops = [];
-          for (var rt = 0; rt < rows.length; rt++) tops.push(rows[rt].offsetTop);
-          for (var ri = 0; ri < rows.length; ri++) {
-            rows[ri].style.marginLeft = ((tops[ri] - mid) * tan) + 'px';
-          }
-        }
+        // NO ROW INDENT: a leaning caption is a rotated BLOCK.
+        //
+        // Both rows were indented so their left edges shared a screen x.
+        // That is the right answer for a label lying flat and the wrong one
+        // for a label at 45: the rows of a turned block already start on one
+        // line, the one perpendicular to the words, and dragging them onto
+        // a vertical instead pulls each row a different distance along the
+        // lean. The result is a staircase, which is what the indent was put
+        // in to remove. It also made the drawn words reach outside the run
+        // the clash test was checking, so two of them could be measured
+        // clear of each other and drawn through each other anyway.
       } else if (horizontal) {
         b.style.left = e._textStart + 'px';
         // NOT ABOVE THE FIRST COORDINATE THE MAP MAY USE.
