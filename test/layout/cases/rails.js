@@ -231,7 +231,10 @@ module.exports = function (test, h) {
         // A mark's rail is the stretch of its own line between its start
         // dot and its end tick; there is no elbow to measure from. The
         // words belong over that run or near either end of it.
-        const drift = e.mark
+        // A convergence is measured against its pill for the same reason a
+        // mark is measured against its run: neither has an elbow to be
+        // beside, and both name a stretch of board rather than a rail.
+        const drift = (e.mark || e.shared)
           ? (e.textStart > e.endA ? e.textStart - e.endA
              : e.textStart + e.textLen < e.nodeA ? e.nodeA - (e.textStart + e.textLen) : 0)
           : Math.abs(e.textStart - (e.dir > 0 ? e.elbow : e.elbow - e.textLen));

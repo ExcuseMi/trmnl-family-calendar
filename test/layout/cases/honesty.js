@@ -87,7 +87,7 @@ module.exports = function (test, h) {
         for (const e of eventsIn(rep)) {
           if (e.status === 'dropped' || e.textStart == null) continue;
           let off;
-          if (e.mark) {
+          if (e.mark || e.shared) {
             // A mark has no branch and no elbow. What it has is the stretch
             // of its own line from its start dot to its end tick, and its
             // name belongs beside that: overlapping it, or near enough

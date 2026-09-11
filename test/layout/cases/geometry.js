@@ -245,7 +245,10 @@ module.exports = function (test, h) {
       // events and all three are marks. So the guard against this test
       // passing vacuously is not "there is always a fork", it is "there is
       // a fork wherever there is a rail to fork off to".
-      const shelves = eventsIn(rep).filter((e) => e.status === 'ok' && !e.mark);
+      // A convergence draws rails and no FORK: the rails are several lines
+      // arriving, drawn as a bundle, and a bundle has no junction in it.
+      // Only a solo event on a rail of its own forks off one.
+      const shelves = eventsIn(rep).filter((e) => e.status === 'ok' && !e.mark && !e.shared);
       if (!shelves.length) return;
       assert(forks.length > 0, shelves.length
         + ' event(s) drawn as rails and no junction fillets at all: '

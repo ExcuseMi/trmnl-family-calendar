@@ -185,12 +185,40 @@ module.exports = function (test, h) {
     assert(bad.length === 0, bad.length + ' branch(es) leave too early: ' + bad.slice(0, 4).join('; '));
   });
 
-  test('a shallow drop still gets its 45-degree ramp — the rule is not "always vertical"', () => {
-    const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
-    const angled = eventsIn(rep).filter((e) => e.status === 'ok' && Math.abs(e.elbow - e.diagFrom) > 1);
-    assert(angled.length > 0,
-      'every branch went vertical: the shallow case has stopped taking the ramp');
-  });
+  // A LEVEL CHANGE IS AN ORTHOGONAL STEP.
+  //
+  // This used to assert the opposite -- that a shallow drop still took a 45
+  // rather than going vertical -- and that rule is gone. A 45 needs as many
+  // pixels of axis as it has bands to climb, so on a board where the lines
+  // sit bands apart it is not a gentle ramp, it is a diagonal across the
+  // whole afternoon: Bart came out of the school day at three on one and
+  // arrived at detention having crossed open canvas the entire way.
+  //
+  // Lines run flat until the moment they have to be somewhere else, and
+  // then go there. Measured off the drawn courses rather than off any
+  // event's numbers, because the claim is about what the board looks like:
+  // no segment of any line may be long in BOTH directions at once.
+  for (const f of fixtures) {
+    test('a line runs flat or steps square, never on a long diagonal: ' + f.name, () => {
+      const rep = layout(f, ROOMY);
+      const corner = (rep.debug.corner || 8) * (rep.debug.Z || 1);
+      const bad = [];
+      for (const path of pathsWhere(rep, 'course').concat(pathsWhere(rep, 'track'))) {
+        const pts = path.points || [];
+        for (let i = 1; i < pts.length; i++) {
+          const dx = Math.abs(pts[i][0] - pts[i - 1][0]);
+          const dy = Math.abs(pts[i][1] - pts[i - 1][1]);
+          // A fillet is short in both; a step is short in one. Only a run
+          // that travels a long way in both is the diagonal being ruled out.
+          if (dx > corner * 2.5 && dy > corner * 2.5) {
+            bad.push(path.owner + ' runs ' + Math.round(dx) + 'x' + Math.round(dy)
+              + ' at x' + Math.round(pts[i - 1][0]));
+          }
+        }
+      }
+      assert(bad.length === 0, bad.length + ' diagonal run(s): ' + bad.slice(0, 3).join('; '));
+    });
+  }
 
   // ---- 4. what a tick means -------------------------------------------
 

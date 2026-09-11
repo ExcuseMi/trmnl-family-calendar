@@ -4954,7 +4954,7 @@
 
       recomputeTrackDists();
     }
-    function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA), e._onTrack ? 'mark' : 'shelf']; }); }
+    function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._trackDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA), e._routeShared ? 'shared' : e._onTrack ? 'mark' : 'shelf']; }); }
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal,
       corner: CORNER, minDiag: MIN_DIAG, win: [dayFrom, dayTo],

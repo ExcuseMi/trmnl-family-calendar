@@ -616,6 +616,12 @@ function eventsIn(rep) { return (rep.debug.events || []).map((e) => ({
   // question, a mark answers with an elbow of zero and looks adrift by the
   // width of the board.
   mark: e[15] === 'mark',
+  // A CONVERGENCE IS THE THIRD SHAPE. It has no elbow, because it has no
+  // rail of its own -- it is a bundle of other people's rails arriving in
+  // one place -- and its name is pinned above the pill. Asked where its
+  // branch is, it answers with a zero and looks adrift by the width of the
+  // board, which is the same question a mark could not answer either.
+  shared: e[15] === 'shared',
 })); }
 
 // ---------------------------------------------------------------- viewports
