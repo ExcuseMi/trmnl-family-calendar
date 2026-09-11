@@ -917,6 +917,35 @@
 
   // ------------------------------------------------------------ lines UI
   function lineNames() { return state.lines.map(function (t) { return t.name.trim(); }).filter(Boolean); }
+  // A RULE NAMES A LINE BY ITS NAME.
+  //
+  // Nothing in the format ties `"line": "Mia"` back to the entry in `lines`
+  // except the spelling, so the editor has to keep the two in step itself. A
+  // rule left naming a line that no longer exists does not fail and does not
+  // warn: the plugin resolves the name and draws a line for it. So removing
+  // Mia here used to put Mia straight back on the board, with no line called
+  // Mia anywhere in the editor to explain why.
+  function otherLineHasName(name, exceptId) {
+    return state.lines.some(function (t) { return t._id !== exceptId && t.name.trim() === name; });
+  }
+  // Every place a line can be named: a rule's line list, top level or inside
+  // a calendar, and a calendar's own "whose line is this" picker. An empty
+  // `to` drops the reference, which is what removing a line means.
+  function retargetLineRefs(from, to) {
+    if (!from || from === to) return;
+    function swap(list) {
+      if (!list) return;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] !== from) continue;
+        if (to) list[i] = to; else { list.splice(i, 1); i--; }
+      }
+    }
+    state.rules.forEach(function (r) { swap(r.lines); });
+    state.calendars.forEach(function (c) {
+      swap(c.assign);
+      c.rules.forEach(function (r) { swap(r.lines); });
+    });
+  }
   // A multi-select is the one control here that does not explain itself: an
   // unselected list looks like "all of them", and picking two needs a key
   // nobody is born knowing. So it is sized to show every line without
@@ -940,14 +969,44 @@
       var look = looks[p._id] || { style: "solid", width: 3, color: p.color, side: "right" };
       var sw = swatchSvg(look.color, look.style, look.width);
       var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "You (e.g. Sam)" : "Name", value: p.name, "aria-label": "Name of line " + (idx + 1) });
-      name.addEventListener("input", function () { p.name = name.value; renderJson(); renderCalendars(); renderGlobalRules(); });
+      // The name this line's rules are written against, so a rename can take
+      // them along. It is the name the card was drawn with until a rename
+      // moves it on.
+      if (p._refName === undefined) p._refName = p.name.trim();
+      name.addEventListener("input", function () {
+        var before = p._refName;
+        p.name = name.value;
+        var after = p.name.trim();
+        // Carry the rules with the name, but never THROUGH a name another
+        // line already answers to: half way through typing "Alexa" the field
+        // reads "Alex", and renaming every "Alex" reference at that moment
+        // would hand this line the other line's rules and never give them
+        // back. A cleared field waits: the references stay on the old name
+        // until there is a new one to move them to.
+        if (!before) p._refName = after;
+        else if (after && after !== before
+          && !otherLineHasName(before, p._id) && !otherLineHasName(after, p._id)) {
+          retargetLineRefs(before, after);
+          p._refName = after;
+        }
+        renderJson(); renderCalendars(); renderGlobalRules();
+      });
       name.addEventListener("change", function () { renderLines(); });
       var up = el("button", { class: "ghost small", title: "Move up", text: "↑" }); up.disabled = idx === 0;
       up.addEventListener("click", function () { state.lines.splice(idx - 1, 0, state.lines.splice(idx, 1)[0]); renderAll(); });
       var down = el("button", { class: "ghost small", title: "Move down", text: "↓" }); down.disabled = idx === state.lines.length - 1;
       down.addEventListener("click", function () { state.lines.splice(idx + 1, 0, state.lines.splice(idx, 1)[0]); renderAll(); });
       var rm = el("button", { class: "ghost small", text: "Remove", title: "Remove this line" });
-      rm.addEventListener("click", function () { snapshot("remove " + (p.name.trim() || "a line")); state.lines.splice(idx, 1); renderAll(); });
+      rm.addEventListener("click", function () {
+        var gone = p.name.trim();
+        snapshot("remove " + (gone || "a line"));
+        // Take the line out of the rules that routed to it, or they go on
+        // naming it and the plugin draws it anyway. Snapshotted first, so
+        // undo brings the line back with its rules intact.
+        if (gone && !otherLineHasName(gone, p._id)) retargetLineRefs(gone, "");
+        state.lines.splice(idx, 1);
+        renderAll();
+      });
       wrap.appendChild(el("div", { class: "card line" }, [
         el("div", { class: "card-head" }, [sw, name, up, down, rm]),
         // Side and colour used to be pickers here. Both are decided by the plugin now
