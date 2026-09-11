@@ -21,8 +21,8 @@ module.exports = function (test, h) {
     })));
     // Promoted OFF the axis: an all-day event has no hour, so it is not an
     // item at all. It is declared at the head of whichever lines are in it.
-    assertEqual(eventItems(r.metro), [], 'nothing on the timeline');
-    assertEqual(r.metro.all_day.map((a) => a.title), ['Staff Training Day'],
+    assertEqual(eventItems(r.data), [], 'nothing on the timeline');
+    assertEqual(r.data.all_day.map((a) => a.title), ['Staff Training Day'],
       'the rule promoted it');
   });
 
@@ -34,7 +34,7 @@ module.exports = function (test, h) {
     const r = await run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'Hide Me' }, hide: true }] }],
     })));
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Keep Me']);
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Keep Me']);
   });
 
   test('a rule can match against an event\'s description, but only when the calendar opts in via includeDescription', async () => {
@@ -42,11 +42,11 @@ module.exports = function (test, h) {
     const fetchImpl = async () => okText(icsWithEvents([ev]));
     const cfgOff = { calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'cancelled' }, hide: true }] }] };
     const rOff = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith(cfgOff)));
-    assertEqual(eventItems(rOff.metro).length, 1, 'without includeDescription, the desc is never parsed, so the rule can\'t see it');
+    assertEqual(eventItems(rOff.data).length, 1, 'without includeDescription, the desc is never parsed, so the rule can\'t see it');
 
     const cfgOn = { calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', includeDescription: true, rules: [{ match: { type: 'word', value: 'cancelled' }, hide: true }] }] };
     const rOn = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith(cfgOn)));
-    assertEqual(eventItems(rOn.metro).length, 0, 'with includeDescription, the rule sees the description and hides it');
+    assertEqual(eventItems(rOn.data).length, 0, 'with includeDescription, the rule sees the description and hides it');
   });
 
   test('a rewrite rule replaces the matched text with literal text, independent of track', async () => {
@@ -55,7 +55,7 @@ module.exports = function (test, h) {
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'L6' }, rewrite: 'Lesson 6' }] }],
     })));
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Lesson 6 Swim Class']);
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Lesson 6 Swim Class']);
   });
 
   test('a catch-all ".*" match with rename does not duplicate the title (WardWard bug)', async () => {
@@ -64,7 +64,7 @@ module.exports = function (test, h) {
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'regex', value: '.*' }, track: 'Ward', rename: true }] }],
     })));
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Ward'], 'a single non-global replace should produce "Ward", never "WardWard"');
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Ward'], 'a single non-global replace should produce "Ward", never "WardWard"');
   });
 
   test('a catch-all ".*" match with rename:false assigns the track without touching the title', async () => {
@@ -74,7 +74,7 @@ module.exports = function (test, h) {
       tracks: [{ name: 'Ward' }],
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'regex', value: '.*' }, track: 'Ward', rename: false }] }],
     })));
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Schoolfotografie']);
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Schoolfotografie']);
   });
 
   test('the "any" match type is the intended way to write a catch-all rule — badges without renaming, by default', async () => {
@@ -84,8 +84,8 @@ module.exports = function (test, h) {
       tracks: [{ name: 'Ward' }],
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'Ward' }] }],
     })));
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Schoolfotografie'], 'an "any" match should badge Ward without needing an explicit rename:false');
-    assertEqual(r.metro.legend.map((p) => p.name), ['Ward']);
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Schoolfotografie'], 'an "any" match should badge Ward without needing an explicit rename:false');
+    assertEqual(r.data.legend.map((p) => p.name), ['Ward']);
   });
 
   test('rewriteFull replaces the whole title, not just the matched substring', async () => {
@@ -94,7 +94,7 @@ module.exports = function (test, h) {
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'L6' }, rewrite: 'Swimming', rewriteFull: true }] }],
     })));
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Swimming']);
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Swimming']);
   });
 
   test('rewrite without rewriteFull still supports regex backreferences against the match', async () => {
@@ -103,7 +103,7 @@ module.exports = function (test, h) {
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'regex', value: 'Sprint (\\d+-\\d+)' }, rewrite: 'Sprint #$1' }] }],
     })));
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Sprint #26-08']);
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Sprint #26-08']);
   });
 
   test('a rewrite rule wins over a rename from a track assignment on the same title', async () => {
@@ -116,7 +116,7 @@ module.exports = function (test, h) {
         { match: { type: 'word', value: 'L6' }, rewrite: 'Lesson 6' },
       ] }],
     })));
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Lesson 6 Swim Class']);
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Lesson 6 Swim Class']);
   });
 
   test('a global rule assigns a track across every calendar, not just one', async () => {
@@ -129,7 +129,7 @@ module.exports = function (test, h) {
       tracks: [{ name: 'Mom', badge: 'M' }],
       calendars: [{ url: 'https://example.com/a.ics' }, { url: 'https://example.com/b.ics' }],
     })));
-    const doctorEvent = eventItems(r.metro).find((e) => e.title.indexOf('Mom') !== -1 || e.title.indexOf('Doctor') !== -1);
+    const doctorEvent = eventItems(r.data).find((e) => e.title.indexOf('Mom') !== -1 || e.title.indexOf('Doctor') !== -1);
     assert(!!doctorEvent, 'the global rule should have assigned Mom regardless of which calendar the event came from');
   });
 
@@ -141,8 +141,8 @@ module.exports = function (test, h) {
       tracks: [{ name: 'Mom', badge: 'M' }, { name: 'Dad', badge: 'D' }],
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'Doctor' }, track: 'Dad' }] }],
     })));
-    const ev0 = eventItems(r.metro)[0];
-    const dadTrack = r.metro.legend.find((p) => p.name === 'Dad');
+    const ev0 = eventItems(r.data)[0];
+    const dadTrack = r.data.legend.find((p) => p.name === 'Dad');
     assertEqual(ev0.hue, dadTrack.hue, 'the calendar-specific rule should win over the global one');
   });
 
@@ -173,8 +173,8 @@ module.exports = function (test, h) {
       tracks: [{ name: 'Everyone', badge: '★' }],
       calendars: [{ url: 'https://example.com/a.ics' }],
     })));
-    assertEqual(eventItems(r.metro).length, 1);
-    assertEqual(r.metro.legend.map((p) => p.name), ['Everyone']);
+    assertEqual(eventItems(r.data).length, 1);
+    assertEqual(r.data.legend.map((p) => p.name), ['Everyone']);
   });
 
   test('an unruled calendar named after a configured track falls back to that track, not everyoneTrack (Kato/Nala real-world bug)', async () => {
@@ -184,8 +184,8 @@ module.exports = function (test, h) {
       tracks: [{ name: 'Familie', badge: '★' }, { name: 'Kato', badge: 'K' }],
       calendars: [{ url: 'https://example.com/a.ics', name: 'Kato' }],
     })));
-    const ev0 = eventItems(r.metro)[0];
-    const katoTrack = r.metro.legend.find((p) => p.name === 'Kato');
+    const ev0 = eventItems(r.data)[0];
+    const katoTrack = r.data.legend.find((p) => p.name === 'Kato');
     assertEqual(ev0.hue, katoTrack.hue, 'a calendar with no rules should fall back to its own name, not the first tracks[] entry');
   });
 
@@ -196,8 +196,8 @@ module.exports = function (test, h) {
       tracks: [{ name: 'Everyone', badge: '★' }, { name: 'Alex', badge: 'A' }],
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'Alex' }, track: 'Alex' }] }],
     })));
-    const ev0 = eventItems(r.metro)[0];
-    const alexTrack = r.metro.legend.find((p) => p.name === 'Alex');
+    const ev0 = eventItems(r.data)[0];
+    const alexTrack = r.data.legend.find((p) => p.name === 'Alex');
     assertEqual(ev0.hue, alexTrack.hue);
   });
 
@@ -207,8 +207,8 @@ module.exports = function (test, h) {
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: ['Alex', 'Kids'] }] }],
     })));
-    const ev0 = eventItems(r.metro)[0];
-    assertEqual(ev0.owner, r.metro.legend.find((p) => p.name === 'Alex').key, 'the first name becomes the primary owner');
+    const ev0 = eventItems(r.data)[0];
+    assertEqual(ev0.owner, r.data.legend.find((p) => p.name === 'Alex').key, 'the first name becomes the primary owner');
     assertEqual(ev0.co_owners.length, 1, 'the remaining name(s) become co_owners');
   });
 
@@ -219,7 +219,7 @@ module.exports = function (test, h) {
       tracks: [{ name: 'Everyone' }],
       calendars: ['https://example.com/a.ics'],
     })));
-    assertEqual(eventItems(r.metro).length, 1);
+    assertEqual(eventItems(r.data).length, 1);
   });
 
   test('non-JSON config text falls back to a newline-separated URL list', async () => {
@@ -230,12 +230,12 @@ module.exports = function (test, h) {
 
   test('valid JSON with no usable calendars falls all the way back to demo data, not a crash', async () => {
     const r = await runTransform(async () => okText(icsWithEvents([])), NOW).run(baseInput(NOW, { config_json: '{}' }));
-    assert(eventItems(r.metro).length > 0, 'demo data should have kicked in');
+    assert(eventItems(r.data).length > 0, 'demo data should have kicked in');
   });
 
   test('non-JSON config text with no non-blank lines also falls back to demo data', async () => {
     const r = await runTransform(async () => okText(icsWithEvents([])), NOW).run(baseInput(NOW, { config_json: '   \n   \n' }));
-    assert(eventItems(r.metro).length > 0, 'demo data should have kicked in');
+    assert(eventItems(r.data).length > 0, 'demo data should have kicked in');
   });
 
   test('a configured track with no events today gets no legend entry (no empty track)', async () => {
@@ -245,7 +245,7 @@ module.exports = function (test, h) {
       tracks: [{ name: 'Idle', side: 'left' }, { name: 'Busy', side: 'left' }],
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'Busy' }] }],
     })));
-    assertEqual(r.metro.legend.map((p) => p.name), ['Busy'], 'Idle has nothing today, so it should not get a track at all');
+    assertEqual(r.data.legend.map((p) => p.name), ['Busy'], 'Idle has nothing today, so it should not get a track at all');
   });
 
   test('removing an empty track compacts the remaining offsets on that side, no gap left behind', async () => {
@@ -255,8 +255,8 @@ module.exports = function (test, h) {
       tracks: [{ name: 'A', side: 'left' }, { name: 'B', side: 'left' }, { name: 'C', side: 'left' }],
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'any' }, track: 'C' }] }],
     })));
-    assertEqual(r.metro.legend.length, 1);
-    assertEqual(r.metro.legend[0].track_offset, -10, 'C should sit at the first left slot, not the third, since A and B left no gap');
+    assertEqual(r.data.legend.length, 1);
+    assertEqual(r.data.legend[0].track_offset, -10, 'C should sit at the first left slot, not the third, since A and B left no gap');
   });
 
   test('an emoji badge does not get mangled by taking only half its UTF-16 surrogate pair', async () => {
@@ -266,7 +266,7 @@ module.exports = function (test, h) {
       tracks: [{ name: 'Everyone', badge: '👪 Family' }],
       calendars: [{ url: 'https://example.com/a.ics' }],
     })));
-    assertEqual(r.metro.legend[0].initial, '👪', 'the full emoji codepoint should survive, not a broken half-surrogate');
+    assertEqual(r.data.legend[0].initial, '👪', 'the full emoji codepoint should survive, not a broken half-surrogate');
   });
 
   // `tracks`/`track` are the current field names (tracks were called
@@ -280,10 +280,10 @@ module.exports = function (test, h) {
       people: [{ name: 'Familie' }, { name: 'Nala', badge: 'N' }],
       calendars: [{ url: 'https://example.com/a.ics', rules: [{ match: { type: 'word', value: 'L6' }, person: 'Nala' }] }],
     })));
-    const ev0 = eventItems(r.metro)[0];
-    const nalaTrack = r.metro.legend.find((p) => p.name === 'Nala');
+    const ev0 = eventItems(r.data)[0];
+    const nalaTrack = r.data.legend.find((p) => p.name === 'Nala');
     assertEqual(ev0.hue, nalaTrack.hue, 'a legacy person: rule should still assign the track');
-    assertEqual(r.metro.legend.map((p) => p.name), ['Nala'], 'legacy people[] should still seed the track registry (Familie has no events today, so no empty track)');
+    assertEqual(r.data.legend.map((p) => p.name), ['Nala'], 'legacy people[] should still seed the track registry (Familie has no events today, so no empty track)');
   });
 
   test('a long block carries its location and earns its owner a legend entry', async () => {
@@ -299,13 +299,13 @@ module.exports = function (test, h) {
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Ward' }],
     })));
-    const items = eventItems(r.metro);
+    const items = eventItems(r.data);
     assertEqual(items.length, 1, 'a long block belongs on the timeline like anything else');
     assertEqual(items[0].title, 'Desk booking');
     assertEqual(items[0].location, 'BE-Ghent A01');
     assertEqual(items[0].start_min, 8 * 60);
     assertEqual(items[0].end_min, 19 * 60);
-    const wardTrack = r.metro.legend.find((p) => p.name === 'Ward');
+    const wardTrack = r.data.legend.find((p) => p.name === 'Ward');
     assertEqual(items[0].owner, wardTrack.key, 'a track carrying only a long block is still "active"');
   });
 
@@ -320,12 +320,12 @@ module.exports = function (test, h) {
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal', rules: [{ match: { type: 'word', value: 'Training' }, allDay: true }] }],
     })));
-    assertEqual(eventItems(r.metro), [], 'nothing between the first hour and the last');
-    assertEqual(r.metro.sidings, undefined, 'and not split into a payload of its own either');
-    assertEqual(r.metro.all_day.length, 1, 'it is declared once');
-    const st = r.metro.all_day[0];
+    assertEqual(eventItems(r.data), [], 'nothing between the first hour and the last');
+    assertEqual(r.data.sidings, undefined, 'and not split into a payload of its own either');
+    assertEqual(r.data.all_day.length, 1, 'it is declared once');
+    const st = r.data.all_day[0];
     assertEqual(st.title, 'Staff Training Day');
-    const calTrack = r.metro.legend.find((p) => p.name === 'Cal');
+    const calTrack = r.data.legend.find((p) => p.name === 'Cal');
     assertEqual(st.owners, [calTrack.key], 'against the line whose day it is');
     assertEqual(st.hue, undefined, 'presentation is the frontend\'s');
   });
@@ -342,8 +342,8 @@ module.exports = function (test, h) {
         { url: 'https://example.com/b.ics', name: 'Two', rules: [{ match: { type: 'word', value: 'Half' }, allDay: true }] },
       ],
     })));
-    assertEqual(r.metro.all_day.length, 1, 'one row, not one per line');
-    assertEqual(r.metro.all_day[0].owners.length, 2, 'carrying both lines');
+    assertEqual(r.data.all_day.length, 1, 'one row, not one per line');
+    assertEqual(r.data.all_day[0].owners.length, 2, 'carrying both lines');
   });
 
   test('a real meeting inside a long block\'s span still renders normally alongside it', async () => {
@@ -357,7 +357,7 @@ module.exports = function (test, h) {
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Ward' }],
     })));
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Desk booking', 'Standup'],
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Desk booking', 'Standup'],
       'in start order, both on the timeline');
   });
 };

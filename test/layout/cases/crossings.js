@@ -26,7 +26,7 @@ module.exports = function (test, h) {
     for (const b of rep.debug.bands) at[b[0]] = (side[b[0]] || 1) * b[3];
     const keys = Object.keys(at);
     const out = [];
-    for (const it of f.metro.items) {
+    for (const it of f.metro.events) {
       if (it.type !== 'event' || !it.co_owners || !it.co_owners.length) continue;
       const mine = [it.owner].concat(it.co_owners).filter((k) => at[k] != null);
       if (mine.length < 2) continue;
@@ -53,7 +53,7 @@ module.exports = function (test, h) {
     };
     const keys = Object.keys(start);
     const out = [];
-    for (const it of f.metro.items) {
+    for (const it of f.metro.events) {
       if (it.type !== 'event' || !it.co_owners || !it.co_owners.length) continue;
       const mine = [it.owner].concat(it.co_owners).filter((k) => start[k] != null);
       if (mine.length < 2) continue;

@@ -65,23 +65,23 @@ module.exports = function (test, h) {
     const r = await run(input());
     assert(r.trmnl_state && typeof r.trmnl_state === 'object',
       'no trmnl_state came back: ' + JSON.stringify(Object.keys(r || {})));
-    assert(r.metro, 'the payload lost its metro key');
+    assert(r.data, 'the payload lost its metro key');
   });
 
   test('the last good forecast is kept and replayed when the weather API fails', async () => {
     const first = runTransform(net(), NOW);
     const good = await first.run(input());
-    assert(good.metro.header_weather.hi != null, 'the live forecast did not render');
+    assert(good.data.header_weather.hi != null, 'the live forecast did not render');
     // the state is stored as JSON by the runtime, so round-trip it
     const saved = JSON.parse(JSON.stringify(good.trmnl_state));
 
     const second = runTransform(net({ weatherFails: true }), NOW);
     const later = await second.run(input({}, saved));
-    assert(later.metro.header_weather.hi === good.metro.header_weather.hi,
-      'a failed forecast blanked the header instead of reusing the last one: ' + JSON.stringify(later.metro.header_weather));
-    assert(later.metro.weather_stale === false, 'a forecast minutes old is not stale');
+    assert(later.data.header_weather.hi === good.data.header_weather.hi,
+      'a failed forecast blanked the header instead of reusing the last one: ' + JSON.stringify(later.data.header_weather));
+    assert(later.data.weather_stale === false, 'a forecast minutes old is not stale');
     // the markers come back too, not only the header numbers
-    const sun = later.metro.items.filter((i) => i.type === 'sun');
+    const sun = later.data.weather.filter((i) => i.type === 'sun');
     assert(sun.length === 2, 'expected sunrise and sunset from the replayed forecast, got ' + sun.length);
   });
 
@@ -96,8 +96,8 @@ module.exports = function (test, h) {
     };
     const { run } = runTransform(net({ weatherFails: true }), NOW);
     const r = await run(input({}, stale));
-    assert(r.metro.header_weather.hi === 9, 'the old forecast was dropped rather than shown: ' + JSON.stringify(r.metro.header_weather));
-    assert(r.metro.weather_stale === true, 'a seven-hour-old forecast should be flagged stale');
+    assert(r.data.header_weather.hi === 9, 'the old forecast was dropped rather than shown: ' + JSON.stringify(r.data.header_weather));
+    assert(r.data.weather_stale === true, 'a seven-hour-old forecast should be flagged stale');
   });
 
   test('a feed that fails starts a clock, and clears it when it comes back', async () => {
@@ -120,15 +120,15 @@ module.exports = function (test, h) {
     const { run } = runTransform(net({ calendarsFail: true }), NOW);
 
     const blip = await run(input({}, { calendarDown: { [ICS_URL]: NOW_S - 10 * 60 } }));
-    assert(blip.metro.calendars_down.length === 0,
-      'a ten-minute outage should not be announced, got ' + JSON.stringify(blip.metro.calendars_down));
+    assert(blip.data.calendars_down.length === 0,
+      'a ten-minute outage should not be announced, got ' + JSON.stringify(blip.data.calendars_down));
 
     const real = await run(input({}, {
       calendarDown: { [ICS_URL]: NOW_S - 3 * 3600 },
       calendarNames: { [ICS_URL]: 'Alex Personal' },
     }));
-    assert(real.metro.calendars_down.join(',') === 'Alex Personal',
-      'expected the failing feed named on the board, got ' + JSON.stringify(real.metro.calendars_down));
+    assert(real.data.calendars_down.join(',') === 'Alex Personal',
+      'expected the failing feed named on the board, got ' + JSON.stringify(real.data.calendars_down));
   });
 
   test('a failing feed keeps the name it had, instead of becoming its URL', async () => {
@@ -145,13 +145,13 @@ module.exports = function (test, h) {
     saved.calendarDown = { [ICS_URL]: NOW_S - 3 * 3600 };
     const second = runTransform(net({ calendarsFail: true }), NOW);
     const later = await second.run(input({}, saved));
-    assert(later.metro.calendars_down.join(',') === 'Alex Personal',
-      'the failing feed lost its name: ' + JSON.stringify(later.metro.calendars_down));
+    assert(later.data.calendars_down.join(',') === 'Alex Personal',
+      'the failing feed lost its name: ' + JSON.stringify(later.data.calendars_down));
 
     // and with nothing remembered it falls back to the link, not to nothing
     const cold = await second.run(input({}, { calendarDown: { [ICS_URL]: NOW_S - 3 * 3600 } }));
-    assert(cold.metro.calendars_down.length === 1 && /Cal/.test(cold.metro.calendars_down[0]),
-      'expected a URL-derived name as the last resort, got ' + JSON.stringify(cold.metro.calendars_down));
+    assert(cold.data.calendars_down.length === 1 && /Cal/.test(cold.data.calendars_down[0]),
+      'expected a URL-derived name as the last resort, got ' + JSON.stringify(cold.data.calendars_down));
   });
 
   test('state left over from feeds the config no longer names is dropped', async () => {
@@ -165,7 +165,7 @@ module.exports = function (test, h) {
     assert(Object.keys(r.trmnl_state.calendarDown).length === 0
       && Object.keys(r.trmnl_state.calendarNames).indexOf('https://gone.example.com/old.ics') < 0,
       'stale feed state survived: ' + JSON.stringify(r.trmnl_state));
-    assert(r.metro.calendars_down.length === 0, 'a feed the config no longer has was announced as down');
+    assert(r.data.calendars_down.length === 0, 'a feed the config no longer has was announced as down');
   });
 
   test('absent, string-wrapped and malformed state all render a board', async () => {
@@ -183,13 +183,13 @@ module.exports = function (test, h) {
     ];
     for (const st of cases) {
       const r = await run(input({}, st));
-      assert(r.metro && eventItems(r.metro).length > 0, 'state ' + JSON.stringify(st) + ' broke the render');
+      assert(r.data && eventItems(r.data).length > 0, 'state ' + JSON.stringify(st) + ' broke the render');
       assert(r.trmnl_state && typeof r.trmnl_state === 'object', 'state ' + JSON.stringify(st) + ' produced no new state');
     }
     // the one well-formed string case is also USED, not just survived
     const r = await run(input({}, cases[3]));
-    assert(r.metro.header_weather.hi === 21 || r.metro.header_weather.hi === 18,
-      'a string-wrapped state was ignored: ' + JSON.stringify(r.metro.header_weather));
+    assert(r.data.header_weather.hi === 21 || r.data.header_weather.hi === 18,
+      'a string-wrapped state was ignored: ' + JSON.stringify(r.data.header_weather));
   });
 
   test('a render that falls back to the demo still returns its state', async () => {

@@ -55,7 +55,7 @@ module.exports = function (test, h) {
     const gb = net();
     const r = await runTransform(gb, NOW).run(input({ locale: 'en-GB' }));
     assert(/temperature_unit=celsius/.test(gb.weatherUrl()), 'en-GB should ask for Celsius: ' + gb.weatherUrl());
-    assert(r.metro.header_weather.unit === 'C', 'the payload should say which unit it is in');
+    assert(r.data.header_weather.unit === 'C', 'the payload should say which unit it is in');
   });
 
   test('the config wins over the account setting, the way timeFormat does', async () => {
@@ -63,14 +63,14 @@ module.exports = function (test, h) {
     const r = await runTransform(n, NOW).run(
       input({ locale: 'en-US', temperatureUnit: 'celsius' }, { temperature_unit: 'f' }));
     assert(/temperature_unit=celsius/.test(n.weatherUrl()), 'the config was overruled: ' + n.weatherUrl());
-    assert(r.metro.header_weather.unit === 'C', 'got unit ' + r.metro.header_weather.unit);
+    assert(r.data.header_weather.unit === 'C', 'got unit ' + r.data.header_weather.unit);
   });
 
   test('the account setting is used when the config says nothing', async () => {
     const n = net();
     const r = await runTransform(n, NOW).run(input({ locale: 'nl-BE' }, { temperature_unit: 'f' }));
     assert(/temperature_unit=fahrenheit/.test(n.weatherUrl()), 'the setting was ignored: ' + n.weatherUrl());
-    assert(r.metro.header_weather.unit === 'F', 'got unit ' + r.metro.header_weather.unit);
+    assert(r.data.header_weather.unit === 'F', 'got unit ' + r.data.header_weather.unit);
   });
 
   test('an unrecognised unit falls back to auto rather than guessing', async () => {
@@ -93,7 +93,7 @@ module.exports = function (test, h) {
       weatherFetchedAt: NOW_S - 600,
     };
     const r = await run(i);
-    assert(r.metro.header_weather.hi === 70 && r.metro.header_weather.lo === 55,
-      'expected 21/13 C converted to 70/55 F, got ' + JSON.stringify(r.metro.header_weather));
+    assert(r.data.header_weather.hi === 70 && r.data.header_weather.lo === 55,
+      'expected 21/13 C converted to 70/55 F, got ' + JSON.stringify(r.data.header_weather));
   });
 };

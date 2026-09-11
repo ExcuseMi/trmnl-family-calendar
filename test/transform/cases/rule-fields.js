@@ -53,7 +53,7 @@ module.exports = function (test, h) {
         { match: { type: 'contains', value: 'Elementary', field: 'location' }, track: 'Kids' },
       ] }],
     });
-    assertEqual(tracksOf(r.metro), ['Assembly@Kids', 'Budget call@Work']);
+    assertEqual(tracksOf(r.data), ['Assembly@Kids', 'Budget call@Work']);
   });
 
   test('matching on the place leaves the title alone', async () => {
@@ -65,7 +65,7 @@ module.exports = function (test, h) {
         { match: { type: 'contains', value: 'Elementary', field: 'location' }, track: 'Kids' },
       ] }],
     });
-    assertEqual(tracksOf(r.metro), ['Assembly@Kids', 'Budget call@Work'],
+    assertEqual(tracksOf(r.data), ['Assembly@Kids', 'Budget call@Work'],
       'the rule has to have fired for this to be about renaming at all');
   });
 
@@ -80,7 +80,7 @@ module.exports = function (test, h) {
         { match: { type: 'exact', value: 'Sport', field: 'categories' }, track: 'Club', rename: false },
       ] }],
     });
-    assertEqual(tracksOf(r.metro), ['Match@Club', 'Standup@Desk']);
+    assertEqual(tracksOf(r.data), ['Match@Club', 'Standup@Desk']);
   });
 
   test('a category is a whole value, and an escaped comma does not split one', async () => {
@@ -96,7 +96,7 @@ module.exports = function (test, h) {
         { match: { type: 'exact', value: 'Kids, school', field: 'categories' }, track: 'Club', rename: false },
       ] }],
     });
-    assertEqual(tracksOf(r.metro), ['Trip@Club']);
+    assertEqual(tracksOf(r.data), ['Trip@Club']);
   });
 
   test('asking for the description by name is opting into it', async () => {
@@ -112,7 +112,7 @@ module.exports = function (test, h) {
         { match: { type: 'contains', value: 'sitter', field: 'description' }, track: 'Home', rename: false },
       ] }],
     });
-    assertEqual(tracksOf(r.metro), ['Block@Home']);
+    assertEqual(tracksOf(r.data), ['Block@Home']);
   });
 
   test('a field of "title" really means only the title', async () => {
@@ -127,8 +127,8 @@ module.exports = function (test, h) {
         { match: Object.assign({ type: 'contains', value: 'sitter' }, field ? { field: field } : {}), track: 'Home', rename: false },
       ] }],
     });
-    assertEqual(tracksOf((await board(ics, cfg(null))).metro), ['Block@Home'], 'no field: the description still counts');
-    assertEqual(tracksOf((await board(ics, cfg('title'))).metro), ['Block@Desk'], 'field title: the description does not');
+    assertEqual(tracksOf((await board(ics, cfg(null))).data), ['Block@Home'], 'no field: the description still counts');
+    assertEqual(tracksOf((await board(ics, cfg('title'))).data), ['Block@Desk'], 'field title: the description does not');
   });
 
   test('"any" reads everything the event carries', async () => {
@@ -142,7 +142,7 @@ module.exports = function (test, h) {
         { match: { type: 'contains', value: 'Elementary', field: 'any' }, track: 'Kids', rename: false },
       ] }],
     });
-    assertEqual(tracksOf(r.metro), ['Elementary theory@Kids', 'Pickup@Kids']);
+    assertEqual(tracksOf(r.data), ['Elementary theory@Kids', 'Pickup@Kids']);
   });
 
   test('an unknown field falls back to the default rather than matching nothing', async () => {
@@ -154,7 +154,7 @@ module.exports = function (test, h) {
         { match: { type: 'contains', value: 'Assembly', field: 'titel' }, track: 'Kids', rename: false },
       ] }],
     });
-    assert(tracksOf(r.metro).indexOf('Assembly@Kids') >= 0, 'got ' + JSON.stringify(tracksOf(r.metro)));
+    assert(tracksOf(r.data).indexOf('Assembly@Kids') >= 0, 'got ' + JSON.stringify(tracksOf(r.data)));
   });
 
   // ---- the shape of the day, rather than its words ---------------------
@@ -177,9 +177,9 @@ module.exports = function (test, h) {
     const r = await board(LONG_DAY, {
       calendars: [{ url: 'https://example.com/a.ics', name: 'Alex' }],
     });
-    assertEqual(r.metro.sidings, undefined, 'nothing is split out of the timeline any more');
-    assertEqual(eventItems(r.metro).map((e) => e.title).sort(), ['Gym', 'In the office', 'Standup']);
-    const long = eventItems(r.metro).filter((e) => e.title === 'In the office')[0];
+    assertEqual(r.data.sidings, undefined, 'nothing is split out of the timeline any more');
+    assertEqual(eventItems(r.data).map((e) => e.title).sort(), ['Gym', 'In the office', 'Standup']);
+    const long = eventItems(r.data).filter((e) => e.title === 'In the office')[0];
     assertEqual([long.start_min, long.end_min], [510, 900], 'the block keeps its own span');
     assertEqual(long.co_owners, [], 'one person is at the office, so there is nobody to converge with');
   });
@@ -196,7 +196,7 @@ module.exports = function (test, h) {
     // to be missing here because a long block was split off the timeline
     // before the rules ran, which made this case quietly agree with a
     // filter instead of with the matcher it is about.
-    assertEqual(tracksOf(r.metro), ['Gym@Quick', 'In the office@Alex', 'Standup@Quick']);
+    assertEqual(tracksOf(r.data), ['Gym@Quick', 'In the office@Alex', 'Standup@Quick']);
   });
 
   test('a rule can ask when the day it belongs to starts', async () => {
@@ -210,7 +210,7 @@ module.exports = function (test, h) {
         { match: { type: 'time', to: '08:30' }, track: 'Early', rename: false },
       ] }],
     });
-    assertEqual(tracksOf(r.metro), ['Gym@Early', 'In the office@Alex', 'Standup@Alex']);
+    assertEqual(tracksOf(r.data), ['Gym@Early', 'In the office@Alex', 'Standup@Alex']);
   });
 
   test('the shape matchers compose with the word ones', async () => {
@@ -225,7 +225,7 @@ module.exports = function (test, h) {
         ] }, hide: true },
       ] }],
     });
-    assertEqual(eventItems(r.metro).map((e) => e.title).sort(), ['Gym', 'In the office'],
+    assertEqual(eventItems(r.data).map((e) => e.title).sort(), ['Gym', 'In the office'],
       'Standup was short and unnamed, so it went; Gym was short and named, so it stayed; '
       + 'In the office is over the ceiling, so the matcher never saw it');
   });
@@ -240,6 +240,6 @@ module.exports = function (test, h) {
         { match: { type: 'time' }, track: 'Nowhere', rename: false },
       ] }],
     });
-    assert(tracksOf(r.metro).every((t) => t.indexOf('@Alex') > 0), 'got ' + JSON.stringify(tracksOf(r.metro)));
+    assert(tracksOf(r.data).every((t) => t.indexOf('@Alex') > 0), 'got ' + JSON.stringify(tracksOf(r.data)));
   });
 };

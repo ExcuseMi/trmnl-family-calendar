@@ -102,7 +102,10 @@ function baseInput(nowMs, customFields) {
   };
 }
 
-function eventItems(metro) { return metro.items.filter((i) => i.type === 'event'); }
+// The payload carries `events` and `weather` as two lists now. This stays,
+// because every case that uses it wants "the events" and should not have to
+// know which key they arrived under.
+function eventItems(data) { return (data.events || []).slice(); }
 
 // ---------------------------------------------------------------------------- tiny test runner
 

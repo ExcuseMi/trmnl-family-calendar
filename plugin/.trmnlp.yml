@@ -1,9 +1,9 @@
 # Local dev config.
 #
 # transform_runtime is disabled, so this hand-feeds what transform.js's
-# demo data produces. Regenerate the `metro:` block after changing the demo
+# demo data produces. Regenerate the `data:` block after changing the demo
 # data (timestamp 1788870600 = Tue 8 Sep 2026 14:30 Europe/Brussels):
-#   node -e "require('./src/transform.js')({trmnl:{system:{timestamp_utc:1788870600},user:{time_zone_iana:'Europe/Brussels'},plugin_settings:{custom_fields_values:{use_demo_data:'true'}}}}).then(r=>console.log(JSON.stringify(r.metro,null,2)))"
+#   node -e "require('./src/transform.js')({trmnl:{system:{timestamp_utc:1788870600},user:{time_zone_iana:'Europe/Brussels'},plugin_settings:{custom_fields_values:{use_demo_data:'true'}}}}).then(r=>console.log(JSON.stringify(r.data,null,2)))"
 watch:
 - .trmnlp.yml
 - src
@@ -24,7 +24,7 @@ variables:
       custom_fields_values:
         use_demo_data: 'true'
         config_json: ''
-  metro:
+  data:
     {
       "day_start_min": 360,
       "day_end_min": 1380,
@@ -130,14 +130,7 @@ variables:
         }
       ],
       "all_day": [],
-      "items": [
-        {
-          "type": "sun",
-          "at_min": 428,
-          "kind": "sunrise",
-          "icon": "https://trmnl.com/images/plugins/weather/wi-sunrise.svg",
-          "label": "Sunrise"
-        },
+      "events": [
         {
           "type": "event",
           "title": "Shift Handover",
@@ -270,12 +263,6 @@ variables:
           "track_offset": -10
         },
         {
-          "type": "weather",
-          "at_min": 780,
-          "icon": "https://trmnl.com/images/plugins/weather/wi-rain.svg",
-          "label": "Rain starts 13:00"
-        },
-        {
           "type": "event",
           "title": "Reactor Core Check",
           "start_min": 840,
@@ -330,12 +317,6 @@ variables:
           "track_width": null,
           "track_style": null,
           "track_offset": 20
-        },
-        {
-          "type": "weather",
-          "at_min": 960,
-          "icon": "https://trmnl.com/images/plugins/weather/wi-day-sunny.svg",
-          "label": "Rain stops 16:00"
         },
         {
           "type": "event",
@@ -397,6 +378,27 @@ variables:
           "track_width": null,
           "track_style": null,
           "track_offset": 30
+        }
+      ],
+      "weather": [
+        {
+          "type": "sun",
+          "at_min": 428,
+          "kind": "sunrise",
+          "icon": "https://trmnl.com/images/plugins/weather/wi-sunrise.svg",
+          "label": "Sunrise"
+        },
+        {
+          "type": "weather",
+          "at_min": 780,
+          "icon": "https://trmnl.com/images/plugins/weather/wi-rain.svg",
+          "label": "Rain starts 13:00"
+        },
+        {
+          "type": "weather",
+          "at_min": 960,
+          "icon": "https://trmnl.com/images/plugins/weather/wi-day-sunny.svg",
+          "label": "Rain stops 16:00"
         },
         {
           "type": "sun",

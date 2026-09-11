@@ -256,7 +256,7 @@ module.exports = function (test, h) {
       }
       const ties = rep.paths.filter((p) => p.role === 'capsule')
         .concat(rep.rects.filter((r) => r.role === 'capsule'));
-      const shared = f.metro.items.filter((i) => i.type === 'event' && (i.co_owners || []).length);
+      const shared = f.metro.events.filter((i) => i.type === 'event' && (i.co_owners || []).length);
       assert(shared.length > 0, name + ': fixture has no shared events');
       let checked = 0;
       for (const item of shared) {
@@ -437,7 +437,7 @@ module.exports = function (test, h) {
     // other for the length of the thing they are both at.
     const f = fixtures.find((x) => x.name === 'shared-long-event');
     const rep = layout(f, ROOMY);
-    const long = f.metro.items.find((i) => i.type === 'event' && (i.co_owners || []).length
+    const long = f.metro.events.find((i) => i.type === 'event' && (i.co_owners || []).length
       && (i.all_day || i.end_min - i.start_min >= 240));
     assert(long, 'this board is meant to carry a long event two people share');
     const owners = new Set([long.owner].concat(long.co_owners));

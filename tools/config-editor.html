@@ -1746,8 +1746,8 @@
     Promise.resolve(run(input)).then(function (result) {
       window.fetch = realFetch;
       document.getElementById("resultJson").value = JSON.stringify(result, null, 2);
-      return drawMap(result.metro, dev).then(function () {
-        var events = result.metro.items.filter(function (i) { return i.type === "event"; }).length;
+      return drawMap(result.data, dev).then(function () {
+        var events = result.data.events.length;
         var msg = !urls.length
           ? "Nothing is configured yet, so this is the plugin's own demo day. Add a calendar above and draw again to see yours."
           : plural(events, "event", "events") + " today.";

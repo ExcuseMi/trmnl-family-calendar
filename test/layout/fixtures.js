@@ -52,8 +52,7 @@ const TRACKS = [
 // that cannot happen.
 function dayWindow(m) {
   var times = [];
-  (m.items || []).forEach(function (i) {
-    if (i.type !== 'event') return;
+  (m.events || []).forEach(function (i) {
     times.push(i.start_min); times.push(i.end_min);
   });
   if (!times.length) return null;
@@ -77,7 +76,7 @@ function base(over) {
     orientation: 'auto', hour12: false,
     i18n: { today: 'Today', more: '+{n} more', earlier: '+{n} earlier', rain_pct: '{n}% rain' },
     header_weather: { hi: 21, lo: 13, condition: 'Rain', rain_chance: 60, icon: '' },
-    legend: TRACKS, all_day: [], items: [],
+    legend: TRACKS, all_day: [], events: [], weather: [],
   }, over);
   var w = dayWindow(m);
   if (m.day_start_min == null) m.day_start_min = w ? w.lo : 420;
@@ -98,7 +97,7 @@ function base(over) {
 // This is the everyday case — if anything here is unreadable, the plugin is
 // unreadable.
 const busyDay = base({
-  items: [
+  events: [
     ev('Yoga', 'alex', 450, 510, { location: 'Studio 9', side: 'right', hue: 'orange-40', track_offset: 10 }),
     ev('Team Standup', 'work', 480, 495, { track_width: 4 }),
     ev('School Run', 'kids', 495, 525, { co_owners: ['sam'], side: 'right', hue: 'purple-40', track_style: 'dotted', track_offset: 30 }),
@@ -137,7 +136,7 @@ const allDayEveryTrack = base({
     // down to the other head rather than written twice.
     { title: 'School Holiday', owners: ['sam', 'kids'] },
   ],
-  items: busyDay.items,
+  events: busyDay.events,
 });
 
 // A long solo event with a location line, spanning most of the day, with
@@ -149,9 +148,9 @@ const longEventDay = base({
   // The holiday is a head row; the desk booking is a real block with real
   // hours, which is the distinction the two used to blur.
   all_day: [{ title: 'Schoolfotografie', owners: ['kids'] }],
-  items: [
+  events: [
     longs(TRACKS)('work', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
-  ].concat(busyDay.items),
+  ].concat(busyDay.events),
 });
 
 // Barely anything on: the layout should use the canvas instead of leaving
@@ -161,7 +160,7 @@ const longEventDay = base({
 // passing simply because nothing ever rejoins.
 const quietDay = base({
   now_min: 600,
-  items: [
+  events: [
     ev('Standup', 'work', 540, 555, { track_width: 4 }),
     ev('Rehearsal Day', 'kids', 540, 840, { side: 'right', hue: 'purple-40', track_style: 'dotted', track_offset: 30 }),
     ev('Swim Training', 'sam', 990, 1050, { side: 'right', hue: 'green-40', track_style: 'dashed', track_offset: 20 }),
@@ -171,7 +170,7 @@ const quietDay = base({
 // Two same-owner meetings starting within a few minutes of each other: the
 // second one's branch used to be forced to cross back through the first's.
 const tightPair = base({
-  items: [
+  events: [
     ev('Team Standup', 'work', 480, 495, { track_width: 4 }),
     ev('Quick Sync', 'work', 500, 515, { track_width: 4 }),
     ev('Client Workshop', 'work', 540, 630, { track_width: 4 }),
@@ -187,7 +186,7 @@ const tightPair = base({
 // Nothing is shared with anybody, so no corridor is planned and the space
 // either side of Work's line is free for Work's own labels.
 const doubleBooked = base({
-  items: [
+  events: [
     ev('Sprint Planning', 'work', 540, 660, { track_width: 4 }),
     ev('Design Review', 'work', 570, 675, { track_width: 4 }),
     ev('1:1 with Priya', 'work', 600, 690, { track_width: 4 }),
@@ -223,7 +222,7 @@ const regroups = Object.assign(base({
     track('hom', 'Homer', 'right', 'orange-40', 10, 3, 'solid'),
     track('lis', 'Lisa', 'right', 'green-40', 20, 3, 'dotted'),
   ],
-  items: [
+  events: [
     ev('School Run', 'mar', 480, 510, { co_owners: ['bar'], track_width: 4 }),
     ev('Band Practice', 'hom', 500, 530, { co_owners: ['lis'], side: 'right', hue: 'orange-40', track_offset: 10 }),
     ev('Kwik-E-Mart', 'mar', 540, 555, { track_width: 4 }),
@@ -242,7 +241,7 @@ const regroups = Object.assign(base({
 // early morning and late evening are what the express sections compress.
 const fullDay = base({
   day_start_min: 0, day_end_min: 1440, window_label: '00:00 24:00', now_min: 600,
-  items: [
+  events: [
     ev('Standup', 'work', 540, 555, { track_width: 4 }),
     ev('Workshop', 'work', 600, 690, { track_width: 4 }),
     ev('Dentist', 'alex', 780, 825, { side: 'right', hue: 'orange-40', track_offset: 10 }),
@@ -256,7 +255,7 @@ const fullDay = base({
 // set between them. Drawn once per line it appeared twice, on lines that
 // could be at opposite ends of the board.
 const sharedLongEvent = base({
-  items: [
+  events: [
     longs(TRACKS)('sam', 'School Day', 480, 960, { location: 'Springfield Elementary', co_owners: ['kids'] }),
     ev('Standup', 'work', 540, 555, { track_width: 4 }),
     ev('Assembly', 'kids', 600, 630, { side: 'right', hue: 'purple-40', track_style: 'dotted', track_offset: 30 }),
@@ -279,7 +278,7 @@ const FIVE = [
 ];
 const fiveLines = Object.assign(base({
   now_min: 519,
-  items: [
+  events: [
     longs(FIVE)('bar', 'School Day', 510, 900, { location: 'Springfield Elementary', co_owners: ['lis'] }),
     longs(FIVE)('hom', 'Desk booking', 480, 1020, { location: 'BE - Ghent / A01 / D01.01' }),
     ev('School Run', 'mar', 480, 510, { co_owners: ['bar', 'lis'], side: 'right', hue: 'black', track_offset: 10 }),
@@ -315,7 +314,7 @@ const CREW = [
 ];
 const crewDay = Object.assign(base({
   day_start_min: 360, day_end_min: 1380, window_label: '6am 11pm', now_min: 611,
-  items: [
+  events: [
     longs(CREW)('fry', 'Delivery Run', 540, 960, { location: 'Chapek 9', co_owners: ['leela', 'bender'] }),
     ev('Coffee (100 cups)', 'fry', 450, 480, { side: 'right', hue: 'black', track_style: 'dotted', track_offset: 10 }),
     ev('Bend Some Girders', 'bender', 450, 495, { side: 'right', hue: 'black', track_style: 'dashed', track_offset: 30 }),
@@ -350,7 +349,7 @@ const SEVEN = [
 const CREW_KEYS = ['fry', 'leela', 'bender', 'amy', 'prof'];
 const sevenLines = Object.assign(base({
   day_start_min: 360, day_end_min: 1380, window_label: '6am 11pm', now_min: 683,
-  items: [
+  events: [
     longs(SEVEN)('amy', 'Lab Rotation', 570, 690, { location: 'Mars University' }),
     longs(SEVEN)(CREW_KEYS[0], 'Delivery Run', 540, 960, { location: 'Chapek 9', co_owners: CREW_KEYS.slice(1) }),
     ev('Coffee (100 cups)', 'fry', 450, 480, { side: 'right', hue: 'black', track_offset: 10 }),
@@ -373,7 +372,7 @@ const sevenLines = Object.assign(base({
 // reasons about a span has to survive one that is zero minutes long.
 const momentDay = base({
   day_start_min: 420, day_end_min: 1260, window_label: '7am 9pm', now_min: 600,
-  items: [
+  events: [
     ev('Bin Day', 'work', 480, 480),
     ev('Standup', 'work', 540, 555, { track_width: 4 }),
     ev('Family Dinner', 'alex', 1110, 1110, { co_owners: ['sam', 'kids'], side: 'right', hue: 'orange-40', track_offset: 10 }),
@@ -407,7 +406,7 @@ const DAY2 = [
 ];
 const threeDay = Object.assign(base({
   now_min: 600,
-  items: DAY0.concat(shift(DAY1, 1), shift(DAY2, 2)),
+  events: DAY0.concat(shift(DAY1, 1), shift(DAY2, 2)),
 }), {
   days: [
     { index: 0, start_min: 0, end_min: 1440, date_label: 'Tue 8 Sep', weekday_label: 'Tuesday',

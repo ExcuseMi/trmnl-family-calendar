@@ -101,7 +101,7 @@ module.exports = function (test, h) {
   const SKY = JSON.parse(JSON.stringify(busy.metro));
   const DOT = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>"
     + "<circle cx='12' cy='12' r='6' fill='black'/></svg>";
-  SKY.items = SKY.items.concat([
+  SKY.weather = (SKY.weather || []).concat([
     { type: 'sun', at_min: SKY.day_start_min + 40, icon: DOT, label: 'sunrise' },
     // deliberately just before the end of the window, where the last hour
     // tick and the "+n more" note both live

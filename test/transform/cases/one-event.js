@@ -33,7 +33,7 @@ module.exports = function (test, h) {
           { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, track: 'Bo' }] },
         ],
       })));
-    const swims = eventItems(r.metro).filter((e) => e.title === 'Swim Class');
+    const swims = eventItems(r.data).filter((e) => e.title === 'Swim Class');
     assertEqual(swims.length, 1, 'one swim class, not two');
     assertEqual((swims[0].co_owners || []).length, 1, 'the second line should be a co-owner, not a second event');
   });
@@ -48,7 +48,7 @@ module.exports = function (test, h) {
           { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, track: 'Bo' }] },
         ],
       })));
-    assertEqual(eventItems(r.metro).filter((e) => e.title === 'Swim Class').length, 2,
+    assertEqual(eventItems(r.data).filter((e) => e.title === 'Swim Class').length, 2,
       'two o\'clock and four o\'clock are not the same lesson');
   });
 
@@ -71,7 +71,7 @@ module.exports = function (test, h) {
           { url: 'https://example.com/b.ics', rules: [{ match: { type: 'any' }, track: 'Bo' }] },
         ],
       })));
-    const st = eventItems(r.metro).filter((s) => s.title === 'School Day');
+    const st = eventItems(r.data).filter((s) => s.title === 'School Day');
     assertEqual(st.length, 1, 'one school day, not one per child');
     assertEqual(st[0].co_owners.length, 1, 'both children really are at school, so both lines are on it');
     assert(st[0].co_owners[0] !== st[0].owner, 'the two of them are different lines');
@@ -100,7 +100,7 @@ module.exports = function (test, h) {
         { url: 'https://example.com/c.ics', rules: [{ match: { type: 'any' }, track: 'Cy' }] },
       ],
     })));
-    const board = r.metro.legend.slice().sort((x, y) => x.track_offset - y.track_offset).map((t) => t.name);
+    const board = r.data.legend.slice().sort((x, y) => x.track_offset - y.track_offset).map((t) => t.name);
     assertEqual(board.length, 3, 'three lines');
     assertEqual(board[1], 'Bo',
       'Bo shares an event with each of the others, so Bo belongs between them; got ' + board.join(' '));
@@ -145,16 +145,16 @@ module.exports = function (test, h) {
         rules: [{ match: { type: 'any' }, track: who[k] }],
       })),
     })));
-    const board = r.metro.legend.slice().sort((x, y) => x.track_offset - y.track_offset).map((t) => t.name);
+    const board = r.data.legend.slice().sort((x, y) => x.track_offset - y.track_offset).map((t) => t.name);
     assertEqual(board.length, 5, 'five lines: ' + board.join(' '));
     // The groups as the BOARD has them, not as this test declared them:
     // what matters is that the order is the best one for the events that
     // actually came out shared, and reading them back is also the only way
     // the two halves of the check can be talking about the same thing.
     const byKey = {};
-    r.metro.legend.forEach((l) => { byKey[l.key] = l.name; });
-    const groups = r.metro.items
-      .filter((e) => e.type === 'event' && e.co_owners && e.co_owners.length)
+    r.data.legend.forEach((l) => { byKey[l.key] = l.name; });
+    const groups = r.data.events
+      .filter((e) => e.co_owners && e.co_owners.length)
       .map((e) => [e.owner].concat(e.co_owners).map((k) => byKey[k]).filter(Boolean));
     assert(groups.length >= 3, 'only ' + groups.length + ' shared event(s) came out; nothing to order for');
     const cost = (seq) => groups.reduce((sum, g) => {
@@ -187,14 +187,14 @@ module.exports = function (test, h) {
     ])), NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }],
     })));
-    const items = eventItems(r.metro);
+    const items = eventItems(r.data);
     const first = Math.min.apply(null, items.map((e) => e.start_min));
     const last = Math.max.apply(null, items.map((e) => e.end_min));
-    assert(r.metro.day_start_min <= first, 'the day starts at or before the first event, got '
-      + r.metro.day_start_min + ' vs ' + first);
-    assert(r.metro.day_end_min >= last + 60,
+    assert(r.data.day_start_min <= first, 'the day starts at or before the first event, got '
+      + r.data.day_start_min + ' vs ' + first);
+    assert(r.data.day_end_min >= last + 60,
       'the day should leave at least an hour past the last event for its label, got '
-      + r.metro.day_end_min + ' vs ' + last);
-    assert(r.metro.day_start_min >= 0 && r.metro.day_end_min <= 24 * 60, 'and stay inside one real day');
+      + r.data.day_end_min + ' vs ' + last);
+    assert(r.data.day_start_min >= 0 && r.data.day_end_min <= 24 * 60, 'and stay inside one real day');
   });
 };

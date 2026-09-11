@@ -47,8 +47,8 @@ module.exports = function (test, h) {
     const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
     const { run } = runTransform(net(ics), NOW);
     const r = await run(input());
-    assert(Array.isArray(r.metro.days), 'no days array at all');
-    assertEqual(r.metro.days.length, 1, 'the board draws one day, so it is told about one day');
+    assert(Array.isArray(r.data.days), 'no days array at all');
+    assertEqual(r.data.days.length, 1, 'the board draws one day, so it is told about one day');
   });
 
   test('the day being drawn is rebased onto its own midnight', async () => {
@@ -56,11 +56,11 @@ module.exports = function (test, h) {
     // midnight, and none of it should have to know which midnight.
     const ics = icsWithEvents([{ start: '20260910T090000Z', end: '20260910T100000Z', summary: 'Tomorrow' }]);
     const r = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
-    const e = r.metro.items.find((i) => i.type === 'event' && i.title === 'Tomorrow');
+    const e = r.data.events.find((i) => i&& i.title === 'Tomorrow');
     assert(e, 'tomorrow\'s event is missing on a board set to tomorrow');
     assertEqual(e.start_min, 9 * 60, 'a 09:00 event on the day being shown should be at 540');
-    assertEqual(r.metro.days[0].start_min, 0, 'the day being shown does not start at zero');
-    assertEqual(r.metro.days[0].end_min, DAY, 'the day being shown is not a day long');
+    assertEqual(r.data.days[0].start_min, 0, 'the day being shown does not start at zero');
+    assertEqual(r.data.days[0].end_min, DAY, 'the day being shown is not a day long');
   });
 
   test('the board shows one day, and the setting says which', async () => {
@@ -69,11 +69,11 @@ module.exports = function (test, h) {
       { start: '20260910T090000Z', end: '20260910T100000Z', summary: 'Tomorrow Meeting' },
     ]);
     const t = await runTransform(net(ics), NOW).run(input());
-    const titlesT = t.metro.items.filter((i) => i.type === 'event').map((i) => i.title);
+    const titlesT = t.data.events.map((i) => i.title);
     assertEqual(titlesT, ['Today Meeting'], 'a board set to today drew something else');
 
     const m = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
-    const titlesM = m.metro.items.filter((i) => i.type === 'event').map((i) => i.title);
+    const titlesM = m.data.events.map((i) => i.title);
     assertEqual(titlesM, ['Tomorrow Meeting'], 'a board set to tomorrow drew something else');
   });
 
@@ -87,10 +87,10 @@ module.exports = function (test, h) {
         rrule: 'FREQ=WEEKLY;BYDAY=TH' },
     ]);
     const today = await runTransform(net(ics), NOW).run(input());
-    assertEqual(today.metro.items.filter((i) => i.type === 'event').length, 0,
+    assertEqual(today.data.events.length, 0,
       'a Thursday standup was drawn on a Wednesday board');
     const tomorrow = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
-    const t = tomorrow.metro.items.filter((i) => i.type === 'event');
+    const t = tomorrow.data.events;
     assertEqual(t.length, 1, 'the Thursday standup is missing from Thursday');
     assertEqual(t[0].start_min, 9 * 60, 'it is not at its own time of day');
   });
@@ -101,8 +101,8 @@ module.exports = function (test, h) {
       { start: '20260909T220000Z', end: '20260909T230000Z', summary: 'Late' },
     ]);
     const r = await runTransform(net(ics), NOW).run(input());
-    assert(r.metro.day_start_min >= 0, 'the window starts before midnight');
-    assert(r.metro.day_end_min <= DAY, 'the window runs past midnight into a day nobody asked for');
+    assert(r.data.day_start_min >= 0, 'the window starts before midnight');
+    assert(r.data.day_end_min <= DAY, 'the window runs past midnight into a day nobody asked for');
   });
 
   test('the forecast is the one for the day being drawn', async () => {
@@ -111,18 +111,18 @@ module.exports = function (test, h) {
     const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
     const today = await runTransform(net(ics), NOW).run(input());
     const tomorrow = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
-    assertEqual(today.metro.header_weather.hi, 18, 'today\'s high is not today\'s');
-    assertEqual(tomorrow.metro.header_weather.hi, 21, 'a board set to tomorrow shows today\'s high');
+    assertEqual(today.data.header_weather.hi, 18, 'today\'s high is not today\'s');
+    assertEqual(tomorrow.data.header_weather.hi, 21, 'a board set to tomorrow shows today\'s high');
   });
 
   test('the header names the day it is drawing, and calls it Today only when it is', async () => {
     const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
     const today = await runTransform(net(ics), NOW).run(input());
     const tomorrow = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
-    assert(today.metro.date_label !== tomorrow.metro.date_label,
-      'both boards carry the same date: ' + today.metro.date_label);
-    assertEqual(today.metro.title_word, null, 'a board showing today should keep the word Today');
-    assert(tomorrow.metro.title_word, 'a board showing tomorrow still says Today, which names the '
+    assert(today.data.date_label !== tomorrow.data.date_label,
+      'both boards carry the same date: ' + today.data.date_label);
+    assertEqual(today.data.title_word, null, 'a board showing today should keep the word Today');
+    assert(tomorrow.data.title_word, 'a board showing tomorrow still says Today, which names the '
       + 'wrong day');
   });
 
@@ -141,7 +141,7 @@ module.exports = function (test, h) {
           use_demo_data: 'false', lat_lon: '51.05,3.72',
           config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
         }, fields)));
-      return r.metro.items.filter((i) => i.type === 'event').map((i) => i.title);
+      return r.data.events.map((i) => i.title);
     };
     assertEqual(await board('2026-09-09T09:00:00Z', { show_day: 'auto' }), ['Today Meeting'],
       'the morning board should still be today');
@@ -158,7 +158,7 @@ module.exports = function (test, h) {
     const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today Meeting' }]);
     for (const bad of ['', 'evening', '99', '-3']) {
       const r = await runTransform(net(ics), NOW).run(input({ show_day: 'auto', switch_hour: bad }));
-      assert(Array.isArray(r.metro.items), 'a switch hour of ' + JSON.stringify(bad) + ' broke the payload');
+      assert(Array.isArray(r.data.events), 'a switch hour of ' + JSON.stringify(bad) + ' broke the payload');
     }
   });
 
@@ -207,7 +207,7 @@ module.exports = function (test, h) {
   ]);
 
   function sky(metro, kind) {
-    return metro.items.filter((i) => i.type === kind).map((i) => i.at_min);
+    return metro.weather.filter((i) => i.type === kind).map((i) => i.at_min);
   }
 
   test('rain markers start and stop within one day, in that order', async () => {
@@ -217,25 +217,25 @@ module.exports = function (test, h) {
     // as "Rain Stops 07:00" drawn six hours BEFORE the 13:00 it belonged
     // to. A day's rain starts and stops inside that day or not at all.
     const r = await runTransform(skyNet(BOTH), NOW).run(input());
-    const at = sky(r.metro, 'weather');
+    const at = sky(r.data, 'weather');
     assertEqual(at, [13 * 60], 'today has one crossing of its own: ' + JSON.stringify(at));
-    const labels = r.metro.items.filter((i) => i.type === 'weather').map((i) => i.label);
+    const labels = r.data.weather.filter((i) => i.type === 'weather').map((i) => i.label);
     assert(/Rain Starts/i.test(labels[0] || ''), 'the one marker should be the rain starting: ' + JSON.stringify(labels));
   });
 
   test('a board showing tomorrow gets tomorrow\'s rain, not today\'s', async () => {
     const r = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
-    assertEqual(sky(r.metro, 'weather'), [9 * 60, 12 * 60],
-      'tomorrow rains 09:00-12:00: ' + JSON.stringify(r.metro.items.filter((i) => i.type === 'weather')));
+    assertEqual(sky(r.data, 'weather'), [9 * 60, 12 * 60],
+      'tomorrow rains 09:00-12:00: ' + JSON.stringify(r.data.weather.filter((i) => i.type === 'weather')));
   });
 
   test('a board showing tomorrow gets tomorrow\'s sunset', async () => {
     // A couple of minutes, which is the whole point: nobody would ever
     // spot this on the board, so it has to be spotted here.
     const today = await runTransform(skyNet(BOTH), NOW).run(input());
-    assertEqual(sky(today.metro, 'sun'), [6 * 60 + 30, 20 * 60 + 30], 'today\'s sun');
+    assertEqual(sky(today.data, 'sun'), [6 * 60 + 30, 20 * 60 + 30], 'today\'s sun');
     const tom = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
-    assertEqual(sky(tom.metro, 'sun'), [6 * 60 + 32, 20 * 60 + 27], 'tomorrow\'s sun');
+    assertEqual(sky(tom.data, 'sun'), [6 * 60 + 32, 20 * 60 + 27], 'tomorrow\'s sun');
   });
 
   test('there is no "now" on a day that is not now', async () => {
@@ -244,9 +244,9 @@ module.exports = function (test, h) {
     // anybody, and the marker would be claiming five people are somewhere
     // they have not been yet.
     const today = await runTransform(skyNet(BOTH), NOW).run(input());
-    assertEqual(today.metro.now_min, 9 * 60, 'today\'s board should carry the clock');
+    assertEqual(today.data.now_min, 9 * 60, 'today\'s board should carry the clock');
     const tom = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
-    assertEqual(tom.metro.now_min, null, 'tomorrow\'s board carried a "now": ' + tom.metro.now_min);
+    assertEqual(tom.data.now_min, null, 'tomorrow\'s board carried a "now": ' + tom.data.now_min);
   });
 
   test('the evening switch-over takes the clock off the board with the day', async () => {
@@ -259,10 +259,10 @@ module.exports = function (test, h) {
         use_demo_data: 'false', lat_lon: '51.05,3.72', show_day: 'auto', switch_hour: '18',
         config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
       }));
-    assert(r.metro.items.some((i) => i.type === 'event' && i.title === 'Tomorrow Meeting'),
+    assert(r.data.events.some((i) => i&& i.title === 'Tomorrow Meeting'),
       'the board should have switched to tomorrow');
-    assertEqual(r.metro.now_min, null, 'the switched board still carried a "now": ' + r.metro.now_min);
-    assertEqual(sky(r.metro, 'weather'), [9 * 60, 12 * 60], 'and tomorrow\'s rain with it');
+    assertEqual(r.data.now_min, null, 'the switched board still carried a "now": ' + r.data.now_min);
+    assertEqual(sky(r.data, 'weather'), [9 * 60, 12 * 60], 'and tomorrow\'s rain with it');
   });
 
   test('the day on the board carries its own forecast in days[0]', async () => {
@@ -270,8 +270,8 @@ module.exports = function (test, h) {
     // they disagreed: a snapshot with no run of days in it left the header
     // filled and days[0].weather null.
     const r = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
-    assert(r.metro.days[0].weather, 'no forecast on the day being drawn');
-    assertEqual(r.metro.days[0].weather.hi, 21, 'tomorrow\'s high');
-    assertEqual(r.metro.header_weather.hi, 21, 'the header should agree with it');
+    assert(r.data.days[0].weather, 'no forecast on the day being drawn');
+    assertEqual(r.data.days[0].weather.hi, 21, 'tomorrow\'s high');
+    assertEqual(r.data.header_weather.hi, 21, 'the header should agree with it');
   });
 };

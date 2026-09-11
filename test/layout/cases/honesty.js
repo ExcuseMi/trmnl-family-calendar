@@ -54,7 +54,7 @@ module.exports = function (test, h) {
       if (!at) { assert(true); return; }
       const labels = textLabels(rep);
       const bad = [];
-      for (const item of f.metro.items.filter((i) => i.type === 'event')) {
+      for (const item of f.metro.events) {
         // the drawn label for this event, matched on its title text
         const box = labels.filter((l) => l.text.indexOf(item.title) >= 0)[0];
         if (!box) continue; // dropped, or ellipsised past recognition

@@ -83,8 +83,8 @@ module.exports = function (test, h) {
     const rep = layout(busy, ROOMY);
     const nowMin = busy.metro.now_min;
     // who is mid-event at now_min
-    const busyNow = busy.metro.items.filter((i) => i.type === 'event'
-      && i.start_min <= nowMin && i.end_min >= nowMin).map((i) => i.owner);
+    const busyNow = busy.metro.events
+      .filter((i) => i.start_min <= nowMin && i.end_min >= nowMin).map((i) => i.owner);
     assert(busyNow.length > 0, 'fixture has nobody mid-event at now_min — nothing to test');
     for (const owner of busyNow) {
       const car = cars(rep).filter((c) => c.owner === owner)[0];

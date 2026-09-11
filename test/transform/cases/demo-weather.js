@@ -43,20 +43,20 @@ module.exports = function (test, h) {
       assert(seen.filter((u) => u.indexOf('api.open-meteo.com') >= 0).length === 0,
         set + ': the demo asked the weather API for a board that has no location');
 
-      const sun = r.metro.items.filter((i) => i.type === 'sun').map((i) => i.kind).sort();
+      const sun = r.data.weather.filter((i) => i.type === 'sun').map((i) => i.kind).sort();
       assert(sun.join(',') === 'sunrise,sunset', set + ': expected a sunrise and a sunset, got ' + JSON.stringify(sun));
 
-      const wx = r.metro.items.filter((i) => i.type === 'weather').map((i) => i.label);
+      const wx = r.data.weather.filter((i) => i.type === 'weather').map((i) => i.label);
       assert(wx.some((l) => /^Rain starts/.test(l)), set + ': no rain start marker, got ' + JSON.stringify(wx));
       assert(wx.some((l) => /^Rain stops/.test(l)), set + ': no rain stop marker, got ' + JSON.stringify(wx));
       // and one heavier condition, so the snow/storm/fog icons are seen too
       assert(wx.some((l) => /^(Snow|Storms|Foggy)/.test(l)),
         set + ': no snow/storm/fog marker, got ' + JSON.stringify(wx));
 
-      assert(r.metro.header_weather.hi != null && r.metro.header_weather.condition,
-        set + ': the header has no weather: ' + JSON.stringify(r.metro.header_weather));
+      assert(r.data.header_weather.hi != null && r.data.header_weather.condition,
+        set + ': the header has no weather: ' + JSON.stringify(r.data.header_weather));
       // every marker carries an icon, or it draws as a floating caption
-      r.metro.items.filter((i) => i.type === 'weather' || i.type === 'sun')
+      r.data.weather
         .forEach((i) => assert(/^https:\/\/trmnl\.com\/images\/plugins\/weather\/wi-[a-z-]+\.svg$/.test(i.icon),
           set + ': bad marker icon ' + i.icon));
     });
@@ -69,7 +69,7 @@ module.exports = function (test, h) {
     for (const set of SETS) {
       const { run } = runTransform(serveDemoOnly(), NOW);
       const r = await run(baseInput(NOW, { use_demo_data: 'true', demo_set: set }));
-      r.metro.items.filter((i) => i.type === 'weather').forEach((i) => {
+      r.data.weather.filter((i) => i.type === 'weather').forEach((i) => {
         const m = /^(Snow|Storms|Foggy)/.exec(i.label);
         if (m) heavy.add(m[1]);
       });
@@ -82,8 +82,8 @@ module.exports = function (test, h) {
     // day, which is exactly when an empty sky band would be noticed.
     const { run } = runTransform(async () => fail(500), NOW);
     const r = await run(baseInput(NOW, { use_demo_data: 'true' }));
-    assert(r.metro.items.filter((i) => i.type === 'sun').length === 2, 'the offline demo lost its sun markers');
-    assert(r.metro.items.filter((i) => i.type === 'weather').length >= 2, 'the offline demo lost its weather markers');
+    assert(r.data.weather.filter((i) => i.type === 'sun').length === 2, 'the offline demo lost its sun markers');
+    assert(r.data.weather.filter((i) => i.type === 'weather').length >= 2, 'the offline demo lost its weather markers');
   });
 
   test('demo weather does not leak into a real board that has no location', async () => {
@@ -96,8 +96,8 @@ module.exports = function (test, h) {
       use_demo_data: 'false',
       config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
     }));
-    assert(r.metro.header_weather.hi == null, 'a real board invented a temperature: ' + JSON.stringify(r.metro.header_weather));
-    assert(r.metro.items.filter((i) => i.type === 'weather' || i.type === 'sun').length === 0,
+    assert(r.data.header_weather.hi == null, 'a real board invented a temperature: ' + JSON.stringify(r.data.header_weather));
+    assert(r.data.weather.length === 0,
       'a real board with no location drew sky markers');
   });
 
@@ -117,9 +117,9 @@ module.exports = function (test, h) {
     const r = await run(baseInput(NOW, { use_demo_data: 'true', lat_lon: '51.05,3.72' }));
     // 30C asked for in Fahrenheit (the demo board pins en-US) comes back
     // already converted by the API, so the number is the one it sent
-    assert(r.metro.header_weather.hi === 30,
-      'the demo weather overrode a real forecast: ' + JSON.stringify(r.metro.header_weather));
-    const sunrise = r.metro.items.filter((i) => i.type === 'sun' && i.kind === 'sunrise')[0];
+    assert(r.data.header_weather.hi === 30,
+      'the demo weather overrode a real forecast: ' + JSON.stringify(r.data.header_weather));
+    const sunrise = r.data.weather.filter((i) => i.type === 'sun' && i.kind === 'sunrise')[0];
     assert(sunrise && sunrise.at_min === 6 * 60 + 30, 'expected the real sunrise, got ' + JSON.stringify(sunrise));
   });
 };

@@ -209,11 +209,11 @@ module.exports = function (test, h) {
 
     const MONDAY = Date.parse('2026-09-07T12:00:00Z');
     const rMon = await runTransform(fetchImpl, MONDAY).run(baseInput(MONDAY, { config_json: cfg }));
-    assertEqual(eventItems(rMon.metro).length, 0, 'Monday occurrence should be hidden by the weekday rule');
+    assertEqual(eventItems(rMon.data).length, 0, 'Monday occurrence should be hidden by the weekday rule');
 
     const WEDNESDAY = Date.parse('2026-09-09T12:00:00Z');
     const rWed = await runTransform(fetchImpl, WEDNESDAY).run(baseInput(WEDNESDAY, { config_json: cfg }));
-    assertEqual(eventItems(rWed.metro).length, 1, 'Wednesday occurrence should still show — the rule only targets Monday');
+    assertEqual(eventItems(rWed.data).length, 1, 'Wednesday occurrence should still show — the rule only targets Monday');
   });
 
   test('"hide these class codes except two" works end to end with no regex (real-world config)', async () => {
@@ -255,7 +255,7 @@ module.exports = function (test, h) {
     });
     const NOW = Date.parse('2026-09-08T12:00:00Z');
     const r = await runTransform(fetchImpl, NOW).run(baseInput(NOW, { config_json: cfg }));
-    const titles = eventItems(r.metro).map((e) => e.title).sort();
+    const titles = eventItems(r.data).map((e) => e.title).sort();
     assertEqual(titles, ['Kato - Extra turnen', 'Nala - Extra turnen'], 'only L2/L6 should survive the hide rule, each renamed to its track by the later word rules');
   });
 };

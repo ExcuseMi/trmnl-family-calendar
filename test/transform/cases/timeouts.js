@@ -57,7 +57,7 @@ module.exports = function (test, h) {
   test('one dead feed costs its own line, not the board', async () => {
     const { run } = runTransform(async (url) => (String(url) === A ? fail(404) : icsFor('Sam Time')), NOW);
     const r = await run(twoCalendars());
-    const titles = eventItems(r.metro).map((e) => e.title);
+    const titles = eventItems(r.data).map((e) => e.title);
     assert(titles.indexOf('Sam Time') >= 0, 'the healthy feed was lost with the dead one: ' + titles.join(', '));
   });
 
@@ -77,7 +77,7 @@ module.exports = function (test, h) {
     }, () => now);
     const r = await run(twoCalendars());
     assert(calls.indexOf(B) < 0, 'the second feed was fetched with no budget left: ' + calls.join(', '));
-    assert(r.metro, 'the render should still produce a board');
+    assert(r.data, 'the render should still produce a board');
   });
 
   test('a slow forecast cannot push the calendars past the deadline', async () => {

@@ -55,8 +55,8 @@ module.exports = function (test, h) {
     const asked = fetchImpl.seen.filter((u) => u.indexOf('/i18n/') >= 0);
     assert(asked.length === 1 && /ExcuseMi\/trmnl-metro-calendar-plugin\/main\/i18n\/fr\.json$/.test(asked[0]),
       'expected one fetch of i18n/fr.json from this repo, got ' + JSON.stringify(asked));
-    assert(r.metro.i18n.today === 'AUJOURD-SERVED',
-      'the board did not use the downloaded table: ' + JSON.stringify(r.metro.i18n));
+    assert(r.data.i18n.today === 'AUJOURD-SERVED',
+      'the board did not use the downloaded table: ' + JSON.stringify(r.data.i18n));
   });
 
   test('a half-translated file uses what it has and reads English for the rest', async () => {
@@ -64,23 +64,23 @@ module.exports = function (test, h) {
     // back to a language nobody asked for.
     const { run } = runTransform(net(() => okText(JSON.stringify({ today: 'Vandaag-SERVED' }))), NOW);
     const r = await run(input('nl-BE'));
-    assert(r.metro.i18n.today === 'Vandaag-SERVED', 'the translated key was ignored');
-    assert(r.metro.i18n.more === '+{n} more', 'a missing key should fall back to English, got ' + r.metro.i18n.more);
+    assert(r.data.i18n.today === 'Vandaag-SERVED', 'the translated key was ignored');
+    assert(r.data.i18n.more === '+{n} more', 'a missing key should fall back to English, got ' + r.data.i18n.more);
   });
 
   test('an unreachable GitHub renders the board in English and says nothing', async () => {
     // Silently: a family board is not the place for a message about a CDN.
     const { run } = runTransform(net(() => { throw new Error('offline'); }), NOW);
     const r = await run(input('fr-BE'));
-    assert(r.metro.i18n.today === 'Today', 'expected the English fallback, got ' + r.metro.i18n.today);
-    assert(eventItems(r.metro).length > 0, 'a failed language fetch cost the events');
+    assert(r.data.i18n.today === 'Today', 'expected the English fallback, got ' + r.data.i18n.today);
+    assert(eventItems(r.data).length > 0, 'a failed language fetch cost the events');
   });
 
   test('a language nobody has translated yet is a 404, not a broken board', async () => {
     const { run } = runTransform(net(() => fail(404)), NOW);
     const r = await run(input('pt-PT'));
-    assert(r.metro.i18n.today === 'Today', 'got ' + r.metro.i18n.today);
-    assert(eventItems(r.metro).length > 0, 'a missing language cost the events');
+    assert(r.data.i18n.today === 'Today', 'got ' + r.data.i18n.today);
+    assert(eventItems(r.data).length > 0, 'a missing language cost the events');
   });
 
   test('the last downloaded table is cached in state and reused when the fetch fails', async () => {
@@ -93,8 +93,8 @@ module.exports = function (test, h) {
     saved.i18n.fetchedAt = NOW_S - 24 * 3600;
     const second = runTransform(net(() => fail(500)), NOW);
     const later = await second.run(input('fr-BE', saved));
-    assert(later.metro.i18n.today === 'AUJOURD-SERVED',
-      'a failed fetch should fall back to the cached table, got ' + later.metro.i18n.today);
+    assert(later.data.i18n.today === 'AUJOURD-SERVED',
+      'a failed fetch should fall back to the cached table, got ' + later.data.i18n.today);
   });
 
   test('a fresh cached table is used without spending the render on a fetch', async () => {
@@ -105,7 +105,7 @@ module.exports = function (test, h) {
     const r = await run(input('fr-BE', {
       i18n: { lang: 'fr', strings: { today: 'CACHED' }, fetchedAt: NOW_S - 60 },
     }));
-    assert(r.metro.i18n.today === 'CACHED', 'the fresh cache was not used: ' + r.metro.i18n.today);
+    assert(r.data.i18n.today === 'CACHED', 'the fresh cache was not used: ' + r.data.i18n.today);
     assert(fetchImpl.seen.filter((u) => u.indexOf('/i18n/') >= 0).length === 0,
       'a fresh cache should not be re-fetched');
   });
@@ -116,7 +116,7 @@ module.exports = function (test, h) {
     const r = await run(input('en-GB'));
     assert(fetchImpl.seen.filter((u) => u.indexOf('/i18n/') >= 0).length === 0,
       'English is inline; it must not be downloaded');
-    assert(r.metro.i18n.today === 'Today');
+    assert(r.data.i18n.today === 'Today');
   });
 
   test('a language file full of junk cannot reach the board or the state', async () => {
@@ -126,9 +126,9 @@ module.exports = function (test, h) {
     const junk = { today: 'Hoi', more: { nope: 1 }, evil: '<script>', earlier: 'x'.repeat(500) };
     const { run } = runTransform(net(() => okText(JSON.stringify(junk))), NOW);
     const r = await run(input('nl-BE'));
-    assert(r.metro.i18n.today === 'Hoi', 'the good key was dropped with the bad ones');
-    assert(r.metro.i18n.more === '+{n} more', 'a non-string value reached the board: ' + JSON.stringify(r.metro.i18n.more));
-    assert(r.metro.i18n.earlier === '+{n} earlier', 'a 500-character string reached the board');
+    assert(r.data.i18n.today === 'Hoi', 'the good key was dropped with the bad ones');
+    assert(r.data.i18n.more === '+{n} more', 'a non-string value reached the board: ' + JSON.stringify(r.data.i18n.more));
+    assert(r.data.i18n.earlier === '+{n} earlier', 'a 500-character string reached the board');
     assert(!('evil' in r.trmnl_state.i18n.strings), 'an unknown key was stored in state');
   });
 
@@ -168,7 +168,7 @@ module.exports = function (test, h) {
     const fr = fs.readFileSync(path.join(I18N_DIR, 'fr.json'), 'utf-8');
     const { run } = runTransform(net(() => okText(fr)), NOW);
     const r = await run(input('fr-FR'));
-    assert(r.metro.i18n.today === JSON.parse(fr).today,
-      'expected the repo French table on the board, got ' + r.metro.i18n.today);
+    assert(r.data.i18n.today === JSON.parse(fr).today,
+      'expected the repo French table on the board, got ' + r.data.i18n.today);
   });
 };

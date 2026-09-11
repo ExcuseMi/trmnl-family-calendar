@@ -28,7 +28,7 @@ module.exports = function (test, h) {
     return run(baseInput(NOW, { use_demo_data: 'false', config_json: JSON.stringify(cfg) }));
   }
 
-  const TRACKS = (r) => r.metro.legend.map((t) => t.name).sort().join(',');
+  const TRACKS = (r) => r.data.legend.map((t) => t.name).sort().join(',');
 
   test('a track with nothing on today is dropped, as it always was', async () => {
     const r = await board({
@@ -51,7 +51,7 @@ module.exports = function (test, h) {
     });
     assert(TRACKS(r) === 'Busy,Quiet', 'got ' + TRACKS(r));
     // and it really is an empty line: no events were invented for it
-    assert(eventItems(r.metro).length === 1, 'expected the one real event, got ' + eventItems(r.metro).length);
+    assert(eventItems(r.data).length === 1, 'expected the one real event, got ' + eventItems(r.data).length);
   });
 
   test('hideIfEmpty:false on a calendar keeps the line that calendar owns', async () => {

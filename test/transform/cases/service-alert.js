@@ -83,8 +83,8 @@ module.exports = function (test, h) {
     // template has one thing to test rather than two.
     const { run } = runTransform(net(forecast()), NOW);
     const r = await run(input({}));
-    assert('service_alert' in r.metro, 'the payload has no service_alert key at all');
-    assertEqual(r.metro.service_alert, null, 'an unconfigured board raised an alert');
+    assert('service_alert' in r.data, 'the payload has no service_alert key at all');
+    assertEqual(r.data.service_alert, null, 'an unconfigured board raised an alert');
   });
 
   test('the banner is off until it is turned on, on a day that breaches everything', async () => {
@@ -92,13 +92,13 @@ module.exports = function (test, h) {
     // for is an alert nobody trusts.
     const { run } = runTransform(net(forecast({ code: 71, hi: -2, lo: -9 })), NOW);
     const r = await run(input({ alert_rain_threshold: '10', alert_temp_low: '0' }));
-    assertEqual(r.metro.service_alert, null, 'a board with alert_enabled unset raised an alert');
+    assertEqual(r.data.service_alert, null, 'a board with alert_enabled unset raised an alert');
   });
 
   test('the wettest hour above the threshold is the banner, in the copy it was written in', async () => {
     const { run } = runTransform(net(forecast()), NOW);
     const r = await run(input(ON));
-    assertEqual(r.metro.service_alert,
+    assertEqual(r.data.service_alert,
       { kind: 'rain', text: 'SERVICE ALERT · Heavy Rain Expected at 17:00 (80%)' },
       'the English rain banner');
   });
@@ -108,7 +108,7 @@ module.exports = function (test, h) {
     // band has to disappear rather than say "Heavy Rain Expected (80%)".
     const { run } = runTransform(net(forecast()), NOW);
     const r = await run(input({ alert_enabled: 'true', alert_rain_threshold: '90' }));
-    assertEqual(r.metro.service_alert, null, 'got ' + JSON.stringify(r.metro.service_alert));
+    assertEqual(r.data.service_alert, null, 'got ' + JSON.stringify(r.data.service_alert));
   });
 
   test('a blank threshold is off, not zero', async () => {
@@ -117,13 +117,13 @@ module.exports = function (test, h) {
     // and never once in Fahrenheit.
     const { run } = runTransform(net(forecast({ max: 0, probs: PROBS.map(() => 0) })), NOW);
     const r = await run(input({ alert_enabled: 'true', alert_rain_threshold: '', alert_temp_low: '' }));
-    assertEqual(r.metro.service_alert, null, 'a blank number field alerted on a dry, mild day');
+    assertEqual(r.data.service_alert, null, 'a blank number field alerted on a dry, mild day');
   });
 
   test('snow outranks rain: one banner, and it names the thing that stops the day', async () => {
     const { run } = runTransform(net(forecast({ code: 71, hi: 1, lo: -3 })), NOW);
     const r = await run(input(ON));
-    assertEqual(r.metro.service_alert,
+    assertEqual(r.data.service_alert,
       { kind: 'snow', text: 'SERVICE ALERT · Heavy Snow Expected at 17:00 (80%)' },
       'a snowy day with rain over the threshold should read as snow');
   });
@@ -131,18 +131,18 @@ module.exports = function (test, h) {
   test('the snow alert can be turned off on its own and the day falls through to rain', async () => {
     const { run } = runTransform(net(forecast({ code: 71 })), NOW);
     const r = await run(input(Object.assign({ alert_snow: 'false' }, ON)));
-    assertEqual((r.metro.service_alert || {}).kind, 'rain', 'got ' + JSON.stringify(r.metro.service_alert));
+    assertEqual((r.data.service_alert || {}).kind, 'rain', 'got ' + JSON.stringify(r.data.service_alert));
   });
 
   test('cold and heat carry the temperature, and outrank rain', async () => {
     const cold = await runTransform(net(forecast({ hi: 1, lo: -6 })), NOW)
       .run(input(Object.assign({ alert_temp_low: '-5' }, ON)));
-    assertEqual(cold.metro.service_alert,
+    assertEqual(cold.data.service_alert,
       { kind: 'cold', text: 'SERVICE ALERT · Extreme Cold Expected (-6°)' }, 'the cold banner');
 
     const heat = await runTransform(net(forecast({ hi: 36, lo: 24 })), NOW)
       .run(input(Object.assign({ alert_temp_high: '35' }, ON)));
-    assertEqual(heat.metro.service_alert,
+    assertEqual(heat.data.service_alert,
       { kind: 'heat', text: 'SERVICE ALERT · Extreme Heat Expected (36°)' }, 'the heat banner');
   });
 
@@ -162,13 +162,13 @@ module.exports = function (test, h) {
     const noRain = Object.assign({}, ON, { alert_rain_threshold: '', alert_temp_low: '20' });
 
     const c = await runTransform(sameDay, NOW).run(input(Object.assign({ temperature_unit: 'c' }, noRain)));
-    assertEqual(c.metro.service_alert,
+    assertEqual(c.data.service_alert,
       { kind: 'cold', text: 'SERVICE ALERT · Extreme Cold Expected (18°)' },
       '18C is at or below a threshold of 20 on a Celsius board');
 
     const f = await runTransform(sameDay, NOW).run(input(Object.assign({ temperature_unit: 'f' }, noRain)));
-    assertEqual(f.metro.service_alert, null,
-      '64F is nowhere near a threshold of 20 on a Fahrenheit board: ' + JSON.stringify(f.metro.service_alert));
+    assertEqual(f.data.service_alert, null,
+      '64F is nowhere near a threshold of 20 on a Fahrenheit board: ' + JSON.stringify(f.data.service_alert));
   });
 
   test('a snapshot saved in one unit is compared in the unit the board now shows', async () => {
@@ -182,9 +182,9 @@ module.exports = function (test, h) {
 
     const later = await runTransform(net(null), NOW)
       .run(input(Object.assign({ temperature_unit: 'f', alert_temp_low: '25', alert_rain_threshold: '' }, ON), null, saved));
-    assertEqual(later.metro.service_alert,
+    assertEqual(later.data.service_alert,
       { kind: 'cold', text: 'SERVICE ALERT · Extreme Cold Expected (21°)' },
-      'got ' + JSON.stringify(later.metro.service_alert));
+      'got ' + JSON.stringify(later.data.service_alert));
   });
 
   test('the alert costs the render no extra network call', async () => {
@@ -193,7 +193,7 @@ module.exports = function (test, h) {
     const fetchImpl = net(forecast());
     const { run } = runTransform(fetchImpl, NOW);
     const r = await run(input(ON));
-    assert(r.metro.service_alert, 'no alert to weigh');
+    assert(r.data.service_alert, 'no alert to weigh');
     assertEqual(fetchImpl.seen.filter((u) => u.indexOf('api.open-meteo.com') >= 0).length, 1,
       'the forecast API was called more than once');
   });
@@ -207,8 +207,8 @@ module.exports = function (test, h) {
     assert(saved.weather && saved.weather.peak, 'the wettest hour was not saved: ' + JSON.stringify(saved.weather));
 
     const later = await runTransform(net(null), NOW).run(input(ON, null, saved));
-    assertEqual((later.metro.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 17:00 (80%)',
-      'got ' + JSON.stringify(later.metro.service_alert));
+    assertEqual((later.data.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 17:00 (80%)',
+      'got ' + JSON.stringify(later.data.service_alert));
   });
 
   test('a saved snapshot from a build that had no wettest hour does not invent one', async () => {
@@ -217,7 +217,7 @@ module.exports = function (test, h) {
     const saved = { weather: { hi: 18, lo: 11, condition: 'rain', icon: 'wi-day-rain.svg', rain_chance: 80, unit: 'C' },
       weatherFetchedAt: NOW_S - 600 };
     const r = await runTransform(net(null), NOW).run(input(ON, null, saved));
-    assertEqual(r.metro.service_alert, null, 'got ' + JSON.stringify(r.metro.service_alert));
+    assertEqual(r.data.service_alert, null, 'got ' + JSON.stringify(r.data.service_alert));
   });
 
   // The exact copy, per language, from the files this repo actually ships,
@@ -236,8 +236,8 @@ module.exports = function (test, h) {
       const table = fs.readFileSync(path.join(I18N_DIR, lang + '.json'), 'utf-8');
       const { run } = runTransform(net(forecast(), table), NOW);
       const r = await run(input(ON, lang + '-' + lang.toUpperCase()));
-      assertEqual((r.metro.service_alert || {}).text, RAIN_COPY[lang],
-        'got ' + JSON.stringify(r.metro.service_alert));
+      assertEqual((r.data.service_alert || {}).text, RAIN_COPY[lang],
+        'got ' + JSON.stringify(r.data.service_alert));
     });
   }
 
@@ -246,15 +246,15 @@ module.exports = function (test, h) {
     // board, a board with "alert_rain" printed on it is not.
     const { run } = runTransform(net(forecast(), null), NOW);
     const r = await run(input(ON, 'fr-FR'));
-    assertEqual((r.metro.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 17:00 (80%)',
-      'got ' + JSON.stringify(r.metro.service_alert));
+    assertEqual((r.data.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 17:00 (80%)',
+      'got ' + JSON.stringify(r.data.service_alert));
   });
 
   test('the banner follows the 12-hour setting like every other time on the board', async () => {
     const { run } = runTransform(net(forecast()), NOW);
     const r = await run(input(Object.assign({ time_format: '12h' }, ON)));
-    assertEqual((r.metro.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 5pm (80%)',
-      'got ' + JSON.stringify(r.metro.service_alert));
+    assertEqual((r.data.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 5pm (80%)',
+      'got ' + JSON.stringify(r.data.service_alert));
   });
 
   test('a board with no location cannot raise an alert', async () => {
@@ -262,7 +262,7 @@ module.exports = function (test, h) {
     // this is the case that would have shipped a banner with a blank in it.
     const { run } = runTransform(net(forecast()), NOW);
     const r = await run(input(Object.assign({ lat_lon: '' }, ON)));
-    assertEqual(r.metro.service_alert, null, 'got ' + JSON.stringify(r.metro.service_alert));
+    assertEqual(r.data.service_alert, null, 'got ' + JSON.stringify(r.data.service_alert));
   });
 
   test('a demo board can show the banner without waiting for real weather', async () => {
@@ -271,8 +271,8 @@ module.exports = function (test, h) {
     // is part of the map.
     const { run } = runTransform(async () => fail(500), NOW);
     const r = await run(baseInput(NOW, { use_demo_data: 'true', demo_set: 'friends', alert_enabled: 'true', alert_temp_low: '0' }));
-    assertEqual((r.metro.service_alert || {}).kind, 'snow',
-      'the freezing demo board should demonstrate the banner: ' + JSON.stringify(r.metro.service_alert));
+    assertEqual((r.data.service_alert || {}).kind, 'snow',
+      'the freezing demo board should demonstrate the banner: ' + JSON.stringify(r.data.service_alert));
   });
 
   // -------------------------------------------------------------------
@@ -347,7 +347,7 @@ module.exports = function (test, h) {
 
   async function alertAt(now, body, fields) {
     const r = await runTransform(netAt(body), now).run(inputAt(now, Object.assign({}, ON, fields)));
-    return r.metro.service_alert;
+    return r.data.service_alert;
   }
 
   test('the wettest hour of the day is not an alert once it has gone', async () => {
@@ -456,14 +456,14 @@ module.exports = function (test, h) {
     // saved snapshot's wettest hour is nine hours old.
     const morning = await runTransform(netAt(forecastDays([{ date: D0, by: { 9: 90 } }])), at(8))
       .run(inputAt(at(8), ON));
-    assertEqual((morning.metro.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (90%)',
+    assertEqual((morning.data.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (90%)',
       'the morning board should warn about the morning');
     const saved = JSON.parse(JSON.stringify(morning.trmnl_state));
 
     const evening = await runTransform(netAt(null), at(19)).run(
       Object.assign(inputAt(at(19), ON), { trmnl: Object.assign({}, inputAt(at(19), ON).trmnl, { state: saved }) }));
-    assertEqual(evening.metro.service_alert, null,
-      'the evening board replayed the morning: ' + JSON.stringify(evening.metro.service_alert));
+    assertEqual(evening.data.service_alert, null,
+      'the evening board replayed the morning: ' + JSON.stringify(evening.data.service_alert));
   });
 
   test('a snapshot with only a wettest hour behind it is still held to the clock', async () => {
@@ -475,13 +475,13 @@ module.exports = function (test, h) {
     const i = inputAt(at(15), ON);
     i.trmnl.state = saved;
     const r = await runTransform(netAt(null), at(15)).run(i);
-    assertEqual(r.metro.service_alert, null, 'got ' + JSON.stringify(r.metro.service_alert));
+    assertEqual(r.data.service_alert, null, 'got ' + JSON.stringify(r.data.service_alert));
 
     const early = inputAt(at(8), ON);
     early.trmnl.state = saved;
     const still = await runTransform(netAt(null), at(8)).run(early);
-    assertEqual((still.metro.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (90%)',
-      'the same snapshot read before the hour is a real warning: ' + JSON.stringify(still.metro.service_alert));
+    assertEqual((still.data.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (90%)',
+      'the same snapshot read before the hour is a real warning: ' + JSON.stringify(still.data.service_alert));
   });
 
   test('the demo board obeys the clock like a real one', async () => {
@@ -489,8 +489,8 @@ module.exports = function (test, h) {
     // wettest hour is guaranteed to be in the past every single evening.
     const late = await runTransform(async () => fail(500), at(20)).run(
       baseInput(at(20), { use_demo_data: 'true', demo_set: 'simpsons', alert_enabled: 'true', alert_rain_threshold: '50' }));
-    assertEqual(late.metro.service_alert, null,
-      'the demo raised an alert about an hour that has gone: ' + JSON.stringify(late.metro.service_alert));
+    assertEqual(late.data.service_alert, null,
+      'the demo raised an alert about an hour that has gone: ' + JSON.stringify(late.data.service_alert));
   });
 
   test('the hourly detail behind the alert is saved, per day', async () => {
@@ -527,8 +527,8 @@ module.exports = function (test, h) {
     const i = inputAt(smallHours, ON);
     i.trmnl.state = saved;
     const r = await runTransform(netAt(null), smallHours).run(i);
-    assertEqual((r.metro.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 16:00 (85%)',
-      'the morning after should be warned about the morning after: ' + JSON.stringify(r.metro.service_alert));
+    assertEqual((r.data.service_alert || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 16:00 (85%)',
+      'the morning after should be warned about the morning after: ' + JSON.stringify(r.data.service_alert));
   });
 
   test('a snapshot older than the run it covers says nothing rather than something wrong', async () => {
@@ -540,7 +540,7 @@ module.exports = function (test, h) {
     const i = inputAt(twoDaysOn, ON);
     i.trmnl.state = saved;
     const r = await runTransform(netAt(null), twoDaysOn).run(i);
-    assertEqual(r.metro.service_alert, null,
-      'a forecast that ran out raised an alert anyway: ' + JSON.stringify(r.metro.service_alert));
+    assertEqual(r.data.service_alert, null,
+      'a forecast that ran out raised an alert anyway: ' + JSON.stringify(r.data.service_alert));
   });
 };

@@ -12,7 +12,7 @@ module.exports = function (test, h) {
       config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
     });
   }
-  const titles = (r) => r.metro.items.filter((i) => i.type === 'event').map((i) => i.title);
+  const titles = (r) => r.data.events.map((i) => i.title);
 
   // "We also have standup twice" — an Outlook-style export where a weekly
   // series has a same-UID RECURRENCE-ID override for one occurrence (an
@@ -29,7 +29,7 @@ module.exports = function (test, h) {
     const fetchImpl = async () => okText(icsWithEvents(events));
     const cfg = JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] });
     const r = await runTransform(fetchImpl, MONDAY).run(baseInput(MONDAY, { config_json: cfg }));
-    assertEqual(eventItems(r.metro).length, 1, 'the override should replace the master\'s occurrence, not add a second "Team Standup"');
+    assertEqual(eventItems(r.data).length, 1, 'the override should replace the master\'s occurrence, not add a second "Team Standup"');
   });
 
   test('a RECURRENCE-ID override that moves the occurrence still suppresses the master\'s original slot', async () => {
@@ -41,7 +41,7 @@ module.exports = function (test, h) {
     const fetchImpl = async () => okText(icsWithEvents(events));
     const cfg = JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] });
     const r = await runTransform(fetchImpl, MONDAY).run(baseInput(MONDAY, { config_json: cfg }));
-    const titles = eventItems(r.metro).map((e) => e.title);
+    const titles = eventItems(r.data).map((e) => e.title);
     assertEqual(titles, ['Standup (moved)'], 'the original 09:00 occurrence should be suppressed and only the moved override should show');
   });
 
@@ -54,7 +54,7 @@ module.exports = function (test, h) {
     const fetchImpl = async () => okText(icsWithEvents(events));
     const cfg = JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] });
     const r = await runTransform(fetchImpl, MONDAY).run(baseInput(MONDAY, { config_json: cfg }));
-    assertEqual(eventItems(r.metro).map((e) => e.title), ['Standup'], 'today\'s own occurrence is untouched by an override targeting a different date');
+    assertEqual(eventItems(r.data).map((e) => e.title), ['Standup'], 'today\'s own occurrence is untouched by an override targeting a different date');
   });
 
   // ---- occurrences the series does NOT have -------------------------
@@ -96,7 +96,7 @@ module.exports = function (test, h) {
         rrule: 'FREQ=WEEKLY;BYDAY=TH,FR', exdate: '20260911T093000Z' },
     ]);
     const r = await runTransform(net(ics), Date.parse('2026-09-10T08:00:00Z')).run(input(Date.parse('2026-09-10T08:00:00Z')));
-    const standups = r.metro.items.filter((i) => i.type === 'event' && i.title === 'Standup');
+    const standups = r.data.events.filter((i) => i&& i.title === 'Standup');
     const days = standups.map((e) => Math.floor(e.start_min / 1440));
     assert(days.indexOf(0) >= 0, 'Thursday\'s standup is missing');
     assertEqual(days.indexOf(1), -1, 'Friday\'s standup was drawn, and the calendar says it '

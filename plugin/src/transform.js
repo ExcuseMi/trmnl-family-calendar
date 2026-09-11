@@ -708,7 +708,21 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
     calendars_down: (extra && extra.calendarsDown) || [],
     legend: tracks,
     all_day: allDay, // declared at the line's head, never on the axis: see above
-    items: items,
+    // TWO LISTS, NOT ONE MIXED ONE.
+    //
+    // This was `items`, one list of three kinds sorted by minute, and every
+    // consumer's first move was to filter it: the axis window wanted events,
+    // the fit pass wanted events, the sky band wanted `weather || sun`.
+    // Nothing ever wanted the mixed list, so the mixing was work done here
+    // and undone four times downstream.
+    //
+    // Sunrise and sunset ride with the weather because that is what they
+    // are on the board -- one band of sky markers along the top edge, drawn
+    // by one pass. They keep their own `type`, so the two are still told
+    // apart where it matters, and `header_weather` is separately the
+    // header's business.
+    events: items.filter(function (i) { return i.type === 'event'; }),
+    weather: items.filter(function (i) { return i.type === 'weather' || i.type === 'sun'; }),
   };
 }
 
@@ -2850,7 +2864,10 @@ async function run(input) {
   // on the failing paths would throw away the remembered weather and the
   // "down since" clocks exactly when they matter.
   function done(metro) {
-    return { metro: metro, trmnl_state: state };
+    // `data`, not `metro`: a serverless transform's returned keys ARE the
+    // template's root variables, so this is the name every template path
+    // starts with.
+    return { data: metro, trmnl_state: state };
   }
 
   if (useDemo || !configRaw) {

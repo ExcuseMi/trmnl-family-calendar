@@ -126,15 +126,15 @@ const YML = path.join(PLUGIN, '.trmnlp.yml');
 // keeps the last of two: the demo payload grew a `service_alert: null` when
 // it was regenerated, and every banner case silently rendered no banner.
 function patchDemoMetro(yml, extra) {
-  const at = yml.indexOf('\n  metro:');
-  if (at < 0) throw new Error('.trmnlp.yml has no metro: block to patch');
+  const at = yml.indexOf('\n  data:');
+  if (at < 0) throw new Error('.trmnlp.yml has no data: block to patch');
   const open = yml.indexOf('{', at);
   let depth = 0, close = -1;
   for (let i = open; i < yml.length; i++) {
     if (yml[i] === '{') depth++;
     else if (yml[i] === '}') { depth--; if (depth === 0) { close = i; break; } }
   }
-  if (close < 0) throw new Error('.trmnlp.yml metro: block does not close');
+  if (close < 0) throw new Error('.trmnlp.yml data: block does not close');
   const lines = Object.keys(extra)
     .map((k) => '      ' + JSON.stringify(k) + ': ' + JSON.stringify(extra[k]) + ',').join('\n');
   return yml.slice(0, close) + ',\n' + lines + '\n    ' + yml.slice(close);

@@ -97,7 +97,7 @@ module.exports = function (test, h) {
       calendars: [{ url: URL, name: 'Fry', rules: [{ match: { type: 'any' }, track: 'Fry' }] }],
     }, null, 1).replace(/([[\]])/g, '\\$1');
     const r = await run(baseInput(NOW, { use_demo_data: 'false', config_json: escaped }));
-    assertEqual(r.metro.legend.map((t) => t.name), ['Fry'], 'the board is not the one the config asked for');
-    assertEqual(eventItems(r.metro).map((i) => i.title), ['Standup'], 'the events did not arrive');
+    assertEqual(r.data.legend.map((t) => t.name), ['Fry'], 'the board is not the one the config asked for');
+    assertEqual(eventItems(r.data).map((i) => i.title), ['Standup'], 'the events did not arrive');
   });
 };

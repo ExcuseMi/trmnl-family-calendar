@@ -67,8 +67,8 @@
         </mask>
         <circle cx="256" cy="256" r="240" mask="url(#metro-mark-cut)"/>
       </svg>
-      <span class="metro-title title title--large font--bold">{% if metro.title_word %}{{ metro.title_word }}{% else %}{{ metro.i18n.today | default: "Today" }}{% endif %}</span>
-      {% if metro.date_label %}<span class="metro-date metro-pill label label--base font--bold">{{ metro.date_label }}</span>{% endif %}
+      <span class="metro-title title title--large font--bold">{% if data.title_word %}{{ data.title_word }}{% else %}{{ data.i18n.today | default: "Today" }}{% endif %}</span>
+      {% if data.date_label %}<span class="metro-date metro-pill label label--base font--bold">{{ data.date_label }}</span>{% endif %}
       {%- comment -%}
         The window the board covers ("06:00 23:00") used to be stated as a
         pill here. The hour scale directly below says the same thing and
@@ -77,12 +77,12 @@
         payload: the smaller views have no scale to read it off.
       {%- endcomment -%}
       <div class="grow"></div>
-      {% if metro.header_weather.hi %}
+      {% if data.header_weather.hi %}
         <span class="metro-weather flex flex--row flex--center-y gap--xsmall">
-          {% if metro.header_weather.icon %}<img class="metro-wicon image--adaptive" src="{{ metro.header_weather.icon }}">{% endif %}
-          <span class="metro-temp title title--base">{{ metro.header_weather.hi }}&deg;<span class="metro-quiet"> / {{ metro.header_weather.lo }}&deg;</span></span>
-          {% assign rain_pct = metro.i18n.rain_pct | default: "{n}% rain" | replace: "{n}", metro.header_weather.rain_chance %}
-          <span class="metro-cond label label--small metro-quiet">{{ metro.header_weather.condition }} &middot; {{ rain_pct }}</span>
+          {% if data.header_weather.icon %}<img class="metro-wicon image--adaptive" src="{{ data.header_weather.icon }}">{% endif %}
+          <span class="metro-temp title title--base">{{ data.header_weather.hi }}&deg;<span class="metro-quiet"> / {{ data.header_weather.lo }}&deg;</span></span>
+          {% assign rain_pct = data.i18n.rain_pct | default: "{n}% rain" | replace: "{n}", data.header_weather.rain_chance %}
+          <span class="metro-cond label label--small metro-quiet">{{ data.header_weather.condition }} &middot; {{ rain_pct }}</span>
         </span>
       {% endif %}
     </div>
@@ -93,22 +93,22 @@
       good fetch looks exactly like a fresh one. Both are stated here
       rather than guessed at from a gap in the map.
     {%- endcomment -%}
-    {% if metro.calendars_down and metro.calendars_down.size > 0 %}
+    {% if data.calendars_down and data.calendars_down.size > 0 %}
       {%- comment -%}
         Built with assign, not written inline: a "{n}" placeholder inside an
         output tag ends the tag early and takes the whole template with it.
       {%- endcomment -%}
-      {%- assign down_names = metro.calendars_down | join: ", " -%}
-      {%- assign feed_down_tpl = metro.i18n.feed_down | default: "{n} unavailable" -%}
+      {%- assign down_names = data.calendars_down | join: ", " -%}
+      {%- assign feed_down_tpl = data.i18n.feed_down | default: "{n} unavailable" -%}
       {%- assign feed_down_msg = feed_down_tpl | replace: "{n}", down_names -%}
       <div class="metro-alerts label label--small metro-quiet">{{ feed_down_msg }}</div>
     {% endif %}
-    {% if metro.weather_stale %}
-      <div class="metro-alerts label label--small metro-quiet">{{ metro.i18n.weather_stale | default: "Forecast may be out of date" }}</div>
+    {% if data.weather_stale %}
+      <div class="metro-alerts label label--small metro-quiet">{{ data.i18n.weather_stale | default: "Forecast may be out of date" }}</div>
     {% endif %}
-    {% if metro.all_day and metro.all_day.size > 0 %}
+    {% if data.all_day and data.all_day.size > 0 %}
       <div class="metro-allday flex flex--row flex--center-y gap--small flex--wrap">
-        {% for a in metro.all_day %}
+        {% for a in data.all_day %}
           <span class="flex flex--row flex--center-y gap--xsmall">
             <svg class="metro-allday-swatch no-shrink" data-hue="{{ a.hue }}" data-style="{{ a.track_style }}" width="20" height="8" viewBox="0 0 20 8"></svg>
             <span class="label label--small font--bold">{{ a.title }}</span>
@@ -138,9 +138,9 @@
     same length and a German banner that would not fit on one line should
     take two rather than be cut.
   {%- endcomment -%}
-  {% if metro.service_alert %}
+  {% if data.service_alert %}
     <div class="metro-banner flex-none w--full px--3 py--1 label label--small font--bold"
-         data-metro-alert="{{ metro.service_alert.kind }}">{{ metro.service_alert.text }}</div>
+         data-metro-alert="{{ data.service_alert.kind }}">{{ data.service_alert.text }}</div>
   {% endif %}
 
 <style>
@@ -239,7 +239,7 @@
   // is not an identifier: `window.METRO` survives the mangler untouched,
   // and the local alias below can be renamed to a letter for all anyone
   // cares, because nothing outside this script looks for it.
-  window.METRO = {{ metro | json }};
+  window.METRO = {{ data | json }};
   var METRO = window.METRO;
   var SCRIPT = document.currentScript;
   var ROOT = SCRIPT && SCRIPT.parentElement ? SCRIPT.parentElement : document;
@@ -879,8 +879,7 @@
       if (LEGEND.length <= maxLines) return;
       var load = {};
       LEGEND.forEach(function (p) { load[p.key] = 0; });
-      METRO.items.forEach(function (i) {
-        if (i.type !== 'event') return;
+      METRO.events.forEach(function (i) {
         if (load[i.owner] != null) load[i.owner]++;
         (i.co_owners || []).forEach(function (k) { if (load[k] != null) load[k] += 0.5; });
       });
@@ -1098,8 +1097,8 @@
     // what it chooses from.
     var DAY_RUN = (METRO.days && METRO.days.length) ? METRO.days : [{ index: 0, start_min: 0, end_min: 1440 }];
     var axisContent = [];
-    METRO.items.forEach(function (i) {
-      if (i.type !== 'event' || i.start_min == null) return;
+    METRO.events.forEach(function (i) {
+      if (i.start_min == null) return;
       axisContent.push({ start_min: i.start_min, end_min: i.end_min == null ? i.start_min : i.end_min });
     });
     var winLabel = ROOT.querySelector('.metro-window');
@@ -1708,7 +1707,7 @@
     }
 
     // ---- events
-    var all = dedupe(METRO.items.filter(function (i) { return i.type === 'event'; }));
+    var all = dedupe(METRO.events);
     var earlier = 0, later = 0, visible = [];
     all.forEach(function (e) {
       // an event on a line this canvas had no room for is counted, not drawn
@@ -1860,7 +1859,7 @@
       return box;
     }
 
-    var alerts = METRO.items.filter(function (i) { return (i.type === 'weather' || i.type === 'sun') && i.at_min >= dayFrom && i.at_min <= dayTo; })
+    var alerts = METRO.weather.filter(function (i) { return i.at_min >= dayFrom && i.at_min <= dayTo; })
       .sort(function (a, b) { return a.at_min - b.at_min; });
     var showAlertLabels = crossPx >= 200 * S && alerts.length > 0;
     var alertBand = 0;

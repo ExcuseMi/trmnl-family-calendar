@@ -44,7 +44,7 @@ module.exports = function (test, h) {
     const rep = layout(f, ROOMY);
     const pxPerMin = scale(rep);
     const byTitle = {};
-    f.metro.items.filter((i) => i.type === 'event').forEach((e) => { byTitle[e.title] = e; });
+    f.metro.events.forEach((e) => { byTitle[e.title] = e; });
 
     // The longest FLAT run inside each branch, in axis px. Measured as the
     // whole path it would charge a rail for its own drop; measured only on
@@ -67,8 +67,7 @@ module.exports = function (test, h) {
     // The longest event in the fixture is 90 minutes; nothing should draw a
     // flat rail dramatically longer than the longest event, which is what a
     // label-length rail did.
-    const longestMin = Math.max.apply(null, f.metro.items
-      .filter((i) => i.type === 'event').map((e) => e.end_min - e.start_min));
+    const longestMin = Math.max.apply(null, f.metro.events.map((e) => e.end_min - e.start_min));
     const budget = (longestMin + 30) * pxPerMin;
     const over = flats.filter((r) => r.len > budget);
     assert(over.length === 0,
@@ -82,7 +81,7 @@ module.exports = function (test, h) {
     const rep = layout(f, ROOMY);
     const placed = eventsIn(rep).filter((e) => e.status === 'ok');
     // interchanges are marked with rings on each line they join, not ticks
-    const interchange = new Set(f.metro.items
+    const interchange = new Set(f.metro.events
       .filter((i) => i.type === 'event' && (i.co_owners || []).length).map((i) => i.title));
     const solo = placed.filter((e) => !interchange.has(e.title));
     const ticks = rep.circles.filter((c) => c.role === 'stop');
@@ -133,7 +132,7 @@ module.exports = function (test, h) {
     test('only a long solo event rejoins its line: ' + f.name, () => {
       const rep = layout(f, ROOMY);
       const spec = {};
-      f.metro.items.filter((i) => i.type === 'event').forEach((i) => { spec[i.title] = i; });
+      f.metro.events.forEach((i) => { spec[i.title] = i; });
       const bad = [];
       for (const e of eventsIn(rep)) {
         if (!e.merged) continue;

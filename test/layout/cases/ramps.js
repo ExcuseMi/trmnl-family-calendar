@@ -251,7 +251,7 @@ module.exports = function (test, h) {
     const rep = layout(fixtures.find((x) => x.name === 'busy-day'), ROOMY);
     const Z = rep.debug.Z || 1;
     const dots = rep.circles.filter((c) => c.role === 'stop-start');
-    const interchange = new Set(fixtures.find((x) => x.name === 'busy-day').metro.items
+    const interchange = new Set(fixtures.find((x) => x.name === 'busy-day').metro.events
       .filter((i) => i.type === 'event' && (i.co_owners || []).length).map((i) => i.title));
     const missing = eventsIn(rep).filter((e) => e.status === 'ok' && !interchange.has(e.title))
       .filter((e) => !dots.some((d) => Math.abs(d.x + d.w / 2 - e.nodeA * Z) < 8));

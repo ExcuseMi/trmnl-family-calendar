@@ -38,7 +38,7 @@ module.exports = function (test, h) {
   test('the demo config resolves against the repo ICS files, with a line per family member', async () => {
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(demoInput(NOW));
-    const names = r.metro.legend.map((t) => t.name).sort();
+    const names = r.data.legend.map((t) => t.name).sort();
     // exactly these five: every school and family entry has to be routed to
     // a person by a rule, so a stray line means a rule stopped matching and
     // the calendar's own name leaked in as a track
@@ -61,7 +61,7 @@ module.exports = function (test, h) {
       return fs.existsSync(full) ? okText(fs.readFileSync(full, 'utf-8')) : fail(404);
     }, NOW);
     const r = await run(demoInput(NOW));
-    const titles = eventItems(r.metro).map((e) => e.title).join(' ');
+    const titles = eventItems(r.data).map((e) => e.title).join(' ');
     assert(!/Zwemles/.test(titles), 'a stale calendar leaked into the demo: ' + titles);
   });
 
@@ -82,14 +82,14 @@ module.exports = function (test, h) {
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(demoInput(NOW));
     const owners = {};
-    eventItems(r.metro).forEach((e) => { owners[e.title] = e.owner; });
-    const bartKey = r.metro.legend.filter((t) => t.name === 'Bart').map((t) => t.key)[0];
-    const lisaKey = r.metro.legend.filter((t) => t.name === 'Lisa').map((t) => t.key)[0];
+    eventItems(r.data).forEach((e) => { owners[e.title] = e.owner; });
+    const bartKey = r.data.legend.filter((t) => t.name === 'Bart').map((t) => t.key)[0];
+    const lisaKey = r.data.legend.filter((t) => t.name === 'Lisa').map((t) => t.key)[0];
     // the class code routes the entry and is then stripped from the title:
     // "L6 School Day" belongs to Bart and reads as "School Day"
     // day 0 only: the payload carries the whole run the board may draw, and
     // a weekly school day recurs on every one of them
-    const schoolDays = eventItems(r.metro)
+    const schoolDays = eventItems(r.data)
       .filter((s) => s.title === 'School Day' && s.start_min < 1440);
     assert(schoolDays.length === 1, 'one school day, shared, not one per child: got ' + schoolDays.length);
     const atSchool = [schoolDays[0].owner].concat(schoolDays[0].co_owners).sort();
@@ -102,7 +102,7 @@ module.exports = function (test, h) {
   test('the family calendar produces an interchange across everyone', async () => {
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(demoInput(NOW));
-    const dinner = eventItems(r.metro).filter((e) => /Family Dinner/.test(e.title))[0];
+    const dinner = eventItems(r.data).filter((e) => /Family Dinner/.test(e.title))[0];
     assert(dinner, 'no Family Dinner in the demo');
     assert(dinner.co_owners.length >= 3,
       'Family Dinner should join the whole family, got ' + (dinner.co_owners.length + 1) + ' track(s)');
@@ -113,7 +113,7 @@ module.exports = function (test, h) {
     // an older one still answers, so some calendars resolve and others 404
     const { run } = runTransform(serveDemoFiles(['simpsons/homer.ics', 'simpsons/marge.ics', 'simpsons/maggie.ics']), NOW);
     const r = await run(demoInput(NOW));
-    const names = r.metro.legend.map((t) => t.name).sort();
+    const names = r.data.legend.map((t) => t.name).sort();
     for (const who of ['Bart', 'Homer', 'Lisa', 'Maggie', 'Marge']) {
       assert(names.indexOf(who) >= 0,
         'expected the offline fallback (a whole family), got only ' + names.join(', '));
@@ -123,8 +123,8 @@ module.exports = function (test, h) {
   test('an unreachable GitHub falls back to the built-in day rather than an empty board', async () => {
     const { run } = runTransform(async () => fail(500), NOW);
     const r = await run(demoInput(NOW));
-    assert(r.metro.legend.length > 0, 'offline demo produced no tracks');
-    assert(eventItems(r.metro).length > 0, 'offline demo produced no events');
+    assert(r.data.legend.length > 0, 'offline demo produced no tracks');
+    assert(eventItems(r.data).length > 0, 'offline demo produced no events');
   });
 
   // ------------------------------------------------------------ the other boards
@@ -142,18 +142,18 @@ module.exports = function (test, h) {
     test('the "' + set + '" demo resolves against the repo ICS files', async () => {
       const { run } = runTransform(serveDemoFiles(), NOW);
       const r = await run(baseInput(NOW, { use_demo_data: 'true', demo_set: set }));
-      const names = r.metro.legend.map((t) => t.name).sort();
+      const names = r.data.legend.map((t) => t.name).sort();
       assert(names.join(',') === SETS[set].tracks.join(','),
         set + ': expected ' + SETS[set].tracks.join(', ') + ', got ' + names.join(', '));
       // and it fetched only its own show's files
-      assert(eventItems(r.metro).length > 0, set + ': resolved no events');
+      assert(eventItems(r.data).length > 0, set + ': resolved no events');
     });
   }
 
   test('an unknown demo board falls back to Springfield rather than an empty one', async () => {
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(baseInput(NOW, { use_demo_data: 'true', demo_set: 'the-wire' }));
-    const names = r.metro.legend.map((t) => t.name).sort();
+    const names = r.data.legend.map((t) => t.name).sort();
     assert(names.join(',') === SETS.simpsons.tracks.join(','), 'got ' + names.join(', '));
   });
 
@@ -167,12 +167,12 @@ module.exports = function (test, h) {
     // still names all three of the crew.
     const { run } = runTransform(serveDemoFiles(), NOW);
     const r = await run(baseInput(NOW, { use_demo_data: 'true', demo_set: 'futurama' }));
-    const runs = eventItems(r.metro).filter((s) => s.title === 'Delivery Run' && s.start_min < 1440);
+    const runs = eventItems(r.data).filter((s) => s.title === 'Delivery Run' && s.start_min < 1440);
     assert(runs.length === 1, 'expected one Delivery Run, got ' + runs.length);
     const crew = [runs[0].owner].concat(runs[0].co_owners);
     assert(crew.length === 3, 'expected the delivery on three lines, got ' + crew.length);
     const key = {};
-    r.metro.legend.forEach((t, i) => { key[t.key] = i; });
+    r.data.legend.forEach((t, i) => { key[t.key] = i; });
     const at = crew.map((k) => key[k]).sort((a, b) => a - b);
     assert(at[2] - at[0] === 2, 'the three lines on one delivery should end up adjacent, got positions ' + at.join(','));
   });
@@ -221,11 +221,11 @@ module.exports = function (test, h) {
         'https://raw.githubusercontent.com/x/y/main/demo/friends/rachel.ics',
       ].join('\n'),
     }));
-    const names = r.metro.legend.map((t) => t.name).sort();
+    const names = r.data.legend.map((t) => t.name).sort();
     // each calendar becomes its own line, named by the feed's own
     // X-WR-CALNAME (and, for a feed that carries none, by its URL)
     assert(names.join(',') === 'Demo - Monica,Demo - Rachel', 'got [' + names.join(', ') + ']');
-    assert(eventItems(r.metro).length > 0, 'a bare URL list produced no events');
+    assert(eventItems(r.data).length > 0, 'a bare URL list produced no events');
   });
 
   test('a link to a feed with no name of its own is named from the link', async () => {
@@ -238,8 +238,8 @@ module.exports = function (test, h) {
       use_demo_data: 'false',
       calendar_urls: 'https://cloud.example.com/alex-work.ics',
     }));
-    assert(r.metro.legend.map((t) => t.name).join(',') === 'Alex Work',
-      'got ' + r.metro.legend.map((t) => t.name).join(', '));
+    assert(r.data.legend.map((t) => t.name).join(',') === 'Alex Work',
+      'got ' + r.data.legend.map((t) => t.name).join(', '));
   });
 
   test('the JSON config wins over the plain list when both are filled', async () => {
@@ -254,7 +254,7 @@ module.exports = function (test, h) {
       calendar_urls: 'https://raw.githubusercontent.com/x/y/main/demo/friends/rachel.ics',
       config_json: cfg,
     }));
-    const names = r.metro.legend.map((t) => t.name);
+    const names = r.data.legend.map((t) => t.name);
     assert(names.join(',') === 'Just Me', 'the JSON config should win, got ' + names.join(', '));
   });
 };

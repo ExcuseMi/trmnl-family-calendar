@@ -34,7 +34,7 @@ const EDITOR = fs.readFileSync(path.join(REPO, 'tools/config-editor.html'), 'utf
 // (which is not a header thing and is empty in every payload now).
 function templateHeader() {
   const a = LIQUID.indexOf('class="metro-header');
-  const b = LIQUID.indexOf('{% if metro.all_day');
+  const b = LIQUID.indexOf('{% if data.all_day');
   if (a < 0 || b < 0 || b < a) throw new Error('cannot find the template header');
   return LIQUID.slice(a, b);
 }

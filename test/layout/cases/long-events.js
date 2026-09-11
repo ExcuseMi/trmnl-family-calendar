@@ -36,8 +36,8 @@ module.exports = function (test, h) {
   const LONG_MIN = 240;
   const isEvent = (i) => i.type === 'event';
   const isLong = (i) => isEvent(i) && (i.all_day || i.end_min - i.start_min >= LONG_MIN);
-  const longSolos = (f) => f.metro.items.filter((i) => isLong(i) && !(i.co_owners || []).length);
-  const longShared = (f) => f.metro.items.filter((i) => isLong(i) && (i.co_owners || []).length);
+  const longSolos = (f) => f.metro.events.filter((i) => isLong(i) && !(i.co_owners || []).length);
+  const longShared = (f) => f.metro.events.filter((i) => isLong(i) && (i.co_owners || []).length);
 
   const solo = fixtures.find((f) => f.name === 'long-event-day');       // "Desk booking", work only
   const shared = fixtures.find((f) => f.name === 'shared-long-event');  // "School Day", sam + kids
@@ -116,7 +116,7 @@ module.exports = function (test, h) {
             + '" took lane ' + e.lane + ' going ' + e.dir + ': a long solo event is drawn on the '
             + 'track, so it claims no rung outward and forks no branch');
           // does this line converge with anybody, anywhere on this board?
-          const converges = f.metro.items.some((i) => isEvent(i) && (i.co_owners || []).length
+          const converges = f.metro.events.some((i) => isEvent(i) && (i.co_owners || []).length
             && (i.owner === item.owner || (i.co_owners || []).indexOf(item.owner) >= 0));
           const home = homeC(f, rep, item.owner);
           const [a0, a1] = spanOf(rep, e);
@@ -160,7 +160,7 @@ module.exports = function (test, h) {
     for (const f of fixtures) {
       const longs = longSolos(f);
       if (!longs.length) continue;
-      const others = f.metro.items.filter(isEvent);
+      const others = f.metro.events.filter(isEvent);
       for (const v of BOTH) {
         const rep = layout(f, v);
         for (const item of longs) {
