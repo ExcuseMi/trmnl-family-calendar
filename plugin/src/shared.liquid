@@ -792,7 +792,25 @@
       // slot on an OG panel is 800x240: wide enough to escape `tiny`, and
       // still spending a fifth of its height on a band that says "Today".
       // The map wants that height more than the word does.
-      var headerless = tiny || vH < 300 * S;
+      //
+      // A PIXEL COUNT IS THE WRONG TEST FOR THIS, and it took an X to show
+      // it. Every slot on an 800x480 panel is under 300px deep and dropped
+      // its header; not one slot on an X is, so a half-horizontal there
+      // (1040x390) and a quadrant (520x390) both kept a band saying
+      // "Today" while having half the panel's depth to spend on a map.
+      // What decides it is not how many pixels the slot got but how much
+      // of the PANEL it got: at half the depth or less it is a slot in a
+      // mashup, the panel says elsewhere what day it is, and the map wants
+      // the band back. Measured off the screen element itself, so a device
+      // this code has never heard of is judged the same way.
+      // Both sides in the same units, which took a wrong answer to notice:
+      // a bounding rect is in DEVICE pixels (the framework's zoom is baked
+      // into it) and clientHeight is in css px (it is not). Dividing both
+      // by Z made an X quadrant look like nine tenths of its panel.
+      var panel = ROOT && ROOT.closest ? ROOT.closest('.screen') : null;
+      var panelH = panel && panel.clientHeight ? panel.clientHeight : 0;
+      var slotShare = panelH > 0 ? vH / panelH : 1;
+      var headerless = tiny || vH < 300 * S || slotShare <= 0.55;
       header.classList.toggle('metro-header--compact', compact);
       header.classList.toggle('metro-header--tiny', tiny);
       header.classList.toggle('metro-header--none', headerless);
@@ -950,7 +968,22 @@
       // So the generous figure is used only when it seats everyone; short
       // of that the board falls back to charging each kept line the full
       // lane it may well need.
-      if (maxLines < LEGEND.length) {
+      // ...BUT COMFORT IS NOT WORTH A PERSON WHEN THERE ARE FEW OF THEM.
+      //
+      // The generous charge above buys each kept line the lane it may need.
+      // That is the right trade on a full panel deciding between four
+      // comfortable lines and five crowded ones. It is the wrong one in a
+      // slot, where it was deciding between one line and two: a
+      // half-horizontal on an 800x480 panel has room for two lines by the
+      // tight figure and was drawing ONE, and a half-vertical showing four
+      // of five people dropped to three. Half a family drawn comfortably is
+      // not a better answer than most of a family drawn tightly.
+      //
+      // Five is where the two readings cross. Below it the board is
+      // choosing between showing the household and showing a piece of it;
+      // at five and above it is choosing between crowded and legible, which
+      // is what the generous figure was written for.
+      if (maxLines < LEGEND.length && maxLines > 4) {
         maxLines = Math.max(1, Math.floor(room / (perLine + LANE_BASE)));
       }
       if (LEGEND.length <= maxLines) return;

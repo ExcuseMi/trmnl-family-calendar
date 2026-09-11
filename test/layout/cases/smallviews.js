@@ -8,26 +8,79 @@ module.exports = function (test, h) {
   const { render, fixtures, textLabels, overlap, assert } = h;
 
   const OG = 'screen--og screen--md screen--1bit screen--density-1x';
+  const X = 'screen--v2 screen--lg screen--4bit screen--density-2x';
+  // A slot is given in the screen's OWN css px, which for the X is 1040x780
+  // (--screen-w/--screen-h), not its 1872x1404 of device pixels.
   const SLOTS = [
     { view: 'full', name: 'og-quadrant', w: 800, h: 480, slot: { w: 400, h: 240 }, classes: OG },
     { view: 'full', name: 'og-half-horizontal', w: 800, h: 480, slot: { w: 800, h: 240 }, classes: OG },
     { view: 'full', name: 'og-half-vertical', w: 800, h: 480, slot: { w: 400, h: 480 }, classes: OG },
+  ];
+  // The same three slots on an X. They are far bigger in pixels, and that
+  // is exactly why they went wrong: every rule about "a small view" was
+  // written against a number of pixels, and an X quadrant clears all of
+  // them while still being a quarter of a panel.
+  const XSLOTS = [
+    { view: 'full', name: 'x-quadrant', w: 1872, h: 1404, slot: { w: 520, h: 390 }, classes: X },
+    { view: 'full', name: 'x-half-horizontal', w: 1872, h: 1404, slot: { w: 1040, h: 390 }, classes: X },
+    { view: 'full', name: 'x-half-vertical', w: 1872, h: 1404, slot: { w: 520, h: 780 }, classes: X },
   ];
   const busy = fixtures.find((f) => f.name === 'busy-day');
 
   // The header hides the date and the weather at this size for want of
   // room, which leaves a band carrying the mark and the word "Today". On a
   // quadrant that band was a third of the board.
+  // A HALF AND A QUADRANT PREFER THE MAP TO THE HEADER, AT ANY SIZE.
+  //
+  // The rule was a pixel count -- drop the header under 300px of depth --
+  // which is true of every slot on an OG panel and of none on an X, where
+  // a half-horizontal is 1040x390 and a quadrant 520x390. Both cleared the
+  // threshold and kept a band saying "Today" across a view with half the
+  // panel's depth to spend. What decides this is not how many pixels the
+  // slot has but how much of the panel's DEPTH it got: at half or less,
+  // the map wants it more than the word does.
   test('a tiny view spends no height on a header that says nothing', () => {
-    for (const v of SLOTS.slice(0, 2)) {
+    for (const v of SLOTS.slice(0, 2).concat(XSLOTS.slice(0, 2))) {
       const rep = render(busy.metro, v);
-      const top = Math.min.apply(null, textLabels(rep).map((l) => l.y).concat([Infinity]));
-      assert(rep.canvas.h >= v.slot.h * 0.9, v.name + ': the canvas is only '
-        + Math.round(rep.canvas.h) + 'px of a ' + v.slot.h + 'px slot, so something above it is '
+      // IN THE SAME UNITS. `rep.canvas` is device pixels and a slot is
+      // given in the screen's own css px, which on an OG panel are the same
+      // number and on an X are 1.8 apart -- so this compared 596 against
+      // 390, passed, and said nothing at all about the panel it was added
+      // for. The debug dump's own W/H are the css px the engine laid out
+      // in, which is what a slot height is.
+      const laidH = (rep.debug && rep.debug.H) || rep.canvas.h;
+      const Z = (rep.debug && rep.debug.Z) || 1;
+      const top = Math.min.apply(null, textLabels(rep).map((l) => l.y).concat([Infinity])) / Z;
+      assert(laidH >= v.slot.h * 0.9, v.name + ': the canvas is only '
+        + Math.round(laidH) + 'px of a ' + v.slot.h + 'px slot, so something above it is '
         + 'still taking the height');
       assert(top < v.slot.h * 0.2, v.name + ': the topmost thing drawn starts '
         + Math.round(top) + 'px down a ' + v.slot.h + 'px slot');
     }
+  });
+
+  // HALF A FAMILY DRAWN COMFORTABLY IS NOT BETTER THAN MOST OF ONE DRAWN TIGHTLY.
+  //
+  // `fitLines` estimates what a line costs two ways: tightly, which is what
+  // a line whose events sit ON it needs, and generously, which adds the
+  // clearance a line with a rung hanging off it needs. It used the generous
+  // figure whenever somebody was going to be left off anyway, on the
+  // argument that an incomplete board should spend its slack on the lines
+  // it keeps. That is right on a full panel choosing between four
+  // comfortable lines and five crowded ones. In a slot it was choosing
+  // between one line and two: a half-horizontal on an 800x480 panel has
+  // room for two by the tight figure and was drawing ONE of four people.
+  test('a slot draws as many people as it can hold, not as few', () => {
+    const lines = (rep) => ((rep.debug && rep.debug.bands) || []).length;
+    const five = fixtures.find((f) => f.name === 'five-lines');
+
+    const hh = render(busy.metro, SLOTS[1]);           // og-half-horizontal, 4 lines offered
+    assert(lines(hh) >= 2, 'og-half-horizontal drew ' + lines(hh)
+      + ' line(s) of 4; the tight estimate says two fit');
+
+    const hv = render(five.metro, SLOTS[2]);           // og-half-vertical, 5 lines offered
+    assert(lines(hv) >= 4, 'og-half-vertical drew ' + lines(hv)
+      + ' line(s) of 5; the tight estimate says four fit');
   });
 
   // "+3 earlier" and the clock badge are both pinned to the head of the
