@@ -299,6 +299,27 @@
     if (!HOUR12) return pad2(h) + ':' + pad2(m);
     return (h % 12 || 12) + (m ? ':' + pad2(m) : '') + (h < 12 ? 'am' : 'pm');
   }
+  // A RANGE INSIDE ONE HALF OF THE DAY SAYS am OR pm ONCE.
+  //
+  // "8am - 8:15am" prints the meridiem twice for a quarter of an hour, and
+  // those four characters are not free: a caption's width is what the band
+  // solver reserves room for through `markRoom`, so every label on the
+  // board was booking space for a word it had already said. "8 - 8:15am"
+  // loses nothing -- a range that starts in the morning and ends in the
+  // morning is unambiguous from its end alone.
+  //
+  // Only within one half. Across noon or midnight both halves have to be
+  // named or the range is a guess, and that is the one case where the
+  // repetition is carrying information.
+  function timeRange(a, b) {
+    if (!(b > a)) return timeLabel(a);
+    if (!HOUR12) return timeLabel(a) + ' \u2013 ' + timeLabel(b);
+    var ha = Math.floor(a / 60) % 24, hb = Math.floor(b / 60) % 24;
+    var lead = (ha < 12) === (hb < 12)
+      ? timeLabel(a).replace(/(am|pm)$/, '')
+      : timeLabel(a);
+    return lead + ' \u2013 ' + timeLabel(b);
+  }
   function hourLabel(h) { return HOUR12 ? ((h % 12 || 12) + (h < 12 ? 'am' : 'pm')) : pad2(h) + ':00'; }
   function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
   function svgEl(tag, attrs) { var e = document.createElementNS(SVG_NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
@@ -1333,8 +1354,33 @@
       // takes the 45 it wants, which is also what keeps several lines
       // shifting in the same corridor visually parallel -- they all take
       // the same angle over the same run.
-      var steep = (i < hs.length && hs[i].shared) || (prev && prev.shared);
+      // A 45 MAY NOT CROSS SOMEBODY ELSE'S BASELINE.
+      //
+      // The angles mean different things and so does the CROSSING. A 45
+      // that changes lane within the gap between two lines is a lane
+      // change; a 45 that travels across a line to get where it is going
+      // runs alongside that line for its whole length, at a shallow
+      // converging angle, and the two read as meeting. The Professor's
+      // morning climb passed through Amy that way for three hours.
+      //
+      // A 90 crossing the same line crosses it at a right angle, in one
+      // place, and is unmistakably a crossing rather than a merge. So the
+      // question is not how far the move goes, it is what is in the way:
+      // where anything lies between here and there, the move goes square.
+      var fromC = spineC + p._c + p._sign * prevLvl;
+      var toC = spineC + p._c + p._sign * lvl;
+      var crosses = false;
+      if (Math.abs(toC - fromC) > 0.5) {
+        var loC = Math.min(fromC, toC), hiC = Math.max(fromC, toC);
+        LEGEND.forEach(function (q) {
+          if (crosses || q === p) return;
+          var qc = spineC + q._c;
+          if (qc > loC + 0.5 && qc < hiC - 0.5) crosses = true;
+        });
+      }
+      var steep = crosses || (i < hs.length && hs[i].shared) || (prev && prev.shared);
       if (steep && i < hs.length) from = Math.max(from, to - CORNER * 3);
+      if (steep && i === hs.length) to = Math.min(to, from + CORNER * 3);
       // GOING HOME IS OPTIONAL. A line has to START the day on its own
       // lane, because that is where its name is written and the reader
       // needs the two to agree. It does not have to END there: after the
@@ -1557,9 +1603,7 @@
         // end is their start (a reminder, a birthday, an invitation saved
         // with no duration), and "6:30pm - 6:30pm" is not a span, it is the
         // same time printed twice with a dash between it and itself.
-        tm.textContent = e.end_min > e.start_min
-          ? timeLabel(e.start_min) + ' \u2013 ' + timeLabel(e.end_min)
-          : timeLabel(e.start_min);
+        tm.textContent = timeRange(e.start_min, e.end_min);
         if (!horizontal) { tm.style.maxWidth = colW + 'px'; tm.style.overflow = 'hidden'; }
         box.appendChild(tm);
       }
@@ -2650,6 +2694,18 @@
         // those, so it is replaced rather than added to -- charged on top
         // it came to more than a whole rung costs, and a mark that costs
         // more than the rail it replaced is not a cheaper shape.
+        // The same allowance the caption pass uses: six pixels of paper on
+        // each side of the words, and the words in between. The two have to
+        // agree, or the pass goes looking for a slot the solver never
+        // booked and the tier loop is shown a board that cannot be fixed by
+        // making the text smaller.
+        //
+        // Measured from the line's CENTRE here and from the rail's edge
+        // there, so half a stroke goes unaccounted. At three pixels that is
+        // a pixel and a half, and buying it costs more than it is worth:
+        // charged in, a mark's gap comes to more than a whole rung, and a
+        // mark that costs more than the rail it replaces is not a cheaper
+        // shape -- which is the arithmetic the whole thing rests on.
         return t.marks ? k.maxLabelThick + (k.capClear || k.lineGap) * 2 : 0;
       }
 
@@ -3218,7 +3274,7 @@
         maxLabelThick: maxLabelThick, laneStep: laneStep, laneBasePacked: LANE_BASE,
         nameH: fan ? fan.nameH : 0, edge: EDGE, alertBand: alertBand,
         // the paper a caption keeps from every rail; see `markRoom`
-        capClear: 12 * S,
+        capClear: 6 * S,
         depth: crossPx, bandLo: bandLo,
       };
     }
@@ -4501,7 +4557,7 @@
           // search will squeeze into the clearance when it must, and never
           // into the letters.
           var ink = Math.max(2, q.line_width) * S * weightScale / 2 + LINE_GAP * 0.5;
-          var half = ink + 12 * S;
+          var half = ink + 6 * S;
           var stepA = Math.max(CORNER, (axisEnd - axisStart) / 140);
           // A VERTICAL DROP IS A WALL, NOT A RAIL TO WRITE OVER.
           //
@@ -4725,6 +4781,20 @@
             // first, which keeps it over the thing it names, and only steps
             // further out when sliding cannot find paper. Charged for both,
             // so the centred spot wins whenever it is clear.
+            // A CONVERGENCE'S LEADER IS CLAMPED TOO.
+            //
+            // The pinned search stepped out a row at a time with only a
+            // mild charge for it, and on a board with space above the pill
+            // it took the far rung: "Good News Everyone" was tethered to
+            // its capsule by a leader most of a band long, and because the
+            // words had slid as well the tether was drawn as a diagonal --
+            // the one shape a leader must never be, since a diagonal on
+            // this map means a line going somewhere.
+            //
+            // Same rule as every other caption: past a stem's length the
+            // leader stops pointing at anything. Charged steeply beyond it,
+            // which makes sliding along the pill the cheaper way out.
+            var CAP_LEADER = 32 * S;
             var row0 = e._h + LINE_GAP * 0.6, mid0 = e._textStart;
             var bestS = null;
             for (var oi0 = 0; oi0 < 4; oi0++) {
@@ -4737,8 +4807,10 @@
                 if (at0 < axisStart + EDGE || at0 + e._textLen > axisEnd - EDGE) continue;
                 var bx0 = { a0: at0 - TEXT_PAD, a1: at0 + e._textLen + TEXT_PAD,
                             c0: c0s, c1: c0s + e._h };
+                var over0 = Math.max(0, oi0 * row0 - CAP_LEADER);
                 var cost0 = costAt(bx0, e)
                           + oi0 * e._h * e._textLen * 0.05
+                          + over0 * e._h * 0.25
                           + Math.abs(slide0) * e._h * 0.02;
                 if (!bestS || cost0 < bestS.cost) bestS = { cost: cost0, at: at0, out: out0, box: bx0 };
                 if (cost0 === 0) { oi0 = 4; break; }
@@ -5003,17 +5075,36 @@
           // SIDEWAYS instead: sliding keeps a name at its own line's height,
           // where the stem is short and the pairing is obvious, and costs
           // only the words being a little late.
+          // ...AND THE CLAMP IS A PRICE, NOT A WALL.
+          //
+          // Cutting the ladder off at the limit left captions that really
+          // did need the outer rung with nowhere to go but sideways, and
+          // when sideways ran out they took an overlap instead: the layout
+          // suite went from twenty-two failures to forty-five, nearly all
+          // of them names written on each other or slid a full label from
+          // their own mark. A long stem is untidy; two names on top of each
+          // other is one name gone.
+          //
+          // So every rung stays on the table and the ones past the limit
+          // are charged steeply. A board with room uses the short stem
+          // because it is cheap, and a board without one still has an
+          // answer.
           var MAX_LEADER = 32 * S;
-          var outs = [];
-          for (var ri = 0; ri < 4; ri++) {
-            var o = e._capOut + ri * row;
-            if (ri && o - e._capOut > MAX_LEADER) break;
-            outs.push(o);
-          }
+          var outs = [e._capOut, e._capOut + row, e._capOut + row * 2, e._capOut + row * 3];
+          // SLIDING STOPS WHERE POINTING STOPS.
+          //
+          // Widening this to a full label-width and beyond did give the
+          // clamp somewhere to send a name, and sent it too far: a caption
+          // that has slid more than about half its own width from its mark
+          // has stopped pointing at it, which is the oldest rule here and
+          // the one the suite calls "adrift". Twelve boards reported it.
+          //
+          // So the order is: slide, as far as a name can slide and still
+          // name something; then pay for the stem. Both are worse than a
+          // clean spot beside the line and both are better than a name
+          // written on another name.
           var slides = [0, e._textLen * 0.3, -e._textLen * 0.3,
-                        e._textLen * 0.55, -e._textLen * 0.55,
-                        e._textLen * 0.85, -e._textLen * 0.85,
-                        e._textLen * 1.2, -e._textLen * 1.2];
+                        e._textLen * 0.55, -e._textLen * 0.55];
           // AN ENCLOSURE'S NEIGHBOURS STACK BELOW IT, IN TIME ORDER.
           //
           // A convergence's own name is pinned above its pill. The events
@@ -5062,8 +5153,10 @@
                 // Charged rather than refused: this is the fallback, and it
                 // has to be able to return something.
                 var thru = runCrosses(e, [b]);
+                var overReach = Math.max(0, (outs[oi] - e._capOut) - MAX_LEADER);
                 var cost = raw + (thru ? e._h * e._textLen * 0.4 : 0)
                          + oi * e._h * e._textLen * 0.03
+                         + overReach * e._h * 0.25
                          + Math.abs(slides[si]) * e._h * 0.02;
                 if (!best || cost < best.cost) {
                   best = { cost: cost, raw: raw, thru: thru, at: at, out: outs[oi], sign: away, box: b };

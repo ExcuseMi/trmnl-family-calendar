@@ -147,6 +147,13 @@ Where the two disagree, this one is newer.
     Never by starting the move early to buy runway. A line leaving an
     interchange before the event ends says the person left early, and the
     board would be lying about the one thing it exists to state.
+29d. **A 45 may not cross another line's baseline.** A 45 that changes lane
+    inside the gap between two lines is a lane change; a 45 that travels
+    ACROSS a line runs alongside it at a shallow converging angle for its
+    whole length, and the two read as meeting. The Professor's morning
+    climb passed through Amy that way for three hours. Where anything lies
+    between here and there the move goes square, which crosses in one place
+    at a right angle and is unmistakably a crossing rather than a merge.
 29c. **A line ends on a 45 slash.** Its own mark, not the crossbar an
     event's end tick uses: three different things drawn with one glyph can
     only be told apart by position. Nothing else on this map is drawn at 45,
@@ -202,13 +209,31 @@ Where the two disagree, this one is newer.
 
 34. **A caption belongs beside its own rail**, on the outside, starting at the
     stop it names.
-34a. **A caption keeps twelve pixels of paper from every rail**, its own
-    included. Merely not touching is not enough: a name dropped into the
-    twenty pixel slot between two close lines is clear of both and reads as
-    belonging to neither. The band solver books this, not just the caption
-    pass -- asked for a slot nobody reserved, the pass finds none at any
-    text size, and the tier loop, shown a board equally bad however small
-    the words get, keeps the biggest ones.
+34a. **Six pixels of paper round every rail and every caption**, its own
+    rail included, descenders included. Merely not touching is not enough:
+    a name dropped into the slot between two close lines is clear of both
+    and reads as belonging to neither. Two rings, and they are not worth the
+    same -- the ink is hard and nothing may be written over it, the paper
+    round it is a preference the search may squeeze into. The band solver
+    books the identical allowance, not just the caption pass: asked for a
+    slot nobody reserved, the pass finds none at any text size, and the tier
+    loop, shown a board equally bad however small the words get, keeps the
+    biggest ones.
+34d. **A leader is a tick, not a tether.** Past about thirty pixels a stem
+    stops pointing at anything -- the eye pairs the words with whatever rail
+    is nearest, which by then is somebody else's. Charged steeply beyond
+    that rather than forbidden: cut off hard, a caption that really needs
+    the outer rung slides until it collides instead, and a long stem is
+    untidy where two names on each other is one name gone.
+34e. **Sliding stops where pointing stops.** Sliding along the line is the
+    cheaper answer than a longer stem, but only as far as a name can slide
+    and still name something -- about half its own width, which is the same
+    limit rule 35 calls adrift. Past that, pay for the stem.
+34f. **A time range says am or pm once** when both ends fall in the same
+    half of the day: "9 - 10:00am", not "9am - 10:00am". A caption's width
+    is what the band solver reserves through `markRoom`, so four characters
+    of repetition are booked as board. Across noon both halves are named,
+    because there the repetition is carrying information.
 34b. **An enclosure's name goes above its pill, centred**, and everything
     whose words overlap that pill goes BELOW it. The region becomes one
     stack with the interchange named at the top of it.
