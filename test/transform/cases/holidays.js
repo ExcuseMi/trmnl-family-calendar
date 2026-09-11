@@ -149,6 +149,34 @@ module.exports = function (test, h) {
       + JSON.stringify(r.data.legend.map((p) => p.name)));
   });
 
+  // ------------------------------------------------- the plain list of links
+
+  test('a plain list can mark a holiday feed, with no JSON at all', async () => {
+    // The low-friction path is "paste links, get a line each", which is
+    // exactly wrong for a subscribed holiday calendar. Telling that user to
+    // go and write JSON defeats the point of the list existing.
+    const r = await runTransform(serve(allDayIcs([
+      { start: '20261225', end: '20261226', summary: 'Christmas Day' },
+    ], 'Holidays in Belgium')), NOW).run(baseInput(NOW, {
+      config_json: 'https://example.com/ada.ics\n'
+        + 'https://example.com/hol.ics holiday\n',
+    }));
+    assertEqual(r.data.holidays.map((x) => x.title), ['Christmas Day'],
+      'the marked feed did not reach the day');
+    assert(!r.data.legend.some((p) => /Holiday/i.test(p.name)),
+      'it still became a line: ' + JSON.stringify(r.data.legend.map((p) => p.name)));
+  });
+
+  test('the marker is the whole word at the end, not a substring of a link', async () => {
+    // A feed whose URL merely contains the word is a feed, not a marker.
+    const r = await runTransform(serve(allDayIcs([
+      { start: '20261225', end: '20261226', summary: 'Christmas Day' },
+    ], 'Holidays in Belgium')), NOW).run(baseInput(NOW, {
+      config_json: 'https://example.com/hol.ics?type=holiday\n',
+    }));
+    assertEqual(r.data.holidays, [], 'a url containing the word was read as a marker');
+  });
+
   test('a holiday feed puts no line on the board', async () => {
     // The ghost line. A named calendar's name becomes a LINE for anything
     // no rule routes, so a subscribed "Holidays in Belgium" drew a rail of

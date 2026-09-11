@@ -391,10 +391,10 @@
   // ------------------------------------------------------------ model
   var state = { lines: [], calendars: [], rules: [], timeZone: "", locale: "" };
   function newLine() { return { _id: uid(), name: "", color: "", side: "" }; }
-  function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false, keepEmpty: false }; }
+  function newCalendar() { return { _id: uid(), name: "", url: "", assign: [], rules: [], headers: [], includeDescription: false, keepEmpty: false, holiday: false }; }
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
   function newCondition() { return { _id: uid(), type: "word", field: "", value: "", status: "confirmed", weekdays: [], min: "", max: "", from: "", to: "", negate: false }; }
-  function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], lines: [], rename: true, rewrite: "", rewriteFull: false, hide: false }; }
+  function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], lines: [], rename: true, rewrite: "", rewriteFull: false, hide: false, holiday: false }; }
 
   // ------------------------------------------------------------ undo
   //
@@ -515,7 +515,11 @@
     }
     if (r.rewrite.trim()) { out.rewrite = r.rewrite.trim(); if (r.rewriteFull) out.rewriteFull = true; }
     if (r.hide) out.hide = true;
-    if (!out.line && !out.rewrite && !out.hide) return null;
+    // A state rather than an appointment: the day's where it names no line,
+    // that line's head where it does. It is an effect in its own right, so
+    // a rule carrying only this is not a no-op.
+    if (r.holiday) out.holiday = true;
+    if (!out.line && !out.rewrite && !out.hide && !out.holiday) return null;
     return out;
   }
   function buildConfig() {
@@ -542,6 +546,7 @@
       if (has) o.headers = headers;
       if (c.includeDescription) o.includeDescription = true;
       if (c.keepEmpty) o.hideIfEmpty = false;
+      if (c.holiday) o.holiday = true;
       return o;
     });
     return cfg;
@@ -618,6 +623,7 @@
     r.rewrite = typeof rv.rewrite === "string" ? rv.rewrite : "";
     r.rewriteFull = rv.rewriteFull === true;
     r.hide = rv.hide === true;
+    r.holiday = rv.holiday === true;
     // `siding` (and the `station` it shipped as) used to be a rule option.
     // Both are gone: a long block is a siding because it is long, which the
     // layout can see for itself. A config saved then still loads, with the
@@ -652,6 +658,7 @@
         if (c.headers && typeof c.headers === "object") Object.keys(c.headers).forEach(function (k) { if (typeof c.headers[k] === "string") { var h = newHeader(); h.key = k; h.value = c.headers[k]; o.headers.push(h); } });
         o.includeDescription = c.includeDescription === true;
         o.keepEmpty = c.hideIfEmpty === false;
+        o.holiday = c.holiday === true;
         return o;
       });
     state.rules = (Array.isArray(data.rules) ? data.rules : []).filter(function (r) { return r && r.match; }).map(ruleFrom);
@@ -1084,9 +1091,19 @@
             rules: [
               { match: { type: "contains", value: "Lunch Menu" }, hide: true },
               { match: { type: "word", value: "Y4" }, line: "Mia", rename: false },
-              { match: { type: "word", value: "Y2" }, line: "Noah", rename: false }
+              { match: { type: "word", value: "Y2" }, line: "Noah", rename: false },
+              // half term is the CHILDREN's day, not the whole household's:
+              // the parents still go to work, and `holiday` with a line says
+              // so at their heads rather than in the header
+              { match: { type: "contains", value: "Half Term" },
+                holiday: true, line: ["Mia", "Noah"], rename: false }
             ]
-          }
+          },
+          // a subscribed national calendar. `holiday` with nobody named
+          // takes it off the line model altogether: it reads beside the date
+          // in the header, and cannot become a fifth line called "Holidays
+          // in Belgium". No `name` for the same reason.
+          { url: "https://calendar.example.com/holidays.ics", holiday: true }
         ]
       }
     },

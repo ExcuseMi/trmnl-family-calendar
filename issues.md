@@ -738,15 +738,28 @@ is open.
   every all-day entry away. Fixed with the rest;
   `test/transform/cases/holidays.js` covers both directions.
 
-  Not done, and deliberately: the demo boards show no holiday, because
-  adding one means changing an ICS file that live devices fetch from
-  `main`. It wants a commit and a push before a plugin push, not a quiet
-  edit. And the plain "one ICS link per line" setup cannot say `holiday`
-  at all: it has no JSON to say it in. Auto-detecting one from the feed's
-  name was costed and refused, because it is wrong both ways round (a
-  calendar literally called "Holidays" that is one person's leave; a
-  school feed that is a holiday feed and says nothing) with no way to turn
-  it off.
+  The plain "one ICS link per line" setup CAN say it now: one word after
+  the link, `https://.../holidays.ics holiday`. A URL cannot contain a
+  bare space, so it needs no punctuation and no JSON, which is the whole
+  point of that path existing. It is the only word the list understands.
+  Auto-detecting one from the feed's name was costed and refused, because
+  it is wrong both ways round (a calendar literally called "Holidays" that
+  is one person's leave; a school feed that is a holiday feed and says
+  nothing) with no way to turn it off.
+
+  The editor learned it too -- it was dropping `holiday` on both a
+  calendar and a rule, so a config carrying one lost it on the round trip
+  -- and the "Family of 4" preset now teaches both shapes: a subscribed
+  national feed that belongs to the day, and a half term that belongs to
+  the children and not to the parents who still go to work.
+
+  The demo boards still show no holiday, and that is correct rather than
+  outstanding: the demo day is a Tuesday in September and a Tuesday in
+  September is not a holiday. Showing one would mean inventing a public
+  holiday on an ordinary day, which teaches the reader something false
+  about what the board is saying. The worked example belongs in the
+  presets, where somebody is reading a configuration rather than a day,
+  and that is where it is.
 
 - [ ] **E14. The two biggest text tiers ignore the device's font setting.**
   Carried over from the old tracker. The device's Font Family setting

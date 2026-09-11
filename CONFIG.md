@@ -179,6 +179,23 @@ Only a rule's own `line` counts. A feed nobody has routed has not told the
 board whose day it changes, so it is the day's: that is what stops a
 national calendar landing on whoever happens to be first in `lines`.
 
+#### In a plain list of links
+
+The low-friction path is one link per line and no JSON at all, and a holiday
+feed pasted into it became a rail named after a country. Say it with one
+word at the end of the line:
+
+```
+https://calendar.example.com/work.ics
+https://calendar.example.com/family.ics
+https://calendar.google.com/calendar/ical/en.be%23holiday%40group.v.calendar.google.com/public/basic.ics holiday
+```
+
+A URL cannot contain a bare space, so a space and the word `holiday` after
+one is unambiguous. It is the only word the list understands and it only
+works at the end: a list with options in it is the JSON config in disguise,
+and the JSON config is right there when you need more than this.
+
 Three details worth knowing.
 
 - **A range says which day of it this is.** "Spring Break" running from the

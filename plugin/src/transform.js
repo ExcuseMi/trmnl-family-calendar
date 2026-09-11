@@ -2039,6 +2039,33 @@ function looksLikeConfigJson(raw) {
   return t.charAt(0) === '{' || t.charAt(0) === '[' || t.indexOf('```') === 0;
 }
 
+// ONE LINK PER LINE, AND ONE WORD IF IT IS A HOLIDAY FEED.
+//
+// The plain list is the low-friction path: paste links, get a line each.
+// That is exactly wrong for a subscribed holiday calendar, which is not a
+// person -- pasted into the list it became a rail named "Holidays in
+// Belgium" with chevrons at both ends, and there was no JSON in which to
+// say otherwise. The whole point of the plain list is not having to write
+// JSON, so "go and write JSON" is not an answer.
+//
+// A trailing word. A URL cannot contain a bare space, so a space and a word
+// after one is unambiguous, needs no punctuation anybody has to look up,
+// and reads as what it is:
+//
+//   https://example.com/work.ics
+//   https://calendar.google.com/.../holidays.ics holiday
+//
+// Only this one word, and only at the end: the list is meant to stay a
+// list, and a second syntax with options in it is the JSON config wearing
+// a disguise.
+function plainListEntry(raw) {
+  var line = String(raw == null ? '' : raw).trim();
+  if (!line) return null;
+  var m = /^(\S+)\s+holiday$/i.exec(line);
+  if (m) return { url: m[1], holiday: true };
+  return line;
+}
+
 // Parses the "Calendar Config (JSON)" setting text into
 // { calendars, lines, timeZone, globalRules, everyoneLine }. Never
 // throws: invalid JSON falls back to treating the text as a plain
@@ -2065,7 +2092,7 @@ function parseConfig(raw) {
         // the demo.
         data = looksLikeConfigJson(raw)
           ? {}
-          : { calendars: raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean) };
+          : { calendars: raw.split(/\r?\n/).map(function (l) { return plainListEntry(l); }).filter(Boolean) };
       }
     }
   }

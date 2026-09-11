@@ -118,6 +118,28 @@ module.exports = function (test, h) {
     });
   });
 
+  // A preset is where somebody learns what the config can say, so the two
+  // holiday shapes have to be IN one: the day's, and a line's. They are the
+  // pair that is easy to get wrong, because the word is the same and only
+  // the presence of a line tells them apart.
+  test('a preset teaches both holiday shapes', () => {
+    const { window, document } = loadEditor();
+    pick(window, document, 'family4', true);
+    const cfg = jsonOut(document);
+    const dayWide = cfg.calendars.filter((c) => c.holiday);
+    assert(dayWide.length === 1, 'no calendar marked as a holiday feed');
+    assert(!dayWide[0].name,
+      'the holiday feed carries a name, which is the line it must not create');
+    const owned = cfg.calendars
+      .reduce((all, c) => all.concat(c.rules || []), [])
+      .filter((r) => r.holiday && r.line);
+    assert(owned.length >= 1,
+      'no rule shows a holiday that belongs to particular lines');
+    assert(Array.isArray(owned[0].line) && owned[0].line.length > 1,
+      'the owned holiday should show the shared case, which is the one with a tie');
+    void window;
+  });
+
   test('the three presets teach three different things, not one shape three times', () => {
     const got = {};
     IDS.forEach((id) => {
