@@ -558,6 +558,9 @@
     document.getElementById("importIn").value = top.paste;
     selectedPreset = top.preset;
     lastLoaded = null;
+    // An example is its configuration AND the feeds it carries, so undoing
+    // back to one has to bring both: see seedPresetFeeds.
+    if (selectedPreset) seedPresetFeeds(selectedPreset);
     renderAll();
     paintPresets();
     paintUndo();
@@ -1467,6 +1470,24 @@
     }
   ];
 
+  // The feeds a preset ships with, put exactly where a paste or an upload
+  // would put them: see sampleIcs. This is not only a step of loading a
+  // preset -- UNDO needs it too. Every preset link points at
+  // calendar.example.com, which no browser can fetch, so a preset restored
+  // without its feeds is seven links to a domain that does not answer, and
+  // the next "Render the example" drew nothing and reported seven feeds it
+  // could not read.
+  function seedPresetFeeds(id) {
+    var preset = null;
+    PRESETS.forEach(function (p) { if (p.id === id) preset = p; });
+    if (!preset || !preset.sample) return;
+    Object.keys(preset.sample).forEach(function (u) {
+      icsOverrides[u] = sampleIcs(preset.sample[u]);
+      icsFromExample[u] = true;
+    });
+    renderSources();
+  }
+
   // What the editor held the last time this page put something in it. Used
   // only to tell "the user has work in here" from "this is exactly what we
   // loaded a moment ago", so flipping between presets does not nag.
@@ -1524,14 +1545,7 @@
     snapshot("load " + preset.label);
     loadConfig(JSON.parse(JSON.stringify(preset.config)));
     document.getElementById("importIn").value = JSON.stringify(preset.config, null, 2);
-    // The feeds, served from here rather than fetched: see sampleIcs.
-    if (preset.sample) {
-      Object.keys(preset.sample).forEach(function (u) {
-        icsOverrides[u] = sampleIcs(preset.sample[u]);
-        icsFromExample[u] = true;
-      });
-      renderSources();
-    }
+    seedPresetFeeds(preset.id);
     selectedPreset = preset.id;
     paintPresets();
     markLoaded();
