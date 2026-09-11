@@ -319,11 +319,35 @@
   function treatmentFor(style, S, width) {
     var w = width * S * weightScale;
     var thin = Math.max(1 * S, 1.4 * S * weightScale);
-    if (style === 'dashed') return { widen: 2.4 * S, core: Math.max(thin, w * 0.3), cap: 'butt' };
+    // A REAL DASHED LINE, because there was not one. All four treatments
+    // used to be a solid envelope with paper knocked out of the middle,
+    // which gives a tramline and two thicknesses of dotted core -- and no
+    // dashes anywhere. Worse, 'dotted' (paper 2.6 on 6.4) and 'dashdot'
+    // (paper 0.1 on 9) were the same idea at two sizes and read as the same
+    // line: on a five-person board Marge and Bart were told apart only by
+    // how big their paper dots were.
+    //
+    // So one of the four now cuts all the way through. The paper core is as
+    // wide as the envelope, so where it is drawn there is no line at all
+    // and what is left is ink in lengths: an actual dashed track. The other
+    // three keep their continuous envelope, which is what makes them
+    // equally heavy at a glance and legible at 1-bit.
+    if (style === 'dashed') return { widen: 0, core: w + 2 * S, cap: 'butt',
+                                     dash: (4.5 * S) + ' ' + (10.5 * S) };
+    // paper dots in a whole line: a texture, not a break
     if (style === 'dotted') return { widen: 1 * S, core: Math.max(thin, w * 0.5), cap: 'butt',
                                      dash: (2.6 * S) + ' ' + (6.4 * S) };
-    if (style === 'dashdot') return { widen: 1 * S, core: Math.max(thin, w * 0.45), cap: 'round',
-                                      dash: (0.1 * S) + ' ' + (9 * S) };
+    // Short ink, wide gaps: a dotted TRACK, as against the dotted texture
+    // above. Long dashes and round dots are two things nobody confuses.
+    //
+    // This slot used to be a tramline -- one continuous paper core, so the
+    // line was drawn as two rails running together -- and that is exactly
+    // how it read: Bart appeared to take two lines into Family Dinner. A
+    // line that looks like two lines is the one texture this board cannot
+    // afford, because two lines running together is the thing a shared
+    // event is drawn as.
+    if (style === 'dashdot') return { widen: 0, core: w + 2 * S, cap: 'butt',
+                                      dash: (7 * S) + ' ' + (3.2 * S) };
     return null;
   }
   // How long one repeat of a treatment's rung pattern is, so a run of line
@@ -357,8 +381,9 @@
   // number of repeats across the swatch's own length, so every line style
   // reads as an equally "full" swatch.
   function legendDashFor(style, S) {
+    if (style === 'dashed') return (3.5 * S) + ' ' + (7 * S);
     if (style === 'dotted') return (2 * S) + ' ' + (4 * S);
-    if (style === 'dashdot') return (0.1 * S) + ' ' + (5 * S);
+    if (style === 'dashdot') return (5 * S) + ' ' + (2.5 * S);
     return null;
   }
   // How much of its nominal weight a line is drawn at. Weights are tuned
@@ -3169,15 +3194,30 @@
           var keep = [];
           (w.q._route || []).forEach(function (h) {
             if (!h.siding || e._endA <= h.a0 || h.a1 <= e._nodeA) { keep.push(h); return; }
-            // FLUSH TO THE CORRIDOR, with no room left for a ramp. Inset by
-            // the length an octilinear turn would like, the siding's own
-            // tail was cut away whenever the dinner fell near the end of it,
-            // and the line never came back up to the level its band and its
-            // caption are still drawn at. The line steps out for the event
-            // and steps straight back, which is the truth and is what the
-            // two legal angles allow when there is no room for the third.
-            if (h.a0 < e._nodeA) keep.push({ a0: h.a0, a1: e._nodeA, lvl: h.lvl, siding: true });
-            if (h.a1 > e._endA) keep.push({ a0: e._endA, a1: h.a1, lvl: h.lvl, siding: true });
+            // AS MUCH ROOM FOR THE RAMP AS THE SIDING CAN SPARE.
+            //
+            // Cut flush, the line steps out of Spring Break into dinner and
+            // straight back with nowhere to turn, so both moves come out as
+            // right angles -- the thing that is meant to be the last resort,
+            // happening twice in an hour. Cut by the full length a 45 wants,
+            // the siding loses its own tail whenever the event lands near
+            // the end of it and never returns to the level its band and
+            // caption are drawn at.
+            //
+            // Neither, then: each side gives up what a 45 needs or half of
+            // what it has, whichever is less. An all-day siding has hours on
+            // both sides and pays the full price without noticing; a short
+            // one keeps half of itself and takes a steeper turn, which is
+            // the trade in the right direction.
+            var want = octRun(w.lvl - h.lvl, octRadius(w.lvl - h.lvl));
+            if (h.a0 < e._nodeA) {
+              var cutL = Math.min(want, (e._nodeA - h.a0) / 2);
+              keep.push({ a0: h.a0, a1: e._nodeA - cutL, lvl: h.lvl, siding: true });
+            }
+            if (h.a1 > e._endA) {
+              var cutR = Math.min(want, (h.a1 - e._endA) / 2);
+              keep.push({ a0: e._endA + cutR, a1: h.a1, lvl: h.lvl, siding: true });
+            }
           });
           keep.push({ a0: e._nodeA, a1: e._endA, lvl: w.lvl, shared: true,
                       lead: w.rank * STAGGER, trail: w.rank * STAGGER });
