@@ -2258,6 +2258,7 @@
   // were last drawn.
   function syncPromptControls() {
     paintRelayOffer();
+    paintFeedsSummary();
   }
   // ALWAYS THE PROMPT AS IT IS NOW.
   //
@@ -2284,6 +2285,7 @@
   });
   document.getElementById("relayPaste").addEventListener("click", function () {
     hideRelayOffer();
+    openFeedBoxes();
     show("station-preview");
     setStatus("promptStatus", "Each unread feed has a box under the map: press "
       + "\u201cPaste / upload instead\u201d, put the .ics text in, then generate the prompt again.", "");
@@ -2366,6 +2368,37 @@
     var u = url.indexOf("webcal://") === 0 ? "https://" + url.slice(9) : url;
     return realFetch(u).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); });
   }
+  // WHAT THE FOLD UNDER THE MAP SAYS ABOUT ITSELF.
+  //
+  // It read "The 6 feeds this was drawn from" whatever the state of them:
+  // before any draw, with nothing read, a list of links just pasted in was
+  // described as the feeds a board had been drawn from. It matters more than
+  // a wrong word, because this fold is where the relay dialog sends anybody
+  // who chooses to paste the .ics themselves, so what it claims is what they
+  // go on.
+  function feedsSummaryText() {
+    var urls = configuredUrls().filter(function (u) { return !fetchErrors[u]; });
+    if (!urls.length) return "";
+    var readCount = urls.filter(feedRead).length;
+    var pending = urls.length - readCount;
+    if (!pending) {
+      return drawnSig !== null
+        ? (urls.length === 1 ? "The feed this was drawn from" : "The " + urls.length + " feeds this was drawn from")
+        : (urls.length === 1 ? "The feed this page has read" : "The " + urls.length + " feeds this page has read");
+    }
+    if (!readCount) {
+      return pending === 1
+        ? "1 feed, not read yet: paste or upload it here"
+        : pending + " feeds, none read yet: paste or upload them here";
+    }
+    return urls.length + " feeds: " + readCount + " read, " + pending + " not read yet";
+  }
+  // Repainted in place, because the panel is not redrawn while somebody is
+  // typing into one of its boxes.
+  function paintFeedsSummary() {
+    var sum = document.querySelector("#sources summary");
+    if (sum) sum.textContent = feedsSummaryText();
+  }
   function renderSources() {
     var wrap = document.getElementById("sources");
     wrap.innerHTML = "";
@@ -2376,12 +2409,17 @@
     // read fine pushed the board they drew off the top of the panel to say
     // six times that nothing was wrong. Only a feed that FAILED has anything
     // to tell you, so the rest fold away behind one line.
+    // AND IT SAYS WHICH OF THEM THEY ARE.
+    //
+    // "The 6 feeds this was drawn from" was the line whatever the state of
+    // them: before any draw, with nothing read, a list of links just pasted
+    // in was described as the feeds a board had been drawn from. The fold is
+    // also where the relay dialog sends anybody choosing to paste the .ics
+    // themselves, so what it says about itself is what they go on.
     var okCount = cals.filter(function (c) { return !fetchErrors[c.url.trim()]; }).length;
     var fold = null;
     if (okCount) {
-      var det = el("details", { class: "adv" }, [
-        el("summary", { text: okCount === 1 ? "The feed this was drawn from" : "The " + okCount + " feeds this was drawn from" }),
-      ]);
+      var det = el("details", { class: "adv" }, [el("summary", { text: feedsSummaryText() })]);
       fold = el("div", { class: "adv-body" });
       det.appendChild(fold);
     }
@@ -2389,7 +2427,7 @@
       var url = c.url.trim();
       var status = el("span", { class: "status" });
       var failed = fetchErrors[url];
-      var ta = el("textarea", { rows: "3", "aria-label": "ICS text for " + (c.name.trim() || url),
+      var ta = el("textarea", { rows: "3", "data-feed": url, "aria-label": "ICS text for " + (c.name.trim() || url),
         placeholder: "If the feed cannot be fetched from the browser (CORS), paste its .ics text here, or upload the file." });
       ta.value = icsOverrides[url] || "";
       // An example's feeds come with the example, so their boxes stay shut:
@@ -2404,7 +2442,17 @@
       // speak for the prompt are repainted.
       ta.addEventListener("input", function () {
         delete icsFromExample[url];
-        if (ta.value.trim()) icsOverrides[url] = ta.value; else delete icsOverrides[url];
+        if (ta.value.trim()) {
+          icsOverrides[url] = ta.value;
+          // Whatever went wrong was about FETCHING it, and there is text in
+          // hand now, so the card stops being a failure and says what to do
+          // with what was just pasted.
+          delete fetchErrors[url];
+          status.textContent = "Read. Draw the map again to see it."; status.className = "status ok";
+        } else {
+          delete icsOverrides[url];
+          status.textContent = ""; status.className = "status";
+        }
         feedsChanged();
         syncPromptControls();
       });
@@ -2416,6 +2464,7 @@
         rd.onload = function () {
           ta.value = String(rd.result || ""); ta.hidden = false;
           icsOverrides[url] = ta.value;
+          delete fetchErrors[url];
           status.textContent = "Loaded " + f.name; status.className = "status ok";
           feedsChanged();
           syncPromptControls();
@@ -2433,6 +2482,28 @@
     // to act on, so it is the thing at the top.
     if (fold && fold.parentNode) wrap.appendChild(fold.parentNode);
     syncPromptControls();
+  }
+
+  // THE MOST PRIVATE WAY OUT HAS TO LEAD SOMEWHERE VISIBLE.
+  //
+  // "Paste the .ics myself" is the one route that sends nothing anywhere,
+  // and it points at the boxes under the map. Those sit inside a fold that
+  // is shut, and each box stays hidden until it is asked for, so the
+  // instruction was to press a button the reader could not see. Open the
+  // fold and every box that is still waiting for text, and put the cursor
+  // in the first of them.
+  function openFeedBoxes() {
+    var wrap = document.getElementById("sources");
+    if (!wrap) return;
+    var det = wrap.querySelector("details");
+    if (det) det.open = true;
+    var first = null;
+    Array.prototype.forEach.call(wrap.querySelectorAll("textarea[data-feed]"), function (ta) {
+      if (feedRead(ta.getAttribute("data-feed"))) return;
+      ta.hidden = false;
+      if (!first) first = ta;
+    });
+    if (first && first.focus) first.focus();
   }
 
   // ------------------------------------------------------------ preview
