@@ -56,15 +56,33 @@ module.exports = function (test, h) {
   //
   // Anything genuinely known goes back in here with the board it happens
   // on and the reason, the way these did.
-  const OVERLAP_KNOWN = {};
+  // Found the moment this check started running on the 800x480 panel as well
+  // as the roomy one. Both are E19: caption placement is greedy, so on a
+  // panel this tight the search takes the least-bad spot and somebody's words
+  // end up on somebody else's. Drawing the board from both ends of the day
+  // and keeping the better one cleared every x-landscape board and these two
+  // did not follow. They want the placer to see a whole side at once.
+  const OVERLAP_KNOWN = {
+    'long-event-day/og-landscape': 'captions are placed greedily and this panel has no slack: E19',
+    'three-day/og-landscape': 'captions are placed greedily and this panel has no slack: E19',
+  };
   const PIERCE_KNOWN_VIEW = {};
   const PIERCE_KNOWN = {};
 
 
   const OVERLAP_TOL = 2;
+  // ON BOTH PANELS, NOT JUST THE ROOMY ONE.
+  //
+  // This ran on x-landscape alone, which is the board with the most paper on
+  // it, so the one place captions are least likely to collide was the only
+  // place anybody looked. The 800x480 panel is where they actually run out
+  // of room: it packs five lines against the spine and stacks the captions
+  // in lanes underneath, and "Reactor Core Check" ran straight into "Moe's
+  // Tavern" with every test in this file green.
   for (const f of fixtures) {
-    test('no two text labels overlap: ' + f.name, () => {
-      const rep = layout(f, ROOMY);
+    for (const vname of ['x-landscape', 'og-landscape']) {
+    test('no two text labels overlap: ' + f.name + '/' + vname, () => {
+      const rep = layout(f, byName(vname));
       const ls = textLabels(rep);
       const bad = [];
       for (let i = 0; i < ls.length; i++) {
@@ -76,7 +94,8 @@ module.exports = function (test, h) {
         }
       }
       assert(bad.length === 0, bad.length + ' overlapping label pair(s): ' + bad.slice(0, 6).join('; '));
-    }, OVERLAP_KNOWN[f.name] && { known: OVERLAP_KNOWN[f.name] });
+    }, OVERLAP_KNOWN[f.name + '/' + vname] && { known: OVERLAP_KNOWN[f.name + '/' + vname] });
+    }
   }
 
   // ------------------------------------------------------------ lines vs text
