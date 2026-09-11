@@ -1223,13 +1223,17 @@
       // busy stretch), so the cap means the same thing over a quiet morning
       // as over a crowded evening.
       //
-      // Only from the baseline. Leaving a level the line had BORROWED is
-      // the other rule -- it goes as soon as the reason for it is over --
-      // and a line that lingers at the school run until teatime is saying
-      // it was still there.
-      if (i < hs.length && prevLvl === 0) {
-        from = Math.max(from, to - pxPerHour * 0.75);
-      }
+      // EVERY approach, not only the ones from the baseline. Leaving a
+      // borrowed level promptly is the other rule and it is not this one's
+      // job: the pass that plans the route already splits a long gap into
+      // "come home now, sit here, set off later" by inserting a hold at the
+      // line's own lane. Where it does, each half is short and this cap
+      // never binds. Where it does not -- a gap too short to be worth the
+      // detour, or another line in the way of it -- the line goes straight
+      // from one hold to the next, and THAT is the move that was crossing
+      // the board: Lisa rose two hours at 45 from her saxophone lesson to
+      // dinner through everybody in between.
+      if (i < hs.length) from = Math.max(from, to - pxPerHour * 0.75);
       // GOING HOME IS OPTIONAL. A line has to START the day on its own
       // lane, because that is where its name is written and the reader
       // needs the two to agree. It does not have to END there: after the
@@ -1254,13 +1258,25 @@
       // So it goes as far as the room buys at 45 and stops there. Usually
       // that is all the way; when it is not, the line is visibly on its way
       // back, which is the truth.
+      // RECOVERY IS PROMPT AND IT IS COMPLETE.
+      //
+      // The run home used to be given the whole rest of the board and take
+      // as much of it as a 45 wanted, so four lines left dinner at eight
+      // and were still fanning apart at the right-hand edge, clustered in
+      // the middle for the whole of the evening. A person who has left is
+      // back on their own line, and the drawing should say so at once.
+      //
+      // So it gets half an hour, immediately, and it goes all the way: the
+      // cap makes the 45 impossible for anything but a small step and
+      // `octSpan` falls through to the vertical, which is the other legal
+      // angle and reads as "and then they went home".
+      //
+      // What used to happen instead was that the move got SHORTENED to
+      // whatever a 45 could pay for, so the line stopped somewhere between
+      // dinner and its own lane and held there, which is a level that means
+      // nothing.
       if (i === hs.length && lvl !== prevLvl) {
-        var room = to - from - CORNER;
-        var want = octRun(lvl - prevLvl, octRadius(lvl - prevLvl));
-        if (room < want) {
-          var reach = Math.max(0, room - CORNER * 2);
-          lvl = prevLvl + (lvl < prevLvl ? -1 : 1) * Math.min(reach, Math.abs(lvl - prevLvl));
-        }
+        to = Math.min(to, from + pxPerHour * 0.5 + CORNER * 2);
       }
       // ...and between two events it cannot refuse: leaving at once and
       // arriving on time are the same demand when the two nearly touch, and
