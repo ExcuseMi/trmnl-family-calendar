@@ -44,6 +44,34 @@ module.exports = function (test, h) {
       'with one of two feeds read the fold should say so: ' + line);
   });
 
+  // AN UPLOADED FILE IS NOT THE EXAMPLE'S FEED ANY MORE.
+  //
+  // The feeds an example ships with are marked as its own, which is what
+  // keeps their boxes shut: nobody asked to read seven generated calendars.
+  // Uploading a real .ics over one stored the text and left the mark, so the
+  // next time the panel was drawn -- adding a line is enough -- the card
+  // said "Example feed." again and hid the file that had just been loaded.
+  test('a file uploaded over an example feed replaces it', async () => {
+    const { window, document } = loadEditor();
+    click(document.querySelector('#presets button[data-preset="family4"]'));
+    const card = document.querySelector('#sources .card');
+    const file = card.querySelector('input[type=file]');
+    Object.defineProperty(file, 'files', {
+      value: [new window.File(['BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n'], 'mine.ics')],
+    });
+    file.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 50));   // FileReader is asynchronous
+    assert(/mine\.ics/.test(card.querySelector('.status').textContent), 'sanity: the file should load');
+
+    // anything that redraws the panel
+    click(document.getElementById('addLine'));
+    const after = document.querySelector('#sources .card');
+    assert(!/Example feed/.test(after.querySelector('.status').textContent),
+      'the uploaded file was relabelled as the example\'s own: ' + after.querySelector('.status').textContent);
+    assert(!after.querySelector('textarea').hidden,
+      'the box holding the uploaded calendar was hidden again');
+  });
+
   test('"Paste the .ics myself" opens the boxes it sends the reader to', () => {
     const document = withTwoLinks();
     click(document.getElementById('makePrompt'));

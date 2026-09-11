@@ -2464,6 +2464,10 @@
         rd.onload = function () {
           ta.value = String(rd.result || ""); ta.hidden = false;
           icsOverrides[url] = ta.value;
+          // It is the user's calendar now, not the example's. Left marked as
+          // the example's, the next redraw of the panel relabelled the card
+          // "Example feed." and hid the file just loaded.
+          delete icsFromExample[url];
           delete fetchErrors[url];
           status.textContent = "Loaded " + f.name; status.className = "status ok";
           feedsChanged();
