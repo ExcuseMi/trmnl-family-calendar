@@ -685,9 +685,9 @@ is open.
   `NODE_STROKE` are sized off the rail), so a full-size board looks like a
   poster rather than a small diagram enlarged.
 
-- [ ] **E5. Preset library in the editor.** A one-click dropdown in Start:
+- [x] **E5. Preset library in the editor.** A one-click dropdown in Start:
   Family of 4, Work vs Personal, Solo Freelancer, so someone can see a board
-  before they have any URLs.
+  before they have any URLs. Shipped in 1e3ba50.
 - [x] **E6. Localized weather alert banner.** A settings group (`enabled`,
   `rain_threshold`, `snow_alert`, `temp_extremes`) using the account
   location and locale. When a threshold is breached, a full-width
