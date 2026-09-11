@@ -6,7 +6,7 @@
 // the whole depth beside it.
 
 module.exports = function (test, h) {
-  const { layout, render, VIEWPORTS, fixtures, pathsWhere, textLabels, overlap, assert } = h;
+  const { layout, render, VIEWPORTS, fixtures, pathsWhere, textLabels, overlap, deepestIntrusion, assert } = h;
 
   const byName = (n) => VIEWPORTS.find((v) => v.name === n);
   const ROOMY = byName('x-landscape');
@@ -130,6 +130,69 @@ module.exports = function (test, h) {
       const inside = sky.filter((m) => (i ? m.y : m.x) < band.hi - 1);
       assert(inside.length === 0, v.name + ': ' + inside.length + ' sky marker(s) inside the strip');
     }
+  });
+
+  // STANDING UP, A SKY MARKER STAYS IN ITS GUTTER.
+  //
+  // A standing board sets its sky markers beside the bundle, right-aligned
+  // against the first rail, in the gutter between the hour strip and the
+  // map. When the text was wider than that gutter the position went
+  // negative, a clamp pinned it to the left edge, and the text ran rightward
+  // over the hour labels and straight through the rail it was meant to sit
+  // beside: "Storms 20:00" written across Homer's line and over "8pm", and
+  // sunset's time printed on top of it, because nothing kept two markers
+  // apart along the axis either.
+  // On the busy two-person board AND the five-person one: a wide bundle is
+  // what leaves the gutter too narrow for the words, and a thin one is what
+  // shows the stacking on its own.
+  const withSky = (metro) => {
+    const m = JSON.parse(JSON.stringify(metro));
+    m.weather = (m.weather || []).concat([
+      { type: 'sun', at_min: m.day_start_min + 40, icon: DOT, label: 'sunrise' },
+      { type: 'weather', at_min: m.day_start_min + 300, icon: DOT, label: 'Rain starts 13:00' },
+      // a storm four minutes after sunset: two markers wanting one spot
+      { type: 'sun', at_min: m.day_end_min - 60, icon: DOT, label: 'sunset' },
+      { type: 'weather', at_min: m.day_end_min - 56, icon: DOT, label: 'Storms 20:00' },
+    ]);
+    return m;
+  };
+  const OG = 'screen--og screen--md screen--1bit screen--density-1x';
+  const fiveLines = fixtures.find((f) => f.name === 'five-lines');
+  test('standing up, a sky marker crosses neither the hour strip, nor a rail, nor another marker', () => {
+    const allBad = [];
+    for (const [metro, v] of [
+      [busy.metro, { view: 'full', name: 'og-half-vertical', w: 800, h: 480, slot: { w: 400, h: 480 }, classes: OG }],
+      [fiveLines.metro, { view: 'full', name: 'og-half-vertical', w: 800, h: 480, slot: { w: 400, h: 480 }, classes: OG }],
+      [busy.metro, byName('x-portrait')],
+      [fiveLines.metro, byName('x-portrait')],
+    ]) {
+      const rep = render(withSky(metro), v);
+      if (rep.debug.horizontal) continue;
+      const labels = textLabels(rep);
+      const sky = labels.filter((l) => (' ' + l.cls + ' ').indexOf(' metro-sky ') >= 0);
+      const scale = labels.filter((l) => {
+        const c = ' ' + l.cls + ' ';
+        return c.indexOf(' metro-hour ') >= 0 || c.indexOf(' metro-axis-note ') >= 0;
+      });
+      const bad = [];
+      for (const m of sky) {
+        for (const t of scale) {
+          const o = overlap(m, t);
+          if (o && o.w > 1 && o.h > 1) bad.push('"' + m.text + '" over the scale\'s "' + t.text + '"');
+        }
+        for (const p of pathsWhere(rep, 'track').concat(pathsWhere(rep, 'branch'))) {
+          if (deepestIntrusion(p.pts, m) > 2) { bad.push('"' + m.text + '" across ' + p.owner + '\'s line'); break; }
+        }
+      }
+      for (let i = 0; i < sky.length; i++) {
+        for (let j = i + 1; j < sky.length; j++) {
+          const o = overlap(sky[i], sky[j]);
+          if (o && o.w > 1 && o.h > 1) bad.push('"' + sky[i].text + '" on "' + sky[j].text + '"');
+        }
+      }
+      if (bad.length) allBad.push(v.name + ' (' + metro.legend.length + ' lines): ' + [...new Set(bad)].join('; '));
+    }
+    assert(allBad.length === 0, allBad.join(' | '));
   });
 
   // The interchange capsule and the rail leaving it are one move through the

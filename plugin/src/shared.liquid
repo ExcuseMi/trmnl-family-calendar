@@ -8020,6 +8020,20 @@
         // shredded.
         if (room < colW * 0.5) room = colW;
         b.style.maxWidth = room + 'px';
+        // A TIME IS WHOLE OR IT IS NOT THERE.
+        //
+        // The time row is capped to the column and clipped, so a range wider
+        // than the column was cut mid-glyph: "8 - 8:15an", "5:30 - 6:3",
+        // "3:30 - 4:30pr". A cut time is worse than a short one, because it
+        // reads as a DIFFERENT time -- and the reader has no way to tell
+        // that it was cut. Where the range will not fit, the start is
+        // written whole and the end is left to the tick on the line, which
+        // is what carries the end on this board anyway.
+        var tRow = b.querySelector('.metro-time-tag');
+        if (tRow) {
+          tRow.style.maxWidth = room + 'px';
+          if (tRow.scrollWidth > tRow.clientWidth + 1) tRow.textContent = timeLabel(e.start_min);
+        }
         // Held on the board, the same way the flat branch holds a caption
         // at the hour strip rather than letting it hang off the top: a
         // caption half off the canvas is the caption gone, and a blemish
@@ -8111,7 +8125,7 @@
     }
 
     // ---- sky marker labels (built + measured earlier)
-    var bandCursor = -Infinity;
+    var bandCursor = -Infinity, axisCursor = -Infinity;
     alerts.forEach(function (w) {
       if (!w._label) return;
       var a = aFor(w.at_min), n = w._label;
@@ -8125,10 +8139,39 @@
         // sunset's "9:12pm" was written straight over the "9pm" tick.
         n.style.left = left + 'px'; n.style.top = (alertTop + 1 * S) + 'px';
       } else {
+        // STANDING UP, A MARKER STAYS IN ITS GUTTER.
+        //
+        // It is set beside the bundle, against the first rail, in the gutter
+        // between the hour strip and the map. When the words were wider than
+        // that gutter the position went negative, a clamp pinned it to the
+        // left edge, and the text ran rightward over the hour labels and
+        // through the rail it was meant to sit beside: "Storms 20:00"
+        // written across Homer's line and over "22:00" on the scale.
+        //
+        // So the gutter is a box with two walls. What does not fit in it
+        // gives up its words first, because the icon at the right height
+        // already says rain or sunset at that time, and the whole marker
+        // only if even the icon will not fit.
         var sign = alertSide === 'A' ? -1 : 1;
         var inner = spineC + sign * (bundleHalf(alertSide) + 2 * S);
-        n.style.left = clamp(sign > 0 ? inner : inner - w._w, 0, Math.max(0, W - w._w)) + 'px';
-        n.style.top = (a - w._h / 2) + 'px';
+        var gLo = sign < 0 ? bandLo + 2 * S : inner;
+        var gHi = sign < 0 ? inner : W - EDGE;
+        if (w._w > gHi - gLo) {
+          var words = n.lastChild;
+          if (words && words !== n.firstChild) words.style.display = 'none';
+          var bare = measure(n); w._w = bare.w; w._h = bare.h;
+          if (w._w > gHi - gLo) { n.remove(); return; }
+        }
+        // AND CLEAR OF THE ONE BEFORE IT. Markers are in time order, and two
+        // a few minutes apart (a storm just after sunset) were set on the
+        // same spot with the later one printed over the earlier; the later
+        // one moves down the axis until it is past.
+        var top = a - w._h / 2;
+        if (top < axisCursor) top = axisCursor;
+        if (top + w._h > H) { n.remove(); return; }
+        axisCursor = top + w._h + 2 * S;
+        n.style.left = (sign > 0 ? gLo : gHi - w._w) + 'px';
+        n.style.top = top + 'px';
       }
     });
 

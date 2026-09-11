@@ -38,6 +38,32 @@ module.exports = function (test, h) {
   // every case in this file, which is exactly why the cases are here. See
   // issues.md E13.
   const WHY = 'portrait captions are not slid or laddered along the axis: E13';
+
+  // A TIME IS WHOLE OR IT IS NOT THERE.
+  //
+  // Standing up, a caption's time row was capped to the column with
+  // `overflow: hidden` and nothing else, so a range wider than the column
+  // was sliced mid-glyph: "8 - 8:15an", "5:30 - 6:3", "3:30 - 4:30pr". A
+  // cut time is worse than a missing one, because it reads as a DIFFERENT
+  // time. Where the range will not fit, the start is written whole and the
+  // end is left to the tick on the line, which is what carries it anyway.
+  //
+  // The reporter says whether a caption's time row is clipped; asked of a
+  // reporter that cannot say, this would pass by saying nothing, so it
+  // insists on an answer first.
+  test('standing up, no caption shows a time cut off mid-character', () => {
+    const bad = [];
+    for (const name of STANDING) {
+      for (const f of fixtures) {
+        const labels = textLabels(layout(f, byName(name)));
+        const captions = labels.filter((l) => /\bmetro-label\b/.test(l.cls));
+        assert(!captions.length || captions.some((l) => 'clipped' in l),
+          'the reporter does not say whether a time row is clipped, so this cannot check');
+        captions.filter((l) => l.clipped).forEach((l) => bad.push(f.name + ': "' + l.text + '"'));
+      }
+    }
+    assert(bad.length === 0, bad.length + ' caption(s) with a time cut off: ' + bad.slice(0, 6).join('; '));
+  });
   const OVERLAP_KNOWN = new Set(['all-day-every-track', 'busy-day', 'crew-day',
     'double-booked', 'five-lines', 'long-event-day', 'regroups', 'seven-lines',
     'tight-pair']);

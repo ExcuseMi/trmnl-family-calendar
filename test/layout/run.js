@@ -283,7 +283,13 @@ const REPORTER = `
     canvas.querySelectorAll('.metro-gen').forEach(function (n) {
       var r = n.getBoundingClientRect();
       if (!r.width || !r.height) return;
-      labels.push(Object.assign(rel(r), { cls: n.className, text: (n.textContent || '').trim() }));
+      // WHETHER THE WORDS ACTUALLY FIT. A caption's time row is capped to
+      // its column and clipped, so a range too wide is sliced mid-glyph and
+      // reaches the panel as "8:15an". textContent still reports the whole
+      // string, so a test reading text alone cannot see it at all.
+      var tt = n.querySelector && n.querySelector('.metro-time-tag');
+      labels.push(Object.assign(rel(r), { cls: n.className, text: (n.textContent || '').trim(),
+        clipped: !!(tt && tt.scrollWidth > tt.clientWidth + 1) }));
     });
     function ctmPts(el, pts) {
       var m = el.getScreenCTM();
