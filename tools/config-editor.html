@@ -706,6 +706,7 @@
     if (note) note.hidden = !empty;
     var copy = document.getElementById("copyJson");
     if (copy) copy.disabled = empty;
+    syncPromptControls();
     refreshStale();
   }
 
@@ -1889,23 +1890,22 @@
     return out.join("\n");
   }
 
-  document.getElementById("makePrompt").addEventListener("click", function () {
-    var ta = document.getElementById("promptOut");
-    ta.value = buildAgentPrompt();
-    ta.rows = 14;
-    // SAY IT HERE RATHER THAN LET THE ASSISTANT SAY IT.
-    //
-    // A prompt with no events in it comes back as a refusal, every time:
-    // neither the browser nor the assistant can fetch a calendar feed, so
-    // the answer is "I cannot read these, paste the .ics text". True, and
-    // a wasted round trip. The tool knows before the copy button is
-    // pressed, so it says so.
-    // COUNTED OFF THE CONFIGURATION, NOT OFF EVERY FEED EVER READ.
-    //
-    // icsOverrides outlives the configuration that filled it: load an
-    // example, then paste your own single link, and seven example feeds are
-    // still in there. Counting its keys reported "the events from all 7
-    // calendars" over a prompt carrying one calendar and no events at all.
+  // SAY IT HERE RATHER THAN LET THE ASSISTANT SAY IT.
+  //
+  // A prompt with no events in it comes back as a refusal, every time:
+  // neither the browser nor the assistant can fetch a calendar feed, so the
+  // answer is "I cannot read these, paste the .ics text". True, and a wasted
+  // round trip. The tool knows how many feeds it has read before the copy
+  // button is pressed, so it says so.
+  //
+  // It is a function rather than a few lines inside Generate because it has
+  // to be said again whenever the answer changes: a relay run that read
+  // three feeds of four left "none of your 4 feed(s) has been read" standing
+  // over a prompt that by then carried three calendars' events.
+  //
+  // Counted off the configuration, not off every feed ever read: the store
+  // outlives the configuration that filled it.
+  function reportPromptState() {
     var read = readUrls().length;
     var urlCount = configuredUrls().length;
     if (!urlCount) {
@@ -1921,6 +1921,12 @@
     } else {
       setStatus("promptStatus", "Ready, with the events from all " + read + " calendars in it.", "ok");
     }
+  }
+  document.getElementById("makePrompt").addEventListener("click", function () {
+    var ta = document.getElementById("promptOut");
+    ta.value = buildAgentPrompt();
+    ta.rows = 14;
+    reportPromptState();
     // Generate is the first press, so it is where the ways to read the
     // feeds are offered. Hung off Copy alone, the offer went unseen by
     // everybody who read an event-less prompt and stopped there.
@@ -1967,13 +1973,19 @@
     return configuredUrls().filter(function (u) { return !feedRead(u); });
   }
   function hideRelayOffer() { document.getElementById("relayOffer").hidden = true; }
-  // Shows the offer and returns true when it took over; false means there
-  // is nothing to ask about and the caller should just get on with it.
-  function relayOffer(afterCopy) {
-    var urls = unreadUrls();
-    if (!urls.length) return false;
-    relayPending = afterCopy || null;
+  // WHAT THE DIALOG SAYS IS PAINTED FROM THE FEEDS THAT ARE UNREAD NOW.
+  //
+  // It is the one dialog on this page that offers to hand calendar links to
+  // a server, and the consent it asks for is consent to send the links it
+  // lists. Painted once when it opened and never again, it went on naming
+  // feeds that had since been pasted in: the heading counted them among the
+  // calendars that could not be read, and "fetch them through the relay"
+  // would have sent a link for a calendar already in hand.
+  function paintRelayOffer() {
     var box = document.getElementById("relayOffer");
+    if (!box || box.hidden) return;
+    var urls = unreadUrls();
+    if (!urls.length) { hideRelayOffer(); return; }
     document.getElementById("relayWhy").textContent = plural(urls.length, "calendar", "calendars")
       + " could not be read from this page, so the prompt carries no events from "
       + (urls.length === 1 ? "it" : "them") + " and the assistant will say so.";
@@ -1989,9 +2001,24 @@
       "Sends the links above to " + RELAY.replace(/^https?:\/\//, "").split("/")[0]
       + ", this plugin's own small server, which fetches each calendar and hands back the text. "
       + "It is the author's server, not TRMNL's.";
+  }
+  // Shows the offer and returns true when it took over; false means there
+  // is nothing to ask about and the caller should just get on with it.
+  function relayOffer(afterCopy) {
+    if (!unreadUrls().length) return false;
+    relayPending = afterCopy || null;
     setStatus("relayStatus", "", "");
-    box.hidden = false;
+    document.getElementById("relayOffer").hidden = false;
+    paintRelayOffer();
     return true;
+  }
+  // Everything on this page that can change which feeds have been read ends
+  // up here: a link typed, a config loaded, a draw finished, an .ics pasted
+  // or uploaded, a relay run. The controls that speak for the prompt are
+  // repainted from the state as it is now rather than as it was when they
+  // were last drawn.
+  function syncPromptControls() {
+    paintRelayOffer();
   }
   // ALWAYS THE PROMPT AS IT IS NOW.
   //
@@ -2058,6 +2085,11 @@
         setStatus("promptStatus", "Read " + plural(done, "calendar", "calendars")
           + " through the relay, and the prompt now carries their events. Press Copy prompt again.", "ok");
       } else {
+        // Some of them came back. What the prompt now carries has changed,
+        // so the line that says what it carries is written again rather than
+        // left reading "none of your feeds has been read" over a prompt
+        // holding the ones that did.
+        reportPromptState();
         setStatus("relayStatus", "Read " + done + ", could not read " + failed.length + ": "
           + failed.join("; ") + ". Paste those by hand.", "err");
       }
@@ -2117,7 +2149,14 @@
       if (failed) { status.textContent = failed; status.className = "status err"; }
       else if (icsFromExample[url]) { status.textContent = "Example feed."; status.className = "status"; }
       else if (icsOverrides[url]) { status.textContent = "Read."; status.className = "status ok"; }
-      ta.addEventListener("input", function () { delete icsFromExample[url]; if (ta.value.trim()) icsOverrides[url] = ta.value; else delete icsOverrides[url]; });
+      // Not renderSources(): redrawing the panel from under somebody who is
+      // typing in it takes the box away mid-paste. Only the controls that
+      // speak for the prompt are repainted.
+      ta.addEventListener("input", function () {
+        delete icsFromExample[url];
+        if (ta.value.trim()) icsOverrides[url] = ta.value; else delete icsOverrides[url];
+        syncPromptControls();
+      });
       var paste = el("button", { class: "small", text: "Paste / upload instead" });
       var file = el("input", { type: "file", accept: ".ics,text/calendar", hidden: "hidden" });
       file.addEventListener("change", function () {
@@ -2136,6 +2175,7 @@
     // The ones that worked go last, folded: a failure is what somebody has
     // to act on, so it is the thing at the top.
     if (fold && fold.parentNode) wrap.appendChild(fold.parentNode);
+    syncPromptControls();
   }
 
   // ------------------------------------------------------------ preview

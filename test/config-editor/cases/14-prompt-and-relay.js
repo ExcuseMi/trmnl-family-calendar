@@ -97,4 +97,72 @@ module.exports = function (test, h) {
       'the button labelled "Copy the prompt anyway" copied nothing: '
         + document.getElementById('promptStatus').textContent);
   });
+
+  // THE DIALOG NAMES THE LINKS IT WOULD SEND, SO THE LIST HAS TO BE NOW'S.
+  //
+  // It is the one dialog on this page that offers to hand calendar links to
+  // a server, and the consent it asks for is consent to send THOSE links. It
+  // was painted once and never again, so pasting a feed's .ics while it was
+  // open left the feed listed as unread, under a heading counting it among
+  // the calendars that could not be read -- and pressing "fetch them through
+  // the relay" would have sent a link for a calendar already in hand.
+  function withTwoCalendars() {
+    const document = withOneCalendar();
+    document.getElementById('importIn').value = 'https://a.example/crew.ics\nhttps://b.example/ship.ics';
+    click(document.getElementById('loadImport'));
+    return document;
+  }
+
+  test('the unread-feeds offer stops naming a calendar once it has been read', () => {
+    const document = withTwoCalendars();
+    click(document.getElementById('makePrompt'));
+    const list = document.getElementById('relayList');
+    assert(/crew\.ics/.test(list.textContent) && /ship\.ics/.test(list.textContent),
+      'sanity: both unread feeds should be listed');
+
+    // paste the .ics for the first, with the dialog still open
+    fireInput(document.querySelectorAll('#sources textarea')[0], ICS);
+    assert(!/crew\.ics/.test(list.textContent),
+      'the offer still lists a feed whose text is now in the page: ' + list.textContent);
+    assert(/ship\.ics/.test(list.textContent), 'the feed that is still unread went missing from the offer');
+    assert(/1 calendar/.test(document.getElementById('relayWhy').textContent),
+      'the heading still counts the feed that was read: ' + document.getElementById('relayWhy').textContent);
+
+    fireInput(document.querySelectorAll('#sources textarea')[1], ICS);
+    assert(document.getElementById('relayOffer').hidden,
+      'every feed has been read and the dialog is still asking how to read them');
+  });
+
+  // A RELAY RUN THAT READ SOME OF THEM SAYS SO.
+  //
+  // The relay fetches each link on its own and any of them can fail. On a
+  // clean run the status is rewritten; on a partial one it was left exactly
+  // as Generate had written it, so a run that read three feeds of four still
+  // reported "none of your 4 feed(s) has been read" while the prompt below
+  // it carried three calendars' events.
+  test('a relay run that read some feeds updates what the prompt says it carries', async () => {
+    const relay = (url) => {
+      const u = String(url);
+      if (/metro-calendar\/ics/.test(u)) {
+        const want = decodeURIComponent(u.split('?url=')[1] || '');
+        return Promise.resolve({ ok: true, status: 200,
+          text: () => Promise.resolve(/crew\.ics$/.test(want) ? ICS : '<html>not a calendar</html>') });
+      }
+      return Promise.reject(new Error('network disabled in tests'));
+    };
+    const { document } = loadEditor(relay);
+    document.getElementById('importIn').value = 'https://a.example/crew.ics\nhttps://b.example/ship.ics';
+    click(document.getElementById('loadImport'));
+    click(document.getElementById('makePrompt'));
+    click(document.getElementById('relayUse'));
+    await h.flush();
+
+    const st = document.getElementById('promptStatus').textContent;
+    assert(!/none of your/.test(st), 'a feed was read through the relay and the status denies it: ' + st);
+    assert(/1 of 2/.test(st), 'the status does not count what the relay read: ' + st);
+    assert(/ship\.ics/.test(document.getElementById('relayList').textContent),
+      'the feed that failed should still be offered a way through');
+    assert(!/crew\.ics/.test(document.getElementById('relayList').textContent),
+      'the feed the relay read is still listed as unread');
+  });
 };
