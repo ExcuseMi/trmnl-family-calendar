@@ -70,17 +70,51 @@ module.exports = function (test, h) {
   // comfortable lines and five crowded ones. In a slot it was choosing
   // between one line and two: a half-horizontal on an 800x480 panel has
   // room for two by the tight figure and was drawing ONE of four people.
-  test('a slot draws as many people as it can hold, not as few', () => {
+  test('a flat slot draws as many people as it can hold, not as few', () => {
     const lines = (rep) => ((rep.debug && rep.debug.bands) || []).length;
-    const five = fixtures.find((f) => f.name === 'five-lines');
-
     const hh = render(busy.metro, SLOTS[1]);           // og-half-horizontal, 4 lines offered
     assert(lines(hh) >= 2, 'og-half-horizontal drew ' + lines(hh)
       + ' line(s) of 4; the tight estimate says two fit');
+  });
 
-    const hv = render(five.metro, SLOTS[2]);           // og-half-vertical, 5 lines offered
-    assert(lines(hv) >= 4, 'og-half-vertical drew ' + lines(hv)
-      + ' line(s) of 5; the tight estimate says four fit');
+  // ...BUT NOT MORE PEOPLE THAN IT CAN WRITE DOWN.
+  //
+  // The same exemption, applied everywhere, filled the slots it did not
+  // belong in. Standing up, every line takes a column the width of its
+  // words: a half-vertical kept four lines in 60px columns and wrote
+  // "Assemb / ly", "Playgro / up", "Detenti / on" -- eleven captions on top
+  // of each other on an 800x480 panel, seventeen on an X. And flat, on a
+  // 520px X quadrant, a fourth line's captions had no axis to spread along
+  // and landed on each other. A slot that shows fewer people legibly is a
+  // better answer than one that shows more of them illegibly.
+  test('a slot keeps only the people whose captions it can write legibly', () => {
+    const five = fixtures.find((f) => f.name === 'five-lines');
+    const overlapsIn = (rep) => {
+      const ls = textLabels(rep);
+      let n = 0;
+      for (let i = 0; i < ls.length; i++) {
+        for (let j = i + 1; j < ls.length; j++) {
+          const o = overlap(ls[i], ls[j]);
+          if (o && o.w > 2 && o.h > 2) n++;
+        }
+      }
+      return n;
+    };
+    for (const [fixture, v, most] of [
+      [busy, SLOTS[2], 5],        // og-half-vertical: was 11
+      [five, SLOTS[2], 3],        // og-half-vertical: was 9
+      [five, XSLOTS[2], 4],       // x-half-vertical: was 17
+      [five, XSLOTS[0], 3],       // x-quadrant, 520px of axis
+    ]) {
+      const rep = render(fixture.metro, v);
+      const n = overlapsIn(rep);
+      assert(n <= most, v.name + ' (' + fixture.name + '): ' + n + ' overlapping caption pairs, '
+        + 'so it is keeping more people than it can write down');
+      if (v.name.indexOf('vertical') >= 0) {
+        assert((rep.debug.colW || 0) >= 75, v.name + ': ' + Math.round(rep.debug.colW)
+          + 'px columns, too narrow to hold a word');
+      }
+    }
   });
 
   // "+3 earlier" and the clock badge are both pinned to the head of the

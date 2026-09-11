@@ -983,8 +983,39 @@
       // choosing between showing the household and showing a piece of it;
       // at five and above it is choosing between crowded and legible, which
       // is what the generous figure was written for.
-      if (maxLines < LEGEND.length && maxLines > 4) {
+      //
+      // ONLY WHERE THE CAPTIONS HAVE AXIS TO SPREAD ALONG. That exemption
+      // counts room ACROSS the lines, and a caption also needs room ALONG
+      // its own line. On an 800px half-horizontal it bought a second person
+      // cleanly. On a 520px X quadrant it bought a fourth line whose
+      // captions had nowhere to go but on top of each other: "Donut Break"
+      // into "Family Dinner", a pile around "Reactor Core Check". So it
+      // applies flat, on an axis of 700px or more, and nowhere else.
+      var roomyAxis = horizontal && axisPx >= 700 * S;
+      if (maxLines < LEGEND.length && (maxLines > 4 || !roomyAxis)) {
         maxLines = Math.max(1, Math.floor(room / (perLine + LANE_BASE)));
+      }
+      // STANDING UP, A LINE COSTS A COLUMN, AND A COLUMN HAS TO HOLD A WORD.
+      //
+      // Flat, a caption lies along its line and only its thickness is paid
+      // across. Standing up, the caption lies across the board, so every
+      // line takes a column the width of its words and the same room is
+      // divided between all of them. Charged by thickness, a half-vertical
+      // on an 800x480 panel kept four lines in 60px columns and wrote
+      // "Assemb / ly", "Playgro / up" and "Detenti / on", eleven captions on
+      // top of each other; the X version kept all five and had seventeen.
+      //
+      // It is the column AND a short axis. X portrait keeps seven 67px
+      // columns with one overlap, because 1300px of day spreads the
+      // captions down the board; a 460px half-vertical cannot. So on a
+      // standing board shorter than 900px, every kept line gets a readable
+      // column, by the same division `colW` makes below, and the board
+      // keeps two people when it can seat two, since one person on half a
+      // panel is rarely what anybody wanted either.
+      if (!horizontal && axisPx < 900 * S) {
+        var MIN_COL = 75 * S;
+        var byColumn = Math.floor((room - 2 * MIN_COL) / (MIN_COL + 12 * S));
+        maxLines = Math.max(Math.min(maxLines, 2), Math.min(maxLines, byColumn));
       }
       if (LEGEND.length <= maxLines) return;
       var load = {};
