@@ -1552,6 +1552,22 @@
         obstacles[alertSide].push({ a0: a - w._h / 2 - 2 * S, a1: a + w._h / 2 + 2 * S, distMax: bundleHalf(alertSide) + 2 * S + w._w });
       }
     });
+    // A STRIP OF THEIR OWN, UNDER THE RULER.
+    //
+    // Sunrise, rain and sunset were written just below the hour strip and
+    // the map was allowed to start there too, so "Rain starts 13:00" was
+    // set over the one o'clock tick and under "Safety Inspection" at the
+    // same time. The solver did keep LINES out of that row -- side A's
+    // demand carried an `alertBand` -- but a label hangs off a lane and
+    // reaches wherever it likes, and every clamp that stops a caption
+    // leaving the board measures from `bandLo`.
+    //
+    // So the row becomes part of the header: `alertTop` is where the
+    // markers are written and `bandLo` moves below them, which is the one
+    // number the whole drawing already respects. The solver's own term
+    // goes, or the same band would be reserved twice.
+    var alertTop = bandLo;
+    if (horizontal && alertBand > 0) { bandLo += alertBand; alertBand = 0; }
 
     // The terminus column is already reserved out of the axis, so there is
     // nothing to negotiate: names always sit at the start, each at its own
@@ -3776,9 +3792,23 @@
         if (!lvl) { rows.push({ p: p, homeC: homeC, atC: homeC, target: homeC, short: false }); return; }
         // the same from, room and reach `routeSpan` will work the tail out
         // from: stagger, and the wait for the last stop's own name
+        // HOW FAR A LINE CAN GET HOME, measured the way `routeSpan` now
+        // actually draws it.
+        //
+        // This asked what a 45 could pay for out of the room left after the
+        // last stop, and answered "not much" for anything that finished
+        // deep: a line coming out of a seven o'clock dinner has an hour of
+        // board and four bands to climb, and a 45 wants four bands of axis
+        // to do it in. So every line was marked short, the even-spacing
+        // below took over, and five lines finished stacked near the bottom
+        // with their own lanes empty above them.
+        //
+        // The run home is not a 45 any more. It is capped at half an hour
+        // and goes vertical, which is the other legal angle and needs
+        // almost no axis at all -- so a line gets all the way home whenever
+        // there is a corner's room to turn in, which is nearly always.
         var room = axisEnd - tailGate(p) - CORNER;
-        var full = octRun(-lvl, octRadius(-lvl));
-        var reach = Math.min(Math.abs(lvl), room >= full ? Math.abs(lvl) : Math.max(0, room - CORNER * 2));
+        var reach = room > CORNER * 2 ? Math.abs(lvl) : 0;
         var atC = homeC + p._sign * lvl;
         rows.push({
           p: p, homeC: homeC, atC: atC,
@@ -6529,7 +6559,35 @@
       // wider than the rail it sits on, or it is just a thick bit of line
       return Math.max(NODE_R * 2.4, p.line_width * S * weightScale + 6 * S);
     }
+    // TWO TRAINS CANNOT STAND IN THE SAME PLACE.
+    //
+    // A car is drawn on its own line at the current minute, which is right
+    // and which says nothing about where the OTHER lines are at that
+    // minute. Where two of them are running close together -- Bart on his
+    // baseline and Lisa a few pixels under it on her school day -- the two
+    // capsules were drawn on top of each other and the letter that tells
+    // one train from another was unreadable: a "B" showing through an "L".
+    //
+    // They stay on their own rails, because that is the whole point of
+    // them, and step apart ALONG the axis instead: a car's length each, in
+    // board order, which reads as two trains a minute apart rather than as
+    // one smudge. The now-marker is a dashed rule down the whole board, so
+    // nothing is claiming these are all at the same pixel anyway.
+    var carShift = {};
     if (nowA != null) {
+      (function spaceCars() {
+        var at = LEGEND.map(function (p) {
+          return { key: p.key, c: lineCAt(p, nowA), need: carAcross(p) };
+        }).sort(function (a, b) { return a.c - b.c; });
+        var step = CAR_ALONG + 3 * S, used = 0;
+        for (var i = 1; i < at.length; i++) {
+          var gap = at[i].c - at[i - 1].c;
+          var want = (at[i].need + at[i - 1].need) / 2 + 2 * S;
+          if (gap >= want) { used = 0; continue; }
+          used += step;
+          carShift[at[i].key] = used;
+        }
+      })();
       LEGEND.forEach(function (p) {
         // riding a spur if one of this line's own events is happening now
         var riding = null;
@@ -6547,7 +6605,7 @@
         // The car is drawn CENTRED on its axis position, so clearing the
         // name means moving its middle half a car past the end of it.
         var carHalf = CAR_ALONG / 2, carHalfT = carAcross(p) / 2;
-        var carA = nowA;
+        var carA = nowA + (carShift[p.key] || 0);
         // Only when the car would REALLY be under the name. Testing the
         // axis alone moved every car by its own line's name width, so five
         // trains all standing at the same minute were drawn at five
@@ -6967,7 +7025,7 @@
         // just UNDER the hour strip, not on it: the scale moved to the top
         // edge and these markers were still being set at the very top, so
         // sunset's "9:12pm" was written straight over the "9pm" tick.
-        n.style.left = left + 'px'; n.style.top = (bandLo + 1 * S) + 'px';
+        n.style.left = left + 'px'; n.style.top = (alertTop + 1 * S) + 'px';
       } else {
         var sign = alertSide === 'A' ? -1 : 1;
         var inner = spineC + sign * (bundleHalf(alertSide) + 2 * S);
