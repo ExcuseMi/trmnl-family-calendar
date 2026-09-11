@@ -1310,16 +1310,27 @@
       if (p[key][i]) return p[key][i];
       var prevEnd = i ? hs[i - 1].a1 : null;
       var prevLvl = i ? hs[i - 1].lvl : 0;
-      var lvl = i < hs.length ? hs[i].lvl : 0;
+      // Where the run home is AIMED. Its own lane, unless `settleHomeRun`
+      // has moved the aim because the line was never going to reach it.
+      var lvl = i < hs.length ? hs[i].lvl : (p._homeLvl == null ? 0 : p._homeLvl);
       var to = i < hs.length ? hs[i].a0 : axisEnd;
       var from = prevEnd == null ? axisStart : prevEnd;
-      // the staggered exit and entry a corridor hands out, so several lines
-      // leaving one place do not all turn on the same minute
-      if (prev && prev.trail) from += prev.trail;
+      // DECLARED BEFORE IT IS READ. `var prev` used to sit three lines
+      // below its first use, so the hoisted binding was still undefined
+      // when the stagger was applied and the stagger was silently dropped:
+      // every line left its corridor on the same minute after all, and the
+      // run home was handed a stretch of axis that was not free.
+      var prev = i ? hs[i - 1] : null;
+      // The staggered exit and entry a corridor hands out, so several lines
+      // leaving one place do not all turn on the same minute. NOT on the
+      // run home: there is no next hold to be on time for, the minutes left
+      // after a late dinner are the scarce thing on that stretch, and
+      // `settleHomeRun` has already given each line a different height to
+      // finish at, so the corners are not on top of each other anyway.
+      if (prev && prev.trail && i < hs.length) from += prev.trail;
       if (i < hs.length && hs[i].lead) to = Math.max(from + 1, to - hs[i].lead);
       // ...and past the previous stop's own name, when that is the way we
       // are going. A move the other way passes nothing and waits for nothing.
-      var prev = i ? hs[i - 1] : null;
       if (prev && prev.capA1 != null && prev.capSide != null) {
         var goingC = p._sign * (lvl - prevLvl);
         if (goingC !== 0 && (goingC > 0) === (prev.capSide > 0)) from = Math.max(from, prev.capA1);
@@ -1360,7 +1371,7 @@
         var want = octRun(lvl - prevLvl, octRadius(lvl - prevLvl));
         if (room < want) {
           var reach = Math.max(0, room - CORNER * 2);
-          lvl = prevLvl - (prevLvl < 0 ? -1 : 1) * Math.min(reach, Math.abs(prevLvl));
+          lvl = prevLvl + (lvl < prevLvl ? -1 : 1) * Math.min(reach, Math.abs(lvl - prevLvl));
         }
       }
       // ...and between two events it cannot refuse: leaving at once and
@@ -3086,6 +3097,89 @@
     // and leaving it is the stale-state trap this file has fallen into
     // before: the second call is unconditional and rebuilds from nothing,
     // so nothing from the first pass can survive into the drawing.
+    // WHEN THEY CANNOT ALL GET HOME, THEY FINISH EVENLY SPACED.
+    //
+    // The run home after the last hold gets whatever 45 degrees can buy in
+    // the minutes left on the axis, and that is the SAME distance for
+    // everybody. So a family that spent dinner in one bundle came out of
+    // it and every line moved by the same amount: the two with a single
+    // lane to climb arrived, the two with three lanes to fall stopped nine
+    // pixels short of them, and the bundle's own spacing was still there
+    // at the edge of the board. Bart reached his rail and Lisa finished on
+    // top of it, their end bars overlapping into one, which tells the
+    // reader they ended the day together when they did not.
+    //
+    // Arriving is worth less than being apart. So when anybody on a side
+    // falls short, that side's finishes are spread EVENLY between the
+    // innermost line's and the outermost line's. The outermost has the
+    // furthest to go and the least chance of arriving, so it keeps what it
+    // reached and the lines inside it give way: they end short of their
+    // own lanes, which costs nothing, because a lane is where a name is
+    // written and the names are at the other end of the board.
+    // Where the run home is free to start: the last hold's end, plus the
+    // stagger that corridor handed this line, and past the last stop's own
+    // name when the line is heading the way the name was written. Exactly
+    // what `routeSpan` works out for the tail, in one place, because the
+    // two disagreeing is what let a line be aimed somewhere it could not
+    // get to and drawn short of it without anything saying so.
+    function tailGate(p) {
+      var hs = p._route, h = hs[hs.length - 1], from = h.a1;
+      if (h.capA1 != null && h.capSide != null) {
+        var goingC = p._sign * -h.lvl;
+        if (goingC !== 0 && (goingC > 0) === (h.capSide > 0)) from = Math.max(from, h.capA1);
+      }
+      return from;
+    }
+    function settleHomeRun() {
+      var rows = [];
+      LEGEND.forEach(function (p) {
+        p._homeLvl = null;
+        var homeC = spineC + p._c;
+        var hs = p._route, h = hs && hs.length ? hs[hs.length - 1] : null;
+        var lvl = h ? h.lvl : 0;
+        // a line already on its own lane is an anchor, not a traveller
+        if (!lvl) { rows.push({ p: p, homeC: homeC, atC: homeC, target: homeC, short: false }); return; }
+        // the same from, room and reach `routeSpan` will work the tail out
+        // from: stagger, and the wait for the last stop's own name
+        var room = axisEnd - tailGate(p) - CORNER;
+        var full = octRun(-lvl, octRadius(-lvl));
+        var reach = Math.min(Math.abs(lvl), room >= full ? Math.abs(lvl) : Math.max(0, room - CORNER * 2));
+        var atC = homeC + p._sign * lvl;
+        rows.push({
+          p: p, homeC: homeC, atC: atC,
+          target: atC + (homeC > atC ? reach : -reach),
+          short: reach < Math.abs(lvl) - 0.5
+        });
+      });
+      if (!rows.some(function (r) { return r.short; })) return;   // everybody home
+      if (rows.length < 2) return;
+      // ACROSS THE WHOLE BOARD, not one side at a time. Done per side, the
+      // innermost line of each finished near the spine and the two of them
+      // finished five pixels apart in the middle, which is the same defect
+      // moved rather than fixed: what has to be even is the stack of ends,
+      // and the stack does not care which side a line calls home.
+      rows.sort(function (a, b) { return a.homeC - b.homeC; });
+      var lo = rows[0].target, hi = rows[rows.length - 1].target;
+      // Two rails read as two when there is a rail's worth of paper between
+      // them. Half a lane is that with room to spare, and it scales with a
+      // board that has had to pack its lanes. Where the reaches leave less
+      // than that, the stack opens out from its middle instead.
+      var need = Math.max(TRACK_STEP, laneStep * 0.5), want = need * (rows.length - 1);
+      if (hi - lo < want) { var mid = (lo + hi) / 2; lo = mid - want / 2; hi = mid + want / 2; }
+      var stepC = (hi - lo) / (rows.length - 1), prevC = null;
+      rows.forEach(function (r, k) {
+        // Evenly, but never further than this line can actually travel:
+        // aimed somewhere it cannot reach, the tail is cut back to its own
+        // reach by `routeSpan` and lands wherever that happens to be, which
+        // is the bundle spacing again with an even stack written over it.
+        var c = Math.max(Math.min(r.atC, r.target), Math.min(Math.max(r.atC, r.target), lo + stepC * k));
+        if (prevC != null && c < prevC) c = prevC;    // and never out of order
+        prevC = c;
+        r.p._homeLvl = r.p._sign * (c - r.homeC);
+        r.p._octs = null;
+      });
+    }
+
     var shared = [];
     function buildTrunks() {
       shared = [];
@@ -3147,6 +3241,7 @@
       LEGEND.forEach(function (p) {
         p._octs = null;
         p._route = null;
+        p._homeLvl = null;
         (p._sidings || []).slice().sort(function (a, b) {
           return (b.a1 - b.a0) - (a.a1 - a.a0);
         }).forEach(function (st) {
@@ -3394,6 +3489,7 @@
         p._octs = null;
       });
 
+      settleHomeRun();
       recomputeTrackDists();
     }
     buildTrunks();
@@ -3519,7 +3615,8 @@
       // A18: which lines exchanged places, and where on the axis. Empty on
       // a day one order can draw, which is most of them.
       route: LEGEND.filter(function (p) { return p._route; }).map(function (p) {
-        return { key: p.key, holds: p._route.map(function (h) { return [Math.round(h.a0), Math.round(h.a1), Math.round(h.lvl)]; }) };
+        return { key: p.key, home: p._homeLvl == null ? null : Math.round(p._homeLvl),
+                 holds: p._route.map(function (h) { return [Math.round(h.a0), Math.round(h.a1), Math.round(h.lvl)]; }) };
       }),
       weave: LEGEND.filter(function (p) { return p._weave; }).map(function (p) {
         return { key: p.key, atA: Math.round(p._weave.mid), from: Math.round(p._weave.fromC), to: Math.round(p._weave.toC) };
@@ -4697,6 +4794,32 @@
     // so the two never meet — the answer is the other legal angle. The rail
     // goes straight across at the elbow, which is what a junction on a
     // steep approach looks like anyway.
+    // A BRANCH DOES NOT LEAVE BEFORE THE SHARED EVENT BEFORE IT IS OVER.
+    //
+    // The scan walks back along the trunk looking for the point where the
+    // 45 works out, and it does not care what it walks back through. Monica
+    // is at Central Perk from six until seven and deep-cleans the flat at
+    // eight; the climb to the deep clean is most of the board deep, so the
+    // 45 for it starts at ten to six -- before Central Perk has begun. The
+    // rail then runs up across the whole of the shared event, crossing her
+    // own trunk and the line she is sharing it with, and the map says she
+    // left for the deep clean before she arrived at the coffee house.
+    //
+    // Somebody in one place cannot be on their way to another. So the scan
+    // stops at the end of the shared event, and where the 45 is not reached
+    // by then the rail takes the other legal angle at the event's own
+    // minute, which is a junction on a steep approach and reads as one.
+    function sharedGate(p, aElbow, dir) {
+      var hs = p._route, g = null;
+      if (!hs) return null;
+      for (var i = 0; i < hs.length; i++) {
+        var h = hs[i];
+        if (!h.shared) continue;
+        if (dir > 0) { if (h.a1 <= aElbow && (g == null || h.a1 > g)) g = h.a1; }
+        else if (h.a0 >= aElbow && (g == null || h.a0 < g)) g = h.a0;
+      }
+      return g;
+    }
     function departAt(p, aFrom, aElbow, laneC, dir) {
       // A trunk already running at 45 in the same direction is PARALLEL to
       // the rail leaving it, and two parallel lines never meet: the scan
@@ -4706,6 +4829,8 @@
       // again as long as the climb itself, take the other legal angle.
       var need = Math.abs(laneC - lineCAt(p, aElbow));
       var budget = need * 1.5 + CORNER;
+      var gate = sharedGate(p, aElbow, dir);
+      if (gate != null) budget = Math.min(budget, Math.abs(aElbow - gate));
       var steps = Math.max(12, Math.ceil(budget / Math.max(1, CORNER * 0.25)));
       var f = function (a) { return Math.abs(aElbow - a) - Math.abs(laneC - lineCAt(p, a)); };
       for (var i = 1; i <= steps; i++) {
