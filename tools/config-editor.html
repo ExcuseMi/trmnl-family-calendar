@@ -1989,14 +1989,22 @@
     box.hidden = false;
     return true;
   }
+  // ALWAYS THE PROMPT AS IT IS NOW.
+  //
+  // The box is readonly and generated, so there is nothing of the user's in
+  // it to preserve, and everything that improves a prompt happens BETWEEN
+  // Generate and Copy: pasting the .ics under the map, fetching through the
+  // relay, adding a link. Copying whatever Generate had left behind handed
+  // the assistant a prompt that said "NOT READ. The browser could not fetch
+  // it" about a calendar whose events were by then sitting in this page.
   function copyPromptNow() {
     var ta = document.getElementById("promptOut");
-    if (!ta.value) ta.value = buildAgentPrompt();
+    ta.value = buildAgentPrompt();
     copyFrom(ta, "promptStatus");
   }
   document.getElementById("copyPrompt").addEventListener("click", function () {
     var ta = document.getElementById("promptOut");
-    if (!ta.value) ta.value = buildAgentPrompt();
+    ta.value = buildAgentPrompt();
     if (relayOffer(copyPromptNow)) return;
     copyPromptNow();
   });
