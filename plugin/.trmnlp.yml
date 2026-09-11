@@ -73,75 +73,62 @@ variables:
       "calendars_down": [],
       "legend": [
         {
-          "key": "p0",
-          "name": "Homer",
-          "side": "left",
-          "hue": "black",
-          "track_offset": -10,
-          "line_width": 3,
-          "line_style": "solid",
-          "initial": "H"
-        },
-        {
           "key": "p4",
           "name": "Maggie",
           "side": "left",
-          "hue": "blue-40",
-          "track_offset": -20,
-          "line_width": 3,
-          "line_style": "dashed",
-          "initial": "M"
+          "hue": null,
+          "track_offset": -10,
+          "line_width": null,
+          "line_style": null,
+          "initial": "M",
+          "anchor": false
         },
         {
-          "key": "p1",
-          "name": "Marge",
-          "side": "right",
-          "hue": "purple-40",
-          "track_offset": 10,
-          "line_width": 3,
-          "line_style": "dashed",
-          "initial": "M"
+          "key": "p0",
+          "name": "Homer",
+          "side": "left",
+          "hue": null,
+          "track_offset": -20,
+          "line_width": null,
+          "line_style": null,
+          "initial": "H",
+          "anchor": true
         },
         {
           "key": "p2",
           "name": "Bart",
           "side": "right",
-          "hue": "red-40",
-          "track_offset": 20,
-          "line_width": 3,
-          "line_style": "dashed",
-          "initial": "B"
+          "hue": null,
+          "track_offset": 10,
+          "line_width": null,
+          "line_style": null,
+          "initial": "B",
+          "anchor": false
         },
         {
           "key": "p3",
           "name": "Lisa",
           "side": "right",
-          "hue": "cyan-40",
+          "hue": null,
+          "track_offset": 20,
+          "line_width": null,
+          "line_style": null,
+          "initial": "L",
+          "anchor": false
+        },
+        {
+          "key": "p1",
+          "name": "Marge",
+          "side": "right",
+          "hue": null,
           "track_offset": 30,
-          "line_width": 3,
-          "line_style": "dashed",
-          "initial": "L"
+          "line_width": null,
+          "line_style": null,
+          "initial": "M",
+          "anchor": false
         }
       ],
       "all_day": [],
-      "sidings": [
-        {
-          "owner": "p2",
-          "title": "School Day",
-          "location": "Springfield Elementary",
-          "start_min": 510,
-          "end_min": 900,
-          "group": "s0"
-        },
-        {
-          "owner": "p3",
-          "title": "School Day",
-          "location": "Springfield Elementary",
-          "start_min": 510,
-          "end_min": 900,
-          "group": "s0"
-        }
-      ],
       "items": [
         {
           "type": "sun",
@@ -159,10 +146,10 @@ variables:
           "owner": "p0",
           "co_owners": [],
           "side": "left",
-          "hue": "black",
-          "track_width": 6,
-          "track_style": "solid",
-          "track_offset": -10
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": -20
         },
         {
           "type": "event",
@@ -176,9 +163,25 @@ variables:
             "p3"
           ],
           "side": "right",
-          "hue": "purple-40",
-          "track_width": 5,
-          "track_style": "dotted",
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": 30
+        },
+        {
+          "type": "event",
+          "title": "School Day",
+          "start_min": 510,
+          "end_min": 900,
+          "location": "Springfield Elementary",
+          "owner": "p2",
+          "co_owners": [
+            "p3"
+          ],
+          "side": "right",
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
           "track_offset": 10
         },
         {
@@ -190,10 +193,10 @@ variables:
           "owner": "p1",
           "co_owners": [],
           "side": "right",
-          "hue": "purple-40",
-          "track_width": 5,
-          "track_style": "dotted",
-          "track_offset": 10
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": 30
         },
         {
           "type": "event",
@@ -204,10 +207,10 @@ variables:
           "owner": "p3",
           "co_owners": [],
           "side": "right",
-          "hue": "cyan-40",
-          "track_width": 3.5,
-          "track_style": "dashed",
-          "track_offset": 30
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": 20
         },
         {
           "type": "event",
@@ -218,10 +221,10 @@ variables:
           "owner": "p0",
           "co_owners": [],
           "side": "left",
-          "hue": "black",
-          "track_width": 6,
-          "track_style": "solid",
-          "track_offset": -10
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": -20
         },
         {
           "type": "event",
@@ -232,10 +235,10 @@ variables:
           "owner": "p4",
           "co_owners": [],
           "side": "left",
-          "hue": "blue-40",
-          "track_width": 5.5,
-          "track_style": "dashed",
-          "track_offset": -20
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": -10
         },
         {
           "type": "event",
@@ -246,10 +249,10 @@ variables:
           "owner": "p1",
           "co_owners": [],
           "side": "right",
-          "hue": "purple-40",
-          "track_width": 5,
-          "track_style": "dotted",
-          "track_offset": 10
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": 30
         },
         {
           "type": "event",
@@ -260,10 +263,10 @@ variables:
           "owner": "p4",
           "co_owners": [],
           "side": "left",
-          "hue": "blue-40",
-          "track_width": 5.5,
-          "track_style": "dashed",
-          "track_offset": -20
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": -10
         },
         {
           "type": "weather",
@@ -280,10 +283,10 @@ variables:
           "owner": "p0",
           "co_owners": [],
           "side": "left",
-          "hue": "black",
-          "track_width": 6,
-          "track_style": "solid",
-          "track_offset": -10
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": -20
         },
         {
           "type": "event",
@@ -294,24 +297,10 @@ variables:
           "owner": "p2",
           "co_owners": [],
           "side": "right",
-          "hue": "red-40",
-          "track_width": 4.5,
-          "track_style": "dashdot",
-          "track_offset": 20
-        },
-        {
-          "type": "event",
-          "title": "Saxophone Lesson",
-          "start_min": 960,
-          "end_min": 1020,
-          "location": null,
-          "owner": "p3",
-          "co_owners": [],
-          "side": "right",
-          "hue": "cyan-40",
-          "track_width": 3.5,
-          "track_style": "dashed",
-          "track_offset": 30
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": 10
         },
         {
           "type": "event",
@@ -322,10 +311,24 @@ variables:
           "owner": "p1",
           "co_owners": [],
           "side": "right",
-          "hue": "purple-40",
-          "track_width": 5,
-          "track_style": "dotted",
-          "track_offset": 10
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": 30
+        },
+        {
+          "type": "event",
+          "title": "Saxophone Lesson",
+          "start_min": 960,
+          "end_min": 1020,
+          "location": null,
+          "owner": "p3",
+          "co_owners": [],
+          "side": "right",
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": 20
         },
         {
           "type": "weather",
@@ -342,10 +345,10 @@ variables:
           "owner": "p2",
           "co_owners": [],
           "side": "right",
-          "hue": "red-40",
-          "track_width": 4.5,
-          "track_style": "dashdot",
-          "track_offset": 20
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": 10
         },
         {
           "type": "event",
@@ -356,10 +359,10 @@ variables:
           "owner": "p0",
           "co_owners": [],
           "side": "left",
-          "hue": "black",
-          "track_width": 6,
-          "track_style": "solid",
-          "track_offset": -10
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": -20
         },
         {
           "type": "event",
@@ -370,10 +373,10 @@ variables:
           "owner": "p3",
           "co_owners": [],
           "side": "right",
-          "hue": "cyan-40",
-          "track_width": 3.5,
-          "track_style": "dashed",
-          "track_offset": 30
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": 20
         },
         {
           "type": "event",
@@ -389,10 +392,10 @@ variables:
             "p4"
           ],
           "side": "right",
-          "hue": "purple-40",
-          "track_width": 5,
-          "track_style": "dotted",
-          "track_offset": 10
+          "hue": null,
+          "track_width": null,
+          "track_style": null,
+          "track_offset": 30
         },
         {
           "type": "sun",

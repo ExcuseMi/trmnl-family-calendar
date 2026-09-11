@@ -72,21 +72,9 @@ var DAY_START_MIN = 7 * 60;
 var DAY_END_MIN = 21 * 60;
 var SECONDARY_THRESHOLD_MIN = 30;
 var TRACK_STEP = 10; // px between adjacent track offsets
-// TWO TREATMENTS, NOT FOUR.
-//
-// Dotted and dashdot were a way of telling five lines apart without colour,
-// and on e-ink they cost more than they bought: a dotted rail is mostly
-// paper, so it reads as faint however dark the ink is, and four textures
-// running across one board is noise rather than information. Solid and
-// dashed, handed out two lines at a time so that the pattern changes only
-// when the grey has already been used, gives four distinguishable lines
-// beside the anchor without any of them looking broken.
-var LINE_STYLES = ['solid', 'solid', 'dashed', 'dashed'];
-// Black and one dark grey, alternating. The framework's scale runs 10
-// (darkest) to 75 (lightest); both of these are inked enough to read as a
-// line on a grayscale panel and they are far enough apart to tell from each
-// other at a glance.
-var HUE_CYCLE = ['gray-20', 'gray-45'];
+// Line styles and stroke weights used to be handed out here. They are
+// drawing decisions, so they live in shared.liquid now (`TRACK_STYLES`);
+// this file says only which line is the anchor.
 var HUE_NAMES = ['blue', 'green', 'orange', 'purple', 'red', 'cyan', 'pink', 'lime', 'violet', 'yellow'];
 
 function pad2(n) {
@@ -709,16 +697,17 @@ function buildMetro(tracks, events, weatherMilestones, headerWeather, nowMin, wi
 // Demo path — unchanged hardcoded data.
 // ---------------------------------------------------------------------
 
-// The offline fallback, for when GitHub is unreachable. Hues and patterns
-// match what makeTrackRegistry would assign these five from HUE_CYCLE and
-// LINE_STYLES, so a device that loses the network does not also change
-// colour — and no grey is pinned, so a theme still gets to repaint them.
+// The offline fallback, for when GitHub is unreachable. It says who is on
+// the board, which side each of them is on and which one is the anchor --
+// and nothing about how any of them is DRAWN, because that is decided in
+// shared.liquid from this same ordering. No colour is pinned either, so a
+// theme still gets to repaint them.
 var DEMO_TRACKS = [
-  { key: 'homer', name: 'Homer', side: 'left', hue: 'black', track_offset: -10, line_width: 3, line_style: 'solid' },
-  { key: 'lisa', name: 'Lisa', side: 'left', hue: 'gray-45', track_offset: -20, line_width: 3, line_style: 'solid' },
-  { key: 'marge', name: 'Marge', side: 'right', hue: 'gray-20', track_offset: 10, line_width: 3, line_style: 'dashed' },
-  { key: 'bart', name: 'Bart', side: 'right', hue: 'gray-45', track_offset: 20, line_width: 3, line_style: 'dashed' },
-  { key: 'maggie', name: 'Maggie', side: 'right', hue: 'gray-20', track_offset: 30, line_width: 3, line_style: 'solid' },
+  { key: 'homer', name: 'Homer', side: 'left', track_offset: -10, anchor: true },
+  { key: 'lisa', name: 'Lisa', side: 'left', track_offset: -20 },
+  { key: 'marge', name: 'Marge', side: 'right', track_offset: 10 },
+  { key: 'bart', name: 'Bart', side: 'right', track_offset: 20 },
+  { key: 'maggie', name: 'Maggie', side: 'right', track_offset: 30 },
 ];
 
 // A deliberately busy day in Springfield: two meetings starting minutes
@@ -2455,37 +2444,19 @@ function makeTrackRegistry(parsed) {
       var configured = parsed.tracks[name.toLowerCase()];
       t.side = side;
       t.track_offset = TRACK_STEP * (idx + 1) * (side === 'left' ? -1 : 1);
-      t.hue = (configured && hueTokenForColor(configured.color)) || (name === anchor ? 'black' : HUE_CYCLE[pos % HUE_CYCLE.length]);
-      // UNIFORM. Weight used to be the third thing separating lines, on
-      // top of hue and pattern, and it made the board look like some
-      // people's days mattered more than others. The anchor is told apart
-      // by being black, not by being fat.
-      t.line_width = 3;
+      // A PINNED COLOUR AND NOTHING ELSE.
+      //
+      // A colour somebody chose is a preference, and preferences are data.
+      // A stroke weight and a dash pattern are not: they are how a metro
+      // line is DRAWN, and this file knows about calendars, events and
+      // weather. It has no business having an opinion on either, any more
+      // than it has any business knowing the word "siding".
+      //
+      // So a track carries whether it is the anchor, and shared.liquid
+      // reads that and decides what everybody looks like.
+      t.hue = (configured && hueTokenForColor(configured.color)) || null;
+      t.anchor = name === anchor;
       t.initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
-    });
-    // Dash patterns are handed out GLOBALLY, in the order the lines appear on
-    // the board, not per side. Per side, the second line on the left and the
-    // second on the right both got "dashed" — and since every hue collapses
-    // to the same grey on a greyscale panel, that left two lines a reader
-    // cannot tell apart. Colour is decoration on this hardware; the pattern
-    // is the identity, so it has to be unique.
-    //
-    // Past a full lap of the four patterns the lines also thin out, so a
-    // sixth track is a thinner dashed rather than a second identical one.
-    // Weight is the other half of telling lines apart. Every line is solid
-    // and thick, so the ladder runs heavy to light in board order and pairs
-    // with the four treatments — a reader separating two lines has both a
-    // texture and a thickness to go on, and neither depends on colour.
-    var WEIGHTS = [5.5, 5, 4.5, 4, 3.5];
-    var styleIdx = 0;
-    boardOrder.forEach(function (name) {
-      var t = byName[name];
-      if (name === anchor) { t.line_style = 'solid'; return; }
-      var lap = Math.floor(styleIdx / (LINE_STYLES.length - 1));
-      t.line_style = LINE_STYLES[1 + (styleIdx % (LINE_STYLES.length - 1))];
-      t.line_width = WEIGHTS[Math.min(styleIdx, WEIGHTS.length - 1)];
-      if (lap > 0) t.line_width = Math.max(3, t.line_width - lap * 0.5);
-      styleIdx++;
     });
   }
 

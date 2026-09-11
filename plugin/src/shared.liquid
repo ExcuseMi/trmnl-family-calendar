@@ -254,6 +254,40 @@
   // 49 repeats of seventeen characters.
   var ROLE_ATTR = 'data-metro-role', OWNER_ATTR = 'data-metro-owner';
   var LEGEND = METRO.legend || [];
+  // HOW A LINE IS DRAWN IS THE FRONT END'S BUSINESS.
+  //
+  // The payload used to carry a stroke width, a dash pattern and a hue for
+  // every track, which meant transform.js -- a thing that knows about
+  // calendars, events and weather -- was deciding what a metro line looks
+  // like. It is the same rule that keeps the word "siding" out of that
+  // file: the back end says who was where and when, and this file decides
+  // how that is drawn.
+  //
+  // A pinned colour still comes through, because that is a preference
+  // somebody set, not a drawing decision. Everything else is assigned here,
+  // in board order, so the encoding is one table in one place:
+  //
+  //   the anchor   solid
+  //   then         heavy dash, dotted, long dash-dot, wide dash
+  //
+  // at one stroke weight for all of them. Weight used to be the other half
+  // of telling lines apart and it made the board look like some people's
+  // days mattered more than others.
+  var TRACK_STYLES = ['heavydash', 'dotted', 'dashdot', 'widedash'];
+  (function styleTracks() {
+    var n = 0;
+    LEGEND.forEach(function (p) {
+      p.line_width = 3;
+      if (!p.hue) p.hue = 'black';
+      // the anchor is the line the eye should find first, and unbroken ink
+      // is how it does; everybody else takes the next pattern in turn
+      p.line_style = p.anchor ? 'solid' : TRACK_STYLES[n++ % TRACK_STYLES.length];
+    });
+    // ...unless nobody was named the anchor, in which case the first line
+    // on the board takes the solid, so there is always exactly one.
+    var any = LEGEND.some(function (p) { return p.line_style === 'solid'; });
+    if (!any && LEGEND.length) LEGEND[0].line_style = 'solid';
+  })();
   var DAY_START = METRO.day_start_min, DAY_END = METRO.day_end_min;
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -343,35 +377,50 @@
   function treatmentFor(style, S, width) {
     var w = width * S * weightScale;
     var thin = Math.max(1 * S, 1.4 * S * weightScale);
-    // A REAL DASHED LINE, because there was not one. All four treatments
-    // used to be a solid envelope with paper knocked out of the middle,
-    // which gives a tramline and two thicknesses of dotted core -- and no
-    // dashes anywhere. Worse, 'dotted' (paper 2.6 on 6.4) and 'dashdot'
-    // (paper 0.1 on 9) were the same idea at two sizes and read as the same
-    // line: on a five-person board Marge and Bart were told apart only by
-    // how big their paper dots were.
+    // FIVE ENCODINGS, ONE FOR EACH LINE, AT ONE WEIGHT.
     //
-    // So one of the four now cuts all the way through. The paper core is as
-    // wide as the envelope, so where it is drawn there is no line at all
-    // and what is left is ink in lengths: an actual dashed track. The other
-    // three keep their continuous envelope, which is what makes them
-    // equally heavy at a glance and legible at 1-bit.
-    if (style === 'dashed') return { widen: 0, core: w + 2 * S, cap: 'butt',
-                                     dash: (4.5 * S) + ' ' + (10.5 * S) };
-    // paper dots in a whole line: a texture, not a break
-    if (style === 'dotted') return { widen: 1 * S, core: Math.max(thin, w * 0.5), cap: 'butt',
-                                     dash: (2.6 * S) + ' ' + (6.4 * S) };
-    // Short ink, wide gaps: a dotted TRACK, as against the dotted texture
-    // above. Long dashes and round dots are two things nobody confuses.
+    // A line is drawn solid and a PAPER overlay is laid over it in the same
+    // geometry, so what the pattern below describes is where the paper
+    // goes: the ink shows through the GAPS in it. Every pattern here is
+    // written as the ink the eye is meant to see and then inverted, which
+    // is why the numbers look back to front -- `dash: "2 4"` is two of
+    // paper and four of ink, and reads as a four-long dash.
     //
-    // This slot used to be a tramline -- one continuous paper core, so the
-    // line was drawn as two rails running together -- and that is exactly
-    // how it read: Bart appeared to take two lines into Family Dinner. A
-    // line that looks like two lines is the one texture this board cannot
-    // afford, because two lines running together is the thing a shared
+    // `core` is as wide as the line plus a margin, so the paper cuts all
+    // the way through rather than leaving a rail either side of it. That
+    // matters: a treatment that leaves two thin rails reads as two lines
+    // running together, and two lines running together is what a shared
     // event is drawn as.
-    if (style === 'dashdot') return { widen: 0, core: w + 2 * S, cap: 'butt',
-                                      dash: (7 * S) + ' ' + (3.2 * S) };
+    //
+    // Sized in device pixels (times S), at one stroke weight for every
+    // line, so what tells them apart is the pattern and nothing else.
+    //
+    //   Marge   heavy dash    4 ink, 2 gap
+    //   Bart    dotted        2 ink, 4 gap
+    //   Lisa    long dash-dot 8 ink, 3 gap, 2 ink, 3 gap
+    //   Maggie  wide dash     6 ink, 6 gap
+    //
+    // Homer is solid and has no treatment at all: the anchor line is the
+    // one the eye should find first, and unbroken ink is how it does.
+    var cut = w + 2 * S;
+    if (style === 'heavydash') return { widen: 0, core: cut, cap: 'butt',
+                                        dash: (2 * S) + ' ' + (4 * S) };
+    // BUTT, NOT ROUND. The cap belongs to the PAPER, not to the ink, and a
+    // round cap on a four-long stroke of paper reaches a stroke-width past
+    // each end of it -- which at this weight is the whole two of ink
+    // between them. Bart's line was drawn and then completely painted out:
+    // a terminal bar at each end of the day and nothing in between.
+    if (style === 'dotted') return { widen: 0, core: cut, cap: 'butt',
+                                     dash: (4 * S) + ' ' + (2 * S) };
+    if (style === 'dashdot') return { widen: 0, core: cut, cap: 'butt',
+                                      dash: (3 * S) + ' ' + (8 * S) + ' '
+                                          + (3 * S) + ' ' + (2 * S) };
+    if (style === 'widedash') return { widen: 0, core: cut, cap: 'butt',
+                                       dash: (6 * S) + ' ' + (6 * S) };
+    // the old names, kept so a saved configuration does not change
+    // appearance under its owner: 'dashed' is the heavy dash.
+    if (style === 'dashed') return { widen: 0, core: cut, cap: 'butt',
+                                     dash: (2 * S) + ' ' + (4 * S) };
     return null;
   }
   // How long one repeat of a treatment's rung pattern is, so a run of line
@@ -6114,9 +6163,24 @@
     function drawSharedBundle(e) {
       if (!e._bundlePlan) return;
       var rails = e._bundlePlan.rails, bend = e._bundlePlan.bend;
+      // ONE END FOR THE WHOLE BUNDLE, so every track gets a terminator and
+      // they all land on the same minute.
+      //
+      // Each rail worked out its own end from its own drop, and the drops
+      // are STAGGERED so the rails can nest, so the end ticks were
+      // staggered too: four lines left Family Dinner at four different
+      // minutes. Three of the marks merged into one grey stub and the
+      // fourth sat alone half an hour short of it, which reads as a stray
+      // tick rather than as the end of a meal four people had together.
+      //
+      // The event ends when the event ends. The floor stays for the rail
+      // whose drop leaves it no length at all, but it is taken across the
+      // whole bundle rather than per rail, so the answer is the same for
+      // everybody.
+      var end = e._endA;
+      rails.forEach(function (r) { end = Math.max(end, r.dropA + bend * 2); });
       rails.forEach(function (r) {
         var fromC = lineCAt(r.q, r.dropA);
-        var end = Math.max(e._endA, r.dropA + bend * 2);
         // A rail reaching a bundle below has to get past whatever lines run
         // between it and there. On a transit map the one that gives way is
         // BROKEN at the crossing: it reads as passing under, and the line
