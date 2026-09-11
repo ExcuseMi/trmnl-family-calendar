@@ -4132,6 +4132,12 @@
         // convergence that belongs to all of it and to none of the lines.
         // The leader still runs back to the capsule, so the pairing is
         // stated rather than implied.
+        // WHERE THE WHOLE ENCLOSURE IS, recorded once here where its extent
+        // is known: the axis span of the event and the cross span of the
+        // outermost rails in it. Everything that has to keep out of an
+        // interchange, or stack against one, reads this.
+        e._pillBox = { a0: e._nodeA, a1: e._endA,
+                       c0: Math.min(lo2, hi2), c1: Math.max(lo2, hi2) };
         e._routeEdge = Math.min(lo2, hi2);
         e._labelSign = -1;
         e._capOut = LINE_GAP * 1.5 + Math.max(NODE_R * 1.6, sharedRailWidth(e._p) * S * weightScale);
@@ -4976,6 +4982,27 @@
           var outs = [e._capOut, e._capOut + row, e._capOut + row * 2, e._capOut + row * 3];
           var slides = [0, e._textLen * 0.3, -e._textLen * 0.3,
                         e._textLen * 0.55, -e._textLen * 0.55];
+          // AN ENCLOSURE'S NEIGHBOURS STACK BELOW IT, IN TIME ORDER.
+          //
+          // A convergence's own name is pinned above its pill. The events
+          // either side of it were then placed cheapest-first and could land
+          // on the same side, so the six-thirty meeting and the seven
+          // o'clock dinner ended up shoulder to shoulder around the same
+          // vertical stem with nothing saying which came first.
+          //
+          // Anything whose words overlap a pill goes on the far side of it
+          // from the title, which turns the region into one stack with the
+          // enclosure's name at the top of it. The order within the stack
+          // falls out of the pass itself: captions are placed in start-time
+          // order and each takes the nearest free rung, and below a pill
+          // "nearest" is "highest". Earlier events end up higher because
+          // they were asked first, which is the whole of the rule.
+          var banSign = 0;
+          visible.forEach(function (o) {
+            if (banSign || o === e || o._dropped || !o._pillBox || o._labelSign == null) return;
+            if (e._nodeA > o._pillBox.a1 || o._pillBox.a0 > e._endA) return;
+            banSign = o._labelSign;
+          });
           var base = e._nodeA + TEXT_PAD, best = null;
           for (var oi = 0; oi < outs.length; oi++) {
             for (var sg = 1; sg >= -1; sg -= 2) {
@@ -4983,6 +5010,7 @@
                 var at = base + slides[si];
                 if (at < axisStart + EDGE || at + e._textLen > axisEnd - EDGE) continue;
                 var away = sg * e._sign;
+                if (banSign && away === banSign) continue;
                 var c0 = away > 0 ? e._routeEdge + outs[oi] : e._routeEdge - outs[oi] - e._h;
                 var b = { a0: at - TEXT_PAD, a1: at + e._textLen + TEXT_PAD, c0: c0, c1: c0 + e._h };
                 if (c0 < bandLo || c0 + e._h > crossPx - EDGE) continue;
