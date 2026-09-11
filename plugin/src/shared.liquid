@@ -342,42 +342,6 @@
     var any = LEGEND.some(function (p) { return p.line_style === 'solid'; });
     if (!any && LEGEND.length) LEGEND[0].line_style = 'solid';
   }
-  // THE DAY'S OWN GENERATOR.
-  //
-  // Anything this board decides by chance -- where a landmark meanders, how
-  // a tie in `markRoom` is broken -- has to decide it the same way every
-  // time it draws the same day. An e-ink panel redraws every few minutes
-  // and two of those redraws differing by a pixel of scenery is a flicker
-  // the reader will notice and cannot explain, and a device that disagrees
-  // with the one in the next room is worse.
-  //
-  // So there is no `Math.random` anywhere in this file. The seed is the
-  // date as a machine reads it, which is the same string on every device
-  // in every language, and the generator is mulberry32: thirty-two bits of
-  // state, no dependencies, and the same sequence everywhere because it is
-  // all integer arithmetic.
-  //
-  // `rngFor(tag)` gives each consumer its own stream off that seed, so
-  // adding a second thing that draws at random cannot shift what the first
-  // one drew -- which would be the same flicker by a longer route.
-  function hash32(str) {
-    var h = 2166136261;
-    for (var i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = (h + (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24)) >>> 0;
-    }
-    return h >>> 0;
-  }
-  var DAY_SEED = hash32(String(METRO.date_iso || METRO.date_label || 'board'));
-  function rngFor(tag) {
-    var a = (DAY_SEED ^ hash32(String(tag))) >>> 0;
-    return function () {
-      a = (a + 0x6D2B79F5) >>> 0;
-      var t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
   var DAY_START = METRO.day_start_min, DAY_END = METRO.day_end_min;
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -846,12 +810,6 @@
     // stays where it was, because none of those numbers were about how
     // round a corner looks.
     var FILLET = 8 * S;
-    // The paper margin the board keeps between one stroke and the next, and
-    // the width of the white casing that gives it back where the river
-    // passes under a rail. Same number as everywhere else on purpose: a
-    // bridge should look like the rest of the map's spacing, not like a
-    // special case.
-    var RIVER_KEEP = 6 * S;
     // Four hours. Every block over it in every demo calendar is a school
     // day, a shift, a desk booking or a delivery, and nothing under it is:
     // the shape of a day is what tells them apart, not what anybody called
@@ -1286,8 +1244,12 @@
     // there they run along their lines and a column is the only place for
     // them.
     var namesAbove = horizontal;
+    // The clear air a name in a head column keeps between its last letter
+    // and the mark that starts its line: the slash's own NODE_R reach, its
+    // round cap, and a few pixels of paper on top.
+    var HEAD_CLEAR = 4 * S + NODE_R + 2 * S + 3 * S;
     var nameCol = LEGEND.length
-      ? (horizontal ? Math.max(8 * S, hourW / 2) : 2 * S + nameH + 6 * S)
+      ? (horizontal ? Math.max(8 * S, hourW / 2) : 2 * S + nameH + HEAD_CLEAR)
       : 0;
     var axisStart = NODE_R + 2 * S + nameCol, axisEnd = axisPx - NODE_R - 2 * S; // rings at the window edges stay whole; tracks still run full bleed
     // The scale, from the model. It decided how many days fit and what each
@@ -1759,7 +1721,43 @@
     // ---- label density: start from what the canvas size suggests, then
     // step down the ladder (drop location → smaller title → drop time)
     // only as far as needed to fit every event
-    var tierPx = Math.min(axisPx, crossPx) / S;
+    // THE TEXT COLUMN, AND WHY IT IS DIVIDED BY THE NUMBER OF LINES.
+    //
+    // Standing up, a caption is set beside its own rail and runs ACROSS the
+    // board, so its width comes out of the same cross axis the rails do --
+    // and every rail needs a column of its own, plus one beyond the
+    // outermost rail on each side for the captions that point outward.
+    // That is what the axis has to be divided by.
+    //
+    // It used to be `(everything left over after both bundles) / 2`, read
+    // through `bundleHalf`, which reports each track's SOLVED distance from
+    // the spine. Nothing has solved one at this point in the layout, so both
+    // sides measured zero and the two columns were handed the whole cross
+    // axis: 260px each on a 760px board. The solver then had five rails to
+    // place and no room left for them, so it pushed the bundle against the
+    // leading edge -- the portrait panel came out with its five rails
+    // crammed into the left 45%, 420px of blank paper beside them, and every
+    // caption belonging to a left-hand rail written off the canvas.
+    //
+    // Dividing by the lines is not an estimate of the bundle, it is the
+    // thing the bundle is made of, so it does not need the bundle solved.
+    var colW = 0;
+    if (!horizontal) {
+      // The sum the cross axis actually has to pay: one column per rail,
+      // one beyond the outermost rail on each side, and the 6px of paper
+      // the solver charges on BOTH sides of every one of them (`markRoom`
+      // and `capClear`). Leaving the clearance out of the divisor is what
+      // made the columns a little too wide for the board on every count of
+      // lines -- the solver could not satisfy its own reservations, so it
+      // squeezed the bundle and let the captions lie across each other.
+      var n = LEGEND.length;
+      colW = clamp((crossPx - bandLo - 2 * EDGE - n * 12 * S) / (n + 2), 60 * S, 260 * S);
+    }
+    // Flat, the binding dimension is the board; standing up it is the
+    // column, because that is what the words have to fit across. Sized off
+    // the board instead, a portrait panel picked a title three sizes larger
+    // than its columns could hold and wrapped every caption into a block.
+    var tierPx = (horizontal ? Math.min(axisPx, crossPx) : Math.min(axisPx, colW * 3)) / S;
     // [title class, tag class for time/location]
     var CLASSES = [['title title--xlarge', 'label label--base'], ['title title--large', 'label label--base'], ['title title--base', 'label label--small'], ['title title--small', 'label label--small'], ['label label--small', 'label label--small']];
     var ci = tierPx >= 560 ? 0 : tierPx >= 440 ? 1 : tierPx >= 300 ? 2 : tierPx >= 200 ? 3 : 4;
@@ -1771,12 +1769,6 @@
     if (wantTime) tiers.push({ cls: CLASSES[CLASSES.length - 1][0], tag: CLASSES[CLASSES.length - 1][1], time: false, loc: false });
     var titleClass, tagClass, showTime, showLocation;
     var maxTitle = clamp(axisPx * 0.3, 130 * S, 380 * S);
-    var colW = 0;
-    if (!horizontal) {
-      // text column per side, sized so one lane on each side always fits
-      var room = (crossPx - bandLo - bundleHalf('A') - bundleHalf('B') - 2 * (LANE_BASE + LINE_GAP + EDGE)) / 2;
-      colW = clamp(room, 60 * S, 260 * S);
-    }
 
     // A sky marker: rain start/stop or sunrise/sunset — an icon plus a short
     // text, drawn in the band along the top edge (horizontal) or beside the
@@ -5788,7 +5780,16 @@
       if (fan) {
         var spreadC = spreadCFor(p);
         var d = fan.dir, edge = d > 0 ? 0 : axisPx;
-        var nameEnd = edge + d * (namesAbove ? 4 * S : 2 * S + (horizontal ? p._nameW : p._nameH) + 4 * S);
+        // HEAD_CLEAR, not four pixels. Where a name sits in a column at the
+        // head of its line rather than above it, the line starts right
+        // after the words -- and the mark that starts it is a slash
+        // spanning NODE_R either side of that point with a round cap on
+        // top, so it reaches back about eight pixels into the name. Four
+        // pixels of gap left every portrait name struck through by its own
+        // terminus: the "|Crew" failure the flat views already fixed,
+        // arriving by the other route. See `nameCol`, which reserves the
+        // same distance so the fan still starts after the column.
+        var nameEnd = edge + d * (namesAbove ? 4 * S : 2 * S + (horizontal ? p._nameW : p._nameH) + HEAD_CLEAR);
         var fanStart = edge + d * fan.len;
         var merge = fanStart + d * Math.abs(spreadC - c);
         // Place along the axis and across the cross-axis, whichever way
@@ -7775,8 +7776,44 @@
         b.style.top = clamp(topC, bandLo, Math.max(bandLo, crossPx - e._h)) + 'px';
       } else {
         b.style.top = e._textStart + 'px';
-        if (ls < 0) b.style.left = (lineC - LINE_GAP - colW) + 'px';
-        else b.style.left = (lineC + LINE_GAP) + 'px';
+        // AS WIDE AS THE PAPER ON THE SIDE IT ACTUALLY LANDED ON.
+        //
+        // `colW` is one number for the whole board -- it has to be, because
+        // the solver sizes the bands from it before any caption has a side
+        // -- and it is what the room beside a rail SHOULD be. Where the
+        // board is tighter than that, or where a caption ends up on the
+        // side the solver did not reserve, the words simply lay across the
+        // next line along: on a seven-line portrait panel a dozen captions
+        // had somebody else's rail through them.
+        //
+        // By this point every rail is drawn, so the honest width is
+        // measurable rather than assumed: the gap from this line to the
+        // next one on the side the caption took, sampled at the caption's
+        // own minute because a rail that is climbing is not where its
+        // baseline says. Narrower words are a worse caption; words with a
+        // rail through them are not a caption at all.
+        // Nothing is excluded: the caption hangs off a LANE, which may or
+        // may not be its own rail, and a rail on the far side measures a
+        // negative gap and is skipped by the same test that skips the rail
+        // the caption is sitting on.
+        var atA = e._textStart + e._h / 2, room = crossPx;
+        LEGEND.forEach(function (q) {
+          var qc = lineCAt(q, atA), gap2 = ls < 0 ? lineC - qc : qc - lineC;
+          if (gap2 > 0.5) room = Math.min(room, gap2);
+        });
+        room = Math.max(0, Math.min(colW, room - LINE_GAP * 2 - NODE_R));
+        // Never so narrow that it is a column of single letters: under
+        // about half the intended column the caption is unreadable either
+        // way, and the board is better off with it overhanging a rail than
+        // shredded.
+        if (room < colW * 0.5) room = colW;
+        b.style.maxWidth = room + 'px';
+        // Held on the board, the same way the flat branch holds a caption
+        // at the hour strip rather than letting it hang off the top: a
+        // caption half off the canvas is the caption gone, and a blemish
+        // where it touches the edge is the cheaper failure.
+        var leftC = ls < 0 ? lineC - LINE_GAP - room : lineC + LINE_GAP;
+        b.style.left = clamp(leftC, 0, Math.max(0, crossPx - room)) + 'px';
       }
     });
 
@@ -7883,360 +7920,6 @@
       }
     });
 
-    // ---- the river ------------------------------------------------------
-    //
-    // A piece of geography under the map. It is the one thing here that is
-    // not information: a transit map is a diagram of a city and it reads as
-    // one partly because there is a city under it, and a board with a river
-    // on it looks like a place rather than a chart.
-    //
-    // IT RUNS DOWN THE BOARD, NOT ACROSS IT. The axis here is time, and a
-    // river lying along the time axis reads as a sixth line -- a very pale
-    // one, but the eye files it with the rails because it goes where they
-    // go. Crossing them settles it: nothing on this map runs top to bottom,
-    // so nothing else can be mistaken for it. Every step therefore descends
-    // a row, drifting at most one column sideways, which caps the bank at
-    // 45 degrees and makes a horizontal run impossible to draw.
-    //
-    // IT MAY CROSS A RAIL, AT NINETY DEGREES, AND PAYS FOR IT. Going top to
-    // bottom means crossing every baseline on the way, so the question is
-    // not whether to cross but where. The solver reads the same occupancy
-    // map the captions left behind and picks the time column that crosses
-    // fewest things; a crossing is taken square, because a rail passing
-    // over water at a shallow angle leaves a long grey shadow along its own
-    // edge, and a square one leaves a nick. At each crossing the rail keeps
-    // its 6px of paper (`RIVER_KEEP`) in a white casing drawn over the
-    // water and under the rail, so the rail reads at full contrast and the
-    // river reads as passing beneath it.
-    //
-    // CAPTIONS ARE NOT CROSSABLE. A rail over water is a bridge; a word
-    // over water is a smudge, and no z-order fixes it at this contrast. So
-    // rails cost a little and text costs enough that a walk will take any
-    // detour it can find first.
-    //
-    // Seeded from the date, so the same day draws the same water on every
-    // device and at every redraw. See `rngFor`.
-    (function drawRiver() {
-      if (!horizontal || BITS < 2) return;   // no greys, no water: see below
-      // COARSE ON PURPOSE, BUT NOT TOO COARSE. The cell is the river's
-      // wavelength: small tiles give a fidgety bank that redraws itself for
-      // any small change anywhere on the board, because a caption moving
-      // four pixels frees or blocks a cell and sends the whole descent
-      // somewhere else.
-      //
-      // The temptation is to double it again, and that kills the feature on
-      // a real day: the grid is also the resolution at which the walk sees
-      // the gaps BETWEEN captions, and at 28px every caption quantises into
-      // a wall wide enough to close the board. So the tile stays big enough
-      // to thread the day, and the calm comes from RUN instead -- a bend
-      // that has to last several cells before it may turn back. Same
-      // wavelength, without blinding the solver.
-      var CELL = 24 * S;
-      var top = bandLo + 2 * S;              // the map's top edge, under the scale
-      var cols = Math.floor(axisPx / CELL), rows = Math.floor((crossPx - top) / CELL);
-      if (cols < 8 || rows < 6) return;      // nothing worth saying at this size
-      // Two maps, because the two kinds of obstacle answer differently: a
-      // rail may be crossed square and masked, a caption may not be crossed
-      // at all.
-      var rail = [], solid = [];
-      for (var ci = 0; ci < cols; ci++) {
-        rail.push(new Array(rows).fill(false));
-        solid.push(new Array(rows).fill(false));
-      }
-      var KEEP = RIVER_KEEP, HALF = 10 * S;   // half the water band
-      // BLOCK BY CENTRE, NOT BY CELL. Rounding each obstacle out to whole
-      // cells looks conservative and is ruinous: a 20px caption at an
-      // arbitrary offset walls off two or three whole rows, and five lines'
-      // worth of captions close the board completely -- which is exactly
-      // how the river disappeared the moment the tiles got bigger. The walk
-      // only ever passes through cell CENTRES, so a cell is blocked when
-      // its centre is inside the obstacle and not before. That makes the
-      // tile size a choice about the river's wavelength again, instead of a
-      // hidden inflation of everything on the board.
-      function mark(grid, a0, a1, c0, c1, pad) {
-        var lo = Math.min(a0, a1) - pad, hi = Math.max(a0, a1) + pad;
-        var up = Math.min(c0, c1) - pad, dn = Math.max(c0, c1) + pad;
-        var x0 = Math.max(0, Math.floor(lo / CELL)), x1 = Math.min(cols, Math.ceil(hi / CELL) + 1);
-        var y0 = Math.max(0, Math.floor((up - top) / CELL)), y1 = Math.min(rows, Math.ceil((dn - top) / CELL) + 1);
-        for (var x = x0; x < x1; x++) {
-          var ax = x * CELL + CELL / 2;
-          if (ax < lo || ax > hi) continue;
-          for (var y = y0; y < y1; y++) {
-            var cy = top + y * CELL + CELL / 2;
-            if (cy >= up && cy <= dn) grid[x][y] = true;
-          }
-        }
-      }
-      // Every rail, sampled the way everything else samples them -- but
-      // sorted by what it is doing there. A FLAT rail can be crossed square
-      // and masked: that is a bridge. A rail that is climbing or dropping
-      // cannot, because a vertical river and a vertical rail do not cross,
-      // they run alongside each other, and the casing then eats the river
-      // lengthways instead of nicking it. So a turning rail is solid.
-      LEGEND.forEach(function (q) {
-        for (var x = 0; x < cols; x++) {
-          var a0 = x * CELL, a1 = a0 + CELL;
-          var c0 = lineCAt(q, a0), c1 = lineCAt(q, a1);
-          mark(Math.abs(c1 - c0) > CELL * 0.5 ? solid : rail, a0, a1, c0, c1, KEEP);
-        }
-      });
-      // EVERY WORD ON THE BOARD, MEASURED WHERE IT LANDED. Not the caption
-      // boxes the collision solver reasons about -- those are the event
-      // titles and nothing else, and the river cheerfully ran through the
-      // line names and the hour labels because nobody had told it they were
-      // there. By this point every label is positioned, so the DOM is the
-      // only description of the day's text that is complete by
-      // construction, and it stays complete when something new is added.
-      canvas.querySelectorAll('.metro-gen').forEach(function (n) {
-        if (!n.offsetWidth || !n.offsetHeight) return;
-        var a0 = horizontal ? n.offsetLeft : n.offsetTop;
-        var c0 = horizontal ? n.offsetTop : n.offsetLeft;
-        var aw = horizontal ? n.offsetWidth : n.offsetHeight;
-        var cw = horizontal ? n.offsetHeight : n.offsetWidth;
-        mark(solid, a0, a0 + aw, c0, c0 + cw, KEEP + HALF);
-      });
-      // and every enclosure, which is a rail and a caption at once
-      visible.forEach(function (e) {
-        if (e._pillBox) mark(solid, e._pillBox.a0, e._pillBox.a1, e._pillBox.c0, e._pillBox.c1, KEEP + HALF);
-      });
-      // A DESCENT THAT MAY REFUSE. From a column on the top edge, one row at
-      // a time to the bottom, drifting sideways only where that is free and
-      // never sideways onto a rail -- a rail is taken square or not at all.
-      // Several sources are tried; the cleanest crossing wins.
-      // EVERY COLUMN IS TRIED, not a sample of them. On a board this dense
-      // the corridors that reach the bottom can be counted on one hand, and
-      // sampling sixty random sources misses them more often than not --
-      // which is how the river ended up wedged against the right-hand edge,
-      // the one place it had no business being. The walk stays seeded; only
-      // the search over sources is exhaustive.
-      var rnd = rngFor('river'), best = null, bestCost = Infinity;
-      for (var attempt = 0; attempt < cols; attempt++) {
-        var c = attempt, dir = rnd() < 0.5 ? 1 : -1;
-        if (solid[c][0]) continue;           // a source has to be on paper
-        var path = [[c * CELL + CELL / 2, top + CELL / 2]], run = 0, cost = 0, dead = false;
-        for (var y2 = 1; y2 < rows; y2++) {
-          // A bend has to last before it may turn back. Without this the
-          // walk reverses every row or two and draws a zigzag: the shape of
-          // noise, not of water.
-          if (run >= 5 && rnd() < 0.4) { dir = -dir; run = 0; }
-          var order = rnd() < 0.6 ? [dir, 0, -dir] : [0, dir, -dir];
-          var step = null;
-          for (var oi = 0; oi < 3; oi++) {
-            var dx = order[oi], cc = c + dx;
-            if (cc < 0 || cc >= cols) continue;
-            if (solid[cc][y2]) continue;
-            // the ninety degree rule: a rail is only ever entered straight down
-            if (rail[cc][y2] && dx !== 0) continue;
-            step = dx;
-            break;
-          }
-          if (step === null) { dead = true; break; }
-          if (step && step !== dir) { dir = step; run = 0; }
-          run++;
-          c += step;
-          if (rail[c][y2]) cost++;
-          path.push([c * CELL + CELL / 2, top + y2 * CELL + CELL / 2]);
-        }
-        // TOP TO BOTTOM OR NOT AT ALL. A river that stops partway down is
-        // not a river, it is a smear, and the eye goes to the severed end
-        // instead of past it. A crowded day that leaves no descent gets no
-        // scenery, which is the right answer.
-        if (dead) continue;
-        // Fewest bridges wins. Ties go inland: a river hard against the
-        // left or right edge reads as a border rule, not as geography.
-        var mid = cols / 2, edge = 0;
-        for (var pi = 0; pi < path.length; pi++) {
-          edge = Math.max(edge, Math.abs(path[pi][0] / CELL - mid) / mid);
-        }
-        var score = cost + edge * 2;
-        if (score < bestCost) { bestCost = score; best = path; }
-      }
-      if (!best) return;
-      // OCTILINEAR, LIKE EVERYTHING ELSE ON THE BOARD. The walk only ever
-      // steps straight down or one column sideways, so the polyline is
-      // already square-and-45 by construction; collapsing the collinear
-      // runs turns it into real segments, and the map's own `roundedPath`
-      // fillets the corners at the same radius the rails use. A spline
-      // would be prettier water and a worse map: this is a diagram, and the
-      // river has to obey the diagram's geometry to sit inside it.
-      var keep = [best[0]];
-      for (var i2 = 1; i2 < best.length - 1; i2++) {
-        var pv = best[i2 - 1], cu = best[i2], nx = best[i2 + 1];
-        var d1 = Math.sign(cu[0] - pv[0]), d2 = Math.sign(nx[0] - cu[0]);
-        if (d1 !== d2) keep.push(cu);
-      }
-      keep.push(best[best.length - 1]);
-      // TOP EDGE TO BOTTOM EDGE. The grid starts half a cell in and ends
-      // wherever the last whole row fell, which leaves the water floating a
-      // few pixels clear of both boundaries -- and a river with two visible
-      // ends is a shape, not a river. Run the first and last segments out
-      // to the edges of the map (the scale above it is not map).
-      keep[0] = [keep[0][0], top];
-      keep[keep.length - 1] = [keep[keep.length - 1][0], crossPx];
-      var pts = keep.map(function (pt) { return toXY(pt[0], pt[1]); });
-      var el = svgEl('path', { d: roundedPath(pts, FILLET) });
-      // Terrain weight. A hairline would read as a sixth line; at twenty
-      // pixels against three-pixel rails it reads as ground.
-      el.setAttribute('stroke-width', 20 * S);
-      el.setAttribute('stroke-linecap', 'round');
-      el.setAttribute('stroke-linejoin', 'round');
-      el.setAttribute('fill', 'none');
-      el.setAttribute('stroke-opacity', '0.13');
-      el.style.stroke = INK;
-      el.setAttribute(ROLE_ATTR, 'landmark-river');
-      // UNDER EVERYTHING, AND NOT CUT. The river goes in as the first
-      // child so it cannot cover a rail even by accident: the guarantee is
-      // not "it was drawn carefully", it is "it is at the bottom of the
-      // stack".
-      //
-      // NO WHITE CASING. The obvious way to keep a rail legible over water
-      // is to give it a paper ring and punch that through the river, and it
-      // is wrong twice. It is wrong in practice, because this board draws
-      // close to two hundred strokes for the hour guides, the dash overlays
-      // and the terminal bars, and a paper copy of each one shreds the
-      // river into blobs the length of the board. And it is wrong in
-      // principle: see `feedback/research/mini-metro.png`, where lines run
-      // across the water uninterrupted and read perfectly well, because
-      // water is a wash and a rail is ink. Thirteen percent grey does not
-      // compete with a 3px black rail, so there is nothing to protect it
-      // from.
-      //
-      // A SHORELINE INSTEAD. What the reference does have is a pale band
-      // around the water -- sand there, a lighter grey here -- and it is
-      // what makes the shape read as terrain rather than as a highlight.
-      // Two strokes down the same path: the shore wider and fainter, the
-      // water inside it.
-      var shore = svgEl('path', { d: el.getAttribute('d') });
-      shore.setAttribute('stroke-width', 20 * S + 10 * S);
-      shore.setAttribute('stroke-linecap', 'round');
-      shore.setAttribute('stroke-linejoin', 'round');
-      shore.setAttribute('fill', 'none');
-      shore.setAttribute('stroke-opacity', '0.07');
-      shore.style.stroke = INK;
-      shore.setAttribute(ROLE_ATTR, 'landmark-shore');
-      svg.insertBefore(shore, svg.firstChild);
-
-      // ---- the rest of the geography --------------------------------
-      //
-      // One river is a river; a river and nothing else is a river on graph
-      // paper. What makes the reference read as a PLACE is that the water
-      // has company -- a lake off to one side, high ground behind it -- so
-      // the empty parts of the sheet look like somewhere the lines chose
-      // not to go, rather than somewhere the diagram ran out.
-      //
-      // Same contract as the river, and it matters more here because these
-      // do not have the excuse of crossing anything: they go strictly in
-      // paper nobody claimed, they are the same two washes, and if the day
-      // is too full for them they simply do not appear.
-      //
-      // WHAT GOES WHERE IS DECIDED BY THE SHAPE OF THE HOLE. A tall, roughly
-      // square void wants water in it. A wide, shallow one wants a ridge,
-      // because a range sits along the ground and a lake in a letterbox
-      // reads as a smear. The board decides; the seed only picks between
-      // equally good answers.
-      // The rails go into `solid` AGAIN, with a wider footprint. The map
-      // the river walked marks a rail cell at RIVER_KEEP, which is the
-      // margin a CENTRELINE needs -- and a lake is not a centreline, it is
-      // a shape whose shore reaches HALF further out than the point the
-      // solver reasoned about. Reusing that map put a lake's bank on a
-      // baseline while every cell it occupied was, correctly, free.
-      LEGEND.forEach(function (q) {
-        for (var x3 = 0; x3 < cols; x3++) {
-          var a3 = x3 * CELL, b3 = a3 + CELL;
-          mark(solid, a3, b3, lineCAt(q, a3), lineCAt(q, b3), KEEP + HALF);
-        }
-      });
-      best.forEach(function (pt) {                    // nor in the river
-        var gx = Math.floor(pt[0] / CELL), gy = Math.floor((pt[1] - top) / CELL);
-        for (var dx = -1; dx <= 1; dx++) {
-          for (var dy = -1; dy <= 1; dy++) {
-            var qx = gx + dx, qy = gy + dy;
-            if (qx >= 0 && qx < cols && qy >= 0 && qy < rows) solid[qx][qy] = true;
-          }
-        }
-      });
-      // The largest clear rectangle left on the board, by brute force: the
-      // grid is a few hundred cells, and the honest answer is worth more
-      // here than a clever one.
-      function biggestVoid() {
-        var found = null;
-        for (var x = 0; x < cols; x++) {
-          for (var y = 0; y < rows; y++) {
-            if (solid[x][y]) continue;
-            var maxW = cols - x;
-            for (var h = 1; y + h <= rows; h++) {
-              for (var w = 0; w < maxW; w++) {
-                if (solid[x + w][y + h - 1]) { maxW = w; break; }
-              }
-              if (!maxW) break;
-              var area = maxW * h;
-              if (!found || area > found.area) {
-                found = { x: x, y: y, w: maxW, h: h, area: area };
-              }
-            }
-          }
-        }
-        return found;
-      }
-      function claim(v) {
-        for (var x = v.x; x < v.x + v.w; x++) {
-          for (var y = v.y; y < v.y + v.h; y++) solid[x][y] = true;
-        }
-      }
-      function wash(node, opacity, role) {
-        node.setAttribute('stroke-linecap', 'round');
-        node.setAttribute('stroke-linejoin', 'round');
-        node.setAttribute('stroke-opacity', String(opacity));
-        node.setAttribute('fill-opacity', String(opacity));
-        node.setAttribute(ROLE_ATTR, role);
-        node.style.stroke = INK;
-        svg.insertBefore(node, svg.firstChild);
-      }
-      // A lake: an octagon, because the map has no curves and a circle in a
-      // diagram of 45s looks like it came from somewhere else. Drawn as a
-      // filled shape with the shore wash around it, the same two tones the
-      // river uses.
-      function lake(v) {
-        // Inside the CENTRES of its border cells, then inset again by the
-        // shore's half width: a cell counts as free when its centre is
-        // clear, so its edges are not the lake's to use.
-        var a0 = (v.x + 0.5) * CELL + HALF, a1 = (v.x + v.w - 0.5) * CELL - HALF;
-        var c0 = top + (v.y + 0.5) * CELL + HALF, c1 = top + (v.y + v.h - 0.5) * CELL - HALF;
-        if (a1 - a0 < CELL || c1 - c0 < CELL) return;
-        var cut = Math.min(a1 - a0, c1 - c0) * 0.3;
-        var ring = [[a0 + cut, c0], [a1 - cut, c0], [a1, c0 + cut], [a1, c1 - cut],
-                    [a1 - cut, c1], [a0 + cut, c1], [a0, c1 - cut], [a0, c0 + cut]];
-        var d = ring.map(function (pt, i) {
-          var xy = toXY(pt[0], pt[1]);
-          return (i ? 'L' : 'M') + xy[0] + ',' + xy[1];
-        }).join(' ') + ' Z';
-        var sh = svgEl('path', { d: d });
-        sh.setAttribute('stroke-width', 20 * S);
-        sh.setAttribute('fill', INK);
-        wash(sh, 0.07, 'landmark-shore');
-        var wa = svgEl('path', { d: d });
-        wa.setAttribute('stroke', 'none');
-        wa.setAttribute('fill', INK);
-        wash(wa, 0.13, 'landmark-lake');
-      }
-      for (var n2 = 0; n2 < 3; n2++) {
-        var v2 = biggestVoid();
-        // Under about this size a landmark is a smudge, not a feature.
-        if (!v2 || v2.w < 4 || v2.h < 3 || v2.area < 16) break;
-        claim(v2);                          // used or not, do not offer it twice
-        // WATER ONLY. A range was tried here and taken out again: a ridge
-        // is a silhouette, and a silhouette on a diagram is a picture of
-        // something, which is one more thing for the reader to interpret on
-        // a board whose whole job is that nothing on it is decorative
-        // except the water. A lake is the same wash as the river, so it
-        // reads as more of the same geography rather than as a new mark.
-        //
-        // Wide and shallow makes a smear rather than a lake, so those voids
-        // go unused.
-        if (v2.w <= v2.h * 2) lake(v2);
-      }
-      svg.insertBefore(el, svg.firstChild);
-    })();
 
   }
 

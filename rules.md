@@ -307,40 +307,6 @@ a state a line is in, not a place it goes at a time.
     scores as occupied when the board decides which lines to keep, or the
     one line with something to say about today would be the first dropped.
 
-## 9. Geography
-
-The board carries scenery: a river, and a lake or a range where the day
-leaves room. It is the only thing here that means nothing, which is the
-whole point. A transit map reads as a diagram of a city partly because
-there is a city under it, and a panel with water on it looks like a place
-rather than a chart. See `feedback/research/mini-metro.png`.
-
-58. **Scenery asks last and takes nothing.** It is placed after the captions
-    have claimed their real estate, over a map of what everything else
-    took. Drawing it first and masking it where the map crosses it is the
-    obvious order and it is wrong: on a board with five lines and thirty
-    captions that is a river cut into confetti.
-59. **The river runs top to bottom, never along the board.** The axis is
-    time, and water lying along the time axis reads as a sixth line. Across
-    the grain it cannot be mistaken for anything, because nothing else on
-    this map descends.
-60. **It crosses rails and is not masked.** A rail over water is a bridge
-    and reads perfectly: water is a wash, a rail is ink. A white casing
-    around every crossing stroke is what shreds the river, and it protects
-    against nothing.
-61. **It never crosses a word.** Grey behind letterforms is a smudge at any
-    z-order. Text is solid to the solver; rails are not.
-62. **Octilinear, like everything else.** 45 and 90 only, filleted at the
-    same radius the rails use. A spline would be prettier water and a worse
-    map.
-63. **Scenery may be absent, and often should be.** A crowded day has no
-    room for it, and no river beats one squeezed through two free cells.
-64. **It is seeded from the date.** The same day draws the same water on
-    every device and at every redraw; a panel that redraws its scenery
-    differently every few minutes is a flicker the reader cannot explain.
-65. **Greys only.** A one-bit panel has no thirteen percent, so it gets no
-    scenery rather than scenery in solid ink.
-
 ---
 
 ## Rules that are stated but not kept

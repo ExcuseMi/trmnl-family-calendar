@@ -574,6 +574,34 @@ is open.
   label) gets worse, and that is the price. Rules 27 and 28 need amending
   and two new rules writing; the full wording is in the plan.
 
+- [ ] **E13. Standing up, captions are never slid or laddered along the axis.**
+  Found by `test/layout/cases/standing.js`, which is the first case file to
+  check a portrait board at all: 17 of its 28 cases are marked known.
+
+  Lying down, a caption's width runs along the time axis and its height
+  across the board, so two events twenty minutes apart are naturally far
+  apart and the solver's job is to stop their two-row boxes touching across
+  the lines. Standing up that swaps: the width now comes out of the SAME
+  axis the rails are spread along, and the height eats the time axis. A
+  two-row caption is about 77px tall where twenty minutes is about 60px, so
+  two events on one line twenty minutes apart overlap by construction.
+
+  The machinery to fix it already exists and is simply not reached in this
+  orientation: the caption pass slides a mark's name along its own line past
+  its neighbours (see `markRoom`, which charges for one column per track on
+  the understanding that the pass does exactly this), and the lane ladder
+  gives a second column further out when sliding is not enough. Both are
+  written against the flat case.
+
+  What to touch: the slide search in `placeSide` and the lane assignment
+  that feeds `_textStart`, so that "how far may this caption move" and "is
+  there a rung further out" are asked in axis terms rather than in
+  horizontal ones. `colW` is already correct -- it is sized so one column
+  per rail plus one beyond each side fits the cross axis, clearance
+  included.
+
+  Known debt: none added. This is a description of what the board does now.
+
 - [ ] **E11. Long events on the main track, and no more sidings.** A long
   block -- a school day, a shift, a delivery run -- is drawn as a siding:
   the line leaves its lane, runs a corridor for the length of the block and

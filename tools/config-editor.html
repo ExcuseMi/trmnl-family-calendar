@@ -18,18 +18,19 @@
   button, input, select, textarea { font: inherit; color: inherit; }
 
   /* ---- top bar: the plugin's own roundel + name */
-  .mc-top { display: flex; align-items: center; gap: 14px; padding: 18px 28px; border-bottom: 4px solid var(--ink); }
+  .mc-top { display: flex; align-items: center; gap: 14px; padding: 18px 28px; border-bottom: 4px solid var(--ink); position: sticky; top: 0; z-index: 5; background: var(--paper); }
   .mc-top img { width: 44px; height: 44px; }
   .mc-top h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
   .mc-top .sub { color: var(--mute); font-size: 13px; }
-  .mc-top nav { margin-left: auto; display: flex; gap: 14px; font-size: 13px; }
+  .mc-top nav { margin-left: 14px; display: flex; gap: 14px; font-size: 13px; }
+  .mc-top .top-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
   .mc-top nav a { text-decoration: none; border-bottom: 2px solid transparent; }
   .mc-top nav a:hover { border-bottom-color: var(--ink); }
 
   /* ---- the page is one metro line: each section is a station on it */
   .line { max-width: 1040px; margin: 0 auto; padding: 24px 28px 80px 28px; position: relative; }
   .line::before { content: ""; position: absolute; left: 41px; top: 40px; bottom: 60px; width: 6px; background: var(--ink); border-radius: 3px; }
-  .station { position: relative; padding-left: 52px; margin: 0 0 40px; }
+  .station { position: relative; padding-left: 52px; margin: 0 0 40px; scroll-margin-top: 96px; }
   .station > h2 { position: relative; margin: 0 0 4px; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; }
   .station > h2::before { content: ""; position: absolute; left: -46px; top: 5px; width: 14px; height: 14px; border-radius: 50%; background: var(--paper); border: 5px solid var(--ink); box-sizing: content-box; }
   .station > h2 small { font-weight: 600; text-transform: none; color: var(--mute); font-size: 13px; margin-left: 10px; letter-spacing: 0; }
@@ -47,20 +48,27 @@
   .swatch { display: inline-block; width: 46px; height: 12px; flex: 0 0 auto; }
   .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
   .row + .row { margin-top: 10px; }
+  .card.calendar > .row { align-items: flex-start; }
   .field { display: flex; flex-direction: column; gap: 3px; }
   .field > label { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mute); }
   .field.grow { flex: 1 1 260px; min-width: 200px; }
-  input[type=text], input[type=time], select, textarea { padding: 8px 10px; border: 2px solid var(--ink); border-radius: 8px; background: var(--paper); min-width: 0; }
-  input[type=text]:focus, input[type=time]:focus, select:focus, textarea:focus { outline: 3px solid #bbb; outline-offset: 1px; }
+  input[type=text], input[type=time], input[type=number], select, textarea { padding: 8px 10px; border: 2px solid var(--ink); border-radius: 8px; background: var(--paper); min-width: 0; max-width: 100%; }
+  /* One focus ring for the whole page, on the keyboard only: 3px of ink with a
+     paper gap, so it reads as a ring on a white field and on a black button. */
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  a:focus-visible { outline-offset: 3px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
   select[multiple] { min-height: 74px; }
   .hint { color: var(--mute); font-size: 12.5px; }
   .status { font-size: 12.5px; }
   .status.ok { color: #1a7a1a; }
   .status.err { color: #b3261e; }
-  /* the calendar-name-becomes-a-line warning: nothing at all when there is nothing wrong */
-  .cal-name-warn:not(:empty) { margin: -2px 0 10px; padding-left: 22px; position: relative; }
-  .cal-name-warn:not(:empty)::before { content: "!"; position: absolute; left: 0; top: 0; width: 15px; height: 15px; border-radius: 50%; background: #b3261e; color: #fff; font-weight: 800; font-size: 11px; line-height: 15px; text-align: center; }
+  /* the two warnings on a calendar card (a name that becomes a line, a link
+     that is not a link): nothing at all when there is nothing wrong */
+  .cal-name-warn:not(:empty), .cal-url-warn:not(:empty) { margin: -2px 0 10px; padding-left: 22px; position: relative; }
+  .cal-url-warn:not(:empty) { margin: 8px 0 0; }
+  .cal-name-warn:not(:empty)::before, .cal-url-warn:not(:empty)::before { content: "!"; position: absolute; left: 0; top: 0; width: 15px; height: 15px; border-radius: 50%; background: #b3261e; color: #fff; font-weight: 800; font-size: 11px; line-height: 15px; text-align: center; }
 
   /* ---- buttons: solid = go, outlined = secondary, ghost = remove */
   button { cursor: pointer; border: 2px solid var(--ink); background: var(--paper); border-radius: 999px; padding: 7px 14px; font-weight: 600; }
@@ -70,6 +78,11 @@
   button.ghost { border-color: transparent; color: var(--mute); padding: 4px 8px; }
   button.ghost:hover { color: #b3261e; background: transparent; }
   button.small { padding: 4px 10px; font-size: 12.5px; }
+  /* a toggle reads as off until it is on: inside a sentence ("if the event NOT
+     has the word") an unlit toggle that looks like every other button is read
+     as a state it is not in */
+  button.toggle[aria-pressed="false"] { border-color: var(--rule); color: var(--mute); }
+  button.toggle[aria-pressed="false"]:hover { border-color: var(--ink); color: var(--ink); }
   button:disabled { opacity: 0.4; cursor: default; }
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; }
 
@@ -90,11 +103,49 @@
   .stage-inner { margin: 0 auto; overflow: hidden; }
   .stage-inner > .trmnl { transform-origin: 0 0; }
   .device { background: #fff; box-shadow: 0 2px 0 #000; }
+  /* the three presets, each saying what it teaches before you load it */
+  .presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin: 10px 0 4px; }
+  .preset { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; border-radius: 12px; padding: 10px 12px; }
+  .preset .preset-note { font-weight: 400; font-size: 12.5px; line-height: 1.35; color: var(--mute); }
+  .preset:hover .preset-note, .preset:focus-visible .preset-note { color: var(--ink); }
+  .preset[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .preset[aria-pressed="true"] .preset-note { color: var(--paper); }
+
+  /* a drawn map that no longer matches the settings above it says so, and stops
+     looking like the answer */
+  .stage-note { margin-bottom: 10px; font-size: 12.5px; font-weight: 600; }
+  .stage.stale .stage-inner { opacity: 0.4; filter: grayscale(1); }
+  .stage.busy .stage-inner { opacity: 0.5; }
+
   .sources .card { padding: 10px 12px; }
+  .sources .card.failed { border-color: #b3261e; }
   .sources .card::before { display: none; }
   code { background: var(--soft); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
   .steps { padding-left: 18px; margin: 8px 0 0; }
   .steps li { margin-bottom: 4px; }
+
+  /* A narrow window is a laptop with a browser at half width, not a phone, but
+     it has to survive one: the spine and its 52px of indent are the first things
+     that stop paying for themselves, and the top bar has to wrap rather than
+     push the nav off the side. */
+  @media (max-width: 780px) {
+    .mc-top { flex-wrap: wrap; padding: 12px 16px; gap: 8px 12px; }
+    .mc-top img { width: 34px; height: 34px; }
+    .mc-top > div:not(.top-actions) { flex: 1 1 140px; min-width: 0; }
+    .mc-top h1 { font-size: 19px; }
+    .mc-top .top-actions { margin-left: auto; }
+    .mc-top nav { margin-left: 0; width: 100%; flex-wrap: wrap; gap: 10px 14px; }
+    .line { max-width: none; padding: 18px 14px 60px; }
+    .line::before { display: none; }
+    .station { padding-left: 0; scroll-margin-top: 130px; }
+    .station > h2 { font-size: 18px; }
+    .station > h2::before, .station.terminus > h2::before, .card::before { display: none; }
+    .station > h2 small { display: block; margin-left: 0; }
+    .card { padding: 12px; }
+    .field, .field.grow { flex: 1 1 100%; min-width: 0; }
+    .preview-controls .field { flex: 1 1 100%; }
+    .cond, .action { gap: 6px; }
+  }
 </style>
 </head>
 <body>
@@ -105,7 +156,10 @@
     <h1>Metro Calendar</h1>
     <div class="sub">Configuration: build the JSON for the plugin's <strong>Calendars</strong> field and see the map before you paste it.</div>
   </div>
-  <nav>
+  <div class="top-actions">
+    <button id="undoBtn" class="small" disabled>Undo</button>
+  </div>
+  <nav aria-label="Sections of this page">
     <a href="#station-agent">AI</a>
     <a href="#station-tracks">Tracks</a>
     <a href="#station-calendars">Calendars</a>
@@ -121,23 +175,22 @@
     <h2>Start <small>load something, or begin from scratch</small></h2>
     <p class="lede">Already have a configuration in TRMNL? Paste it here. You can also paste plain ICS links, one per line, load the demo to see how a finished setup looks, or pick a preset below if you have no links yet.</p>
     <div class="card plain">
+      <label for="importIn" class="sr-only">Paste a configuration, or one ICS link per line</label>
       <textarea id="importIn" rows="4" placeholder='{"tracks": [...], "calendars": [...]}&#10;or just&#10;https://calendar.example.com/work.ics&#10;https://calendar.example.com/family.ics'></textarea>
       <div class="toolbar">
-        <button id="loadImport" class="primary">Load into the editor</button>
+        <button id="loadImport" class="primary" title="Ctrl-Enter (Cmd-Enter on a Mac) in the box above does the same">Load into the editor</button>
         <button id="loadDemo">Load the demo configuration</button>
-        <span id="importStatus" class="status"></span>
+        <span id="importStatus" class="status" role="status" aria-live="polite"></span>
       </div>
-      <div class="toolbar" style="margin-top:12px">
-        <label for="presetPick" style="font-size:12.5px; font-weight:600">No links yet? Start from a preset:</label>
-        <select id="presetPick">
-          <option value="">Pick a preset…</option>
-          <option value="family4">Family of 4</option>
-          <option value="worksplit">Work vs Personal Split</option>
-          <option value="solo">Solo Freelancer Track</option>
-        </select>
-        <span id="presetStatus" class="status"></span>
+      <div style="margin-top:14px">
+        <div style="font-size:12.5px; font-weight:600" id="presetsLabel">No links yet? Start from one of these:</div>
+        <!-- The three presets are drawn from the PRESETS list below, so their names
+             and the line that says what each one teaches are written once. A preset
+             is one click, and says what it is before you spend the click. -->
+        <div class="presets" id="presets" role="group" aria-labelledby="presetsLabel"></div>
+        <span id="presetStatus" class="status" role="status" aria-live="polite"></span>
       </div>
-      <p class="hint">A preset is a complete working configuration with placeholder <code>calendar.example.com</code> links, so you can draw a board before you have any ICS links at all: load one, look at the map, then swap the links for your own. Each teaches something different, and loading one replaces whatever is in the editor.</p>
+      <p class="hint">A preset is a complete working configuration with placeholder <code>calendar.example.com</code> links, so you can draw a board before you have any ICS links at all: load one, look at the map, then swap the links for your own. Loading one replaces whatever is in the editor, and the Undo button at the top of the page puts it back.</p>
     </div>
   </section>
 
@@ -148,9 +201,10 @@
       <div class="toolbar">
         <button id="makePrompt" class="primary">Generate prompt</button>
         <button id="copyPrompt">Copy prompt</button>
-        <span id="promptStatus" class="status"></span>
+        <span id="promptStatus" class="status" role="status" aria-live="polite"></span>
       </div>
-      <textarea id="promptOut" rows="14" readonly placeholder="Paste your ICS links into Start above (or add calendars below), then generate."></textarea>
+      <label for="promptOut" class="sr-only">The generated prompt</label>
+      <textarea id="promptOut" rows="6" readonly placeholder="Paste your ICS links into Start above (or add calendars below), then generate."></textarea>
       <p class="hint">Draw the map first if you can (<em>Preview</em>, further down): the tool then has the real events, and the prompt carries a digest of them so the assistant can spot the patterns without fetching anything. Otherwise it is told to fetch the links itself, which not every assistant can do.</p>
     </div>
   </section>
@@ -164,14 +218,14 @@
 
   <section class="station" id="station-calendars">
     <h2>Calendars <small>the ICS feeds the events come from</small></h2>
-    <p class="lede">Each calendar needs its ICS link. Pick whose line its events go on; open <em>Rules</em> when one calendar mixes several tracks or you want to rename or hide things.</p>
+    <p class="lede">Each calendar needs its ICS link. Pick whose line its events go on, ctrl-clicking (cmd-clicking on a Mac) for more than one; open <em>Rules</em> when one calendar mixes several tracks or you want to rename or hide things.</p>
     <div id="calendars"></div>
     <div class="toolbar"><button id="addCalendar">+ Add a calendar</button></div>
   </section>
 
   <section class="station" id="station-rules">
     <h2>Rules for every calendar <small>optional</small></h2>
-    <p class="lede">The same rules as inside a calendar, applied to all of them. For example, "anything called Dentist goes on Sam's line". A calendar's own rule wins over one of these.</p>
+    <p class="lede">The same rules as inside a calendar, applied to all of them. For example, "anything called Dentist goes on Sam's line". A calendar's own rule wins over one of these. Where a rule names a line, ctrl-click (cmd-click on a Mac) to put the event on more than one: that is how a shared event is drawn once, as an interchange.</p>
     <div id="globalRules"></div>
     <div class="toolbar"><button id="addGlobalRule">+ Add a rule</button></div>
   </section>
@@ -181,7 +235,7 @@
     <p class="lede">Runs the real <code>transform.js</code> against your calendars (fetched from this browser), then draws the map exactly as the device would. Feeds that refuse browser requests can be pasted or uploaded instead.</p>
     <div class="card plain">
       <div class="preview-controls">
-        <div class="field"><label>Device</label>
+        <div class="field"><label for="pDevice">Device</label>
           <select id="pDevice">
             <option value="og">TRMNL OG · 800×480 · 1-bit</option>
             <option value="ogv2">TRMNL OG V2 · 800×480 · 2-bit</option>
@@ -191,32 +245,35 @@
             <option value="hv">OG half (vertical)</option>
             <option value="q">OG quadrant</option>
           </select></div>
-        <div class="field"><label>Language</label>
+        <div class="field"><label for="pLocale">Language</label>
           <select id="pLocale"><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option><option value="de">Deutsch</option><option value="nl">Nederlands</option><option value="en-US">English (US, 12h)</option></select></div>
-        <div class="field"><label>Clock</label>
+        <div class="field"><label for="pTime">Clock</label>
           <select id="pTime"><option value="auto">Auto</option><option value="24h">24-hour</option><option value="12h">12-hour</option></select></div>
-        <div class="field"><label>Now</label><input type="time" id="pNow"></div>
-        <div class="field"><label>Location (lat, lon) for weather</label><input type="text" id="pLatLon" placeholder="50.8503, 4.3517" style="width:170px"></div>
-        <div class="field"><label>Time zone</label><input type="text" id="pTz" placeholder="from your config / browser" style="width:170px"></div>
+        <div class="field"><label for="pNow">Now</label><input type="time" id="pNow"></div>
+        <div class="field"><label for="pLatLon">Location (lat, lon) for weather</label><input type="text" id="pLatLon" placeholder="50.8503, 4.3517" style="width:170px"></div>
+        <div class="field"><label for="pTz">Time zone</label><input type="text" id="pTz" placeholder="from your config / browser" style="width:170px"></div>
       </div>
+      <p class="hint" style="margin:8px 0 0"><strong>Now</strong> is the hour the board is drawn at, so you can look at this evening before it happens. <strong>Location</strong> and <strong>Time zone</strong> are your TRMNL account's settings on the device; here they only affect this preview.</p>
       <div class="toolbar" style="margin-top:12px;">
         <button id="runPreview" class="primary">Draw the map</button>
-        <span id="previewStatus" class="status"></span>
+        <span id="previewStatus" class="status" role="status" aria-live="polite"></span>
       </div>
       <div id="sources" class="sources" style="margin-top:12px;"></div>
-      <div id="stage" class="stage" hidden><div id="stageInner" class="stage-inner"></div></div>
-      <details class="adv" style="margin-top:10px;"><summary>Raw run() output</summary><textarea id="resultJson" rows="10" readonly style="margin-top:8px;"></textarea></details>
+      <div id="stage" class="stage" hidden><div id="stageNote" class="stage-note" hidden></div><div id="stageInner" class="stage-inner"></div></div>
+      <details class="adv" style="margin-top:10px;"><summary>Raw run() output</summary><label for="resultJson" class="sr-only">The JSON the plugin's run() returned</label><textarea id="resultJson" rows="10" readonly style="margin-top:8px;"></textarea></details>
     </div>
   </section>
 
   <section class="station terminus" id="station-output">
     <h2>Your configuration <small>paste this into TRMNL</small></h2>
     <div class="card plain">
+      <label for="jsonOut" class="sr-only">The configuration JSON this page builds</label>
       <textarea id="jsonOut" rows="12" readonly></textarea>
       <div class="toolbar">
         <button id="copyJson" class="primary">Copy JSON</button>
-        <span id="copyStatus" class="status"></span>
+        <span id="copyStatus" class="status" role="status" aria-live="polite"></span>
       </div>
+      <p class="hint" id="outEmpty" hidden>There is nothing to paste yet: add at least one calendar with an ICS link, or load a preset in <a href="#station-start">Start</a>.</p>
       <ol class="steps hint">
         <li>In TRMNL open the plugin's settings and turn <strong>Use Demo Data</strong> off.</li>
         <li>Paste the JSON into <strong>Calendars</strong>. That box takes either a plain list of ICS links, one per line, or a configuration like this one; it reads whichever it is given.</li>
@@ -293,6 +350,19 @@
   }
   function uid() { return Math.random().toString(36).slice(2, 9); }
   function setStatus(id, text, cls) { var n = document.getElementById(id); n.textContent = text; n.className = "status " + (cls || ""); }
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+  // Select the text and copy it. navigator.clipboard is absent on a page opened
+  // from file://, which is how this tool is often used, so the old command is
+  // the fallback rather than an error message; the error is the last resort and
+  // says what to press, since the text is selected either way.
+  function copyFrom(ta, statusId) {
+    ta.focus(); ta.select();
+    function ok() { setStatus(statusId, "Copied.", "ok"); }
+    function manual() { setStatus(statusId, "This browser would not let the page copy. The text is selected: press Ctrl-C (Cmd-C on a Mac).", "err"); }
+    function exec() { var done = false; try { done = document.execCommand && document.execCommand("copy"); } catch (e) { done = false; } if (done) ok(); else manual(); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(ok, exec);
+    else exec();
+  }
 
   // Mirrors HUE_NAMES / hueTokenForColor in transform.js: a colour is a plain hue name (drawn
   // as its -40 step), a gray step, or black/white.
@@ -326,6 +396,49 @@
   function newHeader() { return { _id: uid(), key: "", value: "" }; }
   function newCondition() { return { _id: uid(), type: "word", field: "", value: "", status: "confirmed", weekdays: [], min: "", max: "", from: "", to: "", negate: false }; }
   function newRule() { return { _id: uid(), combinator: "and", conditions: [newCondition()], tracks: [], rename: true, rewrite: "", rewriteFull: false, hide: false }; }
+
+  // ------------------------------------------------------------ undo
+  //
+  // One button, at the top of the page where every section can reach it, for
+  // the four things that throw work away: a preset or an import replacing the
+  // editor, and a track, a calendar or a rule being removed. The whole editor
+  // is one plain object, so a snapshot is a deep copy of it and undoing is
+  // putting the copy back; the only thing that must not be copied is the
+  // `_status` node the preview hangs on a calendar, which is a DOM element.
+  var undoStack = [];
+  function cloneState() {
+    return JSON.parse(JSON.stringify(state, function (k, v) { return k === "_status" ? undefined : v; }));
+  }
+  function snapshot(label) {
+    undoStack.push({ label: label, state: cloneState(), paste: document.getElementById("importIn").value, preset: selectedPreset });
+    if (undoStack.length > 30) undoStack.shift();
+    paintUndo();
+  }
+  function paintUndo() {
+    var b = document.getElementById("undoBtn");
+    if (!b) return;
+    var top = undoStack[undoStack.length - 1];
+    b.disabled = !top;
+    b.textContent = top ? "Undo: " + top.label : "Undo";
+    b.title = top ? "Put back what \u201C" + top.label + "\u201D changed" : "Nothing to undo yet";
+  }
+  function undo() {
+    var top = undoStack.pop();
+    if (!top) { paintUndo(); return; }
+    state.tracks = top.state.tracks;
+    state.calendars = top.state.calendars;
+    state.rules = top.state.rules;
+    state.timeZone = top.state.timeZone;
+    state.locale = top.state.locale;
+    document.getElementById("importIn").value = top.paste;
+    selectedPreset = top.preset;
+    lastLoaded = null;
+    renderAll();
+    paintPresets();
+    paintUndo();
+    setStatus("importStatus", "Undone: " + top.label + ".", "ok");
+    setStatus("presetStatus", "", "");
+  }
 
   var MATCH_TYPES = [["word", "has the word"], ["contains", "contains"], ["exact", "is exactly"], ["regex", "matches regex"], ["any", "any event"], ["status", "has status"], ["weekday", "is on weekday"], ["duration", "lasts"], ["time", "starts"]];
   // Which property the words are looked for in. Blank is the default and
@@ -434,7 +547,19 @@
     });
     return cfg;
   }
-  function renderJson() { document.getElementById("jsonOut").value = JSON.stringify(buildConfig(), null, 2); }
+  function renderJson() {
+    var cfg = buildConfig();
+    document.getElementById("jsonOut").value = JSON.stringify(cfg, null, 2);
+    // An empty configuration is valid JSON and does nothing at all on the
+    // device, so there is nothing to copy and the page says so rather than
+    // reporting "Copied." over a board that will never draw.
+    var empty = !cfg.calendars.length;
+    var note = document.getElementById("outEmpty");
+    if (note) note.hidden = !empty;
+    var copy = document.getElementById("copyJson");
+    if (copy) copy.disabled = empty;
+    refreshStale();
+  }
 
   // ------------------------------------------------------------ import
   function conditionFrom(m) {
@@ -561,22 +686,91 @@
       .replace(/,(\s*[}\]])/g, "$1")
       .trim();
   }
+  // Which of the things tidyConfigText undoes were actually done to this text,
+  // so the message afterwards can name them. A repair the user is told about is
+  // a repair they can decide to trust.
+  function repairsMade(raw) {
+    var out = [];
+    if (/```/.test(raw)) out.push("a code fence");
+    if (/[\u201C\u201D\u2018\u2019]/.test(raw)) out.push("curly quotes");
+    if (/\\[[\]{}_*]|\\\r?\n/.test(raw)) out.push("markdown's backslashes");
+    if (/,\s*[}\]]/.test(raw)) out.push("a trailing comma");
+    if (/\u00A0/.test(raw)) out.push("non-breaking spaces");
+    if (!out.length) out.push("stray characters");
+    return out.length === 1 ? out[0] : out.slice(0, -1).join(", ") + " and " + out[out.length - 1];
+  }
+  function looksLikeJson(t) { var c = String(t).replace(/^\uFEFF/, "").trim().charAt(0); return c === "{" || c === "["; }
+  // V8 says "... in JSON at position 57 (line 4 column 1)" and has for a while,
+  // but not every engine does, so the line and column are worked out from the
+  // position when the message has not already given them. Where the mistake is
+  // is most of what the reader needs; the rest of the message says what it is.
+  function jsonErrorAt(text, e) {
+    var msg = (e && e.message ? e.message : "not valid JSON").replace(/^JSON\.parse:\s*/, "");
+    if (/\(line \d+/.test(msg)) return msg;
+    var at = /position (\d+)/.exec(msg);
+    if (!at) return msg;
+    var upto = String(text).slice(0, Number(at[1]));
+    var nl = upto.lastIndexOf("\n");
+    return msg + " (line " + upto.split(/\r?\n/).length + " column " + (upto.length - nl) + ")";
+  }
+  // A bare array is a list of calendars: that is the only array-shaped thing
+  // this format has, and somebody pasting one means the calendars.
+  function asConfig(d) { return Array.isArray(d) ? { calendars: d } : d; }
+  function looksLikeLink(line) { return /^(https?|webcal):\/\//i.test(line) || (/^[^\s"{}]+\.[a-z]{2,}\//i.test(line) && line.indexOf(" ") === -1); }
+  // What the paste box was handed, and what had to be done to it. Three ways a
+  // paste can go: it is JSON; it is JSON a chat window chewed on, which
+  // tidyConfigText can put back together; or it is a list of links. Anything
+  // that was MEANT to be JSON and cannot be read is an ERROR that names the
+  // line, never a quiet fall through to the list reader. A config with one
+  // missing brace used to import as four calendars whose URLs were "{",
+  // "\"calendars\": [" and the rest of the file, and report "Loaded 4".
   function parseImport(raw) {
-    try { var d = JSON.parse(raw); if (d && typeof d === "object") return d; } catch (e) {}
-    try { var t = JSON.parse(tidyConfigText(raw)); if (t && typeof t === "object") return t; } catch (e2) {}
-    return { calendars: raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean) };
+    var text = String(raw == null ? "" : raw);
+    var trimmed = text.trim();
+    var strictErr = null;
+    if (trimmed) {
+      try {
+        var d = JSON.parse(trimmed);
+        if (d && typeof d === "object") return { data: asConfig(d), mode: "json" };
+      } catch (e) { strictErr = e; }
+    }
+    if (strictErr) {
+      var tidy = tidyConfigText(text);
+      try {
+        var t = JSON.parse(tidy);
+        if (t && typeof t === "object") return { data: asConfig(t), mode: "recovered", repairs: repairsMade(text) };
+      } catch (e2) {
+        if (looksLikeJson(trimmed) || looksLikeJson(tidy)) return { error: jsonErrorAt(tidy, e2) };
+      }
+    }
+    var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+    var links = lines.filter(looksLikeLink);
+    var skipped = lines.filter(function (l) { return !looksLikeLink(l); });
+    if (!links.length) {
+      return { error: lines.length
+        ? "This is neither a configuration nor a list of ICS links. A link starts with https:// or webcal://."
+        : "There is nothing here to load." };
+    }
+    return { data: { calendars: links }, mode: "links", skipped: skipped };
   }
 
   // ------------------------------------------------------------ tracks UI
   function trackNames() { return state.tracks.map(function (t) { return t.name.trim(); }).filter(Boolean); }
-  function trackPicker(values, onChange) {
+  // A multi-select is the one control here that does not explain itself: an
+  // unselected list looks like "all of them", and picking two needs a key
+  // nobody is born knowing. So it is sized to show every track without
+  // scrolling, it carries a name of its own, and the instruction is on the
+  // page next to it rather than in a tooltip.
+  function trackPicker(values, onChange, label) {
     var names = trackNames();
-    var sel = el("select", { multiple: "multiple", title: "Ctrl/Cmd-click to pick more than one" });
+    var sel = el("select", { multiple: "multiple", title: "Ctrl-click (Cmd-click on a Mac) to pick more than one", "aria-label": label || "Which track's line" });
     if (!names.length) { sel.appendChild(el("option", { value: "", disabled: "disabled", text: "add a track first" })); sel.disabled = true; return sel; }
+    sel.setAttribute("size", String(Math.min(Math.max(names.length, 2), 6)));
     names.forEach(function (n) { var o = el("option", { value: n, text: n }); if (values.indexOf(n) !== -1) o.selected = true; sel.appendChild(o); });
     sel.addEventListener("change", function () { onChange(Array.from(sel.selectedOptions).map(function (o) { return o.value; }).filter(Boolean)); });
     return sel;
   }
+
   function renderTracks() {
     var wrap = document.getElementById("tracks");
     wrap.innerHTML = "";
@@ -584,15 +778,15 @@
     state.tracks.forEach(function (p, idx) {
       var look = looks[p._id] || { style: "solid", width: 3, color: p.color, side: "right" };
       var sw = swatchSvg(look.color, look.style, look.width);
-      var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "You (e.g. Sam)" : "Name", value: p.name });
+      var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "You (e.g. Sam)" : "Name", value: p.name, "aria-label": "Name of track " + (idx + 1) });
       name.addEventListener("input", function () { p.name = name.value; renderJson(); renderCalendars(); renderGlobalRules(); });
       name.addEventListener("change", function () { renderTracks(); });
       var up = el("button", { class: "ghost small", title: "Move up", text: "↑" }); up.disabled = idx === 0;
       up.addEventListener("click", function () { state.tracks.splice(idx - 1, 0, state.tracks.splice(idx, 1)[0]); renderAll(); });
       var down = el("button", { class: "ghost small", title: "Move down", text: "↓" }); down.disabled = idx === state.tracks.length - 1;
       down.addEventListener("click", function () { state.tracks.splice(idx + 1, 0, state.tracks.splice(idx, 1)[0]); renderAll(); });
-      var rm = el("button", { class: "ghost small", text: "Remove" });
-      rm.addEventListener("click", function () { state.tracks.splice(idx, 1); renderAll(); });
+      var rm = el("button", { class: "ghost small", text: "Remove", title: "Remove this track" });
+      rm.addEventListener("click", function () { snapshot("remove " + (p.name.trim() || "a track")); state.tracks.splice(idx, 1); renderAll(); });
       wrap.appendChild(el("div", { class: "card track" }, [
         el("div", { class: "card-head" }, [sw, name, up, down, rm]),
         // Side and colour used to be pickers here. Both are decided by the plugin now
@@ -626,8 +820,11 @@
         comb.addEventListener("change", function () { rule.combinator = comb.value; onChange(); });
         row.appendChild(comb);
       } else row.appendChild(el("span", { class: "chip", text: "If the event" }));
-      var notBtn = el("button", { class: "small" + (c.negate ? " primary" : ""), type: "button", title: "Invert this condition (does NOT match)", text: "not" });
-      notBtn.addEventListener("click", function () { c.negate = !c.negate; notBtn.className = "small" + (c.negate ? " primary" : ""); onChange(); });
+      // A toggle in the middle of a sentence has to say whether it is on: an
+      // unlit "not" sitting between "If the event" and "has the word" reads as
+      // a negation that is not there. Off is quiet, on is filled in.
+      var notBtn = el("button", { class: "small toggle" + (c.negate ? " primary" : ""), type: "button", title: "Invert this condition (matches when it does NOT)", text: "not", "aria-pressed": c.negate ? "true" : "false" });
+      notBtn.addEventListener("click", function () { c.negate = !c.negate; notBtn.className = "small toggle" + (c.negate ? " primary" : ""); notBtn.setAttribute("aria-pressed", c.negate ? "true" : "false"); onChange(); });
       row.appendChild(notBtn);
       // Reads left to right as a sentence: "If the event LOCATION CONTAINS
       // Elementary". The field comes before the type for that reason, and
@@ -640,14 +837,15 @@
       var type = el("select", { class: "cond-type" }, MATCH_TYPES.map(function (t) { return el("option", { value: t[0], text: t[1] }); }));
       type.value = c.type;
       row.appendChild(type);
-      var value = el("input", { class: "cond-value", type: "text", placeholder: c.type === "regex" ? "^Piano.*" : "Dentist, or Dentist, Checkup for any of several", value: c.value, style: "width:220px" });
+      var value = el("input", { class: "cond-value", type: "text", "aria-label": "The words to look for",
+        placeholder: c.type === "regex" ? "^Piano.*" : "Dentist (or Dentist, Piano to match either)", value: c.value, style: "width:220px" });
       value.addEventListener("input", function () { c.value = value.value; onChange(); });
       var status = el("select", { class: "cond-status" }, ["confirmed", "tentative", "cancelled"].map(function (s) { return el("option", { value: s, text: s }); }));
       status.value = c.status;
       status.addEventListener("change", function () { c.status = status.value; onChange(); });
       var days = el("span", { class: "cond-days" }, WEEKDAYS.map(function (w) {
-        var b = el("button", { class: "small", text: w[1], type: "button" });
-        function paint() { b.className = "small" + (c.weekdays.indexOf(w[0]) !== -1 ? " primary" : ""); }
+        var b = el("button", { class: "small toggle", text: w[1], type: "button" });
+        function paint() { var on = c.weekdays.indexOf(w[0]) !== -1; b.className = "small toggle" + (on ? " primary" : ""); b.setAttribute("aria-pressed", on ? "true" : "false"); }
         paint();
         b.addEventListener("click", function () { var k = c.weekdays.indexOf(w[0]); if (k === -1) c.weekdays.push(w[0]); else c.weekdays.splice(k, 1); paint(); onChange(); });
         return b;
@@ -656,14 +854,14 @@
       // are things a calendar knows that no title reliably says: "anything
       // over four hours is a status block" holds however the household
       // spells it this week.
-      var minEl = el("input", { type: "number", min: "0", step: "5", placeholder: "at least", value: c.min, style: "width:96px", title: "At least this many minutes" });
-      var maxEl = el("input", { type: "number", min: "0", step: "5", placeholder: "at most", value: c.max, style: "width:96px", title: "At most this many minutes" });
-      var mins = el("span", { class: "chip", text: "min" });
+      var minEl = el("input", { type: "number", min: "0", step: "5", placeholder: "at least", value: c.min, style: "width:96px", title: "At least this many minutes", "aria-label": "Lasts at least, in minutes" });
+      var maxEl = el("input", { type: "number", min: "0", step: "5", placeholder: "at most", value: c.max, style: "width:96px", title: "At most this many minutes", "aria-label": "Lasts at most, in minutes" });
+      var mins = el("span", { class: "chip", text: "minutes" });
       minEl.addEventListener("input", function () { c.min = minEl.value; onChange(); });
       maxEl.addEventListener("input", function () { c.max = maxEl.value; onChange(); });
       var dur = el("span", { class: "cond-dur" }, [minEl, maxEl, mins]);
-      var fromEl = el("input", { type: "time", value: c.from, style: "width:110px", title: "At or after" });
-      var toEl = el("input", { type: "time", value: c.to, style: "width:110px", title: "Before" });
+      var fromEl = el("input", { type: "time", value: c.from, style: "width:110px", title: "At or after", "aria-label": "Starts at or after" });
+      var toEl = el("input", { type: "time", value: c.to, style: "width:110px", title: "Before", "aria-label": "Starts before" });
       fromEl.addEventListener("input", function () { c.from = fromEl.value; onChange(); });
       toEl.addEventListener("input", function () { c.to = toEl.value; onChange(); });
       var when = el("span", { class: "cond-when" }, [el("span", { class: "chip", text: "from" }), fromEl, el("span", { class: "chip", text: "before" }), toEl]);
@@ -698,17 +896,17 @@
       var warn = el("div", { class: "status err" });
       function refresh() { warn.textContent = ruleValue(r) ? "" : "This rule is not exported yet: it needs a condition and at least one action."; renderJson(); }
       renderConditions(r, conds, refresh);
-      var persons = trackPicker(r.tracks, function (v) { r.tracks = v; refresh(); });
+      var persons = trackPicker(r.tracks, function (v) { r.tracks = v; refresh(); }, "Put the event on this track's line");
       var rename = el("input", { type: "checkbox" }); rename.checked = r.rename;
       rename.addEventListener("change", function () { r.rename = rename.checked; refresh(); });
-      var rewrite = el("input", { type: "text", placeholder: "new title (or replacement for the matched text)", value: r.rewrite, style: "width:260px" });
+      var rewrite = el("input", { type: "text", placeholder: "new title, or what to put in place of the matched text", value: r.rewrite, style: "flex:1 1 320px; min-width:180px", "aria-label": "New title, or what to put in place of the matched text" });
       rewrite.addEventListener("input", function () { r.rewrite = rewrite.value; refresh(); });
       var full = el("input", { type: "checkbox" }); full.checked = r.rewriteFull;
       full.addEventListener("change", function () { r.rewriteFull = full.checked; refresh(); });
       var hide = el("input", { type: "checkbox" }); hide.checked = r.hide;
       hide.addEventListener("change", function () { r.hide = hide.checked; refresh(); });
       var rm = el("button", { class: "ghost small", text: "Remove rule" });
-      rm.addEventListener("click", function () { list.splice(i, 1); renderRules(list, container); renderJson(); });
+      rm.addEventListener("click", function () { snapshot("remove a rule"); list.splice(i, 1); renderRules(list, container); renderJson(); });
       card.appendChild(el("div", { class: "rule-step", text: "1 · If" }));
       card.appendChild(conds);
       card.appendChild(el("div", { class: "rule-step", text: "2 · Then" }));
@@ -728,46 +926,78 @@
     var wrap = document.getElementById("calendars");
     wrap.innerHTML = "";
     state.calendars.forEach(function (c, idx) {
-      var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "Work" : "Calendar " + (idx + 1), value: c.name });
+      var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "Work" : "Calendar " + (idx + 1), value: c.name, "aria-label": "Name of calendar " + (idx + 1) });
       // A calendar's name is not a label: an event no rule routes falls back to it, and the
       // fallback name becomes a LINE. Someone generated a config where every calendar had a
       // descriptive name ("Planet Express", "Deliveries") and got seven lines for five
       // people, with no way to tell from the JSON which two were the accident. So the moment
       // a name is not also a track name, say what it will do.
       var nameWarn = el("div", { class: "status err cal-name-warn" });
+      // The name only becomes a line if an event can reach it, and none can
+      // when the calendar routes every event somewhere: "whose line" is exactly
+      // that rule (any event goes to this track), and a rule written by hand
+      // with an "any" condition and a track is the same catch-all. Warning
+      // through one of those cried wolf on the shipped demo, whose Work
+      // calendar sends everything to Sam and cannot leak the word "Work".
+      function routesEverything() {
+        if (c.assign.length) return true;
+        return c.rules.some(function (r) {
+          return r.tracks.length && !r.hide && r.conditions.length === 1
+            && r.conditions[0].type === "any" && !r.conditions[0].negate;
+        });
+      }
       function checkName() {
         var n = c.name.trim();
         var known = trackNames().some(function (t) { return t.toLowerCase() === n.toLowerCase(); });
-        nameWarn.textContent = (!n || known) ? ""
+        nameWarn.textContent = (!n || known || routesEverything()) ? ""
           : "\u201C" + n + "\u201D is not one of your tracks, so any event here that no rule routes falls back to it and draws \u201C" + n + "\u201D as its own line on the map. Name this calendar after the track whose line it is, add \u201C" + n + "\u201D as a track, or clear the name.";
       }
       name.addEventListener("input", function () { c.name = name.value; checkName(); renderJson(); });
       name.addEventListener("change", function () { renderTracks(); });
-      var url = el("input", { type: "text", placeholder: "https://…/calendar.ics (or webcal://…)", value: c.url });
-      url.addEventListener("input", function () { c.url = url.value; renderJson(); renderSources(); });
-      var assign = trackPicker(c.assign, function (v) { c.assign = v; renderJson(); renderTracks(); });
-      var rm = el("button", { class: "ghost small", text: "Remove" });
-      rm.addEventListener("click", function () { state.calendars.splice(idx, 1); if (!state.calendars.length) state.calendars.push(newCalendar()); renderAll(); });
+      var urlId = "cal-url-" + c._id;
+      var url = el("input", { type: "text", id: urlId, placeholder: "https://…/calendar.ics (or webcal://…)", value: c.url });
+      // A link that is not a link is the commonest way a board comes back
+      // empty, and nothing else would ever say so: the feed simply fails to
+      // fetch, at preview time or on the device hours later.
+      var urlWarn = el("div", { class: "status err cal-url-warn" });
+      function checkUrl() {
+        var u = c.url.trim();
+        urlWarn.textContent = (!u || /^(https?|webcal):\/\/\S+$/i.test(u)) ? ""
+          : /\s/.test(u) ? "This has a space in it, so it will not fetch. Paste the whole ICS address on one line."
+          : "This does not look like an ICS link. One starts with https:// or webcal://, and a calendar's web page is not the same thing as its feed.";
+      }
+      url.addEventListener("input", function () { c.url = url.value; checkUrl(); renderJson(); renderSources(); });
+      var assignId = "cal-track-" + c._id;
+      var assign = trackPicker(c.assign, function (v) { c.assign = v; checkName(); renderJson(); renderTracks(); }, "Whose line the events in this calendar go on");
+      assign.id = assignId;
+      var rm = el("button", { class: "ghost small", text: "Remove", title: "Remove this calendar" });
+      rm.addEventListener("click", function () {
+        snapshot("remove " + (c.name.trim() || c.url.trim() || "a calendar"));
+        state.calendars.splice(idx, 1);
+        if (!state.calendars.length) state.calendars.push(newCalendar());
+        renderAll();
+      });
       // advanced: rules, headers, description matching
       var rulesWrap = el("div", {});
       renderRules(c.rules, rulesWrap);
       var addRule = el("button", { class: "small", text: "+ Add a rule" });
       addRule.addEventListener("click", function () { c.rules.push(newRule()); renderRules(c.rules, rulesWrap); });
+      var addHeaderHint = el("p", { class: "hint", text: "Only for a feed behind a token or a password. A public ICS link needs none." });
       var headersWrap = el("div", {});
       function renderHeaders() {
         headersWrap.innerHTML = "";
         c.headers.forEach(function (h, hi) {
-          var k = el("input", { type: "text", placeholder: "Authorization", value: h.key, style: "width:180px" });
+          var k = el("input", { type: "text", placeholder: "Authorization", value: h.key, style: "width:180px", "aria-label": "Header name" });
           k.addEventListener("input", function () { h.key = k.value; renderJson(); });
-          var v = el("input", { type: "text", placeholder: "Bearer …", value: h.value, style: "flex:1 1 200px" });
+          var v = el("input", { type: "text", placeholder: "Bearer …", value: h.value, style: "flex:1 1 200px", "aria-label": "Header value" });
           v.addEventListener("input", function () { h.value = v.value; renderJson(); });
-          var x = el("button", { class: "ghost small", text: "×" });
+          var x = el("button", { class: "ghost small", text: "×", title: "Remove this header", "aria-label": "Remove this header" });
           x.addEventListener("click", function () { c.headers.splice(hi, 1); renderHeaders(); renderJson(); });
           headersWrap.appendChild(el("div", { class: "header-row" }, [k, v, x]));
         });
       }
       renderHeaders();
-      var addHeader = el("button", { class: "small", text: "+ HTTP header" });
+      var addHeader = el("button", { class: "small", text: "+ Add a header" });
       addHeader.addEventListener("click", function () { c.headers.push(newHeader()); renderHeaders(); });
       var desc = el("input", { type: "checkbox" }); desc.checked = c.includeDescription;
       desc.addEventListener("change", function () { c.includeDescription = desc.checked; renderJson(); });
@@ -780,20 +1010,22 @@
           el("p", { class: "hint", text: "Checked in order; the last matching rule wins for each effect. Use these when one calendar holds several tracks' events, or to rename class codes and hide noise. Comma-separate a value to match any of several (\"L1, L3, L4\"); click \"not\" to invert a condition. Combine both for \"one of these, except that one\", with no regex needed." }),
           rulesWrap, addRule,
           el("div", { class: "rule-step", style: "margin-top:14px", text: "HTTP headers for this feed" }),
+          addHeaderHint,
           headersWrap, addHeader,
           el("div", { style: "margin-top:12px" }, [el("label", { class: "check" }, [desc, "also let rules match the event description (slower; off by default)"])]),
           el("div", { style: "margin-top:6px" }, [el("label", { class: "check" }, [keep, "keep this line on the board on a day it has nothing (and while the feed is down)"])]),
         ]),
       ]);
       checkName();
+      checkUrl();
       wrap.appendChild(el("div", { class: "card calendar" }, [
         el("div", { class: "card-head" }, [name, rm]),
         nameWarn,
         el("div", { class: "row" }, [
-          el("div", { class: "field grow" }, [el("label", { text: "ICS link" }), url]),
-          el("div", { class: "field" }, [el("label", { text: "Whose line" }), assign]),
+          el("div", { class: "field grow" }, [el("label", { text: "ICS link", "for": urlId }), url]),
+          el("div", { class: "field" }, [el("label", { text: "Whose line", "for": assignId }), assign]),
         ]),
-        null,
+        urlWarn,
         adv,
       ]));
     });
@@ -919,14 +1151,33 @@
   // only to tell "the user has work in here" from "this is exactly what we
   // loaded a moment ago", so flipping between presets does not nag.
   var lastLoaded = null;
+  var selectedPreset = "";
   function markLoaded() {
     lastLoaded = { json: document.getElementById("jsonOut").value, paste: document.getElementById("importIn").value };
   }
-  // Another load (a paste, the demo) means the dropdown is no longer telling
-  // the truth about what is in the editor, so it goes back to its prompt.
+  // Another load (a paste, the demo) means the marked preset is no longer
+  // telling the truth about what is in the editor, so the mark comes off.
   function clearPresetPick() {
-    document.getElementById("presetPick").value = "";
+    selectedPreset = "";
+    paintPresets();
     setStatus("presetStatus", "", "");
+  }
+  // One button per preset, each carrying the line that says what it teaches.
+  // A name on its own in a dropdown makes you spend a click to find out what
+  // you are getting, and what you get costs you whatever was in the editor.
+  function paintPresets() {
+    var wrap = document.getElementById("presets");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    PRESETS.forEach(function (preset) {
+      var b = el("button", { type: "button", class: "preset", "data-preset": preset.id,
+        "aria-pressed": selectedPreset === preset.id ? "true" : "false" }, [
+        el("strong", { text: preset.label }),
+        el("span", { class: "preset-note", text: preset.note }),
+      ]);
+      b.addEventListener("click", function () { loadPreset(preset.id); });
+      wrap.appendChild(b);
+    });
   }
   function editorHasWork() {
     var paste = document.getElementById("importIn").value.trim();
@@ -938,48 +1189,97 @@
     return document.getElementById("jsonOut").value !== lastLoaded.json
       || document.getElementById("importIn").value !== lastLoaded.paste;
   }
-  document.getElementById("presetPick").addEventListener("change", function () {
-    var sel = document.getElementById("presetPick");
-    var id = sel.value;
-    if (!id) return;
+  function loadPreset(id) {
     var preset = null;
     PRESETS.forEach(function (p) { if (p.id === id) preset = p; });
-    if (!preset) { sel.value = ""; return; }
-    // A preset replaces everything, and there is no undo anywhere else on
-    // this page: the state is one object rebuilt from scratch on every load,
-    // so an undo stack would be a new kind of state to keep correct for one
-    // button. A confirm is the honest version, and it only appears when
-    // there is something to lose (an untouched page, or a preset nobody has
-    // edited yet, swaps silently).
-    if (editorHasWork() && !window.confirm("Loading “" + preset.label + "” replaces everything in the editor. Continue?")) {
-      sel.value = "";
+    if (!preset) return;
+    // A preset replaces everything. Undo puts it back, and the button at the
+    // top of the page says which load it would undo, but work that exists only
+    // in this editor and nowhere else is still worth one question first. An
+    // untouched page, or a preset nobody has edited yet, swaps silently.
+    if (editorHasWork() && !window.confirm("Loading “" + preset.label + "” replaces everything in the editor. You can undo it afterwards. Continue?")) {
       setStatus("presetStatus", "Left as it was.", "");
       return;
     }
+    snapshot("load " + preset.label);
     loadConfig(JSON.parse(JSON.stringify(preset.config)));
     document.getElementById("importIn").value = JSON.stringify(preset.config, null, 2);
-    sel.value = id;
+    selectedPreset = preset.id;
+    paintPresets();
     markLoaded();
     setStatus("importStatus", "", "");
     setStatus("presetStatus", preset.label + " loaded. " + preset.note + " Swap the example.com links for your own.", "ok");
-  });
+  }
+  // What a load found, in one line: how much came in, anything that had to be
+  // repaired before it could be read, and anything left out on the way.
+  function reportLoad(res) {
+    var cals = state.calendars.filter(function (c) { return c.url.trim(); }).length;
+    if (!cals) {
+      setStatus("importStatus", "That loaded, but there are no calendars in it. Check the key is spelled “calendars”: anything this format does not recognise is ignored without a word.", "err");
+      return;
+    }
+    var msg = "Loaded " + plural(cals, "calendar", "calendars") + " and " + plural(state.tracks.length, "track", "tracks") + ".";
+    if (res.mode === "recovered") msg += " It came out of a chat window, so " + res.repairs + " had to be taken out of it first: check the calendars below are the ones you meant.";
+    if (res.mode === "links") msg += " Now say whose line each one is, under Calendars.";
+    if (res.skipped && res.skipped.length) msg += " " + plural(res.skipped.length, "line", "lines") + " did not look like a link and " + (res.skipped.length === 1 ? "was" : "were") + " left out.";
+    setStatus("importStatus", msg, "ok");
+  }
   document.getElementById("loadImport").addEventListener("click", function () {
-    var raw = document.getElementById("importIn").value.trim();
-    if (!raw) { setStatus("importStatus", "Paste a configuration first.", "err"); return; }
-    loadConfig(parseImport(raw));
+    var raw = document.getElementById("importIn").value;
+    if (!raw.trim()) { setStatus("importStatus", "Paste a configuration, or one ICS link per line, then press this.", "err"); return; }
+    var res = parseImport(raw);
+    if (res.error) {
+      setStatus("importStatus", "This is not readable as a configuration: " + res.error.replace(/[.\s]*$/, "") + ". Nothing was loaded, so the editor is as you left it.", "err");
+      return;
+    }
+    snapshot("load the pasted configuration");
+    loadConfig(res.data);
     clearPresetPick();
     markLoaded();
-    setStatus("importStatus", "Loaded " + state.calendars.filter(function (c) { return c.url; }).length + " calendar(s), " + state.tracks.length + " tracks.", "ok");
+    reportLoad(res);
   });
   document.getElementById("loadDemo").addEventListener("click", function () {
+    if (editorHasWork() && !window.confirm("Loading the demo replaces everything in the editor. You can undo it afterwards. Continue?")) {
+      setStatus("importStatus", "Left as it was.", "");
+      return;
+    }
     setStatus("importStatus", "Loading…");
-    realFetch("../demo-config.json").then(function (r) { return r.json(); }).then(function (d) {
+    realFetch("../demo-config.json").then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then(function (d) {
+      snapshot("load the demo");
       loadConfig(d);
       document.getElementById("importIn").value = JSON.stringify(d, null, 2);
       clearPresetPick();
       markLoaded();
-      setStatus("importStatus", "Demo loaded. Scroll down and draw the map.", "ok");
-    }).catch(function (e) { setStatus("importStatus", "Couldn't load demo-config.json: " + e.message, "err"); });
+      setStatus("importStatus", "Demo loaded. Scroll down to Preview and draw the map.", "ok");
+    }).catch(function (e) {
+      setStatus("importStatus", "Could not load demo-config.json (" + e.message + ")."
+        + (location.protocol === "file:"
+          ? " This page was opened straight from a file, and a browser will not let it read the files next to it. Serve the folder over http instead: run python3 -m http.server in the repository, then open http://localhost:8000/tools/config-editor.html."
+          : " It should sit one folder above this one, in the repository."), "err");
+    });
+  });
+  document.getElementById("undoBtn").addEventListener("click", undo);
+  // The paste box is the one place on this page where a key ought to mean
+  // "go": it is a multi-line field, so plain Enter belongs to the text and
+  // the modifier is the one every other multi-line send box uses.
+  document.getElementById("importIn").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); document.getElementById("loadImport").click(); }
+  });
+  // Escape closes the disclosure you are inside and puts the focus on the
+  // thing that opened it, which is the only closing gesture this page has:
+  // there are no dialogs, so Escape is otherwise doing nothing.
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    var node = document.activeElement;
+    while (node && node !== document.body) {
+      if (node.tagName === "DETAILS" && node.open) {
+        node.open = false;
+        var sum = node.querySelector("summary");
+        if (sum) sum.focus();
+        return;
+      }
+      node = node.parentNode;
+    }
   });
   // ------------------------------------------------------------ the AI prompt
   //
@@ -1197,6 +1497,7 @@
   document.getElementById("makePrompt").addEventListener("click", function () {
     var ta = document.getElementById("promptOut");
     ta.value = buildAgentPrompt();
+    ta.rows = 14;
     var read = Object.keys(icsOverrides).length;
     setStatus("promptStatus", read
       ? "Ready, with the events from " + read + " calendar(s) in it."
@@ -1205,20 +1506,16 @@
   document.getElementById("copyPrompt").addEventListener("click", function () {
     var ta = document.getElementById("promptOut");
     if (!ta.value) ta.value = buildAgentPrompt();
-    ta.select();
-    (navigator.clipboard ? navigator.clipboard.writeText(ta.value) : Promise.reject()).then(function () { setStatus("promptStatus", "Copied.", "ok"); })
-      .catch(function () { setStatus("promptStatus", "Select the text and copy it manually.", "err"); });
+    copyFrom(ta, "promptStatus");
   });
 
   document.getElementById("copyJson").addEventListener("click", function () {
-    var ta = document.getElementById("jsonOut");
-    ta.select();
-    (navigator.clipboard ? navigator.clipboard.writeText(ta.value) : Promise.reject()).then(function () { setStatus("copyStatus", "Copied.", "ok"); })
-      .catch(function () { setStatus("copyStatus", "Select the text and copy it manually.", "err"); });
+    copyFrom(document.getElementById("jsonOut"), "copyStatus");
   });
 
   // ------------------------------------------------------------ ICS sources for the preview
   var icsOverrides = {}; // url -> ICS text (fetched, pasted or uploaded)
+  var fetchErrors = {};  // url -> why the last draw could not read it
   function fetchIcs(url) {
     var u = url.indexOf("webcal://") === 0 ? "https://" + url.slice(9) : url;
     return realFetch(u).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); });
@@ -1229,9 +1526,13 @@
     state.calendars.filter(function (c) { return c.url.trim(); }).forEach(function (c) {
       var url = c.url.trim();
       var status = el("span", { class: "status" });
-      var ta = el("textarea", { rows: "3", placeholder: "If the feed can't be fetched from the browser (CORS), paste its .ics content here or upload the file." });
+      var failed = fetchErrors[url];
+      var ta = el("textarea", { rows: "3", "aria-label": "ICS text for " + (c.name.trim() || url),
+        placeholder: "If the feed cannot be fetched from the browser (CORS), paste its .ics text here, or upload the file." });
       ta.value = icsOverrides[url] || "";
-      ta.hidden = !ta.value;
+      ta.hidden = !ta.value && !failed;
+      if (failed) { status.textContent = failed; status.className = "status err"; }
+      else if (icsOverrides[url]) { status.textContent = "Read."; status.className = "status ok"; }
       ta.addEventListener("input", function () { if (ta.value.trim()) icsOverrides[url] = ta.value; else delete icsOverrides[url]; });
       var paste = el("button", { class: "small", text: "Paste / upload instead" });
       var file = el("input", { type: "file", accept: ".ics,text/calendar", hidden: "hidden" });
@@ -1242,7 +1543,7 @@
         rd.readAsText(f);
       });
       paste.addEventListener("click", function () { ta.hidden = false; file.click(); });
-      wrap.appendChild(el("div", { class: "card" }, [
+      wrap.appendChild(el("div", { class: "card" + (failed ? " failed" : "") }, [
         el("div", { class: "toolbar" }, [el("strong", { text: c.name.trim() || url }), el("span", { class: "hint", text: c.name.trim() ? url : "" }), paste, file, status]),
         ta,
       ]));
@@ -1260,6 +1561,27 @@
     hv:   { w: 800,  h: 480,  zoom: 1, view: "half_vertical",   classes: "screen--og screen--md screen--1bit screen--density-1x", mashup: "1Lx1R" },
     q:    { w: 800,  h: 480,  zoom: 1, view: "quadrant",        classes: "screen--og screen--md screen--1bit screen--density-1x", mashup: "2x2" },
   };
+  // A drawn map is a picture of the settings at the moment it was drawn. Every
+  // edit after that makes it a picture of the past, and a stale picture on a
+  // page whose whole job is "see it before you paste it" is the worst thing
+  // this tool can show. So the settings are fingerprinted when the map is
+  // drawn, and the picture greys out and says so the moment they differ.
+  var drawnSig = null;
+  function previewSignature() {
+    return JSON.stringify([buildConfig(), ["pDevice", "pLocale", "pTime", "pNow", "pLatLon", "pTz"].map(function (id) {
+      var n = document.getElementById(id); return n ? n.value : "";
+    })]);
+  }
+  function refreshStale() {
+    var stage = document.getElementById("stage");
+    var note = document.getElementById("stageNote");
+    if (!stage || !note || stage.hidden || drawnSig === null) return;
+    var stale = previewSignature() !== drawnSig;
+    if (stale) stage.className = "stage stale"; else stage.className = "stage";
+    note.hidden = !stale;
+    note.className = "stage-note status err";
+    note.textContent = stale ? "This map was drawn before your last change. Draw it again to see it." : "";
+  }
   var templateCache = null;
   // The plugin template is fetched once; its <script> (the layout engine) and <style> are
   // reused verbatim, its header markup is mirrored below in JS (it is Liquid).
@@ -1302,7 +1624,7 @@
     var w = metro.header_weather || {};
     if (w.hi) {
       var wx = el("span", { class: "metro-weather flex flex--row flex--center-y gap--xsmall" });
-      if (w.icon) wx.appendChild(el("img", { class: "metro-wicon image--adaptive", src: w.icon }));
+      if (w.icon) wx.appendChild(el("img", { class: "metro-wicon image--adaptive", src: w.icon, alt: "" }));
       var temp = el("span", { class: "metro-temp title title--base" }, [String(w.hi) + "°"]);
       temp.appendChild(el("span", { class: "metro-quiet", text: " / " + w.lo + "°" }));
       wx.appendChild(temp);
@@ -1368,8 +1690,22 @@
     if (/^\d{2}:\d{2}$/.test(v)) { d.setHours(+v.slice(0, 2), +v.slice(3, 5), 0, 0); }
     return Math.floor(d.getTime() / 1000);
   }
+  var previewRunning = false;
   document.getElementById("runPreview").addEventListener("click", function () {
-    setStatus("previewStatus", "Fetching calendars and laying out…");
+    // One draw at a time. A run swaps window.fetch for a version that knows
+    // about the pasted feeds and puts the real one back when it finishes; two
+    // overlapping runs put it back while the other is still using it, and the
+    // second then fetches nothing it was told about.
+    if (previewRunning) return;
+    previewRunning = true;
+    var btn = document.getElementById("runPreview");
+    btn.disabled = true;
+    var stage = document.getElementById("stage");
+    var note = document.getElementById("stageNote");
+    if (!stage.hidden) { stage.className = "stage busy"; note.hidden = false; note.className = "stage-note hint"; note.textContent = "Drawing…"; }
+    function done() { previewRunning = false; btn.disabled = false; }
+    setStatus("previewStatus", "Fetching the calendars and laying the board out…");
+    fetchErrors = {};
     var cfg = buildConfig();
     var tzField = document.getElementById("pTz").value.trim();
     var tz = tzField || cfg.timeZone || (Intl.DateTimeFormat().resolvedOptions().timeZone) || "UTC";
@@ -1392,7 +1728,15 @@
       if (key) return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve(icsOverrides[key]); } });
       var isCal = urls.some(function (k) { return u === k || u.indexOf(k) === 0 || (k.indexOf("webcal://") === 0 && u === "https://" + k.slice(9)); });
       if (isCal) return fetchIcs(u).then(function (t) { icsOverrides[u] = t; return { ok: true, status: 200, text: function () { return Promise.resolve(t); } }; })
-        .catch(function (e) { failures.push(u + " (" + e.message + ")"); return { ok: false, status: 0, text: function () { return Promise.resolve(""); } }; });
+        .catch(function (e) {
+          failures.push(u);
+          // A browser reports every blocked cross-origin request as a bare
+          // "Failed to fetch", which tells the reader nothing they can act on.
+          fetchErrors[u] = /^HTTP /.test(e.message)
+            ? "The feed answered " + e.message + ". Check this is the ICS address and that it does not need a password."
+            : "This browser could not read the feed (" + e.message + "). Most calendar services refuse requests made from a web page; the device itself has no such limit, so the board will still work. To see it here, paste or upload the .ics below.";
+          return { ok: false, status: 0, text: function () { return Promise.resolve(""); } };
+        });
       return realFetch(url, opts);
     };
     Promise.resolve(run(input)).then(function (result) {
@@ -1400,20 +1744,43 @@
       document.getElementById("resultJson").value = JSON.stringify(result, null, 2);
       return drawMap(result.metro, dev).then(function () {
         var events = result.metro.items.filter(function (i) { return i.type === "event"; }).length;
-        var msg = events + " event(s) today.";
-        if (failures.length) msg += " Could not fetch: " + failures.join(", ") + ". Paste or upload those feeds above and draw again.";
+        var msg = !urls.length
+          ? "Nothing is configured yet, so this is the plugin's own demo day. Add a calendar above and draw again to see yours."
+          : plural(events, "event", "events") + " today.";
+        if (failures.length) msg += " " + plural(failures.length, "feed", "feeds") + " of " + urls.length + " could not be read: each one says why below, and takes a paste or an upload instead.";
+        else if (urls.length && !events) msg += " An empty board with feeds that did read means nothing in them falls on this day, or a rule hides all of it.";
         setStatus("previewStatus", msg, failures.length ? "err" : "ok");
         renderSources();
+        drawnSig = previewSignature();
+        refreshStale();
+        done();
       });
     }).catch(function (e) {
       window.fetch = realFetch;
-      setStatus("previewStatus", "Preview failed: " + (e && e.message ? e.message : e) + (location.protocol === "file:" ? ". Serve this folder over http (e.g. python3 -m http.server) so the plugin template can be loaded." : ""), "err");
+      done();
+      // Never the stack: what failed, and the one thing that usually fixes it.
+      var why = e && e.message ? e.message : String(e);
+      setStatus("previewStatus", "The map could not be drawn: " + why + "."
+        + (location.protocol === "file:"
+          ? " This page was opened straight from a file, so it cannot read the plugin's template next to it. Serve the folder over http instead: run python3 -m http.server in the repository, then open http://localhost:8000/tools/config-editor.html."
+          : " If it keeps happening, the JSON above is what the map is drawn from: copy it into an issue."), "err");
+      refreshStale();
     });
+  });
+  // Changing a preview setting does not redraw on its own, so the drawn map
+  // has to stop claiming to be the answer the moment one moves.
+  ["pDevice", "pLocale", "pTime", "pNow", "pLatLon", "pTz"].forEach(function (id) {
+    var n = document.getElementById(id);
+    if (!n) return;
+    n.addEventListener("change", refreshStale);
+    n.addEventListener("input", refreshStale);
   });
 
   // ------------------------------------------------------------ init
   state.tracks.push(newTrack());
   state.calendars.push(newCalendar());
+  paintPresets();
+  paintUndo();
   renderAll();
   document.getElementById("pNow").value = (function () { var d = new Date(); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); })();
   // ?demo opens the page with the demo configuration loaded and drawn (also handy for screenshots)

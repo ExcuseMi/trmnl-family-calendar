@@ -1,6 +1,6 @@
 'use strict';
 
-// The preset dropdown in Start (issues.md E5). Someone with no ICS links at all should be
+// The presets in Start (issues.md E5). Someone with no ICS links at all should be
 // able to see a board, so each preset is a COMPLETE configuration the plugin understands,
 // not a sketch: it goes in through loadConfig like an import, and the JSON box has to hand
 // back exactly what went in. These tests are the guard on that, on the four things the
@@ -8,19 +8,23 @@
 // color are chosen by the plugin now, and their pickers were removed from this page).
 
 module.exports = function (test, h) {
-  const { loadEditor, fireInput, fireChange, jsonOut, assert, assertEqual } = h;
+  const { loadEditor, fireInput, click, jsonOut, assert, assertEqual } = h;
 
   const IDS = ['family4', 'worksplit', 'solo'];
 
+  function presetButtons(document) {
+    return [...document.querySelectorAll('#presets button[data-preset]')];
+  }
   function presetIds(document) {
-    return [...document.querySelectorAll('#presetPick option')]
-      .map((o) => o.value).filter(Boolean);
+    return presetButtons(document).map((b) => b.getAttribute('data-preset'));
   }
   // Loads a preset with the confirm answered `answer`, and reports whether it was asked.
   function pick(win, doc, id, answer) {
     const asked = { n: 0 };
     win.confirm = () => { asked.n++; return answer !== false; };
-    fireChange(doc.getElementById('presetPick'), id);
+    const b = presetButtons(doc).find((x) => x.getAttribute('data-preset') === id);
+    if (!b) throw new Error('no preset button for ' + id);
+    click(b);
     return asked;
   }
   // Every rule in a config, calendar rules and global ones alike.
@@ -28,15 +32,34 @@ module.exports = function (test, h) {
     return (cfg.rules || []).concat(...(cfg.calendars || []).map((c) => c.rules || []));
   }
 
-  test('Start offers the three presets the plugin ships, by name', () => {
+  // One button each, not a dropdown: a preset costs you whatever is in the editor,
+  // so what it is has to be readable BEFORE the click that loads it.
+  test('Start offers the three presets the plugin ships, by name and by what they teach', () => {
     const { document } = loadEditor();
-    const opts = [...document.querySelectorAll('#presetPick option')];
-    assertEqual(opts.filter((o) => o.value).map((o) => [o.value, o.textContent]), [
+    const buttons = presetButtons(document);
+    assertEqual(buttons.map((b) => [b.getAttribute('data-preset'), b.querySelector('strong').textContent]), [
       ['family4', 'Family of 4'],
       ['worksplit', 'Work vs Personal Split'],
       ['solo', 'Solo Freelancer Track'],
     ]);
-    assert(!opts[0].value, 'the first option should be the prompt, not a preset');
+    buttons.forEach((b) => {
+      const note = b.querySelector('.preset-note');
+      assert(note && note.textContent.trim().length > 30,
+        b.getAttribute('data-preset') + ' does not say what it teaches before you load it');
+      assertEqual(b.getAttribute('aria-pressed'), 'false');
+    });
+  });
+
+  test('the preset that is loaded is the one marked as loaded', () => {
+    const { window, document } = loadEditor();
+    pick(window, document, 'worksplit', true);
+    const pressed = presetButtons(document).filter((b) => b.getAttribute('aria-pressed') === 'true');
+    assertEqual(pressed.map((b) => b.getAttribute('data-preset')), ['worksplit']);
+    // a paste is not a preset, and the mark must not outlive one
+    document.getElementById('importIn').value = '{"calendars":[{"url":"https://mine.example/a.ics"}]}';
+    window.confirm = () => true;
+    click(document.getElementById('loadImport'));
+    assertEqual(presetButtons(document).filter((b) => b.getAttribute('aria-pressed') === 'true'), []);
   });
 
   test('every preset round-trips: what it loads is what the JSON box gives back', () => {
@@ -140,7 +163,8 @@ module.exports = function (test, h) {
     asked = pick(window, document, 'worksplit', false);
     assert.strictEqual(asked.n, 1, 'edited work should not be thrown away silently');
     assert.strictEqual(document.getElementById('jsonOut').value, mine, 'declining the confirm must change nothing');
-    assert.strictEqual(document.getElementById('presetPick').value, '', 'a declined preset should not look loaded');
+    assert(!presetButtons(document).some((b) => b.getAttribute('data-preset') === 'worksplit' && b.getAttribute('aria-pressed') === 'true'),
+      'a declined preset should not look loaded');
 
     asked = pick(window, document, 'worksplit', true);
     assertEqual(asked.n, 1);

@@ -232,7 +232,7 @@ and a shared family calendar.
 
 The [configuration editor](https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html)
 carries three more, in
-the **Start** section's preset dropdown, for when you have no ICS links yet:
+the **Start** section, one button each, for when you have no ICS links yet:
 
 - **Family of 4**: one calendar per person plus a shared household feed.
   Dinner and the school run are `track` lists, so they are drawn once as an

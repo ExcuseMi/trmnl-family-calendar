@@ -33,7 +33,13 @@ module.exports = function (test, h) {
   test('a tall canvas lays the tracks out along its long side', () => {
     const rep = render(busy.metro, VIEWS[0]);
     assert(rep.debug.horizontal === false, 'a 1404x1872 canvas chose the horizontal layout');
-    for (const t of pathsWhere(rep, 'track')) {
+    // The COURSE, not the drawn runs: the ink is cut wherever a line passes
+    // under something, so one run of it can legitimately be a short sideways
+    // jog -- and a fillet that collapsed to a point is a run of zero length
+    // with no orientation at all, which `spanY > spanX` reads as a track
+    // laid out the wrong way round. Where the line GOES is the question.
+    for (const t of pathsWhere(rep, 'course')) {
+      if (t.len < 1) continue;
       const xs = t.pts.map((p) => p[0]), ys = t.pts.map((p) => p[1]);
       const spanX = Math.max.apply(null, xs) - Math.min.apply(null, xs);
       const spanY = Math.max.apply(null, ys) - Math.min.apply(null, ys);
