@@ -3949,7 +3949,20 @@
         // says: opened all the way it stops reading as together at all. So
         // it opens in proportion to how soon somebody needs it to, and
         // never more than halfway to where the lines would be anyway.
-        var tight = LINE_GAP * 0.65 + Math.max(2, e._p.line_width) * S * weightScale;
+        // SIX PIXELS OF PAPER, MEASURED BETWEEN THE STROKES.
+        //
+        // This was a CENTRE to centre pitch of about seven pixels, and the
+        // strokes either side of it are three wide apiece -- so the paper
+        // actually left between two rails in a corridor was three pixels,
+        // and at four rails deep with a dash pattern on each they read as
+        // one thick line rather than as four people. Bender arrived at the
+        // delivery run drawn on top of Leela.
+        //
+        // What has to be six is the gap, so the stroke is added rather than
+        // being part of the allowance: a corridor is several lines running
+        // together and it has to be possible to count them.
+        var tight = Math.max(2, e._p.line_width) * S * weightScale
+                  + Math.max(LINE_GAP * 0.65, 6 * S);
         var natural = mem.length > 1
           ? Math.abs(mem[mem.length - 1]._c - mem[0]._c) / (mem.length - 1) : tight;
         var soonest = Infinity;
