@@ -34,14 +34,14 @@ custom_fields:
 - keyname: author_info
   name: About This Plugin
   field_type: author_bio
-  description: Everyone's day as a metro map. Each calendar is a line, events branch off it as stations, a long block in one place becomes a siding beside the line, and several people in one place become an interchange. The map picks its own shape for the screen it is on.<br /><br />You are looking at an example board until you turn <strong>Use Demo Data</strong> off below and paste your own calendar links in. Runs on TRMNL <strong>Serverless</strong>.
+  description: Everyone's day as a metro map. Each calendar is a <strong>line</strong>, each event is a <strong>stop</strong> on it, and an event several people share is an <strong>interchange</strong> where their lines converge. A long block like a school day or a shift runs along the main track itself, so you can see who is where and for how long. The map lays itself out to whatever screen it lands on.<br /><br />You are riding a demo board until you turn <strong>Use Demo Data</strong> off below and paste your own calendar links in. Runs on TRMNL <strong>Serverless</strong>.
   github_url: https://github.com/ExcuseMi/trmnl-metro-calendar-plugin
   category: calendar
   help_text: TRMNL X Ready · English, français, español, Deutsch, Nederlands
 - keyname: use_demo_data
   field_type: boolean
   name: Use Demo Data
-  description: On, the board shows a built-in example day so you can see what it does before setting anything up. Turn it off and the Calendars box appears.
+  description: Leave this on and the board runs a built-in example day, so you can see what it draws before setting anything up. Switch it off and the <strong>Calendars</strong> box below opens for your own feeds.
   default: true
   optional: true
   conditional_validation:
@@ -54,18 +54,18 @@ custom_fields:
 - keyname: demo_set
   field_type: select
   name: Demo Board
-  description: Which demo day to show. Each one is a real config in this project's <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/</a> folder, so whichever you like the look of is also a worked example to copy.
+  description: Which example day to run. Each one is a real config from this project's <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/tree/main/demo" target="_blank">demo/</a> folder, so whichever board you like the look of is also a worked example to copy into <strong>Calendars</strong>.
   options:
-  - Springfield, a family of five (shared school day, family dinner): simpsons
+  - Springfield, a family of five (a school day two of them share, dinner as an interchange): simpsons
   - Planet Express, a work crew (one team calendar, a delivery three of them are on all day): futurama
-  - Apartment 20, two flatmates (a day at a desk, an evening they are both at): friends
+  - Apartment 20, two flatmates (a long day at a desk, an evening they are both at): friends
   default: simpsons
   optional: true
 - keyname: config_json
   field_type: text
   name: Calendars
-  placeholder: https://cloud.example.com/alex.ics
-  description: 'One ICS link per line is the whole setup: each calendar becomes its own line on the map, named after the calendar, and its events sit on that line. Links may be <code>https://</code> or <code>webcal://</code>. Recurring events show if they repeat weekly, or if they start today.<br /><br />For anything more (routing one calendar''s events to several people, sharing an event between them, renaming or hiding things, feeds that need an auth header) paste a JSON config here instead. Whatever is in this box is read as JSON if it parses as JSON, and as a list of links if it does not.<br /><br />Easiest way to build one: the <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">Configuration Editor</a>, which previews the map as you go and explains every option.'
+  placeholder: "https://calendar.example.com/alex.ics\nhttps://calendar.example.com/sam.ics"
+  description: 'One ICS link per line is the whole timetable: each calendar becomes its own line on the map, named after the calendar, and its events become the stops along it. Links may be <code>https://</code> or <code>webcal://</code>. Recurring events show if they repeat weekly, or if they start today. Leave the box empty and the demo board keeps running.<br /><br />Where to find a link: Google Calendar, calendar settings, <em>Secret address in iCal format</em>. iCloud, share the calendar publicly and copy the <code>webcal://</code> link. Outlook, calendar settings, publish, then copy the ICS link.<br /><br />For anything more than a line per calendar (routing one calendar''s events to several lines, sharing an event so it draws as an interchange, renaming or hiding things, a private feed that needs an auth header) paste a JSON config here instead. Whatever is in this box is read as JSON if it parses as JSON, and as a list of links if it does not.<br /><br />Easiest way to build one: the <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">Configuration Editor</a>, which previews the map as you go. Every option is written up in <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/blob/main/CONFIG.md" target="_blank">CONFIG.md</a>.'
   optional: true
 - keyname: show_day
   field_type: select
@@ -89,14 +89,15 @@ custom_fields:
   field_type: number
   name: Switch Over At
   group: The Day
-  description: The hour the board moves on to tomorrow, on a 24-hour clock. Blank means 18, so six in the evening.
+  description: The hour the board moves on to tomorrow's timetable, on a 24-hour clock, so 18 is six in the evening. Anything outside 0 to 23, or left blank, is read as 18.
   placeholder: '18'
+  default: 18
   optional: true
 - keyname: time_format
   field_type: select
   name: Time Format
   group: The Day
-  description: 'Auto follows your account language: 12-hour for US English, 24-hour everywhere else.'
+  description: 'How the clock reads, on the hour strip and in the header. Auto follows your TRMNL account language: 12-hour for US English, 24-hour everywhere else.'
   options:
   - Auto: auto
   - 24-hour: 24h
@@ -107,13 +108,13 @@ custom_fields:
   field_type: lat_lon
   name: Location
   group: Weather
-  description: Drives the weather in the header, sunrise and sunset, and the rain start/stop markers along the map. Leave it blank and the board keeps its placeholder weather.
+  description: Where the board is standing. It drives the weather in the header, the sunrise and sunset marks in the band along the top edge, and the rain start and stop markers across the map. Leave it blank and the board keeps its placeholder weather.
   optional: true
 - keyname: temperature_unit
   field_type: select
   name: Temperature Unit
   group: Weather
-  description: 'Auto follows your account language: Fahrenheit for US English, Celsius everywhere else. The alert thresholds below are read in whichever unit this ends up being.'
+  description: 'Auto follows your TRMNL account language: Fahrenheit for US English, Celsius everywhere else. The alert thresholds below are read in whichever unit this ends up being.'
   options:
   - Auto: auto
   - Celsius: c
@@ -124,7 +125,7 @@ custom_fields:
   field_type: boolean
   name: Weather Alert Banner
   group: Weather
-  description: 'A banner along the bottom edge, in the manner of a service alert on a departure board, when the forecast breaches one of the thresholds below. Needs a Location above. Off by default, and on a day that breaches nothing it takes no space at all: the map gets it back.'
+  description: 'A service alert along the bottom edge, the way a departure board announces disruption, on a day the forecast crosses one of the thresholds below. Needs a <strong>Location</strong> above. Off by default, and on a day that crosses nothing it takes no space at all: the map gets it back.'
   default: false
   optional: true
   conditional_validation:
@@ -138,7 +139,8 @@ custom_fields:
   field_type: number
   name: Rain Chance At Or Above (%)
   group: Weather
-  description: The wettest hour still to come is called out once its chance of rain reaches this. Blank for no rain alert.
+  description: The wettest hour still to come is called out once its chance of rain reaches this. 70 is a good "take a coat" line. Blank for no rain alert.
+  placeholder: '70'
   default: 70
   optional: true
 - keyname: alert_snow
@@ -152,13 +154,13 @@ custom_fields:
   field_type: number
   name: Cold At Or Below
   group: Weather
-  description: In whichever unit the board is showing. Blank for no cold alert.
+  description: In whichever unit the board is showing, so 0 in Celsius or 32 in Fahrenheit. Blank for no cold alert.
   optional: true
 - keyname: alert_temp_high
   field_type: number
   name: Heat At Or Above
   group: Weather
-  description: In whichever unit the board is showing. Blank for no heat alert.
+  description: In whichever unit the board is showing, so 30 in Celsius or 86 in Fahrenheit. Blank for no heat alert.
   optional: true
 name: Metro Calendar
 description: Everyone's day as a metro map
