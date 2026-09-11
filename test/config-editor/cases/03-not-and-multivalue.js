@@ -1,5 +1,5 @@
 module.exports = function (test, h) {
-  const { loadEditor, fireInput, fireChange, click, buttonByText, jsonOut, selectMulti, assert, assertEqual } = h;
+  const { loadEditor, fireInput, fireChange, click, buttonByText, checkByLabel, jsonOut, selectMulti, assert, assertEqual } = h;
 
   // Setting up the track BEFORE the rule/condition matters: naming a
   // track re-renders #globalRules (so every rule can offer them in its
@@ -34,7 +34,7 @@ module.exports = function (test, h) {
   test('"not" combined with a comma-separated value produces not(or(...))', () => {
     const { document } = loadEditor();
     const rule = ruleWithCondition(document, 'L2, L6', true);
-    const hide = rule.querySelectorAll('input[type=checkbox]')[2];
+    const hide = checkByLabel(rule, 'hide it from the map');
     hide.checked = true; fireChange(hide);
     assertEqual(jsonOut(document).rules[0].match, {
       type: 'not',

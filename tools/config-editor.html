@@ -936,14 +936,35 @@
       full.addEventListener("change", function () { r.rewriteFull = full.checked; refresh(); });
       var hide = el("input", { type: "checkbox" }); hide.checked = r.hide;
       hide.addEventListener("change", function () { r.hide = hide.checked; refresh(); });
+      // DELETING THE MATCHED TEXT NEEDS ITS OWN TICK.
+      //
+      // It is written as an empty `rewrite`, and a text box cannot tell "I
+      // typed nothing" from "I mean nothing": every rule in the editor has
+      // an empty box, so reading one as "delete it" would make every rule a
+      // delete. So it is a control of its own, and it takes the box out of
+      // play while it is on -- a rule cannot both delete the matched text
+      // and put something else there.
+      var wipe = el("input", { type: "checkbox" }); wipe.checked = r.rewriteEmpty;
+      wipe.addEventListener("change", function () {
+        r.rewriteEmpty = wipe.checked;
+        if (r.rewriteEmpty) { r.rewrite = ""; rewrite.value = ""; }
+        rewrite.disabled = r.rewriteEmpty;
+        refresh();
+      });
+      rewrite.disabled = r.rewriteEmpty;
+      var allDay = el("input", { type: "checkbox" }); allDay.checked = r.allDay;
+      allDay.addEventListener("change", function () { r.allDay = allDay.checked; refresh(); });
       var rm = el("button", { class: "ghost small", text: "Remove rule" });
       rm.addEventListener("click", function () { snapshot("remove a rule"); list.splice(i, 1); renderRules(list, container); renderJson(); });
       card.appendChild(el("div", { class: "rule-step", text: "1 · If" }));
       card.appendChild(conds);
       card.appendChild(el("div", { class: "rule-step", text: "2 · Then" }));
       card.appendChild(el("div", { class: "action" }, [el("span", { class: "chip", text: "put it on the line of" }), persons, el("label", { class: "check" }, [rename, "replace the matched text with their name"])]));
-      card.appendChild(el("div", { class: "action" }, [el("span", { class: "chip", text: "rename it" }), rewrite, el("label", { class: "check" }, [full, "replace the whole title"])]));
-      card.appendChild(el("div", { class: "action" }, [el("label", { class: "check" }, [hide, el("span", { class: "chip", text: "hide it from the map" })])]));
+      card.appendChild(el("div", { class: "action" }, [el("span", { class: "chip", text: "rename it" }), rewrite, el("label", { class: "check" }, [full, "replace the whole title"]), el("label", { class: "check" }, [wipe, "delete the matched text"])]));
+      card.appendChild(el("div", { class: "action" }, [
+        el("label", { class: "check" }, [hide, el("span", { class: "chip", text: "hide it from the map" })]),
+        el("label", { class: "check" }, [allDay, "draw it at the head of the line, not at a time"]),
+      ]));
       card.appendChild(warn);
       card.appendChild(el("div", { style: "text-align:right" }, [rm]));
       refresh();
@@ -1747,8 +1768,19 @@
       inner.style.width = Math.round(dev.w * scale) + "px";
       inner.appendChild(trmnl);
       document.getElementById("stage").hidden = false;
-      // the layout engine, exactly as it ships, with our data in place of the Liquid tag
-      var code = tpl.script.replace("{{ metro | json }}", JSON.stringify(metro));
+      // The layout engine, exactly as it ships, with our data in place of
+      // the Liquid tag. The tag is matched BY SHAPE, not by a copy of its
+      // text: it was renamed once already ({{ metro | json }} became
+      // {{ data | json }}) and the stale copy here then "replaced" nothing,
+      // so every preview compiled a script with raw Liquid still in it and
+      // died on the syntax error that is. A tag this code cannot find is a
+      // broken preview either way, so say which part broke.
+      var TAG = /window\.METRO\s*=\s*\{\{[^{}]*\}\}\s*;/;
+      if (!TAG.test(tpl.script)) throw new Error("the plugin's template no longer hands window.METRO a Liquid tag, so there is nowhere to put the payload. tools/config-editor.html has to be taught the template's new shape");
+      // A function as the replacement, because in a replacement STRING the
+      // sequences $&, $` and $' are substitution patterns, and an event
+      // title carrying one would rewrite the payload around it.
+      var code = tpl.script.replace(TAG, function () { return "window.METRO = " + JSON.stringify(metro) + ";"; });
       new Function(code)();
     });
   }

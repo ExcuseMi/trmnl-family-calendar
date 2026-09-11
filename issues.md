@@ -781,8 +781,13 @@ is open.
   in the same breath. `test/layout/cases/rails.js` now pins what the board
   really does, so the deletion cannot quietly change behaviour.
 
-- [ ] **E16. The rule editor has no control for `allDay` or for deleting the
-  matched text.** Both survive a round trip now -- a config carrying either
+- [x] **E16. The rule editor has no control for `allDay` or for deleting the
+  matched text.** Built. `allDay` is a tick beside `hide`; deleting the
+  matched text is its own tick that disables the rename box while it is on,
+  since a rule cannot both delete what it matched and put something else
+  there. Two tests in `01-export.js` pin them, and the two tests that ticked
+  "hide" as checkbox number two now find it by its label -- they had been
+  silently ticking the new box above it. Both survive a round trip now -- a config carrying either
   loads, keeps it and writes it back, where before the editor dropped them
   silently and handed back a configuration that had quietly stopped
   stripping class codes. But neither can be SET in the editor, so anybody

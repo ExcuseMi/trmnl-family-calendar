@@ -19,10 +19,13 @@ if (!inline) throw new Error("config-editor.html: inline <script> before </body>
 const INLINE_SCRIPT = inline[1];
 const SKELETON = EDITOR_HTML.replace(/<script src="\.\.\/plugin\/src\/transform\.js"><\/script>\s*/, '').replace(INLINE_RE, '</body>');
 
-function loadEditor() {
+// `fetchImpl` is for the one test that needs the page to read something (the
+// preview fetches the plugin's own template). Everything else gets the
+// rejecting stub, so a test that reaches the network by accident says so.
+function loadEditor(fetchImpl) {
   const dom = new JSDOM(SKELETON, { url: 'http://localhost/tools/config-editor.html', runScripts: 'outside-only', pretendToBeVisual: true });
   const { window } = dom;
-  window.fetch = () => Promise.reject(new Error('network disabled in tests'));
+  window.fetch = fetchImpl || (() => Promise.reject(new Error('network disabled in tests')));
   window.eval(TRANSFORM_SRC);
   window.eval(INLINE_SCRIPT);
   return { window, document: window.document };
@@ -37,6 +40,17 @@ const h = {
     if (!b) throw new Error('no button "' + text + '"');
     return b;
   },
+  // BY LABEL, NOT BY INDEX. Two tests ticked "hide it from the map" as
+  // checkbox number two, which held until the rule card grew a checkbox
+  // above it; then they were quietly ticking something else entirely.
+  checkByLabel(container, text) {
+    const l = Array.from(container.querySelectorAll('label.check'))
+      .find((e) => e.textContent.trim().indexOf(text) >= 0);
+    if (!l) throw new Error('no checkbox labelled "' + text + '"');
+    const box = l.querySelector('input[type=checkbox]');
+    if (!box) throw new Error('label "' + text + '" has no checkbox');
+    return box;
+  },
   jsonOut(document) { return JSON.parse(document.getElementById('jsonOut').value); },
   selectMulti(sel, values) {
     Array.from(sel.options).forEach((o) => { o.selected = values.indexOf(o.value) !== -1; });
@@ -44,6 +58,12 @@ const h = {
   },
   assert,
   assertEqual(a, b) { assert.deepStrictEqual(a, b); },
+  // The preview is a promise chain several links long. Nothing in it waits
+  // on a timer, so draining the microtask queue a few hundred times is
+  // enough to let it run to its end (or to its catch) before we look.
+  async flush(n) {
+    for (let i = 0; i < (n || 200); i++) await new Promise((r) => setImmediate(r));
+  },
 };
 
 const tests = [];
@@ -51,10 +71,15 @@ function test(name, fn) { tests.push({ name, fn }); }
 const casesDir = path.join(__dirname, 'cases');
 fs.readdirSync(casesDir).filter((f) => f.endsWith('.js')).sort().forEach((f) => require(path.join(casesDir, f))(test, h));
 
-let failed = 0;
-for (const t of tests) {
-  try { t.fn(); console.log('✓ ' + t.name); }
-  catch (e) { failed++; console.log('✗ ' + t.name + '\n  ' + (e && e.stack ? e.stack.split('\n').slice(0, 3).join('\n  ') : e)); }
-}
-console.log(`\n${tests.length - failed}/${tests.length} passed`);
-process.exit(failed ? 1 : 0);
+// `await` on every case, so a case may be async. A test that returned a
+// promise would otherwise pass by being a promise: nothing waited for it,
+// and whatever it asserted was thrown away.
+(async () => {
+  let failed = 0;
+  for (const t of tests) {
+    try { await t.fn(); console.log('✓ ' + t.name); }
+    catch (e) { failed++; console.log('✗ ' + t.name + '\n  ' + (e && e.stack ? e.stack.split('\n').slice(0, 3).join('\n  ') : e)); }
+  }
+  console.log(`\n${tests.length - failed}/${tests.length} passed`);
+  process.exit(failed ? 1 : 0);
+})();
