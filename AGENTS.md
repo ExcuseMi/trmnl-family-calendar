@@ -11,6 +11,13 @@
 - Demo boards live in `demo/<show>/`: real ICS files plus a `config.json` that is generated from the copy embedded in `plugin/src/transform.js` (`node tools/dump-demo-configs.js`). Change a board in transform.js and write the file back out, or `test/transform/cases/demo-config.js` fails. Those ICS files are fetched from raw.githubusercontent at run time, so push git BEFORE pushing the plugin when their paths change.
 - `tools/config-editor.html` runs `plugin/src/transform.js` and the `<script>` from `plugin/src/shared.liquid` unmodified for its preview; keep the header markup it mirrors in sync when the template's header changes.
 
+## Judging a picture
+
+`/rule-check` (`.claude/skills/rule-check/`) renders or takes a screenshot and
+has an agent read it against `rules.md`, finding by finding. The layout suite
+proves a drawing is well formed; this is for whether it is right, which is a
+different question and the one that has cost the most time here.
+
 ## Where the rules live
 
 `rules.md` lists every rule the board draws by, with the reason attached.
