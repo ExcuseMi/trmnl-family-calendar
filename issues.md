@@ -113,7 +113,16 @@ is open.
 - [ ] **A15. A track should carry events on BOTH sides of its line.**
   Every lane a track owns sits OUTWARD of it, so a line at the edge of the
   bundle has all of its labels on one side and the gap between it and its
-  neighbour goes unused. On the everyday board, Work has six events stacked
+  neighbour goes unused.
+
+  The sharpest case, carried over from the old tracker: a spur on a
+  converged shared station sits in the corridor between the two lines. Bart's
+  "Field Trip" branch lands in the space School Day opens between him and
+  Lisa. That is not a stray -- for the INNER member of a shared station the
+  outward side IS the corridor -- and branching it the other way needs
+  exactly the both-sides support this entry asks for. The outer line is
+  capped so it never crosses into the inner line's band, which is as far as
+  it goes without that change. On the everyday board, Work has six events stacked
   above it and nothing below, while the space south of its rail is empty.
   Reported as: "if Work would have some events to the south of its track,
   there would be more room to play with"; "a track should have events on
@@ -524,14 +533,19 @@ is open.
 - [ ] **E2. Dynamic date range header.** Single day: `Today · Thu 10 Sep ·
   07:00 - 21:00`. Multi-day: `Thu 10 Sep - Fri 11 Sep` with a small high/low
   and icon per day, side by side.
-- [ ] **E3. Midnight terminal.** At 00:00 a full-height perpendicular double
-  bar or a 180° rounded terminal loop into the next day's track, with an
-  inline label on the baseline: `TRANSFER · FRIDAY 11 SEP`.
-- [ ] **E4. Night express compression.** Active hours take ~85% of the axis,
-  night is squashed into the rest, entered and left through tunnel portals,
-  the compressed segment filled with a cross-hatch or chevrons. An event
-  that spans the night runs through it as one continuous stroke with a
-  station at each end.
+- [x] **E3. Midnight terminal.** Built as the first of the two options: a
+  full-height double bar across the map at each boundary, with the day it
+  opens named on it (`drawMidnights` in shared.liquid). Drawn BEHIND the
+  lines, because a line that runs through midnight really does run through
+  it and a bar over the top would cut a sleeper event in half. The 180°
+  terminal loop was the alternative and was not taken.
+- [x] **E4. Night express compression.** Built in the time axis: a minute
+  outside the busy part of a day is worth `expressRate` of a busy one, and
+  adjacent express stretches merge so the tail of one day and the head of
+  the next are ONE night rather than two half-nights. The compressed
+  stretches carry the cross-hatch asked for. An event spanning the night
+  runs through as one stroke, which falls out of the axis being continuous
+  rather than needing anything of its own.
 - [x] **E12. An all-day event belongs at the line's head, not on the axis.**
   AGREED, planned, not built. An all-day event has no time of day at all:
   `transform.js` synthesises a fake timed event spanning the whole visible
@@ -675,6 +689,17 @@ is open.
   true` is already kept as an undocumented alias for configs written before
   the rename, so there is a precedent for reading the old key and ignoring
   it.
+
+- [ ] **E14. The two biggest text tiers ignore the device's font setting.**
+  Carried over from the old tracker. The device's Font Family setting
+  (Default / Classic / TRMNL) only redefines `--title-*` and `--label-*` for
+  the roles it names, and `title--xlarge` / `title--large` -- the two tiers a
+  TRMNL X actually uses -- are not among them, so those stay on Inter
+  whatever the device is set to. Verified locally with the framework
+  webfonts downloaded and the CSS font paths rewritten.
+
+  Needs a decision rather than a fix: cap the tier ladder at `title--base`
+  so the setting always applies, or leave the big tiers alone.
 
 - [ ] **E8. Thicker tracks on the large panel.** Line weights are chosen in
   layout px and then multiplied by `S`, so a TRMNL X at 1872x1404 draws the
