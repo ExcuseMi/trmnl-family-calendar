@@ -512,8 +512,8 @@ is open.
 
 ## E. New features
 
-- [ ] **E19. The four caption overlaps cannot be priced away, because the
-  rails move afterwards.** The remaining overlap failures (long-event-day,
+- [ ] **E19. The caption overlaps cannot be priced away: placement is
+  greedy, so every local improvement reshuffles somebody else.** The remaining overlap failures (long-event-day,
   double-booked, crew-day) are all the same shape: on a crowded line every
   candidate position for a caption is bad, and the search buys the least-bad
   one. `costAt` prices everything by area, charging a caption over a rail at
@@ -531,16 +531,24 @@ is open.
   * Prefer only positions with neither fault, falling back to the old choice
     otherwise: worse still, 10 failures, with eight pierces.
 
-  The second result is the interesting one, because a preference that only
-  ever selects an already-clean candidate should not be able to CREATE a
-  pierce. It can here: `recomputeLineDists()` runs after the captions are
-  placed, so the rails move under captions chosen to avoid them. Any change
-  that perturbs caption positions reshuffles which captions get pierced,
-  which is why tuning the cost model walks sideways instead of converging.
+  The second result is the one that explains the rest, because a preference
+  that only ever selects an already-clean candidate should not be able to
+  CREATE a pierce anywhere. It can, because the pass is greedy and
+  sequential: captions are placed in order against ONE growing obstacle
+  list, and each chosen box is pushed into it. Move the first caption to a
+  better spot and every later caption on that side is choosing against a
+  different board, so the pierces and overlaps land on different captions
+  rather than going away. (I first wrote this down as "the rails move
+  afterwards", blaming `recomputeLineDists()`. That was wrong and is worth
+  recording as wrong: it recomputes each EVENT's branch-origin distance, and
+  the lines' own distances are solved before the caption pass. Nothing moves
+  the rails.)
 
-  So this is not a weights problem. Either the caption pass has to run after
-  the line distances settle (or iterate to a fixed point), or the placer has
-  to know that its own choices move the rails. Worth doing with the
+  So it is not a weights problem and not an ordering problem. A greedy
+  search cannot see that giving caption A its second-best spot leaves B and
+  C clean. Fixing it means a pass with a global view: place all of a side's
+  captions together, or iterate the whole pass to a fixed point and keep the
+  best board seen rather than the last one. Worth doing with the
   measurements above in hand; not worth another round of tuning.
 
   One thing that did come out of it: with captions placed differently,
