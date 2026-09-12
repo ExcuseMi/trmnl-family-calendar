@@ -4469,9 +4469,41 @@
     // it runs backwards, ends before the first). Anything that moves a
     // caption afterwards has to honour it, or the words land back on the
     // rails they were moved off.
+    // A CAPTION MAY NOT BE WRITTEN ACROSS A MIDNIGHT.
+    //
+    // Position along this axis means WHEN, and the midnight bar is the one
+    // place on the board where it also means WHICH DAY. A caption that
+    // straddles it is read on the wrong side of it: "Model zitten
+    // wimperextensions", a Sunday afternoon, slid far enough right that its
+    // words sat in Monday, and the panel was reported as having the event
+    // on the wrong day. It did not; the words did.
+    //
+    // Nothing else catches this. A caption is allowed to slide along its
+    // line to find paper (rule 34e) and the midnight bar is three pixels of
+    // ink, so every clash test it passes on the way is telling the truth --
+    // it is not written over anything. It is written over a DATE.
+    //
+    // So the box goes wholly onto its own event's side. Clamped here rather
+    // than priced in the search, because unlike a rail or another name this
+    // is not a question of how bad it looks: a caption on the wrong side of
+    // a midnight is not untidy, it is incorrect, and there is no amount of
+    // crowding that makes it the right answer.
     function capClamp(e, at) {
       if (e._capMinA != null && at < e._capMinA) return e._capMinA;
       if (e._capMaxA != null && at > e._capMaxA) return e._capMaxA;
+      return offMidnight(e, at);
+    }
+    // Put a caption's box wholly on its own event's side of a midnight.
+    // Returns `at` unchanged when it already is, which is nearly always.
+    function offMidnight(e, at) {
+      if (!horizontal || !e._textLen || !AXIS.boundaries || !AXIS.boundaries.length) return at;
+      for (var mi = 0; mi < AXIS.boundaries.length; mi++) {
+        var mx = aFor(AXIS.boundaries[mi].min);
+        if (at >= mx || at + e._textLen <= mx) continue;
+        at = e._nodeA < mx ? mx - e._textLen - 2 * S : mx + 2 * S;
+      }
+      if (at + e._textLen > axisEnd) at = axisEnd - e._textLen;
+      if (at < axisStart) at = axisStart;
       return at;
     }
     function capAllows(e, at) {
@@ -9191,6 +9223,22 @@
       lead.setAttribute(OWNER_ATTR, e.owner);
       svg.appendChild(lead);
     }
+
+    // EVERY CAPTION, WHICHEVER PASS PLACED IT.
+    //
+    // `capClamp` is the funnel for the bundle and convergence captions and
+    // is not on the path a plain mark's caption takes -- that one comes
+    // straight out of the lane search. So the correction is applied once
+    // more here, to all of them, immediately before anything reads a
+    // position: the drawing below, and `labelBoxes` through it.
+    //
+    // A caption on the wrong side of a midnight is not untidy, it is
+    // incorrect, so it is corrected rather than priced. Where the move puts
+    // it against something else, that is a worse-looking board and a
+    // truthful one, which is the right way round.
+    visible.forEach(function (e) {
+      if (!e._dropped && e._textStart != null) e._textStart = offMidnight(e, e._textStart);
+    });
 
     visible.forEach(function (e) {
       if (e._dropped) return;

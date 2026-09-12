@@ -240,4 +240,32 @@ module.exports = function (test, h) {
     const drawn = (rep.debug.events || []).filter((e) => e[2] !== 'DROP').length;
     assertEqual(drawn, 5, 'expected all five events on the board, drew ' + drawn);
   });
+  test('no caption is written across a midnight', () => {
+    // Position along this axis means WHEN, and the midnight bar is the one
+    // place on the board where it also means WHICH DAY. A caption that
+    // straddles it gets read on the wrong side of it.
+    //
+    // Reported from the panel as an event being on the wrong day. It was
+    // not: a Sunday afternoon had slid far enough right that its words sat
+    // in Monday. Nothing caught it, and every clash test it passed was
+    // telling the truth -- it was not written over anything. It was written
+    // over a DATE, and the bar is three pixels of ink, so no test that asks
+    // "is this on top of something" was ever going to see it.
+    for (const f of fixtures) {
+      for (const vname of ['x-landscape', 'og-landscape']) {
+        const rep = layout(f, byName(vname));
+        if (!rep.debug.midnights.length || !rep.debug.horizontal) continue;
+        const Z = rep.debug.Z;
+        for (const m of rep.debug.midnights) {
+          const mx = m[1] * Z;
+          for (const c of textLabels(rep)) {
+            if (!hasCls(c, 'metro-label')) continue;
+            assert(!(c.x < mx - 1 && c.x + c.w > mx + 1),
+              f.name + '/' + vname + ': "' + c.text + '" is written across the midnight at x'
+              + Math.round(mx) + ', so it reads as the wrong day');
+          }
+        }
+      }
+    }
+  });
 };

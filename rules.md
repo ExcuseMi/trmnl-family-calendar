@@ -375,6 +375,22 @@ Where the two disagree, this one is newer.
     which is the right answer: a name crammed against the last event of the
     day is worse than no second name.
 
+33f. **A caption may not be written across a midnight.** Position along this
+    axis means WHEN, and the midnight bar is the one place on the board
+    where it also means WHICH DAY, so a name that straddles it is read on
+    the wrong side of it. Reported from a panel as an event being on the
+    wrong day: it was not, a Sunday afternoon had slid far enough right that
+    its words sat in Monday.
+    Nothing else catches this and nothing else can. A caption is allowed to
+    slide along its line to find paper (34e), the bar is three pixels of
+    ink, and every clash test the slide passes on the way is telling the
+    truth -- it is not written over anything. It is written over a DATE.
+    Corrected rather than priced, and that is the point: a rail through a
+    name is untidy and a name on the wrong day is WRONG, and no amount of
+    crowding makes the wrong side the right answer. Where the correction
+    puts the words against something else, that is a worse-looking board and
+    a truthful one.
+
 34a. **Six pixels of paper round every rail and every caption**, its own
     rail included, descenders included. Merely not touching is not enough:
     a name dropped into the slot between two close lines is clear of both
