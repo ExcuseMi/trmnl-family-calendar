@@ -573,12 +573,36 @@ is open.
   with a rail through a label. Reverted.
 
   The phantom rung was paying for something real. A corridor's name goes
-  BEYOND the outermost participant's rail, and nothing else books that paper
-  -- the rung booked on one owner's outward ladder was standing in for it, in
-  the wrong place and at the wrong size. So the two halves have to land
-  together: charge the corridor its own need (its rails plus its caption)
-  through the `gaps` mechanism `solve` already takes for A17, and only then
-  drop the rung demand for a convergence that is corridor-routed.
+  above the bundle, and nothing else books that paper -- the rung booked on
+  one owner's outward ladder was standing in for it, in the wrong place and
+  at the wrong size.
+
+  BUILT, ON THE BRANCH `e21-corridor-room`, and not ready. The narrow rule:
+  a bundle closing up frees the paper its top member vacates (half the
+  group's span, less half the fan), and where that is more than the name
+  needs, the rung is waste and is given back; where it is less, the paper had
+  to come from the rung, so it keeps it. Plus a pass after `buildTrunks` that
+  hands the booking back for a convergence that came out a BUNDLE rather than
+  a corridor (two of the 54 these fixtures draw), and a gate that draws the
+  board both ways at the winning tier and keeps the cleaner one.
+
+  It works and it is a net loss: seven-lines/OG goes from three lines in the
+  top 60% at the smallest text to three lines over the whole board with their
+  times and locations back, and the suite goes from 4 failures to 9. The
+  freed room is room the caption pass cannot yet use: what breaks is captions
+  landing on each other and rails through names, on five boards, which is
+  E19 and E20 exactly. That pass has to come first.
+
+  Two findings from the attempt, both worth keeping:
+
+  - Every solo event is a mark on its own line now, so CONVERGENCES ARE THE
+    ONLY RUNG CUSTOMERS LEFT on these boards. The lane ladder is almost
+    entirely theirs.
+  - ATTEMPTS ARE NOT IDEMPOTENT. Each one feeds on the last one's routes and
+    `capBlocks`, and `_noBooking` accumulates, so "draw it both ways and keep
+    the better" is only trustworthy when the two drawings are adjacent.
+    Deciding at the first tier and deciding at the winning tier gave
+    different boards, and neither matched a straight re-run.
 
 - [ ] **E20. Captions walk past a neighbouring rail, so they read as
   somebody else's.** `rules.md` rule 37: "A caption may not walk past another
