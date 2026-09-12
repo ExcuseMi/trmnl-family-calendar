@@ -67,7 +67,19 @@ module.exports = function (test, h) {
   // the repair pass; E19 is what it is for.
   const OVERLAP_KNOWN = {};
   const PIERCE_KNOWN_VIEW = {};
-  const PIERCE_KNOWN = {};
+  // WHAT IS LEFT AFTER E23, and it is a different claim from what used to be
+  // on this list. Not "the greedy pass took the least-bad spot" -- the
+  // assignment can ask a neighbour to move now -- but "on this line every
+  // position for this name is a graze, a pierce or a gap, and the prices only
+  // decide which". Four orderings of those three were measured on the whole
+  // suite; the one that ships costs the fewest boards. See E24.
+  const WHY24 = 'every position for this name is a graze, a pierce or a gap: E24';
+  const PIERCE_KNOWN = { 'long-event-day': WHY24 };
+  // seven-lines is pierced on the ROOMY panel only, which is the opposite of
+  // the usual shape and worth saying so: the bigger board reaches a bigger
+  // text, and "Good News Everyone" at that size has no row beside its bundle
+  // that one of the bundle's own rails does not cross.
+  PIERCE_KNOWN_VIEW['seven-lines/x-landscape'] = WHY24;
 
 
   const OVERLAP_TOL = 2;

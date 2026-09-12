@@ -512,6 +512,36 @@ is open.
 
 ## E. New features
 
+- [ ] **E24. On a crowded line, every position for some name is a graze, a
+  pierce or a gap, and the prices only decide which.** Six boards out of the
+  layout suite's sixty-odd end this way, and they are pinned known against
+  this entry.
+
+  The caption assignment (E23) scores three faults against each other: a pair
+  of names that TOUCH (0.3 of a name's area, plus the area they actually
+  cover), a rail drawn THROUGH the words (0.4), and a name NOT DRAWN at all
+  (0.35, and a line's head counts it as "+2"). All four orderings were
+  measured on the whole suite:
+
+  | shed | pierce | boards failing |
+  |---|---|---|
+  | 0.35 | 0.4 flat | **6** (kept) |
+  | 0.35 | by length | 8 |
+  | 0.35 | 0.5 + length | 10, and the sheds it bought put a "+2" at a line's head on that line's own rail |
+  | 0.50 | 0.4 flat | 8, the sheds gone and the pierces up |
+
+  Grading a pierce by how much of the name it crosses is the obvious idea and
+  it measured worse twice, in both directions: by length alone a six-pixel
+  graze came out cheaper than stepping out one rung; with a fixed part dear
+  enough to fix that, the fixed part passed what not drawing the name costs.
+
+  So this is not a tuning problem, and the remaining six are not going to be
+  priced away. What would actually fix them is more ROOM -- which is E21, the
+  eighty to a hundred and sixty pixels of depth the solver reserves and the
+  drawing never uses. A caption pass with another corridor to put a name in
+  does not have to choose between three bad answers.
+
+
 - [x] **E23. The captions were placed by the strategy the literature calls
   the weakest.** This is the same root cause E19 and E20 each name at the end
   of their own write-ups, so both are closed by it.

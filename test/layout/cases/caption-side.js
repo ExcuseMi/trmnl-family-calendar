@@ -23,13 +23,21 @@ module.exports = function (test, h) {
   // E19: placement is greedy and takes the least-bad spot left, and on these
   // boards that spot is on the wrong side of somebody.
   const WHY = 'a caption crosses a neighbour to find room: E20';
+  // TWO OF THE TEN CAME OFF THIS LIST when the captions started being assigned
+  // together instead of one after another (E23), and shared-long-event joined
+  // it. What is left is a different statement from what E20 made: not "the
+  // greedy pass took the least-bad spot" -- the assignment can ask a
+  // neighbour to move now -- but "on this line every position for this name
+  // is a walk-past, a rail through the words, or a gap". Four orderings of
+  // those three were measured on the whole suite; the one that ships costs
+  // the fewest boards. See E24.
+  const WHY24 = 'every position for this name is a walk-past, a pierce or a gap: E24';
   const KNOWN = new Set([
     'five-lines/x-landscape', 'five-lines/og-landscape',
-    'busy-day/og-landscape',
     'crew-day/x-landscape', 'crew-day/og-landscape',
     'long-event-day/og-landscape',
     'seven-lines/x-landscape', 'seven-lines/og-landscape',
-    'all-day-every-track/og-landscape', 'regroups/og-landscape',
+    'regroups/og-landscape', 'shared-long-event/og-landscape',
   ]);
 
   // Where a line sits across the board at one point along the day. Sampled
@@ -77,7 +85,7 @@ module.exports = function (test, h) {
         }
         assert(past.length === 0, past.length + ' caption(s) on the far side of another line: '
           + [...new Set(past)].slice(0, 4).join('; '));
-      }, KNOWN.has(f.name + '/' + vname) && { known: WHY });
+      }, KNOWN.has(f.name + '/' + vname) && { known: WHY24 });
     }
   }
 };

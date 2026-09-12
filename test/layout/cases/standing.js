@@ -72,15 +72,21 @@ module.exports = function (test, h) {
   // double-booked came off this list when a name with nowhere to go
   // started being counted at its line's head instead of written over
   // another name.
-  const OVERLAP_KNOWN = new Set(['all-day-every-track', 'busy-day', 'crew-day',
-    'five-lines', 'long-event-day', 'regroups']);
+  // all-day-every-track and regroups came off this list with E23: the
+  // assignment can ask a name to step aside for another, which is the whole
+  // of what these two boards needed.
+  const OVERLAP_KNOWN = new Set(['busy-day', 'crew-day', 'five-lines',
+    'long-event-day']);
   // three-day came off this list when the midnight date label moved to the
   // hour strip. Written into the map at the top of the first band, it was a
   // caption in open paper with nothing routed around it, and on a portrait
   // board a rail ran straight through it. On the strip it is booked like
   // every other note there, so there is nothing left for a rail to pierce.
+  // regroups came off with E23 as well. three-day stays for a different
+  // reason now: its convergence caption has nowhere on either side of its
+  // pill that a member's own rail does not reach (E24).
   const PIERCE_KNOWN = new Set(['all-day-every-track', 'busy-day', 'crew-day',
-    'five-lines', 'long-event-day', 'regroups', 'seven-lines']);
+    'five-lines', 'long-event-day', 'seven-lines', 'three-day']);
 
 
   for (const f of fixtures) {

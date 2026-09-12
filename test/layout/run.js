@@ -625,6 +625,7 @@ function render(metro, viewport, liquidExtra) {
     + '|' + (viewport.slot ? viewport.slot.w + 'x' + viewport.slot.h : 'full') + '|'
     + '|' + (viewport.page || 'full') + '|'
     + crypto.createHash('sha1').update(JSON.stringify(metro) + '|' + JSON.stringify(liquidExtra || null)).digest('hex');
+  if (!contentCache.has(key)) asked.set(key, [metro, viewport, liquidExtra || null]);
   if (contentCache.has(key)) spent.hits++;
   else contentCache.set(key, renderUncached(metro, viewport, liquidExtra));
   const rep = contentCache.get(key);
@@ -812,21 +813,65 @@ function renderAsync(metro, viewport, liquidExtra) {
   });
 }
 
+// WHAT THE LAST RUN ACTUALLY ASKED FOR, which is a better list than any
+// matrix written here can be.
+//
+// The matrix (every fixture at every shared viewport) is most of a run and not
+// all of it: the bit-depth cases ask for three more screens per fixture, the
+// small-view cases for six slots, the holiday cases for a board with a holiday
+// on it. Those were left to render one at a time while four cores sat idle.
+//
+// So a run writes down every (payload, viewport) pair it asked for, and the
+// next run warms exactly those. The list survives a source change -- it names
+// boards, not bytes -- while the report cache does not, which is precisely the
+// case that hurts: a run right after an edit to the layout.
+const WARM_LIST = path.join(CACHE, 'asked.json');
+const asked = new Map();
+function rememberAsked() {
+  try {
+    const out = [];
+    for (const v of asked.values()) out.push({ metro: v[0], viewport: v[1], extra: v[2] });
+    fs.mkdirSync(CACHE, { recursive: true });
+    fs.writeFileSync(WARM_LIST + '.part', JSON.stringify(out));
+    fs.renameSync(WARM_LIST + '.part', WARM_LIST);
+  } catch (e) { /* a list that cannot be written only costs the next run time */ }
+}
+
 async function prewarm() {
   if (CACHE_OFF) return;
-  const jobs = [];
-  const fx = require('./fixtures');
-  for (const f of fx) for (const v of VIEWPORTS) jobs.push([f.metro, v]);
-  // One worker per core bar the one this process is on. Chromium is the whole
-  // cost here and each launch is its own process, so this scales with cores
-  // rather than with anything in node.
-  const N = Math.max(1, Math.min(jobs.length, (os.cpus().length || 2) - 1));
+  let jobs = [];
+  try {
+    for (const j of JSON.parse(fs.readFileSync(WARM_LIST, 'utf-8'))) {
+      jobs.push([j.metro, j.viewport, j.extra]);
+    }
+  } catch (e) { /* no list yet: fall back to the matrix below */ }
+  if (!jobs.length) {
+    const fx = require('./fixtures');
+    for (const f of fx) for (const v of VIEWPORTS) jobs.push([f.metro, v, null]);
+  }
+  // HOW MANY WORKERS, and it is bounded by MEMORY rather than by cores.
+  //
+  // Chromium is the whole cost here and each launch is its own process, so
+  // this wants a worker per core -- but a headless Chromium rendering one of
+  // these boards peaks around a gigabyte, and four of them alongside the
+  // serial pass had the run killed for want of memory. So: a worker per core
+  // bar this one, capped by how much memory is actually free, and never fewer
+  // than one.
+  const perWorkerMb = 1400;
+  const freeMb = os.freemem() / (1024 * 1024);
+  const byMemory = Math.floor((freeMb - 2048) / perWorkerMb);
+  // METRO_WARMERS overrides both, for a box under pressure from something
+  // else: 0 turns the warming off and leaves the serial pass to it.
+  const asked2 = process.env.METRO_WARMERS;
+  const N = asked2 != null ? Math.max(0, parseInt(asked2, 10) || 0)
+    : Math.max(1, Math.min(jobs.length, (os.cpus().length || 2) - 1, byMemory));
+  if (!N) return;
   let next = 0;
   const t0 = Date.now();
   await Promise.all(Array.from({ length: N }, async () => {
     while (next < jobs.length) {
       const j = jobs[next++];
-      try { await renderAsync(j[0], j[1], null); } catch (e) { /* see above */ }
+      try { await renderAsync(j[0], j[1], j[2] || null); } catch (e) { /* see above */ }
     }
   }));
   spent.warmMs = Date.now() - t0;
@@ -840,7 +885,9 @@ async function prewarm() {
   for (const t of tests) {
     if (only && t.name.indexOf(only) < 0) continue;
     let err = null;
+    const tt0 = Date.now();
     try { await t.fn(); } catch (e) { err = e; }
+    t.ms = Date.now() - tt0;
     if (t.known && err) {
       console.log('≈ ' + t.name + '\n    known: ' + t.known + '\n    ' + (err.message || err));
       known++;
@@ -856,12 +903,20 @@ async function prewarm() {
     }
   }
   console.log('\n' + pass + '/' + (pass + known + fail) + ' passed, ' + known + ' known issue(s), ' + fail + ' failure(s)');
+  if (process.env.METRO_TIMES) {
+    const slow = tests.filter((t) => t.ms != null).sort((a, b) => b.ms - a.ms).slice(0, 25);
+    console.log('\nslowest cases:');
+    for (const t of slow) console.log('  ' + (t.ms / 1000).toFixed(1) + 's  ' + t.name);
+    const total = tests.reduce((n, t) => n + (t.ms || 0), 0);
+    console.log('  ' + (total / 1000).toFixed(1) + 's in case bodies altogether');
+  }
   console.log(spent.renders + ' render(s) ' + (spent.renderMs / 1000).toFixed(1) + 's, '
     + spent.disk + ' from cache, ' + spent.hits + ' repeated, '
     + spent.builds + ' build(s) ' + (spent.buildMs / 1000).toFixed(1) + 's'
     + (spent.warmers ? ', warmed on ' + spent.warmers + ' worker(s) '
        + (spent.warmMs / 1000).toFixed(1) + 's' : '')
     + (CACHE_OFF ? ' (cache off)' : ''));
+  rememberAsked();
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
   sweepChromeProfiles();
   process.exit(fail ? 1 : 0);

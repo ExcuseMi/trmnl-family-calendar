@@ -5292,19 +5292,27 @@
         // three boards, and nothing in the search could see it, because the
         // one line allowed to do that was one of the two the name is about.
         // A rail through letters is unreadable whoever owns it.
-        // Measured as HOW MUCH of the words it crosses, in the same currency
-        // as everything else here: the length of rail inside them.
+        // ONE PRICE FOR ANY RAIL THROUGH THE WORDS, and it is flat on
+        // purpose. Grading it by how much of the name the rail crosses is the
+        // obvious idea and it measured worse twice, in both directions:
         //
-        // Charged in two parts, and it took both to get it right. A flat
-        // price for any pierce at all sent a convergence's name to a worse
-        // place to dodge a graze, and left it pierced end to end when it got
-        // there. A price purely by length made a six-pixel graze cheaper than
-        // stepping out one rung, and the board took the graze fourteen times
-        // over. So: a fixed charge for a rail being through the words at all,
-        // which is what makes a graze worth a rung, plus a charge by length,
-        // which is what makes a rail lying along a whole name worse than not
-        // drawing that name -- the same two-part shape as a pair of names
-        // that touch.
+        //   - By length alone, a six-pixel graze came out cheaper than
+        //     stepping out one rung, and the board took the graze fourteen
+        //     times across the fixtures.
+        //   - With a fixed part on top, dear enough to beat a graze, the fixed
+        //     part passed what NOT DRAWING the name costs -- so the board shed
+        //     names instead, and the "+2" each shed leaves at its line's head
+        //     landed on that line's own rail. Six pierces became six pierces
+        //     and four new faults.
+        //
+        // What the flat price says is what a reader sees: a rail through
+        // letters is a name they cannot read, and how many letters it crossed
+        // is not the interesting part. It sits between a pair of names that
+        // touch (which a reader can still read, both of them) and not drawing
+        // the name at all, which is where a fault this size belongs.
+        //
+        // Kept measuring the CUT rather than a boolean anyway: the number is
+        // what proved the gradings wrong, and it costs nothing to keep.
         function railCut(e, run) {
           var cut = 0;
           for (var qi = 0; qi < LEGEND.length; qi++) {
@@ -5494,6 +5502,22 @@
         // name at all is the last resort before writing it over somebody
         // else's. So a pair of names covering more than about a third of each
         // other is worth one of them going, and a graze is not.
+        // THESE THREE NUMBERS ONLY MEAN ANYTHING AGAINST EACH OTHER, and all
+        // four orderings were measured on the whole suite before this one was
+        // kept. A pair of names that touch pay 0.3 plus the area they cover; a
+        // rail through the words is 0.4; not drawing the name at all is this.
+        //
+        //   0.35 shed, 0.4 flat pierce  ->  6 boards fail   (kept)
+        //   0.35 shed, pierce by length ->  8
+        //   0.35 shed, pierce 0.5 + len -> 10, and the sheds it bought put a
+        //                                  "+2" at a line's head on its own rail
+        //   0.50 shed, 0.4 flat pierce  ->  8, the sheds gone and pierces up
+        //
+        // The board cannot win this three ways at once: on a crowded line
+        // every position for some name is a graze, a pierce or a gap, and the
+        // prices only decide which. What is written down here is the ordering
+        // that costs the fewest boards, not a claim that any of the three is
+        // acceptable. See issues.md E24.
         var SHED_PRICE = 0.35, TIME_PRICE = 0.2;
         // A DETERMINISTIC RANDOM WALK. The same board must draw the same
         // picture on two consecutive refreshes, and it must draw the same
@@ -5528,6 +5552,13 @@
             // only thing saying what that stretch of rail IS -- there is no
             // dot to pair a count at the head with -- so a board that sheds
             // it has drawn an unexplained thickening of somebody's day.
+            // Two, and six was measured and put back. The board RESERVED this
+            // name a rung on its track's inward side, so shedding it gives
+            // that room back to nothing -- but made dear enough that it is
+            // never shed, the trade moves somewhere worse: the name walks
+            // past a neighbouring rail instead, and seven boards came back
+            // reading somebody else's events as theirs. Same three-way
+            // shortage as E24, found from the third side.
             var hard = isPinned(movable[i]) ? 3 : movable[i]._onTrack ? 2 : 1;
             shedAt.push(capArea(movable[i]) * SHED_PRICE * hard);
           }
@@ -5807,7 +5838,7 @@
                   // the same way.
                   var offPill = Math.max(0, Math.max(e._nodeA - (at0 + e._textLen), at0 - e._endA));
                   var cost0 = raw0
-                            + (cut0 > 0 ? e._h * e._textLen * 0.25 + cut0 * e._h * 0.5 : 0)
+                            + (cut0 > 0 ? e._h * e._textLen * 0.4 : 0)
                             + (sd0 ? e._h * e._textLen * 0.05 : 0)
                             + oi0 * e._h * e._textLen * 0.05
                             + over0 * e._h * 0.25
@@ -6192,9 +6223,7 @@
                 var cut = railCut(e, [b]);
                 var thru = cut > 0 || runCrosses(e, [b]);
                 var overReach = Math.max(0, (outs[oi] - e._capOut) - MAX_LEADER);
-                var cost = raw
-                         + (cut > 0 ? e._h * e._textLen * 0.25 + cut * e._h * 0.5 : 0)
-                         + (thru && !cut ? e._h * e._textLen * 0.4 : 0)
+                var cost = raw + (thru ? e._h * e._textLen * 0.4 : 0)
                          + oi * e._h * e._textLen * 0.03
                          + overReach * e._h * 0.25
                          + Math.abs(slides[si]) * e._h * 0.02;
