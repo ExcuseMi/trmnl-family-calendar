@@ -167,6 +167,27 @@ const quietDay = base({
   ],
 });
 
+// ONE THING ALL DAY, which is a Sunday and is the commonest board this
+// plugin will ever draw in a household that is not the demo family.
+//
+// quiet-day is three events and already tests "do not leave a line adrift";
+// this is the floor below it. Everything the board does to fill itself up
+// has nothing to work with: three of the four lines have no stop on them at
+// all, the axis has one dot and one tick to place, and the tier loop is
+// choosing text for a board that could hardly be emptier. The failures worth
+// catching here are the ones an empty board invents -- a lone caption pushed
+// out to a rung it did not need, a line drawn with nothing on it and no name
+// against it, an hour strip covering a day where nothing happens -- none of
+// which any busy fixture can show, because on a busy fixture there is always
+// something else to blame.
+const slowDay = base({
+  now_min: 780,
+  events: [
+    ev('Lunch with Mum', 'alex', 720, 840,
+       { location: 'The Old Bakery', side: 'right', hue: 'orange-40', track_offset: 10 }),
+  ],
+});
+
 // Two same-owner meetings starting within a few minutes of each other: the
 // second one's branch used to be forced to cross back through the first's.
 const tightPair = base({
@@ -424,6 +445,7 @@ module.exports = [
   { name: 'all-day-every-track', metro: allDayEveryTrack },
   { name: 'long-event-day', metro: longEventDay },
   { name: 'quiet-day', metro: quietDay },
+  { name: 'slow-day', metro: slowDay },
   { name: 'tight-pair', metro: tightPair },
   { name: 'double-booked', metro: doubleBooked },
   { name: 'regroups', metro: regroups },
