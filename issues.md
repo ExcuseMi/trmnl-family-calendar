@@ -507,6 +507,49 @@ is open.
   waiting for real weather. Sunrise and sunset were two more, and were
   removed from the board: a household does not plan around the minute the
   sun comes up.
+### E26. The demo board's line order is a hand-written guess
+
+`DEMO_TRACKS` pins `side` and `line_offset` for all five Springfield lines,
+so `finalize()` never runs on the board most people see and rules 39 to 42
+are not applied to it. The pinned order costs FOUR crossings on the demo day
+where ZERO is available: Bart and Lisa share three events (School Run, Pick
+Up, Itchy & Scratchy) and are put at opposite ends with Homer and Marge
+between them, so "Itchy & Scratchy" reads across two people who are not at
+it. Measured on the offline fallback at 22:30.
+
+The fix is not just deleting the pins -- tried, and the demo comes out with
+`line_offset: null` on every line, because `buildFromDemo` hands
+`DEMO_TRACKS` straight to `buildMetro`, which RENUMBERS offsets but does not
+decide them. The demo has to be routed through the same registry the config
+path uses: register the tracks, `link()` each shared event, `finalize()`,
+then build. Same for the three demo configs if they pin sides too.
+
+### E27. A vertical through a caption is charged by area
+
+`costAt` in the convergence caption pass charges every obstacle by overlap
+AREA. That is right for a rail running along under a line of text and wrong
+for a vertical: a drop is thin BECAUSE it is a drop, so one slicing a name
+clean in half overlaps a couple of hundred square pixels and is charged like
+a graze, while a level rail lying harmlessly behind the same words costs
+five times as much for passing the whole width. "Family Dinner" on
+long-event-day sits in the well of its own line's detour with the left stem
+through the "1" of "18:30", and the search preferred that to every clear
+position because the sums said it was cheap. `HARD_DROP` (16px of padding
+round a vertical) is the existing compensation and it is the wrong currency:
+it buys distance from the drop, not a price for cutting a name.
+
+MEASURED FIX, not yet shipped. Charging a drop by how much of the caption's
+HEIGHT it crosses, against the caption's own area
+(`cross * cross * boxArea * 1.5`), takes captions cut by a near-vertical rail
+from 2 to 1 across the fixture set and clears SIX known-issue boards. It also
+opens six new failures, mostly on OG, which is why it is here and not on
+main: `long-event-day/og` (two labels overlap, and a long event's caption
+lands on something), `long-event-day/x` and `five-lines/og` and
+`seven-lines/x` (a rail through a label), `crew-day/x-portrait` (two captions
+overlap standing up). The direction is right -- the count of REAL cuts halves
+-- and the three OG boards it "broke" are level rails behind words, which
+rule 38 allows. What is left is to work through the six.
+
 - [ ] **D5. Small screens: collapse secondary metadata before geometry.**
   On a board like OG half-vertical with 6+ short events on one track, drop
   location text, then start/end times, rather than bending the baseline.
