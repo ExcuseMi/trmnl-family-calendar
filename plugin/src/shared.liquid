@@ -5292,13 +5292,19 @@
         // three boards, and nothing in the search could see it, because the
         // one line allowed to do that was one of the two the name is about.
         // A rail through letters is unreadable whoever owns it.
-        // Measured as HOW MUCH of the words it crosses, not as yes or no. A
-        // rail clipping ten pixels off the tail of a name is untidy; the same
-        // rail lying along its whole length has taken the name away, and a
-        // flat charge for both sent a convergence's name to a worse place to
-        // dodge a graze and left it pierced end to end somewhere else.
-        // Returned in the same currency as everything here: the length of
-        // rail inside the words, which is charged against their height.
+        // Measured as HOW MUCH of the words it crosses, in the same currency
+        // as everything else here: the length of rail inside them.
+        //
+        // Charged in two parts, and it took both to get it right. A flat
+        // price for any pierce at all sent a convergence's name to a worse
+        // place to dodge a graze, and left it pierced end to end when it got
+        // there. A price purely by length made a six-pixel graze cheaper than
+        // stepping out one rung, and the board took the graze fourteen times
+        // over. So: a fixed charge for a rail being through the words at all,
+        // which is what makes a graze worth a rung, plus a charge by length,
+        // which is what makes a rail lying along a whole name worse than not
+        // drawing that name -- the same two-part shape as a pair of names
+        // that touch.
         function railCut(e, run) {
           var cut = 0;
           for (var qi = 0; qi < LEGEND.length; qi++) {
@@ -5801,7 +5807,7 @@
                   // the same way.
                   var offPill = Math.max(0, Math.max(e._nodeA - (at0 + e._textLen), at0 - e._endA));
                   var cost0 = raw0
-                            + cut0 * e._h * 0.5
+                            + (cut0 > 0 ? e._h * e._textLen * 0.25 + cut0 * e._h * 0.5 : 0)
                             + (sd0 ? e._h * e._textLen * 0.05 : 0)
                             + oi0 * e._h * e._textLen * 0.05
                             + over0 * e._h * 0.25
@@ -6186,7 +6192,8 @@
                 var cut = railCut(e, [b]);
                 var thru = cut > 0 || runCrosses(e, [b]);
                 var overReach = Math.max(0, (outs[oi] - e._capOut) - MAX_LEADER);
-                var cost = raw + cut * e._h * 0.5
+                var cost = raw
+                         + (cut > 0 ? e._h * e._textLen * 0.25 + cut * e._h * 0.5 : 0)
                          + (thru && !cut ? e._h * e._textLen * 0.4 : 0)
                          + oi * e._h * e._textLen * 0.03
                          + overReach * e._h * 0.25
