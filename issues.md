@@ -1,58 +1,74 @@
 # Open work
 
-Everything outstanding, newest brief first. Tick a box only when the fix is
-on `main` **and** on the device, with a test or a screenshot behind it.
+Everything outstanding, highest priority first. Tick a box only when the fix
+is on `main` **and** on the device, with a test or a screenshot behind it.
 
-Order of attack: the board is broken in front of the user (A), then the
-configuration that produced it (B), then the settings and robustness work
-(C, D), then the new features (E). Nothing in E starts while anything in A
-is open.
+Order of attack: **P** first, then the board being wrong in front of the user
+(A), the configuration that produced it (B), settings and robustness (C, D),
+and new features (E). Nothing in E starts while anything in A is open.
+
+Anything finished is one line under **Done** at the foot of the file. The
+reasoning behind a finished item does not live here: it is in the comment
+beside the code that does it, in `rules.md`, or in the commit that shipped
+it, which is where somebody changing that code will be standing.
+
+---
+
+## P. Next
+
+- [ ] **P1. A solo event during a shared one puts a person in two places.**
+  Zwemmen, two till five, all four of them in the corridor. Charlotte also
+  has her own appointment from three till five, and the board draws both:
+  her line stays in the family corridor AND her own event is drawn. She
+  cannot be at both, and the drawing says she is.
+
+  She should LEAVE. A convergence is a claim about where somebody is, and
+  the moment they have something of their own that overlaps it, the claim is
+  false for them. The line should come out of the corridor when the solo
+  event starts and sit outside it, which is also what makes the solo event
+  drawable at all: it needs a rail of its own to hang off, and inside a
+  corridor there is none.
+
+  Decide before building. Does she rejoin afterwards if the shared event is
+  still running, or is the convergence over for her? Where the overlap is
+  total there is nothing to rejoin -- is she in the convergence at all, and
+  should the capsule still span her row? Rule 26 already says a convergence
+  falls back to a bundle when a member cannot be free; this is a second
+  reason a member cannot be free, so it may be that mechanism rather than a
+  new one.
+
+- [ ] **P2. The 45 reclaim has to run after the captions, and it runs before.**
+  Rule 29g: a 90 that could be a 45 without disturbing anything becomes one.
+  Built twice, measured both times, reverted both times, and the second
+  attempt is the one worth reading.
+
+  With convergence approaches included it does exactly what the rule asks:
+  45 goes from about 1% of track ink to 11-24%, on 26 of 49 boards, and the
+  vertical share roughly halves. It also breaks six boards -- a rail through
+  a name on four, a caption past a neighbour on two -- and on one, the
+  shared long event loses its capsule outright. Confining the diagonal to
+  axis with no events on it improved that and did not fix it.
+
+  The cause is the whole issue: the reclaim runs while the trunks are built
+  and the captions do not exist yet, so it can prove it is not crossing a
+  rail and cannot even ask whether it is ploughing through a name. That is
+  rule 29f's argument arriving as a measurement -- the diagonals really do
+  bunch the labels.
+
+  Making it work means running the reclaim after the captions are placed and
+  re-placing what it disturbs, which reorders the passes rather than tweaking
+  one. Keep the mechanism from the attempts: it cannot be done in a single
+  pass, because asking where another line is calls that line's own span
+  solver, which asks back, and the board never draws.
 
 ---
 
 ## A. The board is wrong right now
 
-- [x] **A1. Tracks squashed into a third of the board.** Seven lines at a
-  ~35px pitch with ~700px of unused depth below them. Pass 3 of the
-  separation solver spends the spare cross-axis room on lane pitch FIRST
-  (`STEP_CAP = laneStep * 1.35`), and lane pitch is charged per lane summed
-  over every track, so it eats the entire surplus before track separation
-  (`SEP_CAP`) gets a look in. Spend on separation up to what the names need,
-  then on lanes.
-  Repro: `demo/futurama` + the AI config, X landscape.
-- [x] **A2. Line names sitting on their own rails.** Falls out of A1: with
-  no pitch there is no room above the rail, so `fitNameLines` drops the name
-  onto the line and it collides with the terminus cap ("|Leela"). Re-check
-  after A1; the existing test only covers 5 lines, so it needs a 7-line
-  fixture.
-- [x] **A3. Station captions collide.** "Lab Rotation" wraps to two lines
-  and lands on "Delivery Run" and on two rails.
-  Three faults in one picture. Captions were placed one line at a time and
-  knew nothing about each other, so two that wanted the same strip of
-  canvas simply both took it; they are placed in a second pass now,
-  least-freedom-first, so the caption pinned to a two-hour station keeps
-  its spot and the one with seven hours of corridor to slide along is the
-  one that yields. A caption pushed out of its own loop kept wrapping to
-  two lines, in a lane where every other box is a one-line title, and its
-  second line landed on the event label below; out there it is clamped to
-  one line and ellipsised. And a solo station NESTED inside another of its
-  own line's stations gets no siding at all (`stationRaiseAt` hands the
-  whole overlap to the outer one), so "inside the loop" was a space that
-  was never vacated, half a raise off a baseline the line had left: with no
-  kink of its own the caption now sits off the line where that line really
-  runs. `cases/sidings.js` covers it on every fixture at both views.
 - [ ] **A4. Simultaneous branches on different lines overlap.** "Coffee
   (100 cups)" (Fry, 07:30) and "Bend Some Girders" (Bender, 07:30) drop
   their stubs at the same axis position, a few px apart.
-- [x] **A5. WITHDRAWN, this was a misreading.** "A station shared by five
-  lines draws five separate pills" was written off a screenshot. Those pills
-  are the five CARS, one per line, all at the same minute. The shared-station
-  corridor is correct: on `seven-lines`, "Delivery Run" bends all five crew
-  lines together and captions them once. The misreading is itself the
-  argument for E1b below: a column of cars at one minute reads as a stack of
-  blobs, and it fooled the person who drew it.
-- [x] **A6. Terminator tick misplaced on a backwards branch.** "Walk
-  Nibbler" (17:30 to 18:15) puts its end tick in the wrong place.
+
 - [ ] **A7. Quadrant on TRMNL X: a backwards branch is mangled.** "Family
   Dinner" on the Simpsons board. Its stub runs the wrong way and detaches.
   A large part of this is fixed: a backward group's flat rail was drawn as
@@ -66,30 +82,16 @@ is open.
   `five-lines` on an X quadrant now draws "Family Dinner" correctly, but
   that report predates the harness fix in A11, so it was written about a
   picture that was not a quadrant.
+
 - [ ] **A8. A long wrapped track name overlaps the first event label.**
   Known, carried over: "Demo - Planet / Express Crew" touches "07:30 - 08:15
   Bender: Bend Some Girders". The name is not an obstacle to label placement.
 
-- [x] **A13. A stretch of rail floating in the middle of the board.**
-  Reported off a screenshot. It was the express half of a siding whose
-  siding was never drawn: a solo station nested inside a corridor its own
-  line was already in never kinks the line, so there was no loop, and
-  `expressThrough` drew the straight half anyway, on the baseline the line
-  had left. Nothing in the suite noticed, because the segment was the right
-  colour, the right weight, on the canvas, clear of everybody's text and
-  claimed by no marker. It was simply a line that went nowhere.
-  `cases/loose-ends.js` is the answer: every rail end must meet another
-  rail, sit under a mark that caps it, or be the edge of the board. It
-  found the detached backward stub in A7 on its first run, and it needed
-  `terminus()` to start setting `data-metro-role`, which it never had.
-- [x] **A9. The trunk was interrupted where a siding began.** The kink's
-  corners are rounded, so the trunk leaves its baseline a corner radius
-  before the station's own start; the siding began at the bare vertex, and
-  the two did not meet.
 - [ ] **A10. A branch and a station ramp meeting at the same minute graze
   each other.** With the car no longer a solid block the junction reads, but
   the branch still leaves tangent to the corner rather than out of it, and a
   spike of the flat rail pokes out from under the kink.
+
 - [ ] **A12. A junction redraws a stretch of the main line it does not
   need to, and the copy does not register with the original.** Reported off
   a zoomed junction: the trunk is visibly drawn twice for the length of the
@@ -110,6 +112,7 @@ is open.
   be built as its own arc from a point ON the trunk, and then the branch
   starts where it leaves and nothing is redrawn. Worth doing before A10,
   which is the same elbow seen from the other side.
+
 - [ ] **A15. A track should carry events on BOTH sides of its line.**
   Every lane a track owns sits OUTWARD of it, so a line at the edge of the
   bundle has all of its labels on one side and the gap between it and its
@@ -204,6 +207,7 @@ is open.
   into "Mensa Meeting", and the layout suite 13 to 14. Fix those three
   before turning it back on, and check the picture before the count: the
   suite moved by one and the board fell apart.
+
 - [ ] **A16. Two commitments back to back should not send the line home in
   between, and the orchestrator should order the tracks so they don't have
   far to go.** Reported off a zoomed morning: Bart and Lisa ride the School
@@ -246,6 +250,7 @@ is open.
   orchestrator put the school run on the same side as the school day,
   where the connection is short and crosses nothing. Landing this first
   means it spends its time fighting the side assignment.
+
 - [ ] **A17. A shared bundle asks the board for nothing, so a squeezed
   board draws it on top of the lines.** Reported off a five-line board with
   the alert banner up: the bundle rails and their captions sit across
@@ -280,6 +285,7 @@ is open.
   the gap between it and its neighbour, which is the same space this needs,
   so the two are competing for one piece of board and only the solver can
   referee. Landing them apart means the second one re-opens the first.
+
 - [ ] **A18. A line's cross position is decided once for the whole day, so
   the order that suits the morning has to do for the evening too.** The
   orchestrator should be able to MOVE a track between events when that
@@ -339,6 +345,7 @@ is open.
   means solving the same argument twice. It also subsumes the ordering half
   of A16, which weights the one-shot chain by how close in time a shared
   event is; that is this problem with a single layer.
+
 - [ ] **A19. The orchestrator should SCORE boards, not just produce one.**
   The frame the four above are all inside. Asked for: fewest crossings,
   efficient use of the depth without cramping, every label legible and
@@ -450,151 +457,18 @@ is open.
   nothing per side.
   This is a rework of the solver, not a patch. Sizeable, and worth doing
   before more is layered on top of the current split.
-- [x] **A11. Every "small view" in the layout suite was rendering full
-  size.** Fixed in the harness (a half or a quadrant is a slot inside the
-  screen, not a smaller screen). Left here as a note: any conclusion drawn
-  from a small-view test before this is worth re-checking.
 
 ## B. The configuration that produced it
-
-- [x] **B1. A calendar `name` silently becomes a line.** The AI named its
-  feeds "Crew" and "Deliveries" and got two phantom lines next to the five
-  people, then pinned them on the board with `hideIfEmpty: false`. The
-  prompt must say what `name` does; the editor should warn when a calendar
-  name is not also a track name.
-- [x] **B2. "Let an AI do it" belongs at the top of the editor**, right
-  after Start, not after the user has configured everything by hand.
-- [x] **B3. The prompt should carry a full worked example** of an advanced
-  configuration, not only the schema.
-- [x] **B4. Drop `timeZone` and `locale` from the prompt.** They are account
-  settings; an assistant guessing them makes the board wrong.
-- [x] **B5. Remove `side` and `color` everywhere.** Both are automatic. Out
-  of the editor UI, out of the prompt, out of the docs; `parseConfig` keeps
-  reading them so existing configs do not break.
 
 ## C. Settings
 
 - [ ] **C1. Move the demo settings into a Developer group.**
-- [x] **C2. Remove the "6am 11pm" span pill from the header.** It says
-  nothing the axis does not.
-- [x] **C3. Quadrant and the small vertical views: "+3 earlier" does not
-  fit** and collides with the clock badge. Show "+3" alone below some width.
-- [x] **C4. Quadrant and half-horizontal (sm/md) waste a whole header band**
-  on a logo and the word "Today". Collapse it on those views.
-- [x] **C5. Temperature unit setting.** Auto (from locale) / Celsius /
-  Fahrenheit. Overridable from the config JSON, but not surfaced in the
-  editor or the AI prompt.
 
 ## D. Robustness
-
-- [x] **D1. Timeouts and errors.** Every fetch needs its own timeout inside
-  the serverless deadline, one slow feed must not cost the whole board, and
-  a failed feed must not silently vanish.
-- [x] **D2. Saved state** (https://help.trmnl.com/en/articles/16777795),
-  as the earlier version of this plugin had it. Return `trmnl_state` and
-  read `input.trmnl.state`:
-  - last good weather, reused when the API fails, with a staleness flag
-  - `calendarDown[url]`: first failure timestamp, so a feed that has been
-    down more than ~2h is called out by name instead of quietly missing
-  - `calendarNames[url]`: the last `X-WR-CALNAME`, so a feed that fails
-    keeps its name instead of becoming "Calendar 2"
-  - cached i18n payload
-- [x] **D3. i18n as JSON files in the repo**, fetched by `transform.js`, so
-  a new language is a pull request. English stays inline as the fallback for
-  when GitHub is unreachable.
-- [x] **D4. Demo weather data** in the demo configs, covering every weather
-  event (rain start/stop, snow, storm, fog) so they can be seen without
-  waiting for real weather. Sunrise and sunset were two more, and were
-  removed from the board: a household does not plan around the minute the
-  sun comes up.
-### E26. The demo board's line order is a hand-written guess -- FIXED
-
-`DEMO_TRACKS` pinned `side` and `line_offset` for all five Springfield
-lines, so `finalize()` never ran on the board most people see and rules 39
-to 42 were not applied to it. The pinned order cost FOUR crossings on the
-demo day where ZERO was available: Bart and Lisa share three events (School
-Run, Pick Up, Itchy & Scratchy) and were put at opposite ends with Homer and
-Marge between them.
-
-Fixed by deleting the whole offline board it belonged to. Those pins existed
-only on the hand-written fallback; the real demo config declares its lines
-without a side or an offset and has always had its order computed. The board
-that was showing the bad order was the fallback, not the demo.
-
-### E27. A vertical through a caption is charged by area -- FIXED
-
-`costAt` in the convergence caption pass charged every obstacle by overlap
-AREA. That is right for a rail running along under a line of text and wrong
-for a vertical: a drop is thin BECAUSE it is a drop, so one slicing a name
-clean in half overlapped a couple of hundred square pixels and was charged
-like a graze, while a level rail lying harmlessly behind the same words cost
-five times as much for passing the whole width. The search kept choosing the
-cut, correctly by its own sums.
-
-Fixed by pricing a drop on how much of the caption's HEIGHT it crosses,
-against the caption's own area: `cross * cross * boxArea * 1.2`. Squared, so
-clipping a corner stays nearly free and a full cut costs more than the words
-are worth -- which is the truth, because a name with a rule through it is
-not a name. `HARD_DROP`, the 16px of padding round a vertical, stays as the
-distance it buys; it was never a price.
-
-The factor was swept against the real objective (captions cut by a
-NEAR-VERTICAL rail, told apart from level rails behind words, which rule 38
-allows): 0.8 gives 3, 1.0 gives 0, 1.2 gives 0, 1.5 gives 1, 2.0 gives 0.
-Baseline was 2. 1.2 sits in the stable middle and cost the fewest boards on
-the full suite.
-
-Horizontal only. Standing up a caption is placed by its COLUMN rather than
-by a standoff, and the charge there broke one portrait board while fixing
-another; there was never any evidence it helped in portrait, since the
-vertical-cut measurement is a landscape one.
-
-Six known-issue boards came off the list: caption walk-past on
-regroups/og, five-lines/x and crew-day/x, and a rail through a label on
-long-event-day/x, long-event-day/og and seven-lines/x. seven-lines/x stays
-a known WALK-PAST: correcting the price of a vertical bought it a position
-with no rail through the words, not one that also stays on its own side of
-every neighbour.
-
-612/632, 20 known, 0 failures. Was 606/632 with 26 known.
-
-### E28. The opportunistic 45 pass has nothing to take back -- BUILT, MEASURED, REVERTED
-
-The rule asked for: in a last pass, any 90 that could be a 45 without
-disturbing anything becomes one.
-
-Built it. A move is forced square by `steep` in `routeSpan`, which is true
-for three reasons: the move would cross another line (`crosses`), it arrives
-at a convergence, or it leaves one. The `crosses` test is the conservative
-one -- it asks whether another line's BASELINE lies across the move, not
-whether that line is actually there at the time, and a line up in a corridor
-has left its baseline empty.
-
-Refining it needs two passes, and that is not optional: asking where another
-line really is calls `raiseAt`, which reaches that line's own `routeSpan`,
-which asks about ours. One pass is a cycle and the board never draws. So the
-spans are built once conservatively, snapshotted, then rebuilt with position
-queries reading the snapshot through a freeze flag.
-
-It works and it finds real cases: 65 spans on five-lines alone were squared
-against a rail that was not there. And it changes NOTHING, on any board:
-every fixture, all three viewports, 49 boards measured before and after, and
-the vertical and 45 shares are identical to the decimal place on every one.
-
-The reason is rule 29f. Every one of those 65 is also a convergence move, so
-`steep` is true anyway and stays true -- correctly. The only 90s on these
-boards are the ones we have decided we want. Most boards are entirely flat
-and have no level change to soften at all.
-
-So the pass is correct, costs a full second computation of every span on
-every render, and buys nothing. Reverted. Rebuild it if rule 29f changes, or
-if a board appears with level changes that are not convergences: the
-mechanism is right and the two-pass freeze is the non-obvious part.
 
 - [ ] **D5. Small screens: collapse secondary metadata before geometry.**
   On a board like OG half-vertical with 6+ short events on one track, drop
   location text, then start/end times, rather than bending the baseline.
-- [x] **D6. Optimise the logo SVG per colour variant.**
 
 ## E. New features
 
@@ -619,7 +493,6 @@ mechanism is right and the two-pass freeze is the non-obvious part.
   the borrowed day needs to travel with a day index and be drawn on that day's
   own badge -- which is the shape rules 59 to 64 already describe, applied to
   a day the board reached rather than the day it opened on.
-
 
 - [ ] **E24. On a crowded line, every position for some name is a graze, a
   pierce or a gap, and the prices only decide which.** Six boards out of the
@@ -649,94 +522,6 @@ mechanism is right and the two-pass freeze is the non-obvious part.
   eighty to a hundred and sixty pixels of depth the solver reserves and the
   drawing never uses. A caption pass with another corridor to put a name in
   does not have to choose between three bad answers.
-
-
-- [x] **E23. The captions were placed by the strategy the literature calls
-  the weakest.** This is the same root cause E19 and E20 each name at the end
-  of their own write-ups, so both are closed by it.
-
-  Point-feature label placement is a named problem. Christensen, Marks and
-  Shieber measured the algorithm families against each other in 1995 and
-  simulated annealing beat greedy and gradient descent by a wide margin; every
-  JavaScript library that does this well implements that result (D3-Labeler,
-  d3fc-label-layout's annealing strategy, kevinschaul/avoid-overlap,
-  marcusand/label-locator). What this board was doing was d3fc's OTHER two
-  strategies stacked: greedy insertion, then `removeOverlaps`, which that
-  library's own documentation calls the weakest of the three it offers. The
-  repair pass on top was hill climbing that kept an answer merely NO WORSE, so
-  it wandered sideways and finished wherever the last round left it.
-
-  Now: candidates enumerated per name against the fixed obstacles only (forty
-  of them -- two sides, four rungs, five slides), the whole board scored as one
-  number, and the assignment searched by moving one name at a time with
-  Metropolis acceptance under a cooling temperature. Two departures from the
-  libraries, both because a board is not a chart: the candidates are discrete,
-  so a move picks another rung rather than nudging x and y; and the walk keeps
-  the best board it ever saw rather than where it stopped, which is what makes
-  it safe to run at all -- it starts from the greedy answer and cannot come out
-  worse than the pass it replaces.
-
-  Not drawing a name and giving up a name's time row are candidates in the same
-  search rather than passes afterwards that cannot be undone. And a pair of
-  names that TOUCH pay a flat charge as well as the area they cover: priced by
-  area alone a three-pixel graze cost a hundredth of what shedding costs, so
-  the search kept both names and took the graze -- correct by its own
-  arithmetic and wrong by the only measure that counts.
-
-  Two things found on the way, both worth keeping written down. The old repair
-  pass re-placed a caption WITHOUT restoring `_capOut`, so each failed attempt
-  moved the rung ladder's base further out: the second ask was a different
-  question from the first. And the pass ran twice per attempt, once from each
-  end of the day, purely to blunt the order dependence -- which the assignment
-  removes, so that could go if the render cost ever matters.
-
-  A CONVERGENCE'S NAME IS IN THE SAME SEARCH, which took three measured steps
-  to get right and is the clearest statement of what this entry is about.
-  Pinned above its pill and placed FIRST, it took the paper and a solo event
-  with nowhere else was written over it. Given a search of its own and still
-  placed first, it moved to clean paper and landed on a name that was already
-  there, because it could not ask that name to shift: two boards, measured.
-  In the assignment with everything else, what makes it a convergence's name
-  is price rather than privilege -- the centred spot free, sliding cheap,
-  standing off dearer, the far side of the bundle dearer still, not drawn at
-  all three times what any other name costs. Two more faults fell out of
-  giving it a real search: it had never been charged for a rail through its
-  own words (`runCrosses` excuses a shared event's own members, rightly, for
-  rule 37's question and wrongly for this one), and it had never been charged
-  for sliding off the pill it names -- "Lunch with Alex" ended ninety pixels
-  before its own event began.
-
-
-- [x] **E22. The board was laid out against a font it was not drawing in.**
-  Every number in the layout engine is a measurement, and the first (usually
-  only) layout run measured every label in the FALLBACK face. Proved by
-  stashing the engine's own measurement on each hour label and comparing it
-  with the drawn rect: 34 against 38 on an OG panel, 36.3 against 42.3 on an
-  X. Twelve to seventeen per cent, everywhere, on every board.
-
-  `document.fonts.ready` was supposed to cover this and cannot. It resolves
-  once the fonts that are PENDING have loaded, and a face nothing has asked
-  for yet is not pending, so on a cold page it resolves before the board has
-  drawn a word. The first run then measures in the fallback, requests the real
-  face BY measuring, and the real face lands afterwards. Nothing re-ran:
-  `load` had already fired, and the resize observer sees no resize because the
-  canvas did not change size, only its text.
-
-  It surfaced three ways at once and none of them looked like one bug: hour
-  labels booked clear of each other came out touching by two or three pixels,
-  the first and last hours hung off the ends of the canvas, and captions the
-  assignment had proved clean came out grazing. Each was plausible on its own,
-  which is why it survived so long behind other explanations.
-
-  Fixed by watching the board's own text: a probe in a label's classes is
-  measured after each run and again over the second that follows, and the
-  board is laid out again if its width moves. That also covers a stylesheet
-  arriving late and the framework's engines restyling afterwards, which are
-  the same fault and equally silent. The suite now waits for the run count to
-  stand still instead of reporting a fixed 250ms after the first pass -- it
-  had been reporting whichever pass happened to have landed, which is why the
-  same board reported differently on different runs.
-
 
 - [ ] **E21. The solver reserves 80 to 160px more depth than the drawing
   uses, so every board thinks it is fuller than it is.**
@@ -859,95 +644,6 @@ mechanism is right and the two-pass freeze is the non-obvious part.
     Deciding at the first tier and deciding at the winning tier gave
     different boards, and neither matched a straight re-run.
 
-- [x] **E20. Captions walk past a neighbouring rail, so they read as
-  somebody else's.** Closed by E23: the walk-past is priced in the caption
-  search (`runCrosses` asks the rule's own question -- is another line's rail
-  between the words and the line they name) and in the attempt score beside
-  it. Every board the suite had marked known against this entry now passes.
-  The analysis below stands, and its last paragraph is what E23 did. `rules.md` rule 37: "A caption may not walk past another
-  line to find room. A name on the far side of somebody else's rail reads as
-  theirs." Nothing checked it. The rule-check skill found it by eye on a
-  rendered board: "Skate Park" belongs to Bart, whose dot and end tick carry
-  it, but the words sit below Lisa's rail and read as Lisa's evening.
-
-  Measuring it took two attempts, and the first one is worth recording as
-  wrong. Asking which line is NEAREST a caption marks about thirty of them
-  across ten boards, and it is the wrong question: captions hang in lanes
-  that stack outward, so a caption two lanes from its own rail is naturally
-  nearer the neighbour without ever having passed it. That reading would have
-  condemned the lane model rather than found a bug.
-
-  Walking PAST is what the rule names and it is exactly checkable: is another
-  line's rail between the words and the line they name, at the caption's own
-  point along the day. Measured that way it happens in fourteen places on ten
-  boards, and two boards are clean, which is the shape of a bug rather than
-  of a rule that is wrong. `test/layout/cases/caption-side.js` now holds it,
-  with the ten boards that break it marked known against this entry.
-
-  Same root as E19: placement is greedy and takes the least-bad spot left,
-  and on these boards that spot is across a neighbour. A placer that saw a
-  whole side at once could rule those positions out entirely, since being on
-  the wrong side of a rail is not a matter of degree.
-
-- [x] **E19. The caption overlaps cannot be priced away: placement is
-  greedy, so every local improvement reshuffles somebody else.** Fixed, by
-  drawing the board both ways round rather than by pricing. The remaining overlap failures (long-event-day,
-  double-booked, crew-day) are all the same shape: on a crowded line every
-  candidate position for a caption is bad, and the search buys the least-bad
-  one. `costAt` prices everything by area, charging a caption over a rail at
-  0.35 and a caption over a caption at 1.0, while stepping out to the next
-  row costs `oi * h * textLen * 0.03`. For "Desk booking" that made a four
-  pixel collision (about 136) cheaper than the row it could have moved to,
-  once that row's own rail penalty was counted.
-
-  Measured, not guessed. Two attempts, each a full suite run:
-
-  * Prefer any position with no caption under it: long-event-day and
-    double-booked went clean and crew-day halved, but FIVE boards gained a
-    rail through a caption (busy-day, all-day-every-track, long-event-day,
-    crew-day at two sizes). 6 failures became 8.
-  * Prefer only positions with neither fault, falling back to the old choice
-    otherwise: worse still, 10 failures, with eight pierces.
-
-  The second result is the one that explains the rest, because a preference
-  that only ever selects an already-clean candidate should not be able to
-  CREATE a pierce anywhere. It can, because the pass is greedy and
-  sequential: captions are placed in order against ONE growing obstacle
-  list, and each chosen box is pushed into it. Move the first caption to a
-  better spot and every later caption on that side is choosing against a
-  different board, so the pierces and overlaps land on different captions
-  rather than going away. (I first wrote this down as "the rails move
-  afterwards", blaming `recomputeLineDists()`. That was wrong and is worth
-  recording as wrong: it recomputes each EVENT's branch-origin distance, and
-  the lines' own distances are solved before the caption pass. Nothing moves
-  the rails.)
-
-  So it is not a weights problem. A greedy search cannot see that giving
-  caption A its second-best spot leaves B and C clean.
-
-  WHAT FIXED IT. The order is the one lever that changes every choice at
-  once, and there is no way to know which order is better except to draw
-  both. The tier loop already draws a board more than once and keeps the
-  best by score, so the caption pass joined that: `capOrder` 0 places names
-  from the start of the day, 1 from the end, and `attempt` keeps whichever
-  board scores better. A board with nothing wrong returns on the first
-  draw, so the ordinary case costs nothing.
-
-  All fourteen "no two text labels overlap" cases pass, where three failed.
-  `no two captions overlap standing up: tight-pair/x-portrait` came off the
-  E13 known list with it. Four failures remain and they are the trade the
-  quality score asks for, which weighs an overlap at 120 against a crossing
-  at 40: three captions with a rail through them (long-event-day and
-  five-lines on OG, crew-day on X) and one long-block caption touching a
-  neighbour by 46x13px on OG. A caption with a rail behind it is read
-  through, because every caption carries a paper outline; a caption under
-  another caption is gone. Worth revisiting only with a placer that has a
-  global view of a whole side at once.
-
-  One thing that did come out of it: with captions placed differently,
-  `no two captions overlap standing up: tight-pair/x-portrait` passes. It is
-  still marked known (E13) and still fails on the current code.
-
 - [ ] **E18. TRMNL Companion: blocked upstream, one line of their Swift away.**
   Companion is an iOS app that reads the phone's own calendars through
   EventKit and POSTs them to a plugin, which would remove this plugin's
@@ -999,71 +695,16 @@ mechanism is right and the two-pass freeze is the non-obvious part.
 > scale already compresses quiet hours (`aFor`, EXPRESS_RATE), so the night
 > express is an extension of something real.
 
-- [x] **E1. The metro car should read as a train.** Outline it, hollow it
-  out, or set the track's initial inside it.
 - [ ] **E1b. One car, not one per line.** Instead of a train on every line,
   a single high-contrast car marking the current time for the whole board:
   riding the hour strip, or sitting on the active time position, as the "you
   are here". Worth trying against what is there now (a car per line, each
   carrying its line's initial, which says where each person is rather than
   only what time it is) and keeping whichever reads better on a panel.
+
 - [ ] **E2. Dynamic date range header.** Single day: `Today · Thu 10 Sep ·
   07:00 - 21:00`. Multi-day: `Thu 10 Sep - Fri 11 Sep` with a small high/low
   and icon per day, side by side.
-- [x] **E3. Midnight terminal.** Built as the first of the two options: a
-  full-height double bar across the map at each boundary, with the day it
-  opens named on it (`drawMidnights` in shared.liquid). Drawn BEHIND the
-  lines, because a line that runs through midnight really does run through
-  it and a bar over the top would cut a sleeper event in half. The 180°
-  terminal loop was the alternative and was not taken.
-- [x] **E4. Night express compression.** Built in the time axis: a minute
-  outside the busy part of a day is worth `expressRate` of a busy one, and
-  adjacent express stretches merge so the tail of one day and the head of
-  the next are ONE night rather than two half-nights. The compressed
-  stretches carry the cross-hatch asked for. An event spanning the night
-  runs through as one stroke, which falls out of the axis being continuous
-  rather than needing anything of its own.
-- [x] **E12. An all-day event belongs at the line's head, not on the axis.**
-  AGREED, planned, not built. An all-day event has no time of day at all:
-  `transform.js` synthesises a fake timed event spanning the whole visible
-  window, and the board then prints its own window back as if it were the
-  event's hours. Every render today carries "6am - 11pm / Spring Break".
-  On a multi-day board it is worse, because the window covers the run: a
-  Tuesday holiday is stamped across Wednesday and Thursday.
-
-  It is a STATE the line is in, not a place it goes at a time, so it is
-  declared once where the board already says who a line is:
-
-  - A concentric-ring badge plus a second row of words in the terminus
-    block under the line's name. Nothing at all between `axisStart` and
-    `axisEnd`. No dot, no tick, no band, no lane, no leader. This finally
-    draws rule 28's concentric rings, which the rule has promised since it
-    was written and no code has ever produced.
-  - Both terminal bars become open chevrons, so the day reads as a slice
-    of something longer rather than as a thing that began at six and ended
-    at eleven.
-  - Several lines sharing one title are one origin, named once, with the
-    dashed out-of-station tie between the heads.
-
-  It is the only option costed that gives depth BACK on a board that is
-  96% spent: every all-day event stops buying an inward rung, and the head
-  row is charged once per board through `nameH`, which the solver already
-  reads. It is also the best behaviour on a cropped panel, because the
-  head is the one thing a narrowed time window cannot crop.
-
-  What to touch, in order: `buildMetro` stops synthesising the fake event
-  and repopulates `metro.all_day`; `staticFacts` drops the `e.all_day ||`
-  clause from `_long`; **`fitLines` must count `METRO.all_day` in its load
-  tally**, or a line whose only content is a holiday scores zero and is the
-  first dropped on a quadrant; the name-building pass appends the route row
-  into `p._nameEl` so the existing measurement covers it; `decideNamePlacement`
-  must drop the route row before flipping `namesAbove`; the terminal-bar
-  block draws chevrons with a new role, which `cases/loose-ends.js` has to
-  learn or it fails on every all-day board.
-
-  Known debt it adds: A8 (a wrapped track name overlapping the first event
-  label) gets worse, and that is the price. Rules 27 and 28 need amending
-  and two new rules writing; the full wording is in the plan.
 
 - [ ] **E14b. Three boards now reuse a drop column at a morning convergence.**
   `five-lines` turns Bart and Lisa 1px apart leaving the school run;
@@ -1169,7 +810,7 @@ mechanism is right and the two-pass freeze is the non-obvious part.
   dictates. It should not be: a siding is "this line is somewhere else for a
   stretch of the day", and that is a fact about the EVENTS, not a setting.
   An all-day or most-of-day event on one line, a long block that swallows
-  several shorter ones, a stretch two lines spend together — the layout can
+  several shorter ones, a stretch two lines spend together -- the layout can
   see all of it and decide, the way it now decides convergences.
 
   Two reasons it matters beyond tidiness. A declared siding is a promise the
@@ -1185,61 +826,6 @@ mechanism is right and the two-pass freeze is the non-obvious part.
   true` is already kept as an undocumented alias for configs written before
   the rename, so there is a precedent for reading the old key and ignoring
   it.
-
-- [x] **E15. A public holiday belongs to the day, not to a line.** Built.
-  People subscribe to "Holidays in Belgium", to Apple's equivalent, to a
-  school's term dates. The plugin had no concept of them: they arrived as
-  ordinary all-day entries, were routed by whichever rule happened to
-  match, and either landed at ONE line's head (as if that person alone
-  were off) or, where the feed carried a name nothing routed, put a whole
-  extra LINE on the board named after a country, with both ends drawn as
-  open chevrons. A yearly recurrence -- how most such feeds write Christmas
-  Day -- was dropped entirely, since only FREQ=WEEKLY was ever evaluated.
-
-  A holiday has no hour and no owner, so it is a property of THE DAY and is
-  stated where the board already says which day it is: in the header,
-  beside the date, with rule 28's concentric rings. `data.holidays`,
-  declared with `"holiday": true` on a calendar (the whole setup for a
-  subscription) or on a rule (for a feed carrying both kinds). Inside a
-  range it reads "Spring Break, Day 3 of 5", which is the only thing
-  telling the Monday of a half term from the Thursday. One name, not a
-  list: two on the row came out as "Christmas D" and "School Holid", each
-  cut mid word with the ordinal wrapped underneath.
-
-  It is the one option costed that the MAP does not pay for: a band on the
-  scale puts an hourless thing on a scale of hours, a row at every head
-  says something about people it is not about, and a line of its own costs
-  a band of cross axis and can be kept on a cramped panel while a real
-  person is dropped. Rules 58 to 63; `CONFIG.md`, "Public holidays".
-
-  Found on the way: every all-day entry reached `buildFromConfig` having
-  lost the day it belonged to, so all of them read as day 0. Tomorrow's
-  holiday was declared on today's board, and a board set to tomorrow threw
-  every all-day entry away. Fixed with the rest;
-  `test/transform/cases/holidays.js` covers both directions.
-
-  The plain "one ICS link per line" setup CAN say it now: one word after
-  the link, `https://.../holidays.ics holiday`. A URL cannot contain a
-  bare space, so it needs no punctuation and no JSON, which is the whole
-  point of that path existing. It is the only word the list understands.
-  Auto-detecting one from the feed's name was costed and refused, because
-  it is wrong both ways round (a calendar literally called "Holidays" that
-  is one person's leave; a school feed that is a holiday feed and says
-  nothing) with no way to turn it off.
-
-  The editor learned it too -- it was dropping `holiday` on both a
-  calendar and a rule, so a config carrying one lost it on the round trip
-  -- and the "Family of 4" preset now teaches both shapes: a subscribed
-  national feed that belongs to the day, and a half term that belongs to
-  the children and not to the parents who still go to work.
-
-  The demo boards still show no holiday, and that is correct rather than
-  outstanding: the demo day is a Tuesday in September and a Tuesday in
-  September is not a holiday. Showing one would mean inventing a public
-  holiday on an ordinary day, which teaches the reader something false
-  about what the board is saying. The worked example belongs in the
-  presets, where somebody is reading a configuration rather than a day,
-  and that is where it is.
 
 - [ ] **E17. The rejoin branch is unreachable, and two rules disagree because
   of it.** A solo event of four hours or more is `_onLine`
@@ -1261,24 +847,6 @@ mechanism is right and the two-pass freeze is the non-obvious part.
   in the same breath. `test/layout/cases/rails.js` now pins what the board
   really does, so the deletion cannot quietly change behaviour.
 
-- [x] **E16. The rule editor has no control for `allDay` or for deleting the
-  matched text.** Built. `allDay` is a tick beside `hide`; deleting the
-  matched text is its own tick that disables the rename box while it is on,
-  since a rule cannot both delete what it matched and put something else
-  there. Two tests in `01-export.js` pin them, and the two tests that ticked
-  "hide" as checkbox number two now find it by its label -- they had been
-  silently ticking the new box above it. Both survive a round trip now -- a config carrying either
-  loads, keeps it and writes it back, where before the editor dropped them
-  silently and handed back a configuration that had quietly stopped
-  stripping class codes. But neither can be SET in the editor, so anybody
-  who wants one has to hand-edit the JSON box.
-
-  `allDay` wants a checkbox beside `hide`. Deleting the matched text is the
-  harder one, because the rewrite field cannot tell "I typed nothing" from
-  "I mean nothing": it wants its own affordance -- a "remove the matched
-  text" tick that disables the field -- rather than a subtler reading of an
-  empty box.
-
 - [ ] **E14. The two biggest text tiers ignore the device's font setting.**
   Carried over from the old tracker. The device's Font Family setting
   (Default / Classic / TRMNL) only redefines `--title-*` and `--label-*` for
@@ -1292,25 +860,12 @@ mechanism is right and the two-pass freeze is the non-obvious part.
 
 - [ ] **E8. Thicker tracks on the large panel.** Line weights are chosen in
   layout px and then multiplied by `S`, so a TRMNL X at 1872x1404 draws the
-  same rail the OG panel does, only bigger — which means it reads as
+  same rail the OG panel does, only bigger -- which means it reads as
   THINNER, because there is far more board around it. A metro map's line
   weight is a share of the page, not a constant. The big panel should carry
   visibly heavier track (and heavier marks with it, since `markOut` and
   `NODE_STROKE` are sized off the rail), so a full-size board looks like a
   poster rather than a small diagram enlarged.
-
-- [x] **E5. Preset library in the editor.** A one-click dropdown in Start:
-  Family of 4, Work vs Personal, Solo Freelancer, so someone can see a board
-  before they have any URLs. Shipped in 1e3ba50.
-- [x] **E6. Localized weather alert banner.** A settings group (`enabled`,
-  `rain_threshold`, `snow_alert`, `temp_extremes`) using the account
-  location and locale. When a threshold is breached, a full-width
-  high-contrast banner along the bottom edge:
-  `SERVICE ALERT · Heavy Rain Expected at 17:00 (80%)`, translated per
-  locale. It collapses completely when nothing is breached, and the canvas
-  reclaims the space.
-
----
 
 ## Notes
 
@@ -1343,9 +898,46 @@ mechanism is right and the two-pass freeze is the non-obvious part.
   panel). Those are exactly the views where a missing line is hardest to
   explain, so this wants revisiting.
 
+---
+
 ## Done
 
-- [x] A configuration pasted from a chat window (markdown-escaped, fenced,
-  smart quotes) is read rather than mistaken for a list of URLs, at both the
-  plugin and the editor. The AI prompt now pins the reply format and forces
-  the calendars to actually be fetched.
+One line each; the reasoning is in the code, in `rules.md`, or in the commit.
+
+- A1. Tracks squashed into a third of the board
+- A2. Line names sitting on their own rails
+- A3. Station captions collide
+- A5. WITHDRAWN, this was a misreading
+- A6. Terminator tick misplaced on a backwards branch
+- A13. A stretch of rail floating in the middle of the board
+- A9. The trunk was interrupted where a siding began
+- A11. Every "small view" in the layout suite was rendering full
+- B1. A calendar `name` silently becomes a line
+- B2. "Let an AI do it" belongs at the top of the editor, right
+- B3. The prompt should carry a full worked example of an advanced
+- B4. Drop `timeZone` and `locale` from the prompt
+- B5. Remove `side` and `color` everywhere
+- C2. Remove the "6am 11pm" span pill from the header
+- C3. Quadrant and the small vertical views
+- C4. Quadrant and half-horizontal (sm/md) waste a whole header band
+- C5. Temperature unit setting
+- D1. Timeouts and errors
+- D2. Saved state (https://help.trmnl.com/en/articles/16777795),
+- D3. i18n as JSON files in the repo, fetched by `transform.js`, so
+- D4. Demo weather data in the demo configs, covering every weather
+- E26. The demo board's line order is a hand-written guess
+- E27. A vertical through a caption is charged by area
+- D6. Optimise the logo SVG per colour variant
+- E23. The captions were placed by the strategy the literature calls
+- E22. The board was laid out against a font it was not drawing in
+- E20. Captions walk past a neighbouring rail, so they read as
+- E19. The caption overlaps cannot be priced away
+- E1. The metro car should read as a train
+- E3. Midnight terminal
+- E4. Night express compression
+- E12. An all-day event belongs at the line's head, not on the axis
+- E15. A public holiday belongs to the day, not to a line
+- E16. The rule editor has no control for `allDay` or for deleting the
+- E5. Preset library in the editor
+- E6. Localized weather alert banner
+- A configuration pasted from a chat window (markdown-escaped, fenced,
