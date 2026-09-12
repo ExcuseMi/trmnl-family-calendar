@@ -5287,14 +5287,25 @@
               if (order.indexOf(pr[0]) < 0) order.push(pr[0]);
             });
             order.forEach(function (e) {
+              function lift() {
+                // Off the board, so the search sees the paper it is actually
+                // competing for rather than its own words sitting in it.
+                for (var i = busyList.length - 1; i >= 0; i--) {
+                  if (busyList[i].of === e) busyList.splice(i, 1);
+                }
+                e._capBoxes = null; e._capAngle = null; e._capRun = null;
+              }
+              function restore(keep) {
+                for (var k = busyList.length - 1; k >= 0; k--) {
+                  if (busyList[k].of === e) busyList.splice(k, 1);
+                }
+                e._textStart = keep.at; e._capOut = keep.out; e._labelSign = keep.sign;
+                e._capAngle = keep.angle; e._capRun = keep.run; e._capBoxes = keep.boxes;
+                capBoxes(e).forEach(function (bx) { busyList.push(bx); });
+              }
               var keep = { at: e._textStart, out: e._capOut, sign: e._labelSign,
                            angle: e._capAngle, run: e._capRun, boxes: e._capBoxes };
-              // Off the board, so the search sees the paper it is actually
-              // competing for rather than its own words sitting in it.
-              for (var i = busyList.length - 1; i >= 0; i--) {
-                if (busyList[i].of === e) busyList.splice(i, 1);
-              }
-              e._capBoxes = null; e._capAngle = null; e._capRun = null;
+              lift();
               place(e);
               // Kept when it is no worse, not only when it is better: a
               // name that steps aside for nothing this time is what lets
@@ -5302,13 +5313,37 @@
               // whole still has to come out ahead or the loop stops.
               var now = collisions(movable).length;
               if (now <= worst) { worst = now; return; }
-              // No better: put back exactly what was there, obstacle and all.
-              for (var k = busyList.length - 1; k >= 0; k--) {
-                if (busyList[k].of === e) busyList.splice(k, 1);
-              }
-              e._textStart = keep.at; e._capOut = keep.out; e._labelSign = keep.sign;
-              e._capAngle = keep.angle; e._capRun = keep.run; e._capBoxes = keep.boxes;
-              capBoxes(e).forEach(function (bx) { busyList.push(bx); });
+              restore(keep);
+              // STILL NOWHERE. Then the name is too TALL for the paper
+              // rather than in the wrong place.
+              //
+              // A caption is two rows, its time over its title, and the
+              // corridor between two lines holds a whole number of them:
+              // eighty-four pixels of paper takes two captions of
+              // twenty-eight and five of fourteen. On a line with seven
+              // events that is the whole difference between a board that
+              // fits and a board with names on each other -- and it is
+              // exactly what the freed height bought, because with the room
+              // to keep the times the tier loop keeps them for every
+              // caption on the board at once.
+              //
+              // So the trade is made where it is owed: by the one caption
+              // that cannot be placed, not by every caption on the board.
+              // It gives up its time, which is the same thing a caption
+              // gives up when it is too WIDE for its lane, and tries again.
+              var tm = e._box && e._box.querySelector('.metro-time-tag');
+              if (!tm) return;
+              var before = tm.nextSibling, wasW = e._w, wasH = e._h, wasLen = e._textLen;
+              tm.remove();
+              var nb = measure(e._box);
+              e._w = nb.w; e._h = nb.h; e._textLen = horizontal ? e._w : e._h;
+              lift();
+              place(e);
+              if (collisions(movable).length < worst) { worst = collisions(movable).length; return; }
+              // Not even then: the time goes back and so does the name.
+              e._box.insertBefore(tm, before);
+              e._w = wasW; e._h = wasH; e._textLen = wasLen;
+              restore(keep);
             });
             metroDbgRepair[2] = worst;
             if (worst >= before) return;
@@ -5645,7 +5680,45 @@
           // because it is cheap, and a board without one still has an
           // answer.
           var MAX_LEADER = 32 * S;
-          var outs = [e._capOut, e._capOut + row, e._capOut + row * 2, e._capOut + row * 3];
+          // THE RUNGS ARE THE ROWS THAT EXIST, NOT OFFSETS FROM A LINE.
+          //
+          // This was four steps of a label's height out from the rail,
+          // wherever they landed -- and on a board with lines a caption or
+          // three apart, where they landed was usually on somebody else's
+          // rail. Measured on busy-day at 800x480: every candidate position
+          // for "Client Workshop", at every rung, on both sides, crossed a
+          // line. The search was not choosing between a clean row and a
+          // dirty one, it was choosing which rail to write over, and the
+          // cost it was weighing was dominated by the paper bands of the
+          // lines rather than by the other captions.
+          //
+          // The paper between two lines is a CORRIDOR, and it holds a whole
+          // number of caption rows. Asked for those instead, every
+          // candidate is clear of the rails by construction and the search
+          // goes back to answering the question it is good at: which free
+          // row is nearest the mark this name belongs to.
+          //
+          // The old ladder stays on the end, beyond the corridor and
+          // charged as it always was. A caption whose corridor is too
+          // shallow for even one row still has to go somewhere, and a board
+          // with nowhere clean is a board where a stem over a rail beats a
+          // name over a name.
+          function rungOuts(awayDir) {
+            var here = e._routeEdge != null ? e._routeEdge : lineCAt(e._p, e._nodeA);
+            var lim = awayDir > 0 ? crossPx - EDGE : bandLo;
+            LEGEND.forEach(function (q) {
+              if (q === e._p) return;
+              var qc = lineCAt(q, e._nodeA);
+              if (awayDir > 0 ? (qc > here && qc < lim) : (qc < here && qc > lim)) lim = qc;
+            });
+            // ...less the paper that rail keeps for itself, which is the
+            // same six pixels every caption keeps from every line.
+            var depth = Math.abs(lim - here) - LINE_GAP;
+            var list = [];
+            for (var k = 0; e._capOut + k * row + e._h <= depth; k++) list.push(e._capOut + k * row);
+            for (var k2 = Math.max(list.length, 0); k2 < 4; k2++) list.push(e._capOut + k2 * row);
+            return list;
+          }
           // SLIDING STOPS WHERE POINTING STOPS.
           //
           // Widening this to a full label-width and beyond did give the
@@ -5682,13 +5755,14 @@
             banSign = o._labelSign;
           });
           var base = e._nodeA + TEXT_PAD, best = null;
-          for (var oi = 0; oi < outs.length; oi++) {
-            for (var sg = 1; sg >= -1; sg -= 2) {
+          for (var sg = 1; sg >= -1; sg -= 2) {
+            var away = sg * e._sign;
+            if (banSign && away === banSign) continue;
+            var outs = rungOuts(away);
+            for (var oi = 0; oi < outs.length; oi++) {
               for (var si = 0; si < slides.length; si++) {
                 var at = base + slides[si];
                 if (at < axisStart + EDGE || at + e._textLen > axisEnd - EDGE) continue;
-                var away = sg * e._sign;
-                if (banSign && away === banSign) continue;
                 var c0 = away > 0 ? e._routeEdge + outs[oi] : e._routeEdge - outs[oi] - e._h;
                 // SIX PIXELS UNDER THE DESCENDERS. A label's measured
                 // height stops at the bottom of its box, and a rail drawn
