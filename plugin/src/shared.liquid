@@ -5278,6 +5278,42 @@
           }
           return false;
         }
+        // A RAIL THROUGH THE WORDS, COUNTING THE CAPTION'S OWN LINES TOO.
+        //
+        // `runCrosses` asks rule 37's question -- is another line between
+        // these words and the line they name -- and it rightly excuses a
+        // shared event's own members, because a name that belongs to Work AND
+        // Alex is not on the wrong side of either of them.
+        //
+        // Being READ THROUGH by a rail is a different fault and has no such
+        // excuse. A convergence's name sits over its pill and its members'
+        // rails dive into that pill right underneath it: "Lunch with Alex"
+        // came out with Work's descent drawn through its first two letters on
+        // three boards, and nothing in the search could see it, because the
+        // one line allowed to do that was one of the two the name is about.
+        // A rail through letters is unreadable whoever owns it.
+        // Measured as HOW MUCH of the words it crosses, not as yes or no. A
+        // rail clipping ten pixels off the tail of a name is untidy; the same
+        // rail lying along its whole length has taken the name away, and a
+        // flat charge for both sent a convergence's name to a worse place to
+        // dodge a graze and left it pierced end to end somewhere else.
+        // Returned in the same currency as everything here: the length of
+        // rail inside the words, which is charged against their height.
+        function railCut(e, run) {
+          var cut = 0;
+          for (var qi = 0; qi < LEGEND.length; qi++) {
+            var q = LEGEND[qi];
+            for (var bi = 0; bi < run.length; bi++) {
+              var bx = run[bi], span = bx.a1 - bx.a0;
+              var stepA = Math.max(2 * S, span / 12);
+              for (var a = bx.a0; a <= bx.a1; a += stepA) {
+                var c = lineCAt(q, a);
+                if (c > bx.c0 && c < bx.c1) cut += Math.min(stepA, bx.a1 - a);
+              }
+            }
+          }
+          return cut;
+        }
         // What a leaning name leans off. A mark is ON its line, so that is
         // the line at that minute. A convergence is not on any one of its
         // lines: it is a bundle, and its edge is where its name starts from.
@@ -5467,17 +5503,27 @@
         }
         function assignCaptions(list, busyList) {
           var movable = [];
-          list.forEach(function (e) { if (!isPinned(e) && !e._dropped) movable.push(e); });
+          list.forEach(function (e) { if (!e._dropped && e._textStart != null) movable.push(e); });
           var n = movable.length;
           if (!n) return;
           var cands = [], shedAt = [], i, j, k;
           for (i = 0; i < n; i++) {
-            cands.push(flatCands(movable[i]));
+            cands.push(candsFor(movable[i]));
             // WHAT A SHED NAME COSTS IS ABOUT THE READER, NOT THE BOX. It is
             // the same name missing whether its box was one row or two, so
             // this is measured once and does not move when the second stage
             // takes a time row off.
-            shedAt.push(capArea(movable[i]) * SHED_PRICE);
+            // ...and a convergence's name is not sheddable in practice: it
+            // names a station several people are standing at, and a pill with
+            // no name on it is the one thing on this board a reader cannot
+            // work out from anything else. Three times the price, which no
+            // arrangement of neighbours has yet been able to justify.
+            // ...and so is a long event drawn ON its line. Its name is the
+            // only thing saying what that stretch of rail IS -- there is no
+            // dot to pair a count at the head with -- so a board that sheds
+            // it has drawn an unexplained thickening of somebody's day.
+            var hard = isPinned(movable[i]) ? 3 : movable[i]._onTrack ? 2 : 1;
+            shedAt.push(capArea(movable[i]) * SHED_PRICE * hard);
           }
           // One name's worth of paper, which is what every price here is a
           // fraction of. Set before the first candidate is weighed against
@@ -5598,7 +5644,7 @@
               tm.remove();
               var nb = measure(e2._box);
               e2._w = nb.w; e2._h = nb.h; e2._textLen = horizontal ? e2._w : e2._h;
-              cands[ix] = flatCands(e2);
+              cands[ix] = candsFor(e2);
               // The board with this name not drawn at all, which is what its
               // new candidates are measured against...
               pick[ix] = -1;
@@ -5660,17 +5706,31 @@
         function isPinned(e) {
           return !!(e._routeShared && e._textStart != null && e._capOut != null);
         }
-        function placeCaption(e) {
-          // A CONVERGENCE'S NAME IS PLACED ALREADY, AND IT IS PINNED.
-          //
-          // The corridor pass put it above the pill and across its middle,
-          // which is the one spot on a convergence that belongs to the
-          // whole thing. Letting the search move it defeats the point: it
-          // is not looking for the best free paper, it is naming a
-          // particular station, and every pixel it slides makes that less
-          // clear. So it keeps its place and joins the obstacle list, and
-          // the solo events either side arrange themselves around it.
-          if (isPinned(e)) {
+        // A CONVERGENCE'S NAME HAS A PLACE IT WANTS, NOT A PLACE IT KEEPS.
+        //
+        // The corridor pass puts it above the pill and across its middle,
+        // which is the one spot on a convergence that belongs to the whole
+        // thing, and for a long time it simply stayed there: it was placed
+        // first, became an obstacle like a rail, and the solo events either
+        // side arranged themselves around it.
+        //
+        // That is the ordering bug this whole pass exists to remove, wearing
+        // a different hat. Placed first it takes the paper, and a solo event
+        // with nowhere else is written over. Given a search of its own and
+        // still placed first, it moves to clean paper -- and lands on a name
+        // that was already there, because it could not ask that name to
+        // shift. Both were measured, on the same two boards.
+        //
+        // So it is in the assignment with everything else, and what makes it
+        // a convergence's name is PRICE rather than privilege: the centred
+        // spot is free, sliding along the pill is cheap, standing off it is
+        // dearer, crossing to the far side of the bundle dearer still, and
+        // not drawing it at all is three times what any other name costs. The
+        // board still puts it where the corridor pass asked whenever that
+        // paper is clear, which is nearly always; what it can do now is trade
+        // with its neighbours when it is not.
+        function pinnedCands(e) {
+            var out = [];
             // ABOVE THE PILL, AND CLEAR.
             //
             // Centred over the corridor is where this name belongs and it
@@ -5696,37 +5756,72 @@
             var CAP_LEADER = 32 * S;
             var row0 = e._h + LINE_GAP * 0.6, mid0 = e._textStart;
             var bestS = null;
-            for (var oi0 = 0; oi0 < 4; oi0++) {
-              var out0 = e._capOut + oi0 * row0;
-              var c0s = e._labelSign < 0 ? e._routeEdge - out0 - e._h : e._routeEdge + out0;
-              if (c0s < bandLo || c0s + e._h > crossPx - EDGE) continue;
-              for (var si0 = 0; si0 < 7; si0++) {
-                var slide0 = [0, 0.35, -0.35, 0.7, -0.7, 1.1, -1.1][si0] * e._textLen;
-                var at0 = mid0 + slide0;
-                if (at0 < axisStart + EDGE || at0 + e._textLen > axisEnd - EDGE) continue;
-                var bx0 = { a0: at0 - TEXT_PAD, a1: at0 + e._textLen + TEXT_PAD,
-                            c0: c0s, c1: c0s + e._h };
-                var over0 = Math.max(0, oi0 * row0 - CAP_LEADER);
-                var cost0 = costAt(bx0, e)
-                          + oi0 * e._h * e._textLen * 0.05
-                          + over0 * e._h * 0.25
-                          + Math.abs(slide0) * e._h * 0.02;
-                if (!bestS || cost0 < bestS.cost) bestS = { cost: cost0, at: at0, out: out0, box: bx0 };
-                if (cost0 === 0) { oi0 = 4; break; }
+            // AND THE OTHER SIDE OF THE PILL, WHICH THIS NEVER ASKED FOR.
+            //
+            // The corridor pass puts a convergence's name above its bundle
+            // and the search here slid it along and stepped it outward -- on
+            // that side only. On a board where the side it was given is a
+            // strip of paper one row deep, between the hour band and the
+            // topmost rail, the search had exactly one row to offer and that
+            // row had a rail lying through it. "Lunch with Alex" came out
+            // with Work's trunk drawn through the bottom of its letters on
+            // three boards, and there was nothing wrong with the paper below
+            // the pill; nothing had asked.
+            //
+            // The corridor pass's side is still the preferred one -- it knows
+            // which way the bundle leans and where the board has room -- so
+            // crossing to the other pays a row's worth. A clean row over
+            // there beats a rail through the words on this side, and nothing
+            // less than that moves it.
+            var pinSide = e._labelSign < 0 ? -1 : 1;
+            for (var sd0 = 0; sd0 < 2; sd0++) {
+              var side0 = sd0 ? -pinSide : pinSide;
+              for (var oi0 = 0; oi0 < 4; oi0++) {
+                var out0 = e._capOut + oi0 * row0;
+                var c0s = side0 < 0 ? e._routeEdge - out0 - e._h : e._routeEdge + out0;
+                if (c0s < bandLo || c0s + e._h > crossPx - EDGE) continue;
+                for (var si0 = 0; si0 < 7; si0++) {
+                  var slide0 = [0, 0.35, -0.35, 0.7, -0.7, 1.1, -1.1][si0] * e._textLen;
+                  var at0 = mid0 + slide0;
+                  if (at0 < axisStart + EDGE || at0 + e._textLen > axisEnd - EDGE) continue;
+                  var bx0 = { a0: at0 - TEXT_PAD, a1: at0 + e._textLen + TEXT_PAD,
+                              c0: c0s, c1: c0s + e._h };
+                  var over0 = Math.max(0, oi0 * row0 - CAP_LEADER);
+                  var cut0 = railCut(e, [bx0]), thru0 = cut0 > 0;
+                  var raw0 = costAt(bx0, e, busyFrozen);
+                  // A NAME THAT HAS SLID OFF ITS OWN PILL IS NAMING PAPER.
+                  //
+                  // Sliding is charged by distance and nothing else, so a
+                  // full name-width of slide cost about what one rung costs
+                  // and "Lunch with Alex" came to rest ending ninety pixels
+                  // before its own event began. The pill is the thing being
+                  // named: once the words no longer stand over any part of
+                  // it, the reader has to guess which station they belong to,
+                  // which is the same fault as a caption adrift and is priced
+                  // the same way.
+                  var offPill = Math.max(0, Math.max(e._nodeA - (at0 + e._textLen), at0 - e._endA));
+                  var cost0 = raw0
+                            + cut0 * e._h * 0.5
+                            + (sd0 ? e._h * e._textLen * 0.05 : 0)
+                            + oi0 * e._h * e._textLen * 0.05
+                            + over0 * e._h * 0.25
+                            + Math.abs(slide0) * e._h * 0.02
+                            + (offPill > 0 ? e._h * e._textLen * 0.3 + offPill * e._h * 0.1 : 0);
+                  out.push({ self: cost0, raw: raw0, thru: thru0, at: at0, out: out0,
+                             sign: side0, boxes: [bx0], run: null, angle: null, edge: null });
+                }
               }
             }
-            if (bestS) {
-              e._textStart = bestS.at;
-              e._capOut = bestS.out;
-              bestS.box.of = e; e._capBoxes = [bestS.box];
-              busy.push(bestS.box);
-            }
-          }
+          return out;
         }
         // EVERY SHAPE THE NAME CAN TAKE, all of them priced, and the
         // assignment picks. Enumerated against the fixed obstacles only, so
         // this answer does not depend on where any other name ended up and is
         // computed once per name per attempt rather than once per try.
+        // ONE SEARCH, TWO KINDS OF NAME. A convergence's name leans off its
+        // bundle and a solo event's off its own rail, so they are offered
+        // different positions; everything after this point treats them alike.
+        function candsFor(e) { return isPinned(e) ? pinnedCands(e) : flatCands(e); }
         function flatCands(e) {
           var out = [];
           // EVERY SHAPE THE NAME CAN TAKE, AND THE CHEAPEST ONE WINS.
@@ -6088,9 +6183,11 @@
                 // name costs and was regularly the cheapest thing going.
                 // Charged rather than refused: this is the fallback, and it
                 // has to be able to return something.
-                var thru = runCrosses(e, [b]);
+                var cut = railCut(e, [b]);
+                var thru = cut > 0 || runCrosses(e, [b]);
                 var overReach = Math.max(0, (outs[oi] - e._capOut) - MAX_LEADER);
-                var cost = raw + (thru ? e._h * e._textLen * 0.4 : 0)
+                var cost = raw + cut * e._h * 0.5
+                         + (thru && !cut ? e._h * e._textLen * 0.4 : 0)
                          + oi * e._h * e._textLen * 0.03
                          + overReach * e._h * 0.25
                          + Math.abs(slides[si]) * e._h * 0.02;
@@ -6113,10 +6210,10 @@
           // back, and this has to say so.
           e._capTimeless = false;
         });
-        // THE PINNED NAMES FIRST, AND THEN THE LIST IS FROZEN. Everything
-        // before this point is a fact about the board; everything after it is
-        // a name the assignment is free to move.
-        shared.forEach(function (e) { if (isPinned(e)) placeCaption(e); });
+        // THE OBSTACLE LIST IS FROZEN HERE. Everything in it is a fact about
+        // the board -- rails, the lane machinery's own labels -- and
+        // everything after it is a name the assignment is free to move,
+        // including the pinned ones.
         busyFrozen = busy.length;
         assignCaptions(shared, busy);
       }
