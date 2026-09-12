@@ -6928,6 +6928,88 @@
       var m = /gray-(\d+)/.exec(q.hue || '');
       return m ? parseInt(m[1], 10) : 0;
     }
+    // ---- THE NAME AT THE FAR END TOO -------------------------------------
+    //
+    // A transit map letters both termini, and this board only ever lettered
+    // the head. On a wide panel the right-hand end of a line is a couple of
+    // feet of paper away from the only thing that says whose line it is,
+    // and the reader tracks back across the whole day to find out.
+    //
+    // WHERE THERE IS ROOM, and not otherwise. The head of the axis has a
+    // column reserved for it (`nameCol`); the foot has nothing, because
+    // reserving axis at both ends costs every board the width whether it
+    // wants a tail name or not -- and this session has already measured
+    // what happens when a caption allowance is taken from boards that
+    // cannot spare it. So the tail is drawn into the gap that happens to be
+    // there: after the last ink on any line near this one's row, clear of
+    // every caption, and inside the axis. A busy line simply does not get
+    // one, which is the right answer -- a name crammed against the last
+    // event of the day is worse than no second name.
+    //
+    // Measured against the captions' PREDICTED boxes, the same arithmetic
+    // the drawing does further down, because at this point in the pass the
+    // captions have their positions decided but are not placed yet.
+    function tailName(p, spreadC, nameThick) {
+      if (!horizontal) return;
+      var tn = el('span', 'metro-gen metro-terminus label label--base font--bold text--black absolute');
+      tn.textContent = p.name;
+      tn.style.maxWidth = nameMax + 'px';
+      canvas.appendChild(tn);
+      clampLines(tn, 1);
+      var tm = measure(tn);
+      var tailLen = tm.w, tailThick = tm.h;
+      var capHalfT = (p.line_width + 1) * S / 2;
+      // BEFORE THE END MARK, not on it. Set flush to the right edge the tail
+      // sat exactly on the terminal bar -- four names at 0.0px from it on
+      // busy-day, which is the "|Crew" failure the head name already had,
+      // arriving at the other end of the line.
+      var tailA = axisEnd - NODE_R - capHalfT - 4 * S - tailLen;
+      var tailC = spreadC - tailThick - LINE_GAP;
+      if (tailC < bandLo) tailC = spreadC + LINE_GAP;
+      // ASKED AS A RECTANGLE, not as "is anything further right than this".
+      // The axis test alone let three boards put a caption's last few pixels
+      // through a tail name: a caption hangs off a LANE and the tail sits by
+      // its line's own spread, so two of them can share an axis without
+      // sharing a row, and can share a row without either being the
+      // rightmost thing on the board.
+      var pad = LINE_GAP;
+      var tA0 = tailA - pad, tA1 = tailA + tailLen + pad;
+      var tC0 = tailC - pad, tC1 = tailC + tailThick + pad;
+      var blocked = tailA <= axisStart;
+      visible.forEach(function (e) {
+        if (blocked || e._dropped) return;
+        // the event's own ink, on the row its line runs at
+        var ec = e._routeEdge != null ? e._routeEdge
+          : e._laneDist != null ? spineC + e._sign * e._laneDist : null;
+        if (ec != null && ec > tC0 && ec < tC1 && e._endA > tA0) blocked = true;
+      });
+      // ...AND EVERY CAPTION, from `labelBoxes`, which is the same
+      // arithmetic the drawing does. Predicting the box here by hand missed
+      // two kinds and put a tail name through three boards' worth of
+      // evening captions: a LEANING name is a run of small boxes along its
+      // own centre line rather than one upright box, and an on-track mark
+      // has a `_routeEdge` without a `_laneDist`, which a stricter guard
+      // than this one skipped entirely.
+      if (!blocked) {
+        labelBoxes().forEach(function (bx) {
+          if (blocked) return;
+          if (bx.a0 < tA1 && tA0 < bx.a1 && bx.c0 < tC1 && tC0 < bx.c1) blocked = true;
+        });
+      }
+      // and clear of every other line's name at that end
+      LEGEND.forEach(function (q) {
+        if (blocked || q === p || q._tailBox == null) return;
+        var o2 = q._tailBox;
+        if (tA0 < o2[1] && o2[0] < tA1 && tC0 < o2[3] && o2[2] < tC1) blocked = true;
+      });
+      if (blocked) { canvas.removeChild(tn); return; }
+      p._tailBox = [tA0, tA1, tC0, tC1];
+      var xy = toXY(tailA, tailC);
+      tn.style.left = xy[0] + 'px';
+      tn.style.top = xy[1] + 'px';
+      tn.setAttribute('data-metro-tailname', p.key);
+    }
+
     LEGEND.slice().sort(function (a, b) { return lightness(b) - lightness(a); }).forEach(function (p) {
       var c = spineC + p._c;
       if (fan) {
@@ -7045,6 +7127,7 @@
         var nameXY = toXY(nameA, namesAbove ? nameC + nameOff : nameC - nameThick / 2);
         p._nameEl.style.left = nameXY[0] + 'px';
         p._nameEl.style.top = nameXY[1] + 'px';
+        tailName(p, spreadC, nameThick);
         // ...AND HOW MANY OF ITS STOPS IT COULD NOT NAME.
         //
         // Appended after the name has been measured and placed, so the

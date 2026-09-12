@@ -316,6 +316,17 @@ Where the two disagree, this one is newer.
 
 34. **A caption belongs beside its own rail**, on the outside, starting at the
     stop it names.
+33e. **A line is named at BOTH ends, where there is room.** A transit map
+    letters both termini; this board lettered only the head, so on a wide
+    panel the far end of a line is a hand's span of paper away from the one
+    thing that says whose line it is. The tail name is drawn into the gap
+    that happens to be there -- after the last caption and the last ink on
+    its row, and short of its own end mark -- rather than into a reserved
+    column, because reserving axis at both ends costs every board the width
+    whether it can spare it or not. A busy line therefore does not get one,
+    which is the right answer: a name crammed against the last event of the
+    day is worse than no second name.
+
 34a. **Six pixels of paper round every rail and every caption**, its own
     rail included, descenders included. Merely not touching is not enough:
     a name dropped into the slot between two close lines is clear of both

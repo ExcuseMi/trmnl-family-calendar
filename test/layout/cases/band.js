@@ -236,4 +236,34 @@ module.exports = function (test, h) {
         + bold.toFixed(1) + 'px rail reads as a pill with a thread hanging off it');
     }
   });
+  // ---- THE NAME AT BOTH ENDS ---------------------------------------------
+  //
+  // A transit map letters both termini. This board only lettered the head,
+  // so on a wide panel the right-hand end of a line is a couple of feet of
+  // paper from the only thing saying whose line it is.
+  //
+  // The tail is drawn into the gap that happens to be there rather than
+  // into a reserved column, so a busy line does not get one -- which is why
+  // this asks for "most of them on a roomy board" rather than all. What it
+  // is really guarding is the case where a clearance test is too strict and
+  // silently suppresses every one: the same shape of failure as the caption
+  // tick, which shipped drawing nothing and looked correct doing it.
+  //
+  // Nothing here checks that a tail name is CLEAR of things. It does not
+  // need to: a tail is a .metro-terminus like the head, so "no two text
+  // labels overlap" and "a line name keeps clear of its own terminal bar"
+  // already cover it -- and both of them caught this when it was wrong.
+  test('a line is named at the far end as well, where there is room', () => {
+    const rep = layout(busy, ROOMY);
+    const names = textLabels(rep).filter((l) =>
+      (' ' + l.cls + ' ').indexOf(' metro-terminus ') >= 0);
+    const lines = rep.debug.bands.length;
+    assert(names.length > lines, 'no line is named at its far end: '
+      + names.length + ' name(s) for ' + lines + ' line(s)');
+    // and the far ones really are at the far end
+    const mid = rep.canvas.w / 2;
+    const tail = names.filter((l) => l.x > mid);
+    assert(tail.length >= Math.ceil(lines / 2),
+      'only ' + tail.length + ' of ' + lines + ' lines are named past halfway');
+  });
 };
