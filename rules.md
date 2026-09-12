@@ -44,11 +44,35 @@ Where the two disagree, this one is newer.
    compressed stretch are the same hours -- which is usually -- the
    corridor is the mark and the express hatch stands off: two hatches over
    one stretch of time say two different things are happening to it.
-2c. **Each day names itself on the hour strip.** An hour label says only
-   the time, and "09:00" on a 36-hour board is two different mornings, so
-   the day a midnight opens is written at that midnight, in capitals, among
-   the hours rather than loose on the map. The day the board OPENS on is
-   named there only where the header is not already naming it.
+2c. **Each day names itself on the hour strip, and the strip is the
+   header.** An hour label says only the time, and "09:00" on a 36-hour
+   board is two different mornings, so the day a midnight opens is written
+   at that midnight, among the hours rather than loose on the map -- as a
+   badge carrying that day's date, what the day IS, and what the sky is
+   doing on it. The day the board opens on is named the same way at the head
+   of the axis, on every board, including a board that never leaves its own
+   day.
+
+   There was a band above the map: a logo, the word "Today", a date and a
+   forecast, 58px deep on every panel, an eighth of an 800x480 board. Four
+   of the five things it did the strip was already doing -- what time it is
+   now, which day each half of a two-day board is, what has scrolled off
+   either end, where the scale changes rate -- and the fifth, the weather,
+   is a fact about a DAY and belongs at that day's own end of the scale.
+   What the band really was, was the map paying for something on the map's
+   behalf.
+
+2d. **A badge is an annotation on the scale, not a tenant of it.** So it
+   gives way in a stated order as the axis runs out: which day of a holiday
+   range this is, then the forecast, then the name of the day, then the long
+   date for a short weekday, then the badge for a bare date, then nothing.
+   Two hard limits under all of that: no badge takes more than about a third
+   of the whole scale, and none reaches past the midnight that ends the day
+   it is naming. And the date is asked for BEFORE the clock, which wants the
+   same corner whenever a board is read in the first minutes of its window:
+   the hours along the whole strip already say what time it is, and the next
+   refresh moves the clock clear by itself, whereas nothing else anywhere on
+   the board says which day this is.
 3. **One line per person, parallel to the axis**, at a fixed distance from
    the spine that is decided once per board.
 4. **A line is named at its own head**, and the name and the line must agree:
@@ -346,8 +370,8 @@ it is what THE DAY is, the way the date is which day it is.
 
 58. **Where a holiday is drawn follows from whose day it changes.** The
     config already answers that: a rule naming lines has said whose, a rule
-    naming none has said nobody's. So `holiday` does not mean "the header",
-    it means this is a STATE rather than an appointment -- rule 54's
+    naming none has said nobody's. So `holiday` does not mean "the day
+    badge", it means this is a STATE rather than an appointment -- rule 54's
     distinction -- and the place falls out. Christmas Day is nobody's and
     goes to the day; half term is the children's and not the parent's who
     still works, so it goes to their heads like any other state, named once
@@ -355,7 +379,8 @@ it is what THE DAY is, the way the date is which day it is.
     chain is what put a country's Christmas on whoever was first in the
     list.
 
-59. **A holiday nobody owns is stated in the header, beside the date.** The three other
+59. **A holiday nobody owns is stated beside the date, on the date's own
+    row.** Which is to say on the day badge (rule 2c). The three other
     places costed all charge the map for it. A band or a marker on the hour
     scale puts a thing with no hour on a scale of hours, which is what
     rule 54 already refuses for an all-day event, and it prints the board's
@@ -364,12 +389,15 @@ it is what THE DAY is, the way the date is which day it is.
     everybody and so says nothing about anybody. A line of its own is the
     worst of the three: a line costs a band of the cross axis, it gets a
     name and a texture like a person, and on a cramped panel it can be kept
-    while a real one is dropped. The header is the one part of the board
-    already answering "what day is this", and it has the room on a row it
-    draws anyway.
+    while a real one is dropped. The badge is the one thing on the board
+    already answering "what day is this", it stands at the boundary that day
+    begins at, and it costs the map nothing because the strip under it was
+    being drawn anyway.
 60. **It costs nothing on a day without one.** Like the service banner: no
-    holiday, no element, and the same board as before. That is the other
-    half of the reason it is in the header rather than on the map.
+    holiday, no element, and the same board as before -- same canvas height,
+    same rails, and a badge no taller than the one row it always was. That
+    is the other half of the reason it is beside the date rather than on the
+    map.
 61. **Inside a range it says which day of it this is.** "Spring Break" runs
     a week and the board draws one day. Day 3 of 5 is the only thing
     telling the Monday from the Thursday, and it is the fact a household
@@ -381,14 +409,15 @@ it is what THE DAY is, the way the date is which day it is.
 63. **The day gets ONE name, however many feeds carry it.** Two people in
     a house subscribe to the same national calendar and the day did not
     happen twice. Where a day genuinely carries two (a public holiday and
-    a school one), the header still names one: the row already holds a
-    date and a forecast, and two names on it came out as "Christmas D" and
-    "School Holid", each cut mid word with the ordinal wrapped underneath.
-    Naming the day is the header's job; enumerating it is not.
-64. **It rides with the date.** Where the panel is too small for a header
-    the holiday goes with it. A board that has already stopped saying which
-    day it is has not got room to say what the day is, and a second home
-    for it would be a second thing to keep in step.
+    a school one), the badge still names one: it already carries a date and
+    a forecast, and two names on it came out as "Christmas D" and "School
+    Holid", each cut mid word with the ordinal wrapped underneath. Naming
+    the day is the badge's job; enumerating it is not.
+64. **It rides with the date.** Where the badge gives way to a bare date --
+    a board standing up, where the strip is only as wide as an hour label --
+    the holiday goes with it. A board with no room for the words that say
+    what the day is still has to say which day it is, and a second home for
+    a holiday would be a second thing to keep in step.
 
 ---
 

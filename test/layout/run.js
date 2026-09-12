@@ -266,6 +266,31 @@ function swapMetro(html, metro) {
 // ONE coordinate space — screen px relative to the canvas — so label boxes
 // and SVG geometry can be compared directly without worrying about the
 // framework's own zoom factor.
+// A THROWN LAYOUT IS NOT A BOARD, AND IT LOOKS EXACTLY LIKE ONE.
+//
+// The reporter below runs on its own timer, so it reports whatever is in the
+// DOM whether the layout finished or not. A script that threw half way
+// through leaves a board with its rails drawn and its badges missing, and
+// every case reads that as a board that chose not to draw them: plausible,
+// self-consistent, and wrong. Removing the header band left a reference to
+// it in `alignHeaderDays`, which threw on every board with a day boundary in
+// it, and the suite reported five unrelated-looking failures rather than one.
+//
+// So the page keeps a list of anything that threw, the report carries it, and
+// a render that carries one is an error rather than a result. Installed in
+// the head, before the framework and the layout are parsed.
+const ERRTRAP = `
+<script>
+window.__metroErrors = [];
+window.addEventListener('error', function (e) {
+  window.__metroErrors.push(String((e && e.message) || e) +
+    (e && e.filename ? ' (' + e.filename + ':' + e.lineno + ')' : ''));
+});
+window.addEventListener('unhandledrejection', function (e) {
+  window.__metroErrors.push('unhandled rejection: ' + String((e && e.reason) || e));
+});
+</script>
+`;
 const REPORTER = `
 <script>
 (function () {
@@ -415,21 +440,31 @@ const REPORTER = `
     // everything else: every element in it carrying a metro- class, with
     // whether it is actually shown, because the header hides parts of
     // itself by class as the view gets smaller.
-    var headerEl = document.querySelector('.metro-header');
-    var head = null;
-    if (headerEl) {
+    function partsOf(el) {
+      if (!el) return null;
       var items = [];
-      headerEl.querySelectorAll('[class]').forEach(function (n) {
+      el.querySelectorAll('[class]').forEach(function (n) {
         var cls = String(n.className && n.className.baseVal != null ? n.className.baseVal : n.className);
         if (cls.indexOf('metro-') < 0) return;
         var hr = n.getBoundingClientRect();
         items.push(Object.assign(rel(hr), { cls: cls, text: (n.textContent || '').trim(),
           shown: !!(hr.width && hr.height) }));
       });
-      var hrect = headerEl.getBoundingClientRect();
-      head = { shown: getComputedStyle(headerEl).display !== 'none',
-        h: hrect.height, w: hrect.width, items: items };
+      var er = el.getBoundingClientRect();
+      return Object.assign(rel(er), { shown: getComputedStyle(el).display !== 'none',
+        h: er.height, w: er.width, items: items });
     }
+    var head = partsOf(document.querySelector('.metro-header'));
+    // THE DAY BADGE IS WHERE THE HEADER'S WORDS WENT, and like the header it
+    // says more than one thing, so a case needs its PARTS rather than the one
+    // run-together string \`labels\` reports for it: which day this is, what
+    // the day is (a holiday belongs to the day, not to any line), and what
+    // the sky is doing. It gives parts up as the axis runs out, so each one
+    // carries whether it is actually drawn.
+    var badges = [];
+    document.querySelectorAll('.metro-daybadge').forEach(function (n) {
+      badges.push(partsOf(n));
+    });
     var root = document.querySelector('.metro-root');
     // The slot the board is given: .view when the framework wraps one (a
     // mashup slot takes its box from --full-w/--full-h there), else the
@@ -459,7 +494,7 @@ const REPORTER = `
       root: rel(root.getBoundingClientRect()), view: rel(viewEl.getBoundingClientRect()),
       boardBg: bgOf(canvas), banner: banner,
       debug: dbg, labels: labels, paths: paths, rects: rects, painted: painted, overlays: overlays,
-      header: head,
+      header: head, badges: badges, errors: (window.__metroErrors || []).slice(0, 8),
       circles: circles.concat(shapeMarkers)
     });
     document.body.appendChild(out);
@@ -500,6 +535,7 @@ function pageFor(metro, screenClasses, slot, liquidExtra, page) {
     html = html.replace('</head>', '<style>.screen{--full-w:' + slot.w + 'px !important;'
       + '--full-h:' + slot.h + 'px !important}</style></head>');
   }
+  html = html.replace('</head>', ERRTRAP + '</head>');
   return html.replace('</body>', REPORTER + '</body>');
 }
 
@@ -556,7 +592,13 @@ function render(metro, viewport, liquidExtra) {
     + crypto.createHash('sha1').update(JSON.stringify(metro) + '|' + JSON.stringify(liquidExtra || null)).digest('hex');
   if (contentCache.has(key)) spent.hits++;
   else contentCache.set(key, renderUncached(metro, viewport, liquidExtra));
-  return contentCache.get(key);
+  const rep = contentCache.get(key);
+  // Checked here rather than in renderUncached so a cached report cannot
+  // smuggle a thrown layout past on the second case that asks for it.
+  if (rep.errors && rep.errors.length) {
+    throw new Error('the layout threw: ' + rep.errors.join(' | '));
+  }
+  return rep;
 }
 
 function renderUncached(metro, viewport, liquidExtra) {
