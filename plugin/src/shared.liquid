@@ -5567,6 +5567,52 @@
             if (worst >= before) return;
           }
         }
+        // A LINE THAT CANNOT WRITE ALL ITS NAMES WRITES WHAT IT CAN AND
+        // COUNTS THE REST.
+        //
+        // The repair pass moves a name that has somewhere to go. What is
+        // left after it are names with nowhere: seven of Work's events
+        // inside a few hours on an 800px board, each caption wider than the
+        // hour it belongs to. No amount of moving fixes that -- the axis is
+        // simply shorter than the words -- and the board's answer so far
+        // was to write them on top of each other, which loses BOTH names
+        // and says nothing about it.
+        //
+        // The board already has the honest answer at the ends of the axis:
+        // what it cannot draw, it counts. So a name with nowhere left to go
+        // is not drawn, and its line says how many it is holding back. The
+        // event itself does not vanish -- its dot and its end tick are on
+        // the line where they always were -- so what the count means is
+        // exactly "this line has two more stops than it has room to name".
+        //
+        // Dropped worst-first, and worst means the one written over the
+        // most other names: shedding it buys the most paper back. A tie
+        // goes to the WIDER name, which is the one taking the most room off
+        // the rest.
+        function shedCaptions(list, busyList) {
+          var movable = list.filter(function (e) { return !e._routeShared && !e._dropped; });
+          for (var pass = 0; pass < 12; pass++) {
+            var bad = collisions(movable);
+            if (!bad.length) break;
+            var tally = [];
+            bad.forEach(function (pr) {
+              [0, 1].forEach(function (k) {
+                var hit = null;
+                for (var i = 0; i < tally.length; i++) if (tally[i].e === pr[k]) hit = tally[i];
+                if (!hit) { hit = { e: pr[k], n: 0 }; tally.push(hit); }
+                hit.n++;
+              });
+            });
+            tally.sort(function (a, b) { return (b.n - a.n) || (b.e._textLen - a.e._textLen); });
+            var go = tally[0].e;
+            for (var i2 = busyList.length - 1; i2 >= 0; i2--) {
+              if (busyList[i2].of === go) busyList.splice(i2, 1);
+            }
+            go._capBoxes = null; go._capShed = true;
+            if (go._box && go._box.parentNode) go._box.parentNode.removeChild(go._box);
+            movable = movable.filter(function (e) { return e !== go; });
+          }
+        }
         function placeCaption(e) {
           // A CONVERGENCE'S NAME IS PLACED ALREADY, AND IT IS PINNED.
           //
@@ -6039,9 +6085,10 @@
           best.box.of = e; e._capBoxes = [best.box];
           busy.push(best.box);
         }
-        visible.forEach(function (e) { e._capBoxes = null; });
+        visible.forEach(function (e) { e._capBoxes = null; e._capShed = false; });
         shared.forEach(placeCaption);
         repairCaptions(shared, busy, placeCaption);
+        shedCaptions(shared, busy);
       }
 
       recomputeLineDists();
@@ -6592,6 +6639,41 @@
         var nameXY = toXY(nameA, namesAbove ? nameC + nameOff : nameC - nameThick / 2);
         p._nameEl.style.left = nameXY[0] + 'px';
         p._nameEl.style.top = nameXY[1] + 'px';
+        // ...AND HOW MANY OF ITS STOPS IT COULD NOT NAME.
+        //
+        // Appended after the name has been measured and placed, so the
+        // count cannot change where the name sits or how many lines it
+        // wraps to: it is an annotation on the name, not part of it. The
+        // stops themselves are on the line either way -- this says only
+        // that two of them have no room for their words, which is the same
+        // answer the ends of the axis already give for the events that fall
+        // outside the window.
+        var shedHere = 0;
+        visible.forEach(function (e) { if (e._capShed && e._p === p) shedHere++; });
+        if (shedHere) {
+          var wasName = measure(p._nameEl);
+          var more = el('span', 'metro-capmore ' + quietText());
+          more.textContent = ' +' + shedHere;
+          p._nameEl.appendChild(more);
+          // The name was measured and placed without this, so left where it
+          // is the count grows into whatever the name was keeping clear of
+          // -- on a standing board, its own terminal bar, by ten pixels. It
+          // is an annotation on the name, so the NAME gives up the room:
+          // the whole thing steps back along the axis by exactly what the
+          // count added, and its far edge stays where it was placed. Where
+          // stepping back would take it off the board there is nowhere for
+          // the count to live, and the line goes back to saying nothing,
+          // which is what it said yesterday.
+          var nowName = measure(p._nameEl);
+          var grew = horizontal ? nowName.w - wasName.w : nowName.h - wasName.h;
+          var backTo = (horizontal ? nameXY[0] : nameXY[1]) - grew;
+          if (grew > 0 && backTo >= 0) {
+            if (horizontal) p._nameEl.style.left = backTo + 'px';
+            else p._nameEl.style.top = backTo + 'px';
+          } else if (grew > 0) {
+            p._nameEl.removeChild(more);
+          }
+        }
         if (p._routeEl) {
           // Flat, the row hangs under the name; standing up, beside it.
           // Both are "next along the cross axis", which is the direction a

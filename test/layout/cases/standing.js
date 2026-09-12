@@ -69,8 +69,11 @@ module.exports = function (test, h) {
   // meetings a few minutes apart stopped stacking on one column. The rest
   // still stack, because E13 is about sliding them ALONG the axis and that
   // is still not done.
+  // double-booked came off this list when a name with nowhere to go
+  // started being counted at its line's head instead of written over
+  // another name.
   const OVERLAP_KNOWN = new Set(['all-day-every-track', 'busy-day', 'crew-day',
-    'double-booked', 'five-lines', 'long-event-day', 'regroups']);
+    'five-lines', 'long-event-day', 'regroups']);
   // three-day came off this list when the midnight date label moved to the
   // hour strip. Written into the map at the top of the first band, it was a
   // caption in open paper with nothing routed around it, and on a portrait
