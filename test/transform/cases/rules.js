@@ -397,4 +397,49 @@ module.exports = function (test, h) {
     assertEqual(eventItems(r.data).map((e) => e.title), ['Desk booking', 'Standup'],
       'in start order, both on the timeline');
   });
+  // ---- WHO CLAIMS A CALENDAR NOBODY ROUTED --------------------------------
+  //
+  // A calendar with no rules and no name used to go to the FIRST entry in
+  // `lines[]`. The variable holding it is called `everyoneLine`, which is
+  // the giveaway: it was written to mean "everyone" and it meant "whoever
+  // happens to be first".
+  //
+  // The calendar this actually describes is the household one -- the bin
+  // day, the holidays, the shared family feed pasted in without saying whose
+  // it is. Giving it to the first person is a confident wrong answer and a
+  // silent one: it shows up as that person's day and nothing says otherwise.
+  test('a calendar nobody routed belongs to the whole household', async () => {
+    const ev = { start: '20260907T180000Z', end: '20260907T190000Z', summary: 'Bin Day' };
+    const { run } = runTransform(async () => okText(icsWithEvents([ev])), NOW);
+    const r = await run(baseInput(NOW, cfgWith({
+      lines: [{ name: 'Ada' }, { name: 'Bo' }, { name: 'Cy' }],
+      calendars: [{ url: 'https://example.com/shared.ics' }],
+    })));
+    const bin = eventItems(r.data).filter((e) => e.title === 'Bin Day')[0];
+    assert(bin, 'the unrouted calendar produced no event at all');
+    const on = [bin.owner].concat(bin.co_owners || []).sort();
+    const key = {};
+    r.data.legend.forEach((t) => { key[t.key] = t.name; });
+    assertEqual(on.map((k) => key[k]).sort(), ['Ada', 'Bo', 'Cy'],
+      'an unrouted calendar landed on ' + on.map((k) => key[k]).join(', ') + ' rather than everyone');
+  });
+
+  test('...but a rule, or the calendar\'s own name, still wins over that', async () => {
+    // The household default is the LAST resort. Everything that worked
+    // before it has to keep working, or every config that names a calendar
+    // after a person -- the commonest real setup there is -- would suddenly
+    // put that person's events on the whole family.
+    const ev = { start: '20260907T180000Z', end: '20260907T190000Z', summary: 'Swimming' };
+    const { run } = runTransform(async () => okText(icsWithEvents([ev])), NOW);
+    const r = await run(baseInput(NOW, cfgWith({
+      lines: [{ name: 'Ada' }, { name: 'Bo' }, { name: 'Cy' }],
+      calendars: [{ url: 'https://example.com/bo.ics', name: 'Bo' }],
+    })));
+    const swim = eventItems(r.data).filter((e) => e.title === 'Swimming')[0];
+    assert(swim, 'the named calendar produced no event');
+    assertEqual((swim.co_owners || []).length, 0, 'a calendar named after a person became everyone\'s');
+    const key = {};
+    r.data.legend.forEach((t) => { key[t.key] = t.name; });
+    assertEqual(key[swim.owner], 'Bo', 'a calendar named Bo did not go to Bo');
+  });
 };

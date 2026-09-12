@@ -69,11 +69,17 @@ value in a config file can know.
 A bare string in `calendars` is shorthand for `{ "url": … }`.
 
 **`name` is not a caption: it can become a line.** An event that no rule
-routes falls back to the calendar's `name`, then to the first entry in
-`lines`, then to the feed's own `X-WR-CALNAME`. Whichever wins is drawn as
-a *line* on the map. So a calendar called `"Deliveries"` that leaks a single
-unrouted event puts a "Deliveries" line on a board that was meant to have
-one line per person, and nothing in the JSON says so.
+routes falls back to the calendar's `name`, then to EVERY entry in `lines`
+(the household), then to the feed's own `X-WR-CALNAME`. So a calendar called
+`"Deliveries"` that leaks a single unrouted event puts a "Deliveries" line on
+a board that was meant to have one line per person, and nothing in the JSON
+says so.
+
+The household step used to be the FIRST entry in `lines` rather than all of
+them, which meant an unnamed, unruled calendar -- the bin day, the shared
+family feed somebody pasted in without saying whose it was -- silently became
+the first person's day. It is everyone's now: right for the common case, and
+where it is wrong, wrong in a way you can see.
 
 Name a calendar after the person whose line it is (`"name": "Alex"` beside a
 rule routing everything to Alex), or leave `name` off entirely when its

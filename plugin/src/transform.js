@@ -28,8 +28,8 @@
 // calendar's own rule wins when both assign a line to the same event),
 // a `line` field that can be a list (multiple lines on the same
 // event become an interchange node, metro-plugin's own concept for a
-// shared event), and an `everyoneLine` fallback (the first entry in
-// `lines[]`) for any event no rule assigns a line to.
+// shared event), and a household fallback -- EVERY entry in `lines[]` --
+// for any event no rule and no calendar name assigns a line to.
 //
 // `lines[].side` ("left"/"work" or "right"/"family") pins a line to a
 // side of the map; without it the line a calendar named "Work" assigns
@@ -2187,7 +2187,26 @@ function parseConfig(raw) {
   })();
 
   var lines = {};
+  // EVERY declared line, in the order declared, for the event no rule and no
+  // name claims. That used to be ONE name -- the first entry in `lines[]` --
+  // and the variable is still called `everyoneLine`, which is the giveaway:
+  // it was written to mean "everyone" and it meant "whoever happens to be
+  // first".
+  //
+  // A calendar nobody has routed is nearly always a HOUSEHOLD calendar: the
+  // bin day, the holidays, the shared family feed. Handing it to the first
+  // person on the board is a confident wrong answer and a silent one -- the
+  // events show up as that person's day and nothing says otherwise. Handing
+  // it to everybody is right for the common case and, where it is wrong,
+  // wrong in a way you can see.
+  //
+  // Nothing that works today changes. This is the LAST resort: a matching
+  // rule wins, and after that the calendar's own name, so a feed called
+  // "Kato" still goes to Kato's line. It is reached only by a calendar with
+  // no rules and no name at all -- which is exactly the shared household
+  // feed somebody pasted in without saying whose it is.
   var everyoneLine = null;
+  var allLines = [];
   // One name for the field, everywhere: `lines`. Nothing was released
   // under the old one, so there is nothing to keep reading it for.
   (Array.isArray(data.lines) ? data.lines : []).forEach(function (item) {
@@ -2201,6 +2220,7 @@ function parseConfig(raw) {
     var sideRaw = typeof item.side === 'string' ? item.side.trim().toLowerCase() : '';
     var side = (sideRaw === 'left' || sideRaw === 'work') ? 'left' : (sideRaw === 'right' || sideRaw === 'family') ? 'right' : null;
     if (everyoneLine === null) everyoneLine = name;
+    if (allLines.indexOf(name) < 0) allLines.push(name);
     // A DECLARED LINE IS DRAWN, QUIET DAY OR NOT.
     //
     // It used to be the other way round: a line with nothing on today was
@@ -2251,7 +2271,7 @@ function parseConfig(raw) {
       holiday: item.holiday === true });
   });
 
-  return { calendars: calendars, lines: lines, timeZone: timeZone, locale: locale, timeFormat: timeFormat, temperatureUnit: temperatureUnit, globalRules: globalRules, everyoneLine: everyoneLine };
+  return { calendars: calendars, lines: lines, timeZone: timeZone, locale: locale, timeFormat: timeFormat, temperatureUnit: temperatureUnit, globalRules: globalRules, everyoneLine: everyoneLine, allLines: allLines };
 }
 
 // A replace that never double-matches an empty-string-capable pattern
@@ -2942,7 +2962,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
           return;
         }
         var lineNames = resolved.lineNames || (cal.name ? [cal.name] : null)
-          || (parsed.everyoneLine ? [parsed.everyoneLine] : null) || (calLabel ? [calLabel] : null);
+          || (parsed.allLines && parsed.allLines.length ? parsed.allLines.slice() : null) || (calLabel ? [calLabel] : null);
         if (!lineNames || !lineNames.length) return;
         // A DAY THE BOARD ONLY MIGHT DRAW COSTS THE BOARD NOTHING YET.
         //
@@ -3011,7 +3031,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
           return;
         }
         var lineNames = resolved.lineNames || (cal.name ? [cal.name] : null)
-          || (parsed.everyoneLine ? [parsed.everyoneLine] : null) || (calLabel ? [calLabel] : null);
+          || (parsed.allLines && parsed.allLines.length ? parsed.allLines.slice() : null) || (calLabel ? [calLabel] : null);
         if (!lineNames || !lineNames.length) return;
         // WHICH DAY IT IS ON, carried rather than assumed. Dropped here,
         // every all-day entry read as day 0: a holiday that is tomorrow's
