@@ -512,6 +512,29 @@ is open.
 
 ## E. New features
 
+- [ ] **E25. A rolling board draws tomorrow's appointments but not tomorrow's
+  all-day states, and not its holiday.** So a board that reaches into Boxing
+  Day shows the day's meetings and does not say it is Boxing Day, and a line
+  whose owner is on leave tomorrow is drawn as if they were not.
+
+  `allDayEvents` and `holidays` are filtered to day 0, which was right while
+  the board drew exactly one day and the reader could pick which. Nothing
+  picks a day now: a rolling board is today PLUS tomorrow, and the second day
+  arrives with its timed events, its own forecast and its own date badge but
+  none of its states.
+
+  Found by removing the Show setting: two cases in `cases/holidays.js` proved
+  tomorrow's holiday and tomorrow's leave DID reach a board when that board
+  was set to tomorrow, and there is no longer any way to ask. They are gone
+  and this is what they were holding.
+
+  The fix is not just widening the filter. The day badge draws
+  `METRO.holidays[0]` against the run's first day, so a holiday belonging to
+  the borrowed day needs to travel with a day index and be drawn on that day's
+  own badge -- which is the shape rules 59 to 64 already describe, applied to
+  a day the board reached rather than the day it opened on.
+
+
 - [ ] **E24. On a crowded line, every position for some name is a graze, a
   pierce or a gap, and the prices only decide which.** Six boards out of the
   layout suite's sixty-odd end this way, and they are pinned known against

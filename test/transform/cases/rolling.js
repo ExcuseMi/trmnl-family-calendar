@@ -155,41 +155,39 @@ module.exports = function (test, h) {
       'an event running to 17:30 needs room past it for its own caption');
   });
 
-  test('the reader can ask for one day and get exactly the old board', async () => {
-    const off = await board(QUIET, { rolling_view: 'one' });
-    assertEqual(off.days.length, 1, 'the stretch happened with the setting off');
-    assertEqual(off.rolling, null, 'a window was sent with the setting off');
-    assertEqual(off.events.map((e) => e.title), ['Dentist'], 'another day\'s events were drawn');
-  });
+  // THE OPT-OUT IS GONE, AND SO IS THE DAY PICKER.
+  //
+  // Two cases lived here. One turned the stretch off ("Quiet Days: always one
+  // day") and checked the board came out exactly as it used to; the other set
+  // the board to tomorrow and checked the stretch followed it into the day
+  // after.
+  //
+  // The opt-out existed because a board that changes shape on its own needs a
+  // way to be told not to -- and what made that alarming was the shape
+  // changing WHILE somebody read it, which the four o'clock boundary fixed
+  // (see 'a day has two shapes at most, and it changes at four'). A board that
+  // quietly shows more of what is coming needs no opt-out. The day picker went
+  // with it: a board about tomorrow cannot say what time it is.
+  //
+  // What is left of both is that a board somebody already saved with either
+  // setting still draws a board, which the case below checks.
 
-  test('the stretch follows the day the Show setting picked', async () => {
-    // Tomorrow, quiet, borrows the day after it: which means the day after
-    // has to have been fetched at all, and the board has to be about
-    // tomorrow rather than about today plus one.
-    const r = await board([
-      ['20260910', '1400', '1500', 'Dentist'],
-      ['20260911', '0900', '1000', 'Sprint Review'],
-    ], { show_day: 'tomorrow' });
-    assertEqual(r.days.length, 2, 'a quiet tomorrow did not borrow the day after it');
-    const titles = r.events.map((e) => [e.title, e.start_min]);
-    assertEqual(titles.sort(), [['Dentist', 14 * 60], ['Sprint Review', DAY + 9 * 60]],
-      'a board about tomorrow drew the wrong two days: ' + JSON.stringify(titles));
-    assertEqual(r.now_min, null, 'a board that is not about today still carried a clock');
-    // A BOARD SOMEBODY LEFT ON "auto" IS READ AS TODAY. The setting that used
-    // to swap one day for the other in the evening is gone -- rolling reaches
-    // tomorrow without giving up today -- but a saved value outlives the
-    // option it was chosen from, and the board it produces has to be a board.
+  test('a setting the board no longer reads still draws a board', async () => {
     const at = Date.parse('2026-09-09T21:00:00Z');
     const rows = [['20260910', '1400', '1500', 'Dentist'], ['20260911', '0900', '1000', 'Sprint Review']];
-    const run = async (show) => (await runTransform(net(feed(rows)), at).run(baseInput(at, {
-      use_demo_data: 'false', lat_lon: '51.05,3.72', show_day: show,
-      config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
-    }))).data;
-    const legacy = await run('auto'), plain = await run('today');
-    assertEqual(legacy.events.map((e) => e.title).sort(), plain.events.map((e) => e.title).sort(),
-      'a saved "auto" drew a different board from today');
-    assertEqual(legacy.title_word, plain.title_word,
-      'a saved "auto" named a different day from today');
+    const run = async (fields) => (await runTransform(net(feed(rows)), at).run(baseInput(at,
+      Object.assign({ use_demo_data: 'false', lat_lon: '51.05,3.72',
+        config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
+      }, fields)))).data;
+    const plain = await run({});
+    for (const stale of [{ show_day: 'auto' }, { show_day: 'tomorrow' }, { rolling_view: 'one' },
+                         { show_day: 'auto', switch_hour: '18', rolling_view: 'one' }]) {
+      const r = await run(stale);
+      assertEqual(r.events.map((e) => e.title).sort(), plain.events.map((e) => e.title).sort(),
+        JSON.stringify(stale) + ' drew a different board');
+      assertEqual(r.title_word, plain.title_word, JSON.stringify(stale) + ' named a different day');
+      assertEqual(r.days.length, plain.days.length, JSON.stringify(stale) + ' drew a different run of days');
+    }
   });
 
   test('a day the board is not drawing leaves the board as it found it', async () => {

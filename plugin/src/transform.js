@@ -2776,13 +2776,31 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   //
   // A board somebody already set to "auto" is read as "today" rather than
   // refused: the rolling view is what they were asking for.
-  var showPref = cf(input, 'show_day').trim().toLowerCase();
-  var showIx = showPref === 'tomorrow' ? 1 : 0;
-  // Whether a quiet day may borrow the next one at all. The reader's call,
-  // not because the automatic rule is in doubt, but because a board that
-  // changes shape on its own needs a way to be told not to.
-  var rollPref = cf(input, 'rolling_view').trim().toLowerCase();
-  var mayRoll = rollPref !== 'one';
+  // THE BOARD IS ABOUT TODAY, AND IT ROLLS. There is nothing left to ask.
+  //
+  // There were three settings here and each of them was a way of asking for
+  // something the rolling window now does by itself.
+  //
+  //   "Today, then tomorrow from the evening on", with an hour beside it,
+  //   swapped one day for the other at nine. Rolling reaches tomorrow from
+  //   four and keeps what is left of tonight, so the switch was strictly
+  //   worse and it is gone.
+  //
+  //   "Tomorrow" drew tomorrow instead of today, all day long. On a screen on
+  //   a wall that is a board which is wrong every morning: it cannot say what
+  //   time it is, because now is not on it, and it cannot mark the day,
+  //   because the day it is about has not started. Everything it was for, a
+  //   reader gets from this afternoon onward anyway.
+  //
+  //   "Quiet Days: always one day" turned the rolling off. It existed because
+  //   a board that changes shape on its own needs a way to be told not to --
+  //   and what actually made that alarming was the shape changing WHILE
+  //   somebody read it, which the four o'clock boundary fixed. A board that
+  //   quietly shows more of what is coming needs no opt-out.
+  //
+  // So: the day is today, always, and a quiet day always borrows the next
+  // one. Every branch that existed to serve the other answers has gone with
+  // them, which is most of what this change is.
 
   // The run of days the board may draw. Three is the ceiling: past that a
   // day gets less axis than its own events need and the board stops being
@@ -2794,7 +2812,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   // view reaches into, and never fewer than the two days this has always
   // gathered.
   var days = [];
-  var runDays = Math.max(DAY_SPAN, showIx + 2);
+  var runDays = Math.max(DAY_SPAN, 2);
   for (var di = 0; di < runDays; di++) days.push(addCivilDays(today, di));
 
   var registry = makeLineRegistry(parsed);
@@ -3083,9 +3101,8 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   // midnight, and the board is handed an explicit window into that run.
   // Everything downstream still reads one number line starting at the day
   // it is about; all that changes is how far it goes.
-  if (showIx >= days.length) showIx = days.length - 1;
-  var shownDay = days[showIx];
-  var dayLo = showIx * 1440;
+  var shownDay = days[0];
+  var dayLo = 0;
   // HOW MANY EVENTS THE SHOWN DAY HAS, counted the way the board counts
   // them: after every rule, every hide and every merge, so one dinner that
   // three calendars describe is one event and not three, and an all-day
@@ -3112,12 +3129,11 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   // Before noon the boundary is the day's own start, which is what it has
   // always been: a morning board counts and draws the whole day, early
   // events included. From noon it is noon.
-  var rollFrom = (showIx === 0 && nowMin >= ROLL_SPLIT_MIN) ? ROLL_SPLIT_MIN : 0;
+  var rollFrom = nowMin >= ROLL_SPLIT_MIN ? ROLL_SPLIT_MIN : 0;
   var stillToCome = onDay.filter(function (e) {
     return (e.endMin == null ? e.startMin : e.endMin) > dayLo + rollFrom;
   });
-  var rolling = mayRoll && distinctEvents(stillToCome) <= QUIET_DAY_MAX_EVENTS
-    && showIx + 1 < days.length;
+  var rolling = distinctEvents(stillToCome) <= QUIET_DAY_MAX_EVENTS && days.length > 1;
   // The window, in the shown day's own minutes. It starts at six unless the
   // day itself starts earlier, and ends at six the next evening unless
   // something kept is still running then: a window that cut an event it had
@@ -3176,11 +3192,11 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     });
     winTo = Math.min(2880, Math.ceil(winTo / 60) * 60);
   }
-  allDayEvents = allDayEvents.filter(function (e) { return (e.day || 0) === showIx; });
+  allDayEvents = allDayEvents.filter(function (e) { return (e.day || 0) === 0; });
   // A holiday is a fact about ONE day, so the board states it only on that
   // day: Christmas is not Christmas Eve's business, and a board set to
   // tomorrow has to be able to say that tomorrow is the holiday.
-  holidays = holidays.filter(function (h) { return (h.day || 0) === showIx; });
+  holidays = holidays.filter(function (h) { return (h.day || 0) === 0; });
 
   events = mergeAcrossLines(events);
   linkMerged(events);
@@ -3198,7 +3214,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   // drawn this morning, and its day 0 is yesterday. Slide by however many
   // civil days have passed since it was taken, and if that runs off the
   // end of the run there is simply nothing to say about this day.
-  var snapIx = showIx + civilDaysSince(weather && weather.date, today);
+  var snapIx = civilDaysSince(weather && weather.date, today);
   var shownWx = (snapIx >= 0 && weather && weather.perDay && weather.perDay[snapIx]) || null;
   // The day after the one being shown, which only a rolling board draws.
   // The forecast may not reach it -- it is fetched for the run this has
@@ -3217,7 +3233,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     };
   }
   var dayRows = [dayRow(shownDay, shownWx || (snapIx === 0 && weather && weather.header) || null)];
-  if (rolling) dayRows.push(dayRow(days[showIx + 1], nextWx));
+  if (rolling) dayRows.push(dayRow(days[1], nextWx));
   function ofShownDay(key) {
     if (shownWx && Array.isArray(shownWx[key])) return shownWx[key];
     // A snapshot with no run of days in it can only be describing its own
@@ -3239,7 +3255,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     // such minute: drawn anyway it parks a train on each line at a time
     // nobody has reached yet, and drags the axis out to hold a clock badge
     // for a day that has not started.
-    showIx === 0 ? nowMin : null,
+    nowMin,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
     allDayEvents,
     Object.assign({}, extra, {
@@ -3250,9 +3266,9 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
       // hour that has gone.
       // The clock only travels with the day we are standing in: on any
       // other day there is no "already gone".
-      serviceAlert: alertFor(extra, snapIx, showIx === 0 ? nowMin : null),
+      serviceAlert: alertFor(extra, snapIx, nowMin),
       // "Today" is only true when it is
-      todayWord: showIx === 0,
+      todayWord: true,
       // one entry per day the board MAY draw, each with its own date and
       // its own forecast: a two-day board showing one temperature is
       // wrong about one of the days
