@@ -22,9 +22,10 @@ silently, so check spelling.
 { "name": "Alex", "hideIfEmpty"?: boolean }
 ```
 
-- Each line is one line on the map. Order matters: the first line is the
-  fallback for any event no rule assigns, and lines on the same side get
-  their dash pattern in order (solid, dashed, dotted, dash-dot).
+- Each line is one line on the map. Order matters for the dash patterns:
+  lines on the same side take solid, dashed, dotted, dash-dot in that order.
+  It no longer decides who catches an unrouted event -- that is every line
+  now, see below -- so a list in a different order draws the same day.
 - A line is otherwise just a name. Which side of the map it runs on, what
   colour it is and which dash pattern it gets are all decided from the day
   itself: sides are balanced once every calendar is fetched, whoever has the

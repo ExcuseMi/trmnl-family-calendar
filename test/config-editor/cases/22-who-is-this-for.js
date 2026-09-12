@@ -128,15 +128,31 @@ module.exports = function (test, h) {
     assertEqual(document.getElementById('newWho').value, 'Homer');
   });
 
-  // Answering is optional, because a public-holiday feed and a feed that is
-  // split by rules are both nobody's in particular. It says what happens then,
-  // which is that the events land on the first person's line.
-  test('a calendar added with no answer says where its events will go', () => {
+  // AN UNANSWERED FEED IS THE HOUSEHOLD'S, AND THAT IS THE ZERO-CONFIGURATION
+  // ANSWER FOR A SHARED CALENDAR.
+  //
+  // This used to say the events land on the FIRST person's line, because that
+  // is what the plugin did: the household fallback was the first entry in
+  // `lines`. It is every entry now. A calendar with no name and no rules is
+  // nearly always the shared one -- the bin day, the meals, the feed somebody
+  // pasted in without saying whose it was -- so handing it to whoever happens
+  // to be first was a confident wrong answer that nothing on the board
+  // admitted to, and handing it to everybody is right for the common case and
+  // visibly wrong where it is wrong.
+  //
+  // Which makes "leave the answer blank" the complete and correct way to say
+  // "this one is the whole house's": nothing is written for it at all, and the
+  // message has to say so rather than naming a person.
+  test('a calendar added with no answer belongs to the whole household', () => {
     const { document } = loadEditor();
-    addFeed(document, 'https://calendar.example.com/holidays.ics');
-    assertEqual(jsonOut(document).calendars, [{ url: 'https://calendar.example.com/holidays.ics' }]);
-    assert(/first person/.test(status(document)),
+    addFeed(document, 'https://calendar.example.com/bins.ics');
+    assertEqual(jsonOut(document).calendars, [{ url: 'https://calendar.example.com/bins.ics' }],
+      'a shared feed needs no name and no rules, so nothing should be written for it');
+    assert(/household|whole house|every line/i.test(status(document)),
       'it does not say what an unanswered feed does: ' + status(document));
+    assert(!/first person/i.test(status(document)),
+      'it still says an unanswered feed lands on the first person, which stopped being true: '
+        + status(document));
     assertEqual(jsonOut(document).lines, [], 'an unanswered feed invented a person');
   });
 
@@ -227,16 +243,32 @@ module.exports = function (test, h) {
       'undo did not put the person back with their calendar');
   });
 
-  test('the people can be reordered, and the first one is the one that catches strays', () => {
+  // BEING FIRST STOPPED MEANING ANYTHING IN PARTICULAR.
+  //
+  // The first person's card used to read "Also gets any event no rule claims",
+  // and while the plugin's household fallback was the first entry in `lines`
+  // that was true. It is every entry now, so the sentence did not just go
+  // stale: it named one person out of four as the owner of the shared
+  // calendar, on the card of the person it was wrong about, with nothing else
+  // on the page to contradict it. The order still decides the dash patterns,
+  // which is said once in the section's own lede and not four times on the
+  // cards.
+  test('the people can be reordered, and nobody claims to catch the strays', () => {
     const { document } = loadEditor();
     addFeed(document, 'https://calendar.example.com/bart.ics', 'Bart');
     addFeed(document, 'https://calendar.example.com/lisa.ics', 'Lisa');
     click(people(document)[1].querySelector('button[title="Move up"]'));
     assertEqual(jsonOut(document).lines.map((t) => t.name), ['Lisa', 'Bart']);
-    assert(/no rule claims/.test(people(document)[0].textContent),
-      'the first person does not say they catch what no rule does');
-    assert(!/no rule claims/.test(people(document)[1].textContent),
-      'every person claims to be the fallback');
+    people(document).forEach((card, i) => {
+      assert(!/no rule claims/.test(card.textContent),
+        'person ' + i + ' still claims to be the fallback for an unrouted calendar, which is now '
+          + 'the whole household: ' + card.textContent);
+    });
+    // and the section says what the order DOES decide, and who an unrouted
+    // calendar really goes to
+    const lede = document.querySelector('#station-lines p.lede').textContent;
+    assert(/whole household|every line/i.test(lede),
+      'the people section does not say where an unrouted calendar goes: ' + lede);
   });
 
   // A person with nothing behind them draws an empty line, which on a board is
