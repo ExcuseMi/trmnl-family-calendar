@@ -371,14 +371,28 @@ module.exports = function (test, h) {
 
   // -------------------------------------------------------------- which day
 
-  test('a holiday tomorrow is not announced today', async () => {
-    // Every all-day entry used to arrive here having lost the day it
-    // belongs to, so it was read as day 0 whatever date it carried.
+  test('a holiday tomorrow is tomorrow\'s, and says so', async () => {
+    // Every all-day entry used to arrive here having lost the day it belongs
+    // to, so it was read as day 0 whatever date it carried: Boxing Day was
+    // announced on Christmas Day's board.
+    //
+    // It travels now, because a rolling board draws tomorrow's appointments
+    // and used to say nothing about tomorrow being Boxing Day -- it drew the
+    // meetings and left out the fact that explains them. What must still be
+    // true is that it is not attributed to the day the board opens on: it
+    // carries the day it is about, and the badge for that day states it.
     const r = await runTransform(serve(allDayIcs(
       [{ start: '20261226', end: '20261227', summary: 'Boxing Day' }])), NOW)
       .run(baseInput(NOW, cfgWith(config())));
-    assertEqual(r.data.holidays, [],
+    const hols = r.data.holidays || [];
+    assertEqual(hols.filter((h) => (h.day || 0) === 0).map((h) => h.title), [],
       'tomorrow\'s holiday was stated on today\'s board');
+    if (r.data.rolling) {
+      assertEqual(hols.map((h) => [h.title, h.day]), [['Boxing Day', 1]],
+        'a rolling board reached into Boxing Day and did not say so');
+    } else {
+      assertEqual(hols, [], 'a board that is not drawing tomorrow carried tomorrow\'s holiday');
+    }
   });
 
   // THE OTHER HALF OF THAT PAIR IS GONE WITH THE SETTING IT NEEDED.

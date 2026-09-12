@@ -22,14 +22,24 @@ Where the two disagree, this one is newer.
    evening, because a day with one appointment left on it spends most of the
    board on hours nobody has anything in, and what is coming is the thing
    such a day still has to say. A busier one is the single day it always was.
-2a-i. **The board may change shape once a day, at four in the afternoon, and
-   only by gaining tomorrow.** Neither the count nor the window may be read
-   from the clock continuously: the panel refreshes every fifteen minutes and
-   a board keyed to "now" slides every event left four times an hour under
-   whoever is reading it. So both are measured from a boundary that moves
-   exactly once -- the day's own start until four, four o'clock after that --
-   and a day therefore has two shapes at most, at an hour anybody can
-   predict. Four because noon is the middle of a working day and not of a
+2a-i. **The board may change shape twice a day, at four in the afternoon and
+   at nine in the evening, and only by gaining tomorrow.** Neither the count
+   nor the window may be read from the clock continuously: the panel refreshes
+   every fifteen minutes and a board keyed to "now" slides every event left
+   four times an hour under whoever is reading it. So both are measured from
+   boundaries that move at fixed hours, and a day therefore has three shapes
+   at most, at hours anybody can predict.
+
+   The first boundary is four: the count of what is still to come is taken
+   from the day's own start until then, and from four o'clock after that. The
+   second is nine, and it does not ask whether the day was quiet -- past nine
+   the board reaches tomorrow whatever kind of day it has been. That is not a
+   second opinion about quietness, it is the answer to what counting-once
+   cannot see: a day with three or more things after four never reaches
+   tomorrow at all, and a real board was still drawing only Saturday at eleven
+   at night with every event on it already over. It KEEPS what is left of
+   tonight while it does, which is the whole difference from the "switch over
+   at nine" setting this replaced, and why that setting is gone. Four because noon is the middle of a working day and not of a
    family's: at 12:01 most of what a household does is still ahead of it.
    What falls before the window is not lost, it is counted at the leading
    edge as "+N earlier" -- on the same terms as the date marker, which is to
