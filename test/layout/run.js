@@ -620,6 +620,14 @@ const CACHE_OFF = process.env.METRO_NO_CACHE === '1';
 // Keyed on the CONTENT instead, every one of those is a cache hit, which is
 // most of the suite's wall time.
 const contentCache = new Map();
+// Every (payload, viewport) a run asks for, written out at the end so the next
+// run can warm exactly those in parallel (see prewarm). Declared HERE rather
+// than beside prewarm because `render` below is its only writer, and the
+// scratch harness re-compiles a PREFIX of this file: a declaration further
+// down is cut away while the use of it is not, and every probe built on the
+// harness died with "asked is not defined".
+const WARM_LIST = path.join(CACHE, 'asked.json');
+const asked = new Map();
 function render(metro, viewport, liquidExtra) {
   const key = viewport.name + '|' + viewport.w + 'x' + viewport.h
     + '|' + (viewport.slot ? viewport.slot.w + 'x' + viewport.slot.h : 'full') + '|'
@@ -825,8 +833,6 @@ function renderAsync(metro, viewport, liquidExtra) {
 // next run warms exactly those. The list survives a source change -- it names
 // boards, not bytes -- while the report cache does not, which is precisely the
 // case that hurts: a run right after an edit to the layout.
-const WARM_LIST = path.join(CACHE, 'asked.json');
-const asked = new Map();
 function rememberAsked() {
   try {
     const out = [];
