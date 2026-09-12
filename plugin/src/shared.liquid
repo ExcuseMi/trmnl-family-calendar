@@ -221,6 +221,7 @@
   // 49 repeats of seventeen characters.
   var ROLE_ATTR = 'data-metro-role', OWNER_ATTR = 'data-metro-owner';
   var LEGEND = METRO.legend || [];
+  var metroDbgRepair = null;
   // HOW A LINE IS DRAWN IS THE FRONT END'S BUSINESS.
   //
   // The payload used to carry a stroke width, a dash pattern and a hue for
@@ -5221,7 +5222,99 @@
           if (sa !== sb) return sa - sb;
           return capOrder ? b._nodeA - a._nodeA : a._nodeA - b._nodeA;
         });
-        shared.forEach(function (e) {
+        // WHOEVER WAS ASKED FIRST TOOK THE PAPER, AND THAT IS THE WHOLE BUG.
+        //
+        // Captions are placed one at a time, cheapest spot first, and a
+        // spot taken is taken: an eight o'clock meeting asked before an
+        // eleven o'clock one takes the paper the eleven o'clock one had no
+        // alternative to, and the eleven o'clock one is then written on top
+        // of it. Nothing in the pass can see that, because by the time the
+        // second name is placed the first is an obstacle like any other and
+        // the search is choosing the least bad of what is left.
+        //
+        // That is E19 and E20, and it is what has stopped both attempts to
+        // give this board more room: free some depth or some height, the
+        // tier loop reaches a bigger text, and the bigger text turns near
+        // misses into collisions faster than the extra room removes them.
+        //
+        // The fix is not a cleverer order -- every order is first-come for
+        // somebody. It is to LOOK AT THE BOARD AFTERWARDS. A name written
+        // over another is lifted off and asked again with the rest of the
+        // board standing, which is a question it was never asked the first
+        // time: the first time, half the board was not there yet.
+        //
+        // Bounded and strictly downhill. Each round re-places only the
+        // names that are actually in a collision, keeps the answer only if
+        // the board ends with fewer, and stops the moment a round buys
+        // nothing -- so it cannot oscillate and cannot make a board worse
+        // than the greedy pass left it.
+        function capBoxes(e) { return e._capBoxes || []; }
+        // TOUCHING COUNTS. The suite measures the drawn boxes and this
+        // measures the model's, and the two differ by a pixel here and
+        // there -- a caption that has been truncated, a leaning run
+        // described by three boxes. Counted with a two-pixel tolerance the
+        // repair called a board clean that came out with four names on each
+        // other; counted with none, what it fixes is what a reader sees.
+        function boxesHit(a, b) {
+          return a.a0 < b.a1 && b.a0 < a.a1 && a.c0 < b.c1 && b.c0 < a.c1;
+        }
+        function collisions(list) {
+          var bad = [];
+          for (var i = 0; i < list.length; i++) {
+            for (var j = i + 1; j < list.length; j++) {
+              var A = capBoxes(list[i]), B = capBoxes(list[j]);
+              var hit = false;
+              for (var x = 0; x < A.length && !hit; x++) {
+                for (var y = 0; y < B.length && !hit; y++) if (boxesHit(A[x], B[y])) hit = true;
+              }
+              if (hit) bad.push([list[i], list[j]]);
+            }
+          }
+          return bad;
+        }
+        function repairCaptions(list, busyList, place) {
+          // A convergence's name is pinned to its pill and is not ours to
+          // move; everything else on this list was searched for and can be
+          // searched for again.
+          var movable = list.filter(function (e) { return !e._routeShared && !e._dropped; });
+          if (movable.length < 2) return;
+          var worst = collisions(movable).length;
+          metroDbgRepair = [movable.length, worst, worst];
+          for (var round = 0; round < 6 && worst; round++) {
+            var before = worst, order = [];
+            collisions(movable).forEach(function (pr) {
+              if (order.indexOf(pr[1]) < 0) order.push(pr[1]);
+              if (order.indexOf(pr[0]) < 0) order.push(pr[0]);
+            });
+            order.forEach(function (e) {
+              var keep = { at: e._textStart, out: e._capOut, sign: e._labelSign,
+                           angle: e._capAngle, run: e._capRun, boxes: e._capBoxes };
+              // Off the board, so the search sees the paper it is actually
+              // competing for rather than its own words sitting in it.
+              for (var i = busyList.length - 1; i >= 0; i--) {
+                if (busyList[i].of === e) busyList.splice(i, 1);
+              }
+              e._capBoxes = null; e._capAngle = null; e._capRun = null;
+              place(e);
+              // Kept when it is no worse, not only when it is better: a
+              // name that steps aside for nothing this time is what lets
+              // the next one move somewhere at all, and the round as a
+              // whole still has to come out ahead or the loop stops.
+              var now = collisions(movable).length;
+              if (now <= worst) { worst = now; return; }
+              // No better: put back exactly what was there, obstacle and all.
+              for (var k = busyList.length - 1; k >= 0; k--) {
+                if (busyList[k].of === e) busyList.splice(k, 1);
+              }
+              e._textStart = keep.at; e._capOut = keep.out; e._labelSign = keep.sign;
+              e._capAngle = keep.angle; e._capRun = keep.run; e._capBoxes = keep.boxes;
+              capBoxes(e).forEach(function (bx) { busyList.push(bx); });
+            });
+            metroDbgRepair[2] = worst;
+            if (worst >= before) return;
+          }
+        }
+        function placeCaption(e) {
           // A CONVERGENCE'S NAME IS PLACED ALREADY, AND IT IS PINNED.
           //
           // The corridor pass put it above the pill and across its middle,
@@ -5279,6 +5372,7 @@
             if (bestS) {
               e._textStart = bestS.at;
               e._capOut = bestS.out;
+              bestS.box.of = e; e._capBoxes = [bestS.box];
               busy.push(bestS.box);
             }
             return;
@@ -5516,7 +5610,8 @@
               e._capOut = bestA.out;
               e._capAngle = Math.atan(bestA.m) * 180 / Math.PI;
               e._capRun = bestA.run;
-              bestA.run.forEach(function (bx) { busy.push(bx); });
+              e._capBoxes = bestA.run;
+              bestA.run.forEach(function (bx) { bx.of = e; busy.push(bx); });
               return;
             }
           }
@@ -5634,7 +5729,8 @@
             e._capOut = bestA.out;
             e._capAngle = Math.atan(bestA.m) * 180 / Math.PI;
             e._capRun = bestA.run;
-            bestA.run.forEach(function (bx) { busy.push(bx); });
+            e._capBoxes = bestA.run;
+            bestA.run.forEach(function (bx) { bx.of = e; busy.push(bx); });
             return;
           }
           if (!best) return;
@@ -5642,8 +5738,12 @@
           if (best.thru) capPierces++;
           e._capAngle = null; e._capRun = null;
           e._textStart = best.at; e._capOut = best.out; e._labelSign = best.sign;
+          best.box.of = e; e._capBoxes = [best.box];
           busy.push(best.box);
-        });
+        }
+        visible.forEach(function (e) { e._capBoxes = null; });
+        shared.forEach(placeCaption);
+        repairCaptions(shared, busy, placeCaption);
       }
 
       recomputeLineDists();
@@ -5655,6 +5755,7 @@
       // The run the board settled on, and the nights inside it, in minutes
       // and in axis px: a case asking whether the corridor really spans
       // 22:00 to 06:00 should not have to re-derive the scale to find out.
+      capRepair: metroDbgRepair,
       days: dayCount, rolling: !!ROLL,
       midnights: AXIS.boundaries.map(function (b) { return [b.min, Math.round(aFor(b.min))]; }),
       nights: NIGHTS.map(function (n) { return [n.from, n.to, Math.round(aFor(n.from)), Math.round(aFor(n.to))]; }),
