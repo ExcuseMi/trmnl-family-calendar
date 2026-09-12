@@ -325,10 +325,15 @@ module.exports = function (test, h) {
     }
   });
 
-  test('the sky of the day after is on the board, and only the part of it that is', async () => {
+  test('a rolling board carries no sunrise and no sunset', async () => {
+    // It used to carry three: today's sunrise, today's sunset, and the
+    // borrowed day's sunrise, each shifted onto the window's own number
+    // line. That was the most intricate piece of the sky code and it drew
+    // the two marks nobody was reading. The whole branch is gone, so what
+    // is worth asserting is that it stays gone: a payload with anything but
+    // a weather marker in `weather` is the old path back.
     const r = await board(QUIET);
-    const sun = r.weather.filter((i) => i.type === 'sun').map((i) => i.at_min);
-    assertEqual(sun, [6 * 60 + 30, 20 * 60 + 30, DAY + 6 * 60 + 32],
-      'expected today\'s sunrise and sunset and tomorrow\'s sunrise, got ' + JSON.stringify(sun));
+    assertEqual(r.weather.filter((i) => i.type !== 'weather'), [],
+      'a rolling board put sky markers back on: ' + JSON.stringify(r.weather));
   });
 };

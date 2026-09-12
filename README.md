@@ -23,8 +23,8 @@ No server of your own.
   enters the map, and appears in the legend.
 - Events as rings at their true start time; shared events as capsules across
   the lines involved. Title, time and location on the branch.
-- The current time, sunrise and sunset, and rain start/stop markers across
-  the map; today's high/low and conditions in the header.
+- The current time, and rain start/stop markers across the map; today's
+  high/low and conditions in the header.
 - English, French, Spanish, German and Dutch, following your TRMNL account
   language; 12- or 24-hour clocks.
 

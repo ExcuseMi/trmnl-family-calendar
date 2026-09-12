@@ -97,7 +97,7 @@ function timeLabel(min) {
 var I18N = {
   en: { today: 'Today', more: '+{n} more', earlier: '+{n} earlier', rain_pct: '{n}% rain',
         clear: 'Clear', partly_cloudy: 'Partly cloudy', cloudy: 'Cloudy', foggy: 'Foggy', rain: 'Rain', snow: 'Snow', storms: 'Storms',
-        rain_starts: 'Rain starts', rain_stops: 'Rain stops', sunrise: 'Sunrise', sunset: 'Sunset',
+        rain_starts: 'Rain starts', rain_stops: 'Rain stops',
         feed_down: '{n} unavailable', weather_stale: 'Forecast may be out of date',
         // "Day 3 of 5". A week-long half term is a different fact on the
         // Monday than on the Thursday, and the one day the board draws is
@@ -653,10 +653,19 @@ function buildMetro(lines, events, weatherMilestones, headerWeather, nowMin, win
     items.push({ type: 'weather', _sortMin: w.atMin, at_min: w.atMin, icon: w.icon, label: w.label });
   });
 
-  ((extra && extra.sun) || []).forEach(function (m) {
-    if (m.atMin == null) return;
-    items.push({ type: 'sun', _sortMin: m.atMin, at_min: m.atMin, kind: m.kind, icon: WEATHER_ICON_BASE + (m.kind === 'sunrise' ? 'wi-sunrise.svg' : 'wi-sunset.svg'), label: tr((extra && extra.strings) || I18N.en, m.kind) });
-  });
+  // NO SUNRISE AND NO SUNSET. They were two of the five sky markers, and
+  // they were the two nobody needed: a household does not plan around the
+  // minute the sun comes up, and on a board whose whole subject is what the
+  // family is doing they were the only marks that answered a question
+  // nobody had asked. Rain start and rain stop change what you take with
+  // you; sunrise does not.
+  //
+  // They also cost more than they looked. Every marker reserves a slot in
+  // the strip under the ruler, and the two of them sat at the ends of the
+  // day where the board is widest and the hour labels thinnest, so a
+  // sunset at 19:58 was competing for that row with the rain markers and
+  // with the hour ticks, and the collision rules that shuffle two markers
+  // apart existed mostly to keep them out of each other's way.
 
   items.sort(function (a, b) { return a._sortMin - b._sortMin; });
   items.forEach(function (item) { delete item._sortMin; });
@@ -786,13 +795,12 @@ function buildMetro(lines, events, weatherMilestones, headerWeather, nowMin, win
     // Nothing ever wanted the mixed list, so the mixing was work done here
     // and undone four times downstream.
     //
-    // Sunrise and sunset ride with the weather because that is what they
-    // are on the board -- one band of sky markers along the top edge, drawn
-    // by one pass. They keep their own `type`, so the two are still told
-    // apart where it matters, and `header_weather` is separately the
-    // header's business.
+    // `weather` is now only rain start and rain stop and the heavier
+    // conditions: the sunrise and sunset markers are gone, so there is one
+    // kind of sky marker left and nothing to tell apart. `header_weather`
+    // is separately the header's business.
     events: items.filter(function (i) { return i.type === 'event'; }),
-    weather: items.filter(function (i) { return i.type === 'weather' || i.type === 'sun'; }),
+    weather: items.filter(function (i) { return i.type === 'weather'; }),
   };
 }
 
@@ -847,13 +855,12 @@ var DEMO_ALLDAY = [
 ];
 
 var DEMO_NOW_MIN = 11 * 60;
-var DEMO_SUN = [{ kind: 'sunrise', atMin: 7 * 60 + 8 }, { kind: 'sunset', atMin: 19 * 60 + 58 }];
 
 // Demo weather, one snapshot per board. The demo has no location and must
 // not make a network call, so without this nothing on a demo board ever
 // draws a sky marker and nobody can see what the band looks like until
 // they have set a real lat/lon and waited for the right hour of the right
-// day. Every board carries a sunrise, a sunset, a rain start, a rain stop
+// day. Every board carries a rain start, a rain stop
 // and one heavier condition, so all five marker shapes are on the screen
 // at once; the three boards use a different heavy condition each
 // (storms/fog/snow) so every icon in MILESTONE_ICON is exercised by the
@@ -878,7 +885,6 @@ var DEMO_WEATHER = {
       { atMin: 16 * 60, kind: 'rain_stops' },
       { atMin: 20 * 60, kind: 'storms' },
     ],
-    sun: DEMO_SUN,
   },
   futurama: {
     hi: 24, lo: 15, condition: 'foggy', icon: 'wi-day-fog.svg', rain_chance: 35, unit: 'C',
@@ -888,7 +894,6 @@ var DEMO_WEATHER = {
       { atMin: 12 * 60, kind: 'rain_starts' },
       { atMin: 14 * 60 + 30, kind: 'rain_stops' },
     ],
-    sun: DEMO_SUN,
   },
   friends: {
     hi: 1, lo: -4, condition: 'snow', icon: 'wi-day-snow.svg', rain_chance: 80, unit: 'C',
@@ -898,7 +903,6 @@ var DEMO_WEATHER = {
       { atMin: 15 * 60, kind: 'rain_starts' },
       { atMin: 17 * 60, kind: 'rain_stops' },
     ],
-    sun: DEMO_SUN,
   },
 };
 
@@ -1057,7 +1061,7 @@ function buildFromDemo(weather, nowMin, extra) {
       // the clock: the demo forecast is fixed, so its wettest hour is in
       // the past every single evening.
       serviceAlert: alertFor(extra, 0, nowMin != null ? nowMin : DEMO_NOW_MIN),
-      sun: (w.sun && w.sun.length) ? w.sun : DEMO_SUN }),
+      }),
     DEMO_STATIONS.map(function (st) {
       return { line: st.line, title: st.title, location: st.location || null, startMin: st.startMin, endMin: st.endMin };
     })
@@ -1131,12 +1135,7 @@ function materializeMilestones(list, strings) {
     });
 }
 
-function materializeSun(list) {
-  return (Array.isArray(list) ? list : [])
-    .filter(function (m) { return m && typeof m.atMin === 'number' && isFinite(m.atMin) && (m.kind === 'sunrise' || m.kind === 'sunset'); });
-}
-
-// snapshot -> the { header, milestones, sun } shape buildMetro takes.
+// snapshot -> the { header, milestones } shape buildMetro takes.
 function materializeWeather(snap, strings, unit) {
   if (!snap || typeof snap !== 'object') return null;
   strings = strings || I18N.en;
@@ -1155,7 +1154,6 @@ function materializeWeather(snap, strings, unit) {
       unit: unit,
     },
     milestones: materializeMilestones(snap.milestones, strings),
-    sun: materializeSun(snap.sun),
     // One forecast per day of the run, converted the same way the header
     // is: saved state outlives the temperature setting, so a snapshot
     // taken in Celsius has to come back out in whatever the board is
@@ -1170,9 +1168,8 @@ function materializeWeather(snap, strings, unit) {
         icon: di.indexOf('http') === 0 ? di : WEATHER_ICON_BASE + di,
         unit: unit,
         // A day's own sky band. The board draws one day of the run, and
-        // its rain markers and its sunset have to be that day's.
+        // its rain markers have to be that day's.
         milestones: materializeMilestones(d.milestones, strings),
-        sun: materializeSun(d.sun),
       };
     }),
   };
@@ -1207,7 +1204,7 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
   try {
     var params = new URLSearchParams({
       latitude: String(latlon[0]), longitude: String(latlon[1]),
-      daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode,sunrise,sunset',
+      daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode',
       hourly: 'precipitation_probability',
       temperature_unit: unit === 'F' ? 'fahrenheit' : 'celsius',
       timezone: tz, forecast_days: String(DAY_SPAN),
@@ -1219,18 +1216,6 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
     var body = await resp.json();
     var daily = body.daily || {};
     var info = weatherCodeInfo((daily.weathercode || [])[0]);
-
-    // Sunrise and sunset of a given day of the run. Read at a fixed [0]
-    // this drew TODAY's sunset on a board showing tomorrow: a small error
-    // in minutes, but the sky band is meant to be the day's own shape.
-    function sunFor(ix) {
-      var out = [];
-      var sr = isoToMinutes((daily.sunrise || [])[ix]), ss = isoToMinutes((daily.sunset || [])[ix]);
-      if (sr != null) out.push({ kind: 'sunrise', atMin: sr });
-      if (ss != null) out.push({ kind: 'sunset', atMin: ss });
-      return out;
-    }
-    var sun = sunFor(0);
 
     var hourly = body.hourly || {};
     var times = hourly.time || [];
@@ -1309,7 +1294,6 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
         hours: dayHours[pd] || [],
         peak: wettestHour(dayHours[pd], null),
         milestones: milestonesFor(dayHours[pd]),
-        sun: sunFor(pd),
       });
     }
     return {
@@ -1330,7 +1314,6 @@ async function fetchWeather(latLonRaw, tz, deadline, unit) {
       peak: peak,
       perDay: perDay,
       milestones: milestones,
-      sun: sun,
     };
   } catch (e) {
     return null;
@@ -3329,16 +3312,6 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
       // Where the board starts and stops inside that run. Null unless a
       // quiet day borrowed the next one.
       window: rolling ? { from: winFrom, to: winTo } : null,
-      // The sky belongs to the day it is over. On a rolling board that is
-      // two skies: tomorrow's sunrise is inside the window and inside the
-      // night the board is drawing, which is the one marker that says where
-      // the night ends. Shifted onto the same number line everything else
-      // is on, and cut to the window, so nothing is marked off the board.
-      sun: rolling
-        ? ofShownDay('sun').concat(((nextWx && Array.isArray(nextWx.sun)) ? nextWx.sun : [])
-            .map(function (m) { return Object.assign({}, m, { atMin: m.atMin + 1440 }); }))
-          .filter(function (m) { return m.atMin >= winFrom && m.atMin <= winTo; })
-        : ofShownDay('sun'),
       calendarsDown: downNames, holidays: holidays })
   );
 }

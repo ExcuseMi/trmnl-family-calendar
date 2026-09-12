@@ -61,7 +61,7 @@ custom_fields:
   field_type: lat_lon
   name: Location
   group: Weather
-  description: Where the board is standing. It drives the weather in the header, the sunrise and sunset marks in the band along the top edge, and the rain start and stop markers across the map. Leave it blank and the board keeps its placeholder weather.
+  description: Where the board is standing. It drives the weather in the header and the rain start and stop markers along the top edge. Leave it blank and the board keeps its placeholder weather.
   optional: true
 - keyname: temperature_unit
   field_type: select

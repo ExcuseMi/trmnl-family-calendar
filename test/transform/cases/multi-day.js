@@ -272,20 +272,16 @@ module.exports = function (test, h) {
     assert(/Rain Starts/i.test(labels[0] || ''), 'the one marker should be the rain starting: ' + JSON.stringify(labels));
   });
 
-  test('the sky and the sun belong to the day the board opens on', async () => {
-    // A couple of minutes between one day's sunset and the next, which is the
-    // whole point: nobody would ever spot this on the board, so it has to be
-    // spotted here.
-    //
-    // This used to be asked twice, once of a board set to tomorrow. Nothing
-    // draws tomorrow instead of today any more, so the question is only worth
-    // asking of the day the board opens on.
+  test('the sky belongs to the day the board opens on', async () => {
+    // This used to be about the sun: a couple of minutes between one day's
+    // sunset and the next, which nobody would ever spot on the board, so it
+    // was spotted here. The sun markers are gone, and what the case is
+    // really guarding is that the sky is read per day rather than at a
+    // fixed [0] -- so it asks that of the markers that are left.
     const today = await runTransform(skyNet(BOTH), NOW).run(input());
-    // A ROLLING BOARD CARRIES BOTH DAYS' SUN, which is right and is the
-    // detail this case exists to catch: the borrowed day's sunrise is at its
-    // own minute past midnight, not repeated at today's.
-    assertEqual(sky(today.data, 'sun'),
-      [6 * 60 + 30, 20 * 60 + 30, DAY + 6 * 60 + 32], 'the sun on a rolling board');
+    assertEqual(sky(today.data, 'sun'), [], 'a sun marker came back');
+    assert(sky(today.data, 'weather').length > 0,
+      'the day lost its rain markers along with its sun');
   });
 
   test('the board carries the clock, because it is about now', async () => {

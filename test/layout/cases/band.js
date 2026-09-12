@@ -74,7 +74,7 @@ module.exports = function (test, h) {
       const rep = render(SKY, v);
       assert(shapes(rep, 'now').length === 0,
         v.name + ': something is still drawn across the board at now');
-      // sunrise, sunset and the weather markers used to drop one too
+      // the sky markers used to drop one too
       const band = bandOf(rep);
       const i = cross(rep);
       const depth = rep.debug.horizontal ? rep.canvas.h : rep.canvas.w;
@@ -95,17 +95,22 @@ module.exports = function (test, h) {
     assert(/\d/.test(pills[0].text), 'the clock badge says "' + pills[0].text + '"');
   });
 
-  // Sunrise/sunset markers used to be set at the very top of the canvas.
-  // The hour scale moved there, and nothing said so: sunset's "9:12pm" was
-  // written straight over the "9pm" tick on the strip.
+  // Sky markers used to be set at the very top of the canvas. The hour
+  // scale moved there, and nothing said so: a marker's own time was written
+  // straight over the hour tick on the strip.
+  //
+  // These were `type: 'sun'` markers when the board still drew a sunrise
+  // and a sunset. Those are gone and `weather` is the only kind left, so
+  // the fixtures below are weather markers -- a case feeding a payload the
+  // transform can no longer produce proves nothing about the board.
   const SKY = JSON.parse(JSON.stringify(busy.metro));
   const DOT = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>"
     + "<circle cx='12' cy='12' r='6' fill='black'/></svg>";
   SKY.weather = (SKY.weather || []).concat([
-    { type: 'sun', at_min: SKY.day_start_min + 40, icon: DOT, label: 'sunrise' },
+    { type: 'weather', at_min: SKY.day_start_min + 40, icon: DOT, label: 'Rain starts 06:40' },
     // deliberately just before the end of the window, where the last hour
     // tick and the "+n more" note both live
-    { type: 'sun', at_min: SKY.day_end_min - 12, icon: DOT, label: 'sunset' },
+    { type: 'weather', at_min: SKY.day_end_min - 12, icon: DOT, label: 'Rain stops 21:48' },
   ]);
 
   test('a sky marker never lands on the hour scale', () => {
@@ -140,18 +145,19 @@ module.exports = function (test, h) {
   // negative, a clamp pinned it to the left edge, and the text ran rightward
   // over the hour labels and straight through the rail it was meant to sit
   // beside: "Storms 20:00" written across Homer's line and over "8pm", and
-  // sunset's time printed on top of it, because nothing kept two markers
-  // apart along the axis either.
+  // the next marker's text printed on top of it, because nothing kept two
+  // markers apart along the axis either.
   // On the busy two-person board AND the five-person one: a wide bundle is
   // what leaves the gutter too narrow for the words, and a thin one is what
   // shows the stacking on its own.
   const withSky = (metro) => {
     const m = JSON.parse(JSON.stringify(metro));
     m.weather = (m.weather || []).concat([
-      { type: 'sun', at_min: m.day_start_min + 40, icon: DOT, label: 'sunrise' },
+      { type: 'weather', at_min: m.day_start_min + 40, icon: DOT, label: 'Rain stops 06:40' },
       { type: 'weather', at_min: m.day_start_min + 300, icon: DOT, label: 'Rain starts 13:00' },
-      // a storm four minutes after sunset: two markers wanting one spot
-      { type: 'sun', at_min: m.day_end_min - 60, icon: DOT, label: 'sunset' },
+      // a storm four minutes after the shower stops: two markers wanting
+      // one spot
+      { type: 'weather', at_min: m.day_end_min - 60, icon: DOT, label: 'Rain stops 19:00' },
       { type: 'weather', at_min: m.day_end_min - 56, icon: DOT, label: 'Storms 20:00' },
     ]);
     return m;

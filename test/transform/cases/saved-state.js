@@ -81,8 +81,10 @@ module.exports = function (test, h) {
       'a failed forecast blanked the header instead of reusing the last one: ' + JSON.stringify(later.data.header_weather));
     assert(later.data.weather_stale === false, 'a forecast minutes old is not stale');
     // the markers come back too, not only the header numbers
-    const sun = later.data.weather.filter((i) => i.type === 'sun');
-    assert(sun.length === 2, 'expected sunrise and sunset from the replayed forecast, got ' + sun.length);
+    const marks = later.data.weather.filter((i) => i.type === 'weather');
+    assert(marks.length > 0, 'the replayed forecast came back with no markers at all');
+    assert(later.data.weather.every((i) => i.type === 'weather'),
+      'the replay put a sun marker back: ' + JSON.stringify(later.data.weather));
   });
 
   test('a replayed forecast old enough to be another day says so', async () => {

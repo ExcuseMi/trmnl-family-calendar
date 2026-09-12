@@ -1,11 +1,11 @@
 'use strict';
 
 // Demo weather. A demo board has no location, so before this nothing on one
-// ever drew a sky marker: the band along the top edge, the sunrise and
-// sunset rules, the rain start/stop markers were all invisible until
-// someone had set a real lat/lon and waited for the right hour of the right
-// day. Every demo board now carries its own forecast (no network call, no
-// setting), and between the three of them every marker icon is exercised.
+// ever drew a sky marker: the strip under the ruler and the rain start/stop
+// markers were all invisible until someone had set a real lat/lon and
+// waited for the right hour of the right day. Every demo board now carries
+// its own forecast (no network call, no setting), and between the three of
+// them every marker icon is exercised.
 //
 // It applies to the demo ONLY: a real config with no location still shows
 // an empty header rather than an invented forecast.
@@ -43,8 +43,11 @@ module.exports = function (test, h) {
       assert(seen.filter((u) => u.indexOf('api.open-meteo.com') >= 0).length === 0,
         set + ': the demo asked the weather API for a board that has no location');
 
-      const sun = r.data.weather.filter((i) => i.type === 'sun').map((i) => i.kind).sort();
-      assert(sun.join(',') === 'sunrise,sunset', set + ': expected a sunrise and a sunset, got ' + JSON.stringify(sun));
+      // and NO sunrise or sunset: they were markers once and are not any
+      // more, so a payload carrying one is the old path coming back.
+      assert(r.data.weather.every((i) => i.type === 'weather'),
+        set + ': the sky band carries something that is not a weather marker: '
+        + JSON.stringify(r.data.weather.map((i) => i.type)));
 
       const wx = r.data.weather.filter((i) => i.type === 'weather').map((i) => i.label);
       assert(wx.some((l) => /^Rain starts/.test(l)), set + ': no rain start marker, got ' + JSON.stringify(wx));
@@ -77,13 +80,43 @@ module.exports = function (test, h) {
     assert(heavy.size === 3, 'expected snow, storms and fog across the three boards, got ' + [...heavy].join(', '));
   });
 
+  test('the board asks the forecast for nothing it does not draw', async () => {
+    // The sunrise and sunset markers are gone from the board, and the two
+    // fields that fed them are gone from the query with them. Left in, they
+    // would be the kind of thing that comes back by accident: the data is
+    // there in the response, somebody adds a marker "while they are in
+    // here", and the two marks nobody wanted are on the wall again.
+    const urls = [];
+    const { run } = runTransform(async (url) => {
+      urls.push(String(url));
+      if (String(url).indexOf('api.open-meteo.com') >= 0) {
+        return okText(JSON.stringify({
+          daily: {
+            temperature_2m_max: [20], temperature_2m_min: [10],
+            precipitation_probability_max: [10], weathercode: [0],
+          },
+          hourly: { time: [], precipitation_probability: [] },
+        }));
+      }
+      return okText(icsWithEvents([{ start: '20260909T090000Z', end: '20260909T100000Z', summary: 'Standup' }]));
+    }, NOW);
+    await run(baseInput(NOW, { config_json: 'https://calendar.example.com/a.ics', lat_lon: '51.05,3.72' }));
+
+    const wx = urls.filter((u) => u.indexOf('api.open-meteo.com') >= 0);
+    assert(wx.length > 0, 'the board never asked for a forecast at all');
+    for (const u of wx) {
+      assert(u.indexOf('sunrise') < 0 && u.indexOf('sunset') < 0,
+        'the forecast query still asks for sunrise and sunset: ' + u);
+    }
+  });
+
   test('the offline demo fallback keeps its weather too', async () => {
     // GitHub unreachable: the board falls back to the built-in Springfield
     // day, which is exactly when an empty sky band would be noticed.
     const { run } = runTransform(async () => fail(500), NOW);
     const r = await run(baseInput(NOW, { use_demo_data: 'true' }));
-    assert(r.data.weather.filter((i) => i.type === 'sun').length === 2, 'the offline demo lost its sun markers');
     assert(r.data.weather.filter((i) => i.type === 'weather').length >= 2, 'the offline demo lost its weather markers');
+    assert(r.data.weather.every((i) => i.type === 'weather'), 'the offline demo grew a marker that is not weather');
   });
 
   test('demo weather does not leak into a real board that has no location', async () => {
@@ -119,7 +152,10 @@ module.exports = function (test, h) {
     // already converted by the API, so the number is the one it sent
     assert(r.data.header_weather.hi === 30,
       'the demo weather overrode a real forecast: ' + JSON.stringify(r.data.header_weather));
-    const sunrise = r.data.weather.filter((i) => i.type === 'sun' && i.kind === 'sunrise')[0];
-    assert(sunrise && sunrise.at_min === 6 * 60 + 30, 'expected the real sunrise, got ' + JSON.stringify(sunrise));
+    // The API is still asked for the day's forecast and still answers with
+    // a sunrise and a sunset in the body; the board simply no longer builds
+    // a marker out of either.
+    assert(r.data.weather.every((i) => i.type === 'weather'),
+      'the real forecast put a sun marker back on the board: ' + JSON.stringify(r.data.weather));
   });
 };

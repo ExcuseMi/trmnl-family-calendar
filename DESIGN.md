@@ -59,8 +59,8 @@ written before the pickers were removed keeps drawing the same board.
   small lettered bullet instead (at the start of the axis horizontally, the
   end vertically). The header legend is always drawn as well (hidden only on
   tiny canvases when the lines are named on the map).
-- Sunrise, sunset and rain start/stop are sky markers: an icon with the time
-  or text, in a band along the top edge (horizontal) or beside the bundle on
+- Rain start/stop and the heavier conditions are sky markers: an icon with
+  its text, in a band along the top edge (horizontal) or beside the bundle on
   the quieter side (vertical, where they block lanes), plus a guide line
   across the map (dotted for sun, dashed for rain).
 

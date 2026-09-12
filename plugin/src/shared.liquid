@@ -2000,24 +2000,29 @@
     var titleClass, tagClass, showTime, showLocation;
     var maxTitle = clamp(axisPx * 0.3, 130 * S, 380 * S);
 
-    // A sky marker: rain start/stop or sunrise/sunset — an icon plus a short
-    // text, drawn in the band along the top edge (horizontal) or beside the
-    // bundle (vertical), with a guide line across the canvas at its time.
+    // A sky marker: rain starting or stopping, or the day turning heavier
+    // than that -- an icon plus a short text, drawn in the strip under the
+    // ruler (horizontal) or beside the bundle (vertical).
+    //
+    // Sunrise and sunset used to be markers too, and were the two kinds
+    // this had to tell apart: they were drawn bigger, quieter, and carrying
+    // a time instead of a phrase. They are gone, so there is one kind left
+    // and nothing to branch on.
     function buildMarkerLabel(w) {
       var n = el('div', 'metro-gen metro-sky flex flex--row flex--center-y gap--xsmall absolute text--black');
-      var size = hourH * (w.type === 'sun' ? 1.5 : 1.3);
+      var size = hourH * 1.3;
       var ic = el('img', 'image--adaptive'); ic.src = w.icon; ic.style.width = size + 'px'; ic.style.height = size + 'px';
       // The framework paints an adaptive icon by masking it with the text
       // colour, but it only arms the ones present when the page loads, and
       // these are drawn later by this script. Armed by hand here, which is
       // the manual form the framework documents: set the mask source and
-      // flip the gate. Without it a sunrise stayed black line art, and went
+      // flip the gate. Without it a marker stayed black line art, and went
       // invisible the moment the device was in dark mode.
       ic.style.setProperty('--framework-icon-src', 'url("' + w.icon + '")');
       ic.setAttribute('data-adaptive', 'true');
-      var tx = el('span', 'label label--small ' + (w.type === 'sun' ? quietText() : 'font--bold text--black'));
+      var tx = el('span', 'label label--small font--bold text--black');
       tx.style.whiteSpace = 'nowrap';
-      tx.textContent = w.type === 'sun' ? timeLabel(w.at_min) : w.label;
+      tx.textContent = w.label;
       n.appendChild(ic); n.appendChild(tx);
       return n;
     }
@@ -2117,8 +2122,8 @@
     });
     // A STRIP OF THEIR OWN, UNDER THE RULER.
     //
-    // Sunrise, rain and sunset were written just below the hour strip and
-    // the map was allowed to start there too, so "Rain starts 13:00" was
+    // The sky markers were written just below the hour strip and the map
+    // was allowed to start there too, so "Rain starts 13:00" was
     // set over the one o'clock tick and under "Safety Inspection" at the
     // same time. The solver did keep LINES out of that row -- side A's
     // demand carried an `alertBand` -- but a label hangs off a lane and
@@ -6577,10 +6582,10 @@
     // is, is said once by the badge on the scale; where each person is, is
     // said by their own car, on their own line, which is the thing a reader
     // is actually looking for.
-    // Sunrise, sunset and the weather markers used to drop a guide line the
-    // whole depth of the board at their minute. Nothing routed around those
-    // either, so they crossed captions and rails alike for the sake of a
-    // time that is already stated at the top. The marker sits on the scale
+    // The sky markers used to drop a guide line the whole depth of the
+    // board at their minute. Nothing routed around those either, so they
+    // crossed captions and rails alike for the sake of a time that is
+    // already stated at the top. The marker sits on the scale
     // and is read against it, like every other time on this board.
 
     // a track's own line/rings kink out to siding level for the span of
@@ -9215,7 +9220,7 @@
         bandCursor = left + w._w + 6 * S;
         // just UNDER the hour strip, not on it: the scale moved to the top
         // edge and these markers were still being set at the very top, so
-        // sunset's "9:12pm" was written straight over the "9pm" tick.
+        // a marker's own time was written straight over the hour tick.
         n.style.left = left + 'px'; n.style.top = (alertTop + 1 * S) + 'px';
       } else {
         // STANDING UP, A MARKER STAYS IN ITS GUTTER.
@@ -9229,8 +9234,8 @@
         //
         // So the gutter is a box with two walls. What does not fit in it
         // gives up its words first, because the icon at the right height
-        // already says rain or sunset at that time, and the whole marker
-        // only if even the icon will not fit.
+        // already says rain at that time, and the whole marker only if even
+        // the icon will not fit.
         var sign = alertSide === 'A' ? -1 : 1;
         var inner = spineC + sign * (bundleHalf(alertSide) + 2 * S);
         var gLo = sign < 0 ? bandLo + 2 * S : inner;
@@ -9242,9 +9247,9 @@
           if (w._w > gHi - gLo) { n.remove(); return; }
         }
         // AND CLEAR OF THE ONE BEFORE IT. Markers are in time order, and two
-        // a few minutes apart (a storm just after sunset) were set on the
-        // same spot with the later one printed over the earlier; the later
-        // one moves down the axis until it is past.
+        // a few minutes apart (a storm on the heels of a shower) were set on
+        // the same spot with the later one printed over the earlier; the
+        // later one moves down the axis until it is past.
         var top = a - w._h / 2;
         if (top < axisCursor) top = axisCursor;
         if (top + w._h > H) { n.remove(); return; }

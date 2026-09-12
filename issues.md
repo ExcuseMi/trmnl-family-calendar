@@ -503,8 +503,10 @@ is open.
   a new language is a pull request. English stays inline as the fallback for
   when GitHub is unreachable.
 - [x] **D4. Demo weather data** in the demo configs, covering every weather
-  event (rain start/stop, snow, storm, fog, sunrise, sunset) so they can be
-  seen without waiting for real weather.
+  event (rain start/stop, snow, storm, fog) so they can be seen without
+  waiting for real weather. Sunrise and sunset were two more, and were
+  removed from the board: a household does not plan around the minute the
+  sun comes up.
 - [ ] **D5. Small screens: collapse secondary metadata before geometry.**
   On a board like OG half-vertical with 6+ short events on one track, drop
   location text, then start/end times, rather than bending the baseline.
