@@ -808,53 +808,30 @@ function buildMetro(lines, events, weatherMilestones, headerWeather, nowMin, win
 // Demo path — unchanged hardcoded data.
 // ---------------------------------------------------------------------
 
-// The offline fallback, for when GitHub is unreachable. It says who is on
-// the board, which side each of them is on and which one is the anchor --
-// and nothing about how any of them is DRAWN, because that is decided in
-// shared.liquid from this same ordering. No colour is pinned either, so a
-// theme still gets to repaint them.
-var DEMO_TRACKS = [
-  { key: 'homer', name: 'Homer', side: 'left', line_offset: -10, anchor: true },
-  { key: 'lisa', name: 'Lisa', side: 'left', line_offset: -20 },
-  { key: 'marge', name: 'Marge', side: 'right', line_offset: 10 },
-  { key: 'bart', name: 'Bart', side: 'right', line_offset: 20 },
-  { key: 'maggie', name: 'Maggie', side: 'right', line_offset: 30 },
-];
-
-// A deliberately busy day in Springfield: two meetings starting minutes
-// apart on one line (lane stacking), two- and four-track interchanges, a
-// long day at school and a shift at the plant as sidings, and an
-// evening cluster once everyone is home.
-var DEMO_EVENTS = [
-  { line: 'marge', interchange_with: ['bart', 'lisa'], title: 'School Run', startMin: 7 * 60 + 45, endMin: 8 * 60 + 15 },
-  { line: 'homer', title: 'Shift Briefing', startMin: 8 * 60, endMin: 8 * 60 + 15 },
-  { line: 'homer', title: 'Donut Run', startMin: 8 * 60 + 20, endMin: 8 * 60 + 35 },
-  { line: 'marge', title: 'Dr. Hibbert', startMin: 10 * 60, endMin: 10 * 60 + 45 },
-  { line: 'homer', title: '1:1 with Mr. Burns', startMin: 11 * 60, endMin: 11 * 60 + 30, location: 'The Office' },
-  { line: 'marge', interchange_with: ['homer'], title: 'Lunch at Krusty Burger', startMin: 12 * 60, endMin: 13 * 60 },
-  { line: 'homer', title: 'Safety Inspection', startMin: 14 * 60, endMin: 15 * 60 },
-  { line: 'lisa', title: 'Sax Practice', startMin: 15 * 60 + 30, endMin: 16 * 60 + 15, location: 'Band Room' },
-  { line: 'marge', interchange_with: ['bart', 'lisa'], title: 'Pick Up', startMin: 16 * 60, endMin: 16 * 60 + 20 },
-  { line: 'bart', title: 'Skate Park', startMin: 16 * 60 + 30, endMin: 17 * 60 + 30 },
-  { line: 'marge', title: 'Groceries', startMin: 17 * 60 + 30, endMin: 18 * 60, location: 'Kwik-E-Mart' },
-  { line: 'marge', interchange_with: ['homer', 'bart', 'lisa', 'maggie'], title: 'Family Dinner', startMin: 18 * 60 + 30, endMin: 19 * 60 + 30 },
-  { line: 'homer', title: "Moe's Tavern", startMin: 19 * 60 + 45, endMin: 21 * 60 },
-  { line: 'bart', interchange_with: ['lisa'], title: 'Itchy & Scratchy', startMin: 20 * 60, endMin: 20 * 60 + 30 },
-];
-
-// Sidings: the line kinks out to siding level for the span
-// rather than branching, for a place you simply ARE for a while.
-var DEMO_STATIONS = [
-  { line: 'homer', title: 'Sector 7-G', location: 'Springfield Nuclear', startMin: 9 * 60, endMin: 17 * 60 },
-  { line: 'bart', title: 'Springfield Elementary', location: 'Room 12', startMin: 8 * 60 + 30, endMin: 15 * 60 },
-  { line: 'lisa', title: 'Springfield Elementary', location: 'Room 4', startMin: 8 * 60 + 30, endMin: 15 * 60 },
-];
-
-var DEMO_ALLDAY = [
-  { line: 'maggie', title: 'With Grampa' },
-];
-
-var DEMO_NOW_MIN = 11 * 60;
+// THE OFFLINE FALLBACK IS GONE, and with it a second definition of the same
+// board. There used to be a hand-written Springfield day here -- its own
+// tracks, events, sidings and all-day states -- used whenever this repo's
+// own demo calendars could not be fetched.
+//
+// It was a duplicate that had drifted. Different titles for the same
+// appointments ("Donut Run" against the feed's "Donut Break", "Shift
+// Briefing" against "Shift Handover"), a single hardcoded day where the
+// feeds recur weekly, and the only tracks in the plugin with `side` and
+// `line_offset` pinned by hand -- so the ordering solver never ran on the
+// board most people see, and the pinned order cost four crossings on a day
+// where zero was available. Bart and Lisa share three events and sat at
+// opposite ends of the board.
+//
+// Worse, it swapped itself in SILENTLY. The demo makes seven feed fetches
+// inside one 4.2 second render budget, and a device that missed it got a
+// different board, with different words on it, and nothing to say so. That
+// is how this was found: a panel showing appointments that do not exist in
+// this repo's demo calendars.
+//
+// So there is one demo: the config, against this repo's own ICS files,
+// through the same pipeline a real config uses. When it cannot be fetched
+// the board is honestly empty. A demo that is empty beats a demo that is
+// quietly a different demo.
 
 // Demo weather, one snapshot per board. The demo has no location and must
 // not make a network call, so without this nothing on a demo board ever
@@ -1042,29 +1019,27 @@ function demoConfigFor(name) {
   return DEMO_SETS[String(name || '').trim().toLowerCase()] || SIMPSONS_CONFIG;
 }
 
-function buildFromDemo(weather, nowMin, extra) {
+// AN EMPTY BOARD, when there is nothing honest to draw. This used to answer
+// with the hand-written Springfield day; a board that invents appointments
+// rather than look empty is lying, and it lied convincingly enough to be
+// taken for the real demo. The lines and the events come from where they
+// always come from, or they do not come.
+function buildEmpty(weather, nowMin, extra) {
   var strings = (extra && extra.strings) || I18N.en;
   var demo = demoWeather(strings, (extra && extra.tempUnit) || 'C');
   var w = weather || demo;
   return buildMetro(
-    DEMO_TRACKS, DEMO_EVENTS,
+    [], [],
     w.milestones || [],
     w.header || demo.header,
-    nowMin != null ? nowMin : DEMO_NOW_MIN,
+    nowMin,
     timeLabel(DAY_START_MIN) + ' ' + timeLabel(DAY_END_MIN),
-    DEMO_ALLDAY,
-    // The offline fallback is one day, and says so: a run of one is still
-    // a run, so the client takes the same path for it as for three.
+    [],
     Object.assign({}, extra || {}, {
       days: (extra && extra.days) || [{ label: (extra && extra.dateLabel) || null, weekday: null, weather: null }],
-      // The offline fallback is always today, and it is always subject to
-      // the clock: the demo forecast is fixed, so its wettest hour is in
-      // the past every single evening.
-      serviceAlert: alertFor(extra, 0, nowMin != null ? nowMin : DEMO_NOW_MIN),
-      }),
-    DEMO_STATIONS.map(function (st) {
-      return { line: st.line, title: st.title, location: st.location || null, startMin: st.startMin, endMin: st.endMin };
-    })
+      serviceAlert: alertFor(extra, 0, nowMin),
+    }),
+    []
   );
 }
 
@@ -3411,7 +3386,7 @@ async function run(input) {
       var demoToday = fromEpoch(nowTsDemo * 1000, demoTz);
       demoNowMin = demoToday.h * 60 + demoToday.mi;
       demoDate = dateLabel(demoToday, locale);
-    } catch (e) { /* keep the illustrative fixed DEMO_NOW_MIN on failure */ }
+    } catch (e) { /* no clock rather than an invented one */ }
     var demoWx = await resolveWeather(latLonRaw, demoTz, deadline, state, tempUnit, strings);
     // A demo board has no location, so it would draw no sunrise, no rain
     // and no header weather at all. The sky band, which is half the
@@ -3472,9 +3447,16 @@ async function run(input) {
         (a.owners || []).forEach(function (k) { busy[k] = true; });
       });
       var everyoneBusy = want.every(function (n) { return !!busy[keyOf[n]]; });
-      if (complete && everyoneBusy) return done(demoMetro);
-    } catch (e) { /* fall through to the offline demo below */ }
-    return done(buildFromDemo(demoWx.weather, demoNowMin, demoExtra));
+      // A PARTIAL DEMO IS STILL THE DEMO. This fell back to the hand-written
+      // day whenever one feed was stale or missing, on the grounds that a
+      // half-resolved board is worse than the offline one. There is no
+      // offline one, and the reasoning does not survive without it: what a
+      // stale feed produces here is exactly what a stale feed produces for
+      // a real config, which is the thing the demo exists to show.
+      if (!complete || !everyoneBusy) demoMetro.demo_partial = true;
+      return done(demoMetro);
+    } catch (e) { /* nothing came back at all: an honestly empty board */ }
+    return done(buildEmpty(demoWx.weather, demoNowMin, demoExtra));
   }
 
   // Reached only with calendars to draw: `noUsableConfig` above sends an
@@ -3488,7 +3470,7 @@ async function run(input) {
       { weatherStale: wx.stale, wxSnapshot: wx.snapshot });
     return done(await buildFromConfig(input, parsed, wx.weather, cfgExtra, state));
   } catch (e) {
-    return done(buildFromDemo(null, null, extra));
+    return done(buildEmpty(null, null, extra));
   }
 }
 

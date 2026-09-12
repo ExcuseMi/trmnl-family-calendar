@@ -507,22 +507,19 @@ is open.
   waiting for real weather. Sunrise and sunset were two more, and were
   removed from the board: a household does not plan around the minute the
   sun comes up.
-### E26. The demo board's line order is a hand-written guess
+### E26. The demo board's line order is a hand-written guess -- FIXED
 
-`DEMO_TRACKS` pins `side` and `line_offset` for all five Springfield lines,
-so `finalize()` never runs on the board most people see and rules 39 to 42
-are not applied to it. The pinned order costs FOUR crossings on the demo day
-where ZERO is available: Bart and Lisa share three events (School Run, Pick
-Up, Itchy & Scratchy) and are put at opposite ends with Homer and Marge
-between them, so "Itchy & Scratchy" reads across two people who are not at
-it. Measured on the offline fallback at 22:30.
+`DEMO_TRACKS` pinned `side` and `line_offset` for all five Springfield
+lines, so `finalize()` never ran on the board most people see and rules 39
+to 42 were not applied to it. The pinned order cost FOUR crossings on the
+demo day where ZERO was available: Bart and Lisa share three events (School
+Run, Pick Up, Itchy & Scratchy) and were put at opposite ends with Homer and
+Marge between them.
 
-The fix is not just deleting the pins -- tried, and the demo comes out with
-`line_offset: null` on every line, because `buildFromDemo` hands
-`DEMO_TRACKS` straight to `buildMetro`, which RENUMBERS offsets but does not
-decide them. The demo has to be routed through the same registry the config
-path uses: register the tracks, `link()` each shared event, `finalize()`,
-then build. Same for the three demo configs if they pin sides too.
+Fixed by deleting the whole offline board it belonged to. Those pins existed
+only on the hand-written fallback; the real demo config declares its lines
+without a side or an offset and has always had its order computed. The board
+that was showing the bad order was the fallback, not the demo.
 
 ### E27. A vertical through a caption is charged by area
 

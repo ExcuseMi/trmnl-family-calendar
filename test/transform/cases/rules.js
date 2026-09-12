@@ -245,14 +245,22 @@ module.exports = function (test, h) {
     assertEqual(cfg.calendars.map((c) => c.url), ['https://a.example.com/x.ics', 'https://b.example.com/y.ics']);
   });
 
-  test('valid JSON with no usable calendars falls all the way back to demo data, not a crash', async () => {
+  test('valid JSON with no usable calendars falls all the way back to the demo, not a crash', async () => {
+    // It reaches the DEMO PATH, which is what this is about. It used to
+    // assert events came back, which worked only because the demo had a
+    // hand-written day behind it: here the fetch stub answers every URL
+    // with an empty calendar, so the demo's own feeds are empty too. What
+    // the case means is that the demo config was picked up, so that is what
+    // it asks -- the Springfield family is on the board.
     const r = await runTransform(async () => okText(icsWithEvents([])), NOW).run(baseInput(NOW, { config_json: '{}' }));
-    assert(eventItems(r.data).length > 0, 'demo data should have kicked in');
+    const names = r.data.legend.map((t) => t.name).sort();
+    assertEqual(names, ['Bart', 'Homer', 'Lisa', 'Maggie', 'Marge'], 'the demo config was not picked up');
   });
 
-  test('non-JSON config text with no non-blank lines also falls back to demo data', async () => {
+  test('non-JSON config text with no non-blank lines also falls back to the demo', async () => {
     const r = await runTransform(async () => okText(icsWithEvents([])), NOW).run(baseInput(NOW, { config_json: '   \n   \n' }));
-    assert(eventItems(r.data).length > 0, 'demo data should have kicked in');
+    const names = r.data.legend.map((t) => t.name).sort();
+    assertEqual(names, ['Bart', 'Homer', 'Lisa', 'Maggie', 'Marge'], 'the demo config was not picked up');
   });
 
   test('a line nobody uses today is still on the board, because somebody named it', async () => {

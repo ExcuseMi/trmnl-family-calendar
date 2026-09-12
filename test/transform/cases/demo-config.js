@@ -46,10 +46,19 @@ module.exports = function (test, h) {
       'expected exactly the five family lines, got: ' + names.join(', '));
   });
 
-  test('a stale copy of one calendar falls back rather than mixing someone else in', async () => {
+  test('a stale copy of one calendar shows through, because there is nothing to swap to', async () => {
     // raw.githubusercontent serves a changed file from cache for a few
     // minutes, so right after a push some calendars are current and one is
-    // not. That renders a board that is nobody's day, and it must not ship.
+    // not. This used to fall back to a hand-written Springfield day rather
+    // than render a board that is nobody's day.
+    //
+    // THAT REMEDY IS GONE with the offline board, and it was worse than the
+    // thing it prevented: it replaced the demo with a DIFFERENT demo, in
+    // different words, with no indication anything had happened. What a
+    // stale feed produces here is exactly what a stale feed produces for a
+    // real config, which is the thing the demo exists to show. So the case
+    // now holds the two things still guaranteed -- the family is all there
+    // and the board renders -- and records that the stale event is on it.
     const stale = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nX-WR-CALNAME:Demo - School\r\n'
       + 'BEGIN:VEVENT\r\nUID:stale@x\r\nDTSTAMP:20240101T000000Z\r\nSUMMARY:Zwemles L2\r\n'
       + 'DTSTART:20240101T100000\r\nDTEND:20240101T110000\r\nRRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU\r\n'
@@ -61,8 +70,11 @@ module.exports = function (test, h) {
       return fs.existsSync(full) ? okText(fs.readFileSync(full, 'utf-8')) : fail(404);
     }, NOW);
     const r = await run(demoInput(NOW));
-    const titles = eventItems(r.data).map((e) => e.title).join(' ');
-    assert(!/Zwemles/.test(titles), 'a stale calendar leaked into the demo: ' + titles);
+    const names = r.data.legend.map((t) => t.name).sort();
+    for (const who of ['Bart', 'Homer', 'Lisa', 'Maggie', 'Marge']) {
+      assert(names.indexOf(who) >= 0, 'a stale feed cost the demo a line: ' + names.join(', '));
+    }
+    assert(eventItems(r.data).length > 0, 'a stale feed emptied the whole board');
   });
 
   test('every demo calendar the config names actually exists in demo/', async () => {
@@ -108,23 +120,45 @@ module.exports = function (test, h) {
       'Family Dinner should join the whole family, got ' + (dinner.co_owners.length + 1) + ' track(s)');
   });
 
-  test('a partly-resolved demo falls back rather than showing half a family', async () => {
+  test('a partly-resolved demo still shows the whole family', async () => {
     // the failure that actually happens: new files not yet on the CDN while
-    // an older one still answers, so some calendars resolve and others 404
+    // an older one still answers, so some calendars resolve and others 404.
+    // A line the config DECLARES is drawn on its quiet day rather than
+    // dropped, so the family survives a feed being down without needing
+    // anything to fall back to.
     const { run } = runTransform(serveDemoFiles(['simpsons/homer.ics', 'simpsons/marge.ics', 'simpsons/maggie.ics']), NOW);
     const r = await run(demoInput(NOW));
     const names = r.data.legend.map((t) => t.name).sort();
     for (const who of ['Bart', 'Homer', 'Lisa', 'Maggie', 'Marge']) {
       assert(names.indexOf(who) >= 0,
-        'expected the offline fallback (a whole family), got only ' + names.join(', '));
+        'a feed being down cost the demo a line: ' + names.join(', '));
     }
   });
 
-  test('an unreachable GitHub falls back to the built-in day rather than an empty board', async () => {
+  test('an unreachable GitHub draws an empty board, not a made-up one', async () => {
+    // THE OPPOSITE OF WHAT THIS USED TO ASSERT. It held that an unreachable
+    // GitHub must fall back to the built-in Springfield day "rather than an
+    // empty board", and that was the whole mistake: the built-in day was a
+    // second, drifted copy of the demo that swapped itself in silently, and
+    // a panel showing it was indistinguishable from a working one until you
+    // noticed the appointments did not exist in this repo.
+    //
+    // A board that invents appointments to avoid looking empty is lying. An
+    // empty one is honest and, unlike the fake, it is obviously wrong.
+    // What it actually draws is better than empty and still honest: the
+    // config DECLARES its five lines, and a declared line is drawn on its
+    // quiet day, so the board comes out as the Springfield family with
+    // nothing on any of them. That says who should be there and that
+    // nothing came, which is the truth, and it is obviously not a working
+    // day -- where the built-in board was indistinguishable from one.
     const { run } = runTransform(async () => fail(500), NOW);
     const r = await run(demoInput(NOW));
-    assert(r.data.legend.length > 0, 'offline demo produced no tracks');
-    assert(eventItems(r.data).length > 0, 'offline demo produced no events');
+    assertEqual(eventItems(r.data).length, 0, 'something was invented for an offline board');
+    const names = r.data.legend.map((t) => t.name).sort();
+    assertEqual(names, ['Bart', 'Homer', 'Lisa', 'Maggie', 'Marge'],
+      'an offline board should still say whose day is missing');
+    assert(r.data.demo_partial === true, 'an offline demo is not flagged as partial');
+    assert(r.data.header_weather, 'the board lost its header along with its events');
   });
 
   // ------------------------------------------------------------ the other boards
