@@ -442,4 +442,43 @@ module.exports = function (test, h) {
     r.data.legend.forEach((t) => { key[t.key] = t.name; });
     assertEqual(key[swim.owner], 'Bo', 'a calendar named Bo did not go to Bo');
   });
+  // ---- THE LETTER IN THE CAR ----------------------------------------------
+  //
+  // A car carries the first letter of its line's name, and a household is
+  // exactly where that collides: Marge and Maggie both came out `M` on the
+  // demo board. The two cars then sat a few rows apart with the same letter
+  // in them, and the only thing telling them apart was the texture of the
+  // row they were on -- which is the very thing the badge exists to
+  // disambiguate, because the car is what you look at when you cannot trace
+  // the row.
+  test('two people whose names start alike get different letters', async () => {
+    const ev = { start: '20260907T090000Z', end: '20260907T100000Z', summary: 'Swim' };
+    const { run } = runTransform(async () => okText(icsWithEvents([ev])), NOW);
+    const r = await run(baseInput(NOW, cfgWith({
+      lines: [{ name: 'Marge' }, { name: 'Maggie' }, { name: 'Homer' }],
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Homer' }],
+    })));
+    const badges = r.data.legend.map((t) => t.initial);
+    assertEqual(badges.length, new Set(badges).size,
+      'two lines share a badge: ' + r.data.legend.map((t) => t.name + '=' + t.initial).join(', '));
+    // and the one that did not clash keeps its single letter: a one-letter
+    // badge is better where it is unique, so only the clash pays
+    const by = {};
+    r.data.legend.forEach((t) => { by[t.name] = t.initial; });
+    assertEqual(by.Homer, 'H', 'a line that never clashed had its badge grown anyway');
+  });
+
+  test('a badge somebody asked for is never rewritten', async () => {
+    // Their board, their letter. A collision they can see is theirs to fix;
+    // silently renaming it would be worse than the collision.
+    const ev = { start: '20260907T090000Z', end: '20260907T100000Z', summary: 'Swim' };
+    const { run } = runTransform(async () => okText(icsWithEvents([ev])), NOW);
+    const r = await run(baseInput(NOW, cfgWith({
+      lines: [{ name: 'Marge', badge: 'X' }, { name: 'Maggie', badge: 'X' }],
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Marge' }],
+    })));
+    const by = {};
+    r.data.legend.forEach((t) => { by[t.name] = t.initial; });
+    assertEqual([by.Marge, by.Maggie], ['X', 'X'], 'an asked-for badge was rewritten');
+  });
 };

@@ -2214,7 +2214,12 @@ function parseConfig(raw) {
     var name = typeof item.name === 'string' ? item.name.trim() : '';
     if (!name) return;
     var color = typeof item.color === 'string' ? item.color.trim().toLowerCase() : '';
-    var badgeSrc = typeof item.badge === 'string' && item.badge.trim() ? item.badge.trim() : name;
+    // Whether the badge was ASKED FOR or defaulted from the name. The two
+    // have to be told apart downstream: a letter somebody chose is theirs
+    // and is never rewritten, while one this file guessed may be grown to
+    // keep it distinct from another line's.
+    var badgePinned = typeof item.badge === 'string' && !!item.badge.trim();
+    var badgeSrc = badgePinned ? item.badge.trim() : name;
     var badge = Array.from(badgeSrc)[0].toUpperCase(); // Array.from, not [0] — keeps a full surrogate pair (emoji) intact
     // optional explicit side of the map: "left"/"work" or "right"/"family"
     var sideRaw = typeof item.side === 'string' ? item.side.trim().toLowerCase() : '';
@@ -2234,7 +2239,7 @@ function parseConfig(raw) {
     // keeps the old default: a feed named "School" whose events are all
     // routed to the children is a router, not a person, and drawing it
     // would put an empty School rail on the board.)
-    lines[name.toLowerCase()] = { name: name, color: color, badge: badge, side: side, keepEmpty: item.hideIfEmpty !== true };
+    lines[name.toLowerCase()] = { name: name, color: color, badge: badge, badgePinned: badgePinned, side: side, keepEmpty: item.hideIfEmpty !== true };
   });
 
   var globalRules = compileRuleList(data.rules);
@@ -2712,6 +2717,44 @@ function makeLineRegistry(parsed) {
       t.anchor = name === anchor;
       t.initial = (configured && configured.badge) || Array.from(name)[0].toUpperCase();
     });
+
+    // A BADGE THE READER CANNOT TELL FROM ANOTHER BADGE IS NOT A BADGE.
+    //
+    // The letter is the first character of the name, and a household is
+    // exactly where that collides: Marge and Maggie both came out `M`, on
+    // the demo board and on any family with two names sharing a letter. The
+    // two cars then sat 150 pixels apart with the same letter in them, and
+    // the only thing telling them apart was the dash texture of the row --
+    // which is the very thing the badge exists to disambiguate, because a
+    // car is the mark you look at when you cannot trace the row.
+    //
+    // Grown a character at a time, and only for the names that clash: a
+    // one-letter badge is better where it is unique, so Homer stays `H` and
+    // only Marge and Maggie become `Ma` and `Mag`. An explicit `badge` in
+    // the config is never touched -- somebody who asked for a letter gets
+    // that letter, collision or not, because they can see their own board.
+    (function uniqueBadges() {
+      var taken = {};
+      var rows = order.map(function (n) { return byName[n]; }).filter(Boolean);
+      rows.forEach(function (t) {
+        var conf = parsed.lines[String(t.name).toLowerCase()];
+        if (conf && conf.badgePinned) { taken[t.initial] = true; t._badgePinned = true; }
+      });
+      rows.forEach(function (t) {
+        if (t._badgePinned) return;
+        var chars = Array.from(String(t.name));
+        var want = t.initial;
+        for (var n = 1; n <= chars.length && taken[want]; n++) {
+          want = chars.slice(0, n + 1).join('');
+          want = want.charAt(0).toUpperCase() + want.slice(1);
+        }
+        // A name that is a prefix of another ("Al" inside "Alex") can run
+        // out of characters. Two identical badges are still better than a
+        // badge that is not the name, so it keeps what it has.
+        t.initial = want;
+        taken[want] = true;
+      });
+    })();
   }
 
   return {

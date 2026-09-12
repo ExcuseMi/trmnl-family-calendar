@@ -399,6 +399,18 @@ Where the two disagree, this one is newer.
     clipped corner is nearly free and a full cut costs more than the words
     are worth.
 
+38b. **A badge nobody can tell from another badge is not a badge.** The
+    letter in a car is the first character of the line's name, and a
+    household is exactly where that collides: Marge and Maggie both came out
+    `M`. The two cars then sat a few rows apart carrying the same letter,
+    with only the texture of the row to tell them apart -- which is the very
+    thing the badge exists to disambiguate, because the car is what you look
+    at when you cannot trace the row. A guessed letter grows a character at a
+    time until it is unique, and only for the names that clash, so a line
+    with an unambiguous initial keeps its single letter. A badge somebody
+    ASKED for is never rewritten: their board, their letter, and a collision
+    they can see is theirs to fix.
+
 39. **Fewest crossings.** Every line sitting between two people who share an
     event is a line their lines must cross to reach each other, and since a
     shared event moves the trunks that crossing is real ink. The order with
