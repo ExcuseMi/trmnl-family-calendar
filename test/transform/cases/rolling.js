@@ -8,12 +8,18 @@
 // the day being shown through to six the following evening. Anything busier
 // is the single-day board it always was, byte for byte.
 //
-// The two things that must not go wrong are both about STABILITY. The panel
-// refreshes every fifteen minutes, so the count may not be read from the
-// clock forwards (a board would flip into the rolling view during the
-// afternoon and back at midnight), and the window may not be anchored to
-// "now" (every event would slide left four times an hour). Both are decided
-// per civil day, and the cases that pin that down are the last two here.
+// The count is of what is STILL TO COME, not of what the day had. "Was this
+// a quiet day" is a question nobody asks; "what is coming" is the one a
+// board on a wall is standing there to answer, and it is asked in the
+// evening, when a busy Tuesday has one thing left on it and eleven that
+// already happened.
+//
+// What must not go wrong is STABILITY. The panel refreshes every fifteen
+// minutes, so neither the count nor the window may be read from the clock
+// continuously: everything would slide left four times an hour. So the
+// boundary both are measured from moves exactly once a day, at four in the
+// afternoon, and a day therefore has two shapes at most. The case that pins
+// that down is 'a day has two shapes at most, and it changes at four'.
 
 module.exports = function (test, h) {
   const { runTransform, icsWithEvents, okText, baseInput, assert, assertEqual } = h;
@@ -213,12 +219,20 @@ module.exports = function (test, h) {
       + JSON.stringify(r.legend.map((t) => t.name)));
   });
 
-  test('the same day reads the same at every hour of it', async () => {
-    // THE STABILITY CASE. Counted from the clock forwards, a day loses
-    // events as it goes: a four-event day would drop to two by mid
-    // afternoon and stretch itself then, and an e-ink panel refreshing
-    // every fifteen minutes would rearrange under whoever was reading it.
-    // Anchored to "now", the window would slide four times an hour.
+  test('a day has two shapes at most, and it changes at four', async () => {
+    // THE STABILITY CASE, AS THE RULE NOW STANDS. A board keyed to the
+    // clock would lose events as the day went on, stretch itself the
+    // moment the count dropped, and rearrange under whoever was reading
+    // it -- an e-ink panel refreshes every fifteen minutes, so the window
+    // would slide four times an hour.
+    //
+    // What it does instead is count from a boundary that moves exactly
+    // once, at four in the afternoon. So a day has two shapes at most: one
+    // that every hour before four agrees on, one that every hour after it
+    // agrees on. That is what this pins down, in both directions -- a
+    // board that changed at any other hour, or twice, or continuously,
+    // fails it just as a board that never changed used to fail the old
+    // version of this test.
     const rows = [
       ['20260909', '0900', '0915', 'Standup'],
       ['20260909', '1100', '1200', 'Workshop'],
@@ -226,33 +240,29 @@ module.exports = function (test, h) {
       ['20260909', '1900', '2000', 'Book Club'],
       ['20260910', '0900', '1000', 'Sprint Review'],
     ];
-    const shapes = [];
-    for (const hh of ['0015', '0700', '1215', '1600', '2030']) {
+    async function shapeAt(hh) {
       const when = Date.parse('2026-09-09T' + hh.slice(0, 2) + ':' + hh.slice(2) + ':00Z');
       const r = (await runTransform(net(feed(rows)), when).run(baseInput(when, {
         use_demo_data: 'false', lat_lon: '51.05,3.72',
         config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
       }))).data;
-      shapes.push({ at: hh, shape: r.days.length + ' day(s) ' + JSON.stringify(r.rolling) });
+      return r.days.length + ' day(s) ' + JSON.stringify(r.rolling);
     }
-    assertEqual([...new Set(shapes.map((s) => s.shape))].length, 1,
-      'the board changed shape during the day: '
-      + shapes.map((s) => s.at + ' ' + s.shape).join(' | '));
-
-    // And a quiet day is quiet at every hour of it too, window and all.
-    const quiet = [];
-    for (const hh of ['0015', '0700', '1600', '2030']) {
-      const when = Date.parse('2026-09-09T' + hh.slice(0, 2) + ':' + hh.slice(2) + ':00Z');
-      const r = (await runTransform(net(feed(QUIET)), when).run(baseInput(when, {
-        use_demo_data: 'false', lat_lon: '51.05,3.72',
-        config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
-      }))).data;
-      quiet.push({ at: hh, shape: JSON.stringify(r.rolling) + ' '
-        + JSON.stringify(r.events.map((e) => e.start_min)) });
-    }
-    assertEqual([...new Set(quiet.map((s) => s.shape))].length, 1,
-      'the rolling window moved with the clock: '
-      + quiet.map((s) => s.at + ' ' + s.shape).join(' | '));
+    const before = [], after = [];
+    for (const hh of ['0015', '0700', '1215', '1545']) before.push({ at: hh, shape: await shapeAt(hh) });
+    for (const hh of ['1600', '1815', '2030', '2345']) after.push({ at: hh, shape: await shapeAt(hh) });
+    const show = (l) => l.map((s) => s.at + ' ' + s.shape).join(' | ');
+    assertEqual([...new Set(before.map((s) => s.shape))].length, 1,
+      'the board changed shape before four: ' + show(before));
+    assertEqual([...new Set(after.map((s) => s.shape))].length, 1,
+      'the board changed shape after four: ' + show(after));
+    // ...and the one change it is allowed is the one it makes: this day is
+    // three events until the afternoon is over and one after it, so it
+    // borrows tomorrow at four and not before.
+    assertEqual(before[0].shape.indexOf('null') > 0, true,
+      'a day with three things still to come should not borrow: ' + show(before));
+    assertEqual(after[0].shape.indexOf('null') > 0, false,
+      'a day with one thing left should borrow tomorrow: ' + show(after));
   });
 
   test('the sky of the day after is on the board, and only the part of it that is', async () => {

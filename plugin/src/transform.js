@@ -1602,6 +1602,33 @@ var QUIET_DAY_MAX_EVENTS = 2;
 // for the same reason the count is.
 var ROLL_START_MIN = 6 * 60;
 var ROLL_END_MIN = 1440 + 18 * 60;
+// WHAT IS LEFT OF TODAY, NOT WHAT TODAY HAD, AND ONLY IN TWO STEPS.
+//
+// Counting the whole day answers "was this a quiet day", and nobody asks
+// that. The question a board on a wall is standing there to answer is
+// "what is coming", and it is asked in the evening, when a busy Tuesday
+// has one thing left on it and eleven that already happened: a board that
+// still calls that day busy spends itself on a morning nobody can attend
+// any more.
+//
+// So the day is counted from a boundary that moves, and it moves exactly
+// once, because a window keyed to the clock rescales under the reader
+// every time the panel refreshes -- everything sliding left by a few
+// pixels every fifteen minutes. Two shapes a day, at an hour anybody can
+// predict, is the same contract the evening switch-over already has and
+// gentler in what it does.
+//
+// FOUR IN THE AFTERNOON, and it was noon first. Noon is not the middle of
+// a family's day, it is the middle of its working one: at 12:01 most of
+// what a household does is still ahead of it, and a board that drops the
+// morning then has thrown away half a day nobody had finished. Four is
+// after school and before anybody is home, which is the same reasoning
+// that put the switch-over at nine rather than six.
+//
+// The morning is not thrown away in any case: what falls before the
+// window is counted at the leading edge as "+N earlier", which is an
+// affordance the board already draws.
+var ROLL_SPLIT_MIN = 16 * 60;
 
 // Civil date arithmetic, deliberately not epoch arithmetic: "the day after
 // the 30th" is a calendar question, and answering it by adding 86400
@@ -3056,7 +3083,19 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   var onDay = events.filter(function (e) {
     return e.startMin != null && e.startMin >= dayLo && e.startMin < dayLo + 1440;
   });
-  var rolling = mayRoll && distinctEvents(onDay) <= QUIET_DAY_MAX_EVENTS
+  // Where the count starts, and where the window will start with it: the
+  // two have to agree, or the board decides it is quiet by one measure and
+  // then draws itself by another. Only a board about TODAY has a past to
+  // leave behind; a board about tomorrow has all of tomorrow ahead of it
+  // whatever time it is now.
+  // Before noon the boundary is the day's own start, which is what it has
+  // always been: a morning board counts and draws the whole day, early
+  // events included. From noon it is noon.
+  var rollFrom = (showIx === 0 && nowMin >= ROLL_SPLIT_MIN) ? ROLL_SPLIT_MIN : 0;
+  var stillToCome = onDay.filter(function (e) {
+    return (e.endMin == null ? e.startMin : e.endMin) > dayLo + rollFrom;
+  });
+  var rolling = mayRoll && distinctEvents(stillToCome) <= QUIET_DAY_MAX_EVENTS
     && showIx + 1 < days.length;
   // The window, in the shown day's own minutes. It starts at six unless the
   // day itself starts earlier, and ends at six the next evening unless
@@ -3066,8 +3105,11 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   // minutes apart lay the same board out.
   var winFrom = 0, winTo = 1440, dayHi = dayLo + 1440;
   if (rolling) {
-    winFrom = ROLL_START_MIN;
-    onDay.forEach(function (e) { winFrom = Math.min(winFrom, e.startMin - dayLo - 60); });
+    winFrom = Math.max(rollFrom, ROLL_START_MIN);
+    // Widened for what the board is KEEPING, never for what it has already
+    // decided to leave behind: widening for the morning would put the
+    // morning back and undo the count that got here.
+    stillToCome.forEach(function (e) { winFrom = Math.min(winFrom, e.startMin - dayLo - 60); });
     winFrom = Math.max(0, Math.floor(winFrom / 60) * 60);
     dayHi = dayLo + ROLL_END_MIN;
     // The held-back day now counts, and only now: its line weights and any
@@ -3083,9 +3125,18 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
         title: l.title, startMin: l.startMin, endMin: l.endMin, location: l.location });
     });
   }
+  // FROM THE DAY'S OWN MIDNIGHT, NOT FROM THE WINDOW.
+  //
+  // An event the window has moved past is not an event the board has never
+  // heard of: the client counts everything before its leading edge and
+  // writes "+N earlier" there, which is how a board that has dropped the
+  // morning says so instead of quietly being short of it. Filtered out
+  // here, that count was zero and four meetings left the board without a
+  // word. The window still decides what is DRAWN; this decides what the
+  // board knows about.
   function onShownDay(list) {
     return list.filter(function (e) {
-      return e.startMin != null && e.startMin >= dayLo + winFrom && e.startMin < dayHi;
+      return e.startMin != null && e.startMin >= dayLo && e.startMin < dayHi;
     }).map(function (e) {
       var c = Object.assign({}, e);
       c.startMin = e.startMin - dayLo;

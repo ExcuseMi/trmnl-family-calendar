@@ -17,15 +17,26 @@ Where the two disagree, this one is newer.
 2. **Quiet hours are compressed, not cut.** The scale runs faster through
    stretches with nothing on them, and the change of rate is drawn on the
    hour strip and on the lines (the speed marks).
-2a. **A quiet day is drawn with the next one.** Two events or fewer on the
-   day being shown and the board runs from six that morning to six the
-   following evening, because a day with one appointment on it spends most
-   of the board on hours nobody has anything in, and what is coming is the
-   thing a quiet day still has to say. Counted per civil day over the whole
-   day, never from the clock forwards, and the window is anchored to the
-   day and not to "now": the panel refreshes every fifteen minutes and the
-   board may not rearrange itself under somebody reading it. A busier day
-   is the single day it always was.
+2a. **A quiet day is drawn with the next one.** Two events or fewer STILL TO
+   COME on the day being shown and the board runs on to six the following
+   evening, because a day with one appointment left on it spends most of the
+   board on hours nobody has anything in, and what is coming is the thing
+   such a day still has to say. A busier one is the single day it always was.
+2a-i. **The board may change shape once a day, at four in the afternoon, and
+   only by gaining tomorrow.** Neither the count nor the window may be read
+   from the clock continuously: the panel refreshes every fifteen minutes and
+   a board keyed to "now" slides every event left four times an hour under
+   whoever is reading it. So both are measured from a boundary that moves
+   exactly once -- the day's own start until four, four o'clock after that --
+   and a day therefore has two shapes at most, at an hour anybody can
+   predict. Four because noon is the middle of a working day and not of a
+   family's: at 12:01 most of what a household does is still ahead of it.
+   What falls before the window is not lost, it is counted at the leading
+   edge as "+N earlier" -- on the same terms as the date marker, which is to
+   say the clock badge has first claim on that spot and the count appears
+   once the badge has moved along. The one shape change this allows is a gain; losing
+   today, which the evening switch-over does, is a different rule and a
+   blunter one.
 2b. **The night is a zone, not a moment.** Ten at night to six in the
    morning is drawn as a corridor of upright hairlines the depth of the
    board, with more ink on its two edges than between them, so a reader can
