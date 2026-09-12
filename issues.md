@@ -558,6 +558,39 @@ every neighbour.
 
 612/632, 20 known, 0 failures. Was 606/632 with 26 known.
 
+### E28. The opportunistic 45 pass has nothing to take back -- BUILT, MEASURED, REVERTED
+
+The rule asked for: in a last pass, any 90 that could be a 45 without
+disturbing anything becomes one.
+
+Built it. A move is forced square by `steep` in `routeSpan`, which is true
+for three reasons: the move would cross another line (`crosses`), it arrives
+at a convergence, or it leaves one. The `crosses` test is the conservative
+one -- it asks whether another line's BASELINE lies across the move, not
+whether that line is actually there at the time, and a line up in a corridor
+has left its baseline empty.
+
+Refining it needs two passes, and that is not optional: asking where another
+line really is calls `raiseAt`, which reaches that line's own `routeSpan`,
+which asks about ours. One pass is a cycle and the board never draws. So the
+spans are built once conservatively, snapshotted, then rebuilt with position
+queries reading the snapshot through a freeze flag.
+
+It works and it finds real cases: 65 spans on five-lines alone were squared
+against a rail that was not there. And it changes NOTHING, on any board:
+every fixture, all three viewports, 49 boards measured before and after, and
+the vertical and 45 shares are identical to the decimal place on every one.
+
+The reason is rule 29f. Every one of those 65 is also a convergence move, so
+`steep` is true anyway and stays true -- correctly. The only 90s on these
+boards are the ones we have decided we want. Most boards are entirely flat
+and have no level change to soften at all.
+
+So the pass is correct, costs a full second computation of every span on
+every render, and buys nothing. Reverted. Rebuild it if rule 29f changes, or
+if a board appears with level changes that are not convergences: the
+mechanism is right and the two-pass freeze is the non-obvious part.
+
 - [ ] **D5. Small screens: collapse secondary metadata before geometry.**
   On a board like OG half-vertical with 6+ short events on one track, drop
   location text, then start/end times, rather than bending the baseline.
