@@ -4455,8 +4455,54 @@
     // `labelOverlaps` subsumes what `capClashes` counted and sees the rest
     // of the board besides, so the pass's own tally is not added again.
     var _ov = labelOverlaps();
+    // A NAME THE BOARD DECIDED NOT TO WRITE IS A LOSS, AND THE LOOP THAT
+    // CHOOSES THE TEXT SIZE HAS TO SEE IT.
+    //
+    // Shedding was the last thing this pass learned to do: a name with
+    // nowhere to go is not drawn and its line counts it instead, which is
+    // the honest answer and much better than two names on each other. But
+    // nothing counted the shedding, so every board came back clean --
+    // `labelOverlaps` finds nothing when the loser has been taken off the
+    // board -- and the tier loop, choosing between a large text that sheds
+    // half the names and a smaller one that writes all of them, could not
+    // tell them apart. It took the large one, every time, and the bigger
+    // the canvas the more it took.
+    //
+    // Charged like a caption adrift, which is what it is: the words are not
+    // where the reader can pair them with their stop. A board that shrinks
+    // one step and writes everything now beats a board that stays large and
+    // counts four of them at a line's head, which is the trade a reader
+    // would make.
+    var _shed = 0;
+    visible.forEach(function (e) { if (e._capShed && !e._dropped) _shed++; });
+    // ...AND A NAME ON THE FAR SIDE OF SOMEBODY ELSE'S RAIL (rule 37).
+    //
+    // Charging for a shed name without charging for this one just moved the
+    // harm: told that not writing a name is expensive, the pass wrote it
+    // past a neighbour instead, where it reads as that neighbour's. "1:1
+    // with Priya" belongs to Work and came to rest on the far side of Alex.
+    // Nothing in this score could see it -- `capPierces` counts rails drawn
+    // THROUGH words, which is a different fault -- so the cheapest way out
+    // of an expensive shed was a silent one.
+    //
+    // Measured the way the rule is worded: is another line's rail between
+    // the words and the line they name, at the caption's own point along
+    // the day.
+    var _past = 0;
+    visible.forEach(function (e) {
+      if (e._dropped || e._capShed || !e._capBoxes || !e._capBoxes.length || !e._p) return;
+      var bx = e._capBoxes[0];
+      var mid = (bx.a0 + bx.a1) / 2, mine = lineCAt(e._p, mid);
+      var lo = Math.min(bx.c0, mine), hi = Math.max(bx.c1, mine);
+      var mates = e._involved || [e._p];
+      LEGEND.forEach(function (q) {
+        if (mates.indexOf(q) >= 0) return;
+        var qc = lineCAt(q, mid);
+        if (qc > lo + 1 && qc < hi - 1) _past++;
+      });
+    });
     return dropped * 1000 + (packedFallback ? 300 : 0) + lost
-      + (adrift + _ov) * 120
+      + (adrift + _ov + _shed + _past) * 120
       + (crossings + barPierces() + capPierces) * 40 + slides * 15 + backwards * 10;
     }
 
@@ -6670,7 +6716,16 @@
           if (grew > 0 && backTo >= 0) {
             if (horizontal) p._nameEl.style.left = backTo + 'px';
             else p._nameEl.style.top = backTo + 'px';
-          } else if (grew > 0) {
+          } else if (grew > 0 && !horizontal) {
+            // Standing up, a name runs ALONG its line and the next thing
+            // after it is that line's own terminal bar, so a count with
+            // nowhere to step back to would be written on the bar. Lying
+            // down, the name sits in a column at the head of the board with
+            // its own margin after it, and there is nothing there to hit --
+            // which matters, because dropping the count is the one thing
+            // this must not do. The whole point of shedding a name is that
+            // the board says so; a shed name AND no count is just a missing
+            // name, which is what the board did before any of this.
             p._nameEl.removeChild(more);
           }
         }
