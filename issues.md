@@ -549,19 +549,36 @@ is open.
   better. Reserved-versus-drawn came out IDENTICAL on all eight boards, and
   it cost one new overlap on regroups/og-landscape. Reverted.
 
-  What that rules out is the obvious reading of the table above. The drawing
-  does use the lanes it asks for, so the gap is not unused lanes. Part of it
-  is legitimate reserve that is never drawn into: `needOf` adds the edge
-  margin and half a name's height, which is about 18px of the 80 on
-  five-lines/og. The rest, roughly one and a half lanes' worth, is the depth
-  a lane is charged versus the ink that ends up in it -- every lane is
-  charged `maxLabelThick`, the thickest label anywhere on the board, whatever
-  is actually in that lane.
+  RULED OUT: per-lane thickness. Every label on a board is the same
+  thickness, because a label is one text row at whatever tier the attempt is
+  drawing, so charging a lane for what it holds rather than for
+  `maxLabelThick` reclaims nothing. Measured on ten boards: OG at
+  `label--small` is 14px for every label, OG at `title--small` 30, X at
+  `title--small` 34, X at `title--base` 40, and the largest saving available
+  anywhere across all their lanes was 1px.
 
-  So the next thing to measure is per-lane thickness against
-  `maxLabelThick`, not lane counts. If that is where it goes, the fix is to
-  charge a lane for what it holds rather than for the board's worst case, and
-  that is inside `buildSide`'s `extent`.
+  WHERE IT ACTUALLY GOES: rungs booked by CONVERGENCES that are then drawn as
+  corridors. Every solo event is a mark on its own line now, so a convergence
+  is the only thing left that asks for a rung -- and a convergence is normally
+  drawn as a corridor between the participants' own rails with its name above
+  the pill, which uses no rung at all. On seven-lines/OG, bender's ladder is
+  four rungs deep and reaches 348px from the spine; its three shared events
+  hold lanes 0 and 2, and the drawing stops at 208.
+
+  TRIED, and it is half a fix: skip shared events in the `used` count
+  `placeSide` returns, so they book no rung. seven-lines/OG goes from three
+  lines crammed into the top 60% at `label--small` to three lines spread over
+  the whole panel two text tiers larger, with the times and the locations
+  back. It costs 21 layout failures: six boards with overlapping labels, seven
+  with a rail through a label. Reverted.
+
+  The phantom rung was paying for something real. A corridor's name goes
+  BEYOND the outermost participant's rail, and nothing else books that paper
+  -- the rung booked on one owner's outward ladder was standing in for it, in
+  the wrong place and at the wrong size. So the two halves have to land
+  together: charge the corridor its own need (its rails plus its caption)
+  through the `gaps` mechanism `solve` already takes for A17, and only then
+  drop the rung demand for a convergence that is corridor-routed.
 
 - [ ] **E20. Captions walk past a neighbouring rail, so they read as
   somebody else's.** `rules.md` rule 37: "A caption may not walk past another
