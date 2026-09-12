@@ -512,6 +512,77 @@ is open.
 
 ## E. New features
 
+- [x] **E23. The captions were placed by the strategy the literature calls
+  the weakest.** This is the same root cause E19 and E20 each name at the end
+  of their own write-ups, so both are closed by it.
+
+  Point-feature label placement is a named problem. Christensen, Marks and
+  Shieber measured the algorithm families against each other in 1995 and
+  simulated annealing beat greedy and gradient descent by a wide margin; every
+  JavaScript library that does this well implements that result (D3-Labeler,
+  d3fc-label-layout's annealing strategy, kevinschaul/avoid-overlap,
+  marcusand/label-locator). What this board was doing was d3fc's OTHER two
+  strategies stacked: greedy insertion, then `removeOverlaps`, which that
+  library's own documentation calls the weakest of the three it offers. The
+  repair pass on top was hill climbing that kept an answer merely NO WORSE, so
+  it wandered sideways and finished wherever the last round left it.
+
+  Now: candidates enumerated per name against the fixed obstacles only (forty
+  of them -- two sides, four rungs, five slides), the whole board scored as one
+  number, and the assignment searched by moving one name at a time with
+  Metropolis acceptance under a cooling temperature. Two departures from the
+  libraries, both because a board is not a chart: the candidates are discrete,
+  so a move picks another rung rather than nudging x and y; and the walk keeps
+  the best board it ever saw rather than where it stopped, which is what makes
+  it safe to run at all -- it starts from the greedy answer and cannot come out
+  worse than the pass it replaces.
+
+  Not drawing a name and giving up a name's time row are candidates in the same
+  search rather than passes afterwards that cannot be undone. And a pair of
+  names that TOUCH pay a flat charge as well as the area they cover: priced by
+  area alone a three-pixel graze cost a hundredth of what shedding costs, so
+  the search kept both names and took the graze -- correct by its own
+  arithmetic and wrong by the only measure that counts.
+
+  Two things found on the way, both worth keeping written down. The old repair
+  pass re-placed a caption WITHOUT restoring `_capOut`, so each failed attempt
+  moved the rung ladder's base further out: the second ask was a different
+  question from the first. And the pass ran twice per attempt, once from each
+  end of the day, purely to blunt the order dependence -- which the assignment
+  removes, so that could go if the render cost ever matters.
+
+
+- [x] **E22. The board was laid out against a font it was not drawing in.**
+  Every number in the layout engine is a measurement, and the first (usually
+  only) layout run measured every label in the FALLBACK face. Proved by
+  stashing the engine's own measurement on each hour label and comparing it
+  with the drawn rect: 34 against 38 on an OG panel, 36.3 against 42.3 on an
+  X. Twelve to seventeen per cent, everywhere, on every board.
+
+  `document.fonts.ready` was supposed to cover this and cannot. It resolves
+  once the fonts that are PENDING have loaded, and a face nothing has asked
+  for yet is not pending, so on a cold page it resolves before the board has
+  drawn a word. The first run then measures in the fallback, requests the real
+  face BY measuring, and the real face lands afterwards. Nothing re-ran:
+  `load` had already fired, and the resize observer sees no resize because the
+  canvas did not change size, only its text.
+
+  It surfaced three ways at once and none of them looked like one bug: hour
+  labels booked clear of each other came out touching by two or three pixels,
+  the first and last hours hung off the ends of the canvas, and captions the
+  assignment had proved clean came out grazing. Each was plausible on its own,
+  which is why it survived so long behind other explanations.
+
+  Fixed by watching the board's own text: a probe in a label's classes is
+  measured after each run and again over the second that follows, and the
+  board is laid out again if its width moves. That also covers a stylesheet
+  arriving late and the framework's engines restyling afterwards, which are
+  the same fault and equally silent. The suite now waits for the run count to
+  stand still instead of reporting a fixed 250ms after the first pass -- it
+  had been reporting whichever pass happened to have landed, which is why the
+  same board reported differently on different runs.
+
+
 - [ ] **E21. The solver reserves 80 to 160px more depth than the drawing
   uses, so every board thinks it is fuller than it is.** Measured on four
   fixtures at both landscape sizes, comparing `needB` (what the cross solver
@@ -604,8 +675,12 @@ is open.
     Deciding at the first tier and deciding at the winning tier gave
     different boards, and neither matched a straight re-run.
 
-- [ ] **E20. Captions walk past a neighbouring rail, so they read as
-  somebody else's.** `rules.md` rule 37: "A caption may not walk past another
+- [x] **E20. Captions walk past a neighbouring rail, so they read as
+  somebody else's.** Closed by E23: the walk-past is priced in the caption
+  search (`runCrosses` asks the rule's own question -- is another line's rail
+  between the words and the line they name) and in the attempt score beside
+  it. Every board the suite had marked known against this entry now passes.
+  The analysis below stands, and its last paragraph is what E23 did. `rules.md` rule 37: "A caption may not walk past another
   line to find room. A name on the far side of somebody else's rail reads as
   theirs." Nothing checked it. The rule-check skill found it by eye on a
   rendered board: "Skate Park" belongs to Bart, whose dot and end tick carry
