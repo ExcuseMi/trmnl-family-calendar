@@ -38,7 +38,7 @@
 // what the device does.
 
 module.exports = function (test, h) {
-  const { layout, VIEWPORTS, fixtures, pathsWhere, assert, assertEqual } = h;
+  const { layout, VIEWPORTS, fixtures, pathsWhere, hasClass, assert, assertEqual } = h;
 
   const ROOMY = VIEWPORTS.find((v) => v.name === 'x-landscape');
   const busy = fixtures.find((f) => f.name === 'busy-day');
@@ -126,16 +126,23 @@ module.exports = function (test, h) {
     });
   }
 
-  test('nothing is drawn for it on the scale of hours', () => {
-    // The defect this replaces: an all-day entry drawn as an event
-    // spanning the visible window, so the board printed its own window
-    // back as the holiday's hours. A holiday has no hour at all.
+  test('nothing is drawn for it AT AN HOUR', () => {
+    // The defect this replaces: an all-day entry drawn as an event spanning
+    // the visible window, so the board printed its own window back as the
+    // holiday's hours. A holiday has no hour at all.
+    //
+    // The badge itself is not that, and this case has to say which it means
+    // now that the words are inside the canvas rather than in a band above
+    // it. The badge stands at the day's own boundary and names the DAY; what
+    // is forbidden is the holiday appearing as an event on a line, as a
+    // caption at a minute, or as a second mark somewhere on the scale.
     const rep = layout(withHoliday(busy, CHRISTMAS), ROOMY);
-    for (const l of rep.labels) {
-      assert(l.text.indexOf('Christmas Day') < 0,
-        '"Christmas Day" is written on the map at ' + Math.round(l.x) + ','
-        + Math.round(l.y) + '. It has no hour to put it at.');
-    }
+    const said = rep.labels.filter((l) => l.text.indexOf('Christmas Day') >= 0);
+    assertEqual(said.length, 1, 'the holiday is stated ' + said.length
+      + ' times on the canvas; it is one fact about one day');
+    assert(hasClass(said[0], 'metro-daybadge'),
+      '"Christmas Day" is drawn as ' + said[0].cls + ' at ' + Math.round(said[0].x)
+      + ',' + Math.round(said[0].y) + '. It has no hour to put it at.');
   });
 
   test('it declares nobody to be away', () => {

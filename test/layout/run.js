@@ -499,13 +499,23 @@ const REPORTER = `
     });
     document.body.appendChild(out);
   }
-  // the layout debounces at 60ms and re-runs on load/fonts; give it room to
-  // settle, then require the debug attribute to be present before reporting
-  var tries = 0;
+  // WAIT FOR THE BOARD TO STOP REDRAWING, not for a fixed delay.
+  //
+  // The layout debounces at 60ms and re-runs on load, on fonts, and whenever
+  // its own text metrics move -- which is how it corrects a first pass laid
+  // out in the fallback face. A report taken a fixed 250ms after the first
+  // run catches whichever of those happened to have landed, so the same board
+  // reported differently on different runs and the suite blamed the layout.
+  // So: require the debug attribute, then require the run count to stand
+  // still for 400ms before reading anything.
+  var tries = 0, seen = -1, still = 0;
   (function wait() {
-    if (++tries > 60) { report(); return; }
+    if (++tries > 120) { report(); return; }
     if (!canvas.getAttribute('data-metro-debug')) return setTimeout(wait, 50);
-    setTimeout(report, 250);
+    var runs = window.__metroRuns || 0;
+    if (runs !== seen) { seen = runs; still = 0; } else { still++; }
+    if (still < 4) return setTimeout(wait, 100);
+    report();
   })();
 })();
 </script>

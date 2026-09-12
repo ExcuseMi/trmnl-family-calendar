@@ -5420,6 +5420,26 @@
           }
           return s;
         }
+        // ...AND TOUCHING AT ALL IS A FAULT, not a small amount of one.
+        //
+        // Priced purely by area, a three-pixel graze costs about a hundredth
+        // of what shedding a name costs, so the search kept both names and
+        // took the graze -- correctly, by its own arithmetic, and wrongly by
+        // the only measure that counts: a reader seeing two names touch reads
+        // neither cleanly, and the suite fails the board whether they overlap
+        // by three pixels or by thirty. Nine boards came back that way, every
+        // one of them a graze rather than a collision.
+        //
+        // So a pair that touches pays a flat charge as well as the area. It
+        // is a little under what shedding costs, which puts the order where a
+        // reader would put it: a clean spot further out beats a graze, a graze
+        // beats not writing the name at all, and a real overlap -- flat charge
+        // plus most of a name's area -- is worse than either.
+        var TOUCH_PRICE = 0.3, capScale = 1;
+        function pairCost(A, B) {
+          var ov = pairArea(A, B);
+          return ov > 0 ? ov + capScale * TOUCH_PRICE : 0;
+        }
         // WHAT A NAME'S OWN AREA IS WORTH, which is the unit everything in
         // this search is priced in: one name written squarely over another
         // costs about one of these.
@@ -5459,6 +5479,12 @@
             // takes a time row off.
             shedAt.push(capArea(movable[i]) * SHED_PRICE);
           }
+          // One name's worth of paper, which is what every price here is a
+          // fraction of. Set before the first candidate is weighed against
+          // another: pairCost reads it.
+          capScale = 0;
+          for (i = 0; i < n; i++) capScale += capArea(movable[i]);
+          capScale = Math.max(1, capScale / n);
           var pick = [];
           // THE GREEDY BOARD IS THE STARTING POINT, not the answer. It is a
           // good one -- most boards have room and come out of it clean -- and
@@ -5469,7 +5495,7 @@
             for (j = 0; j < cands[i].length; j++) {
               var tot = cands[i][j].self;
               for (k = 0; k < i; k++) {
-                if (pick[k] >= 0) tot += pairArea(cands[i][j].boxes, cands[k][pick[k]].boxes);
+                if (pick[k] >= 0) tot += pairCost(cands[i][j].boxes, cands[k][pick[k]].boxes);
               }
               if (tot < bc) { bc = tot; bj = j; }
             }
@@ -5482,7 +5508,7 @@
               E2 += priceOf(a, pick[a]);
               if (pick[a] < 0) continue;
               for (var b = a + 1; b < n; b++) {
-                if (pick[b] >= 0) E2 += pairArea(cands[a][pick[a]].boxes, cands[b][pick[b]].boxes);
+                if (pick[b] >= 0) E2 += pairCost(cands[a][pick[a]].boxes, cands[b][pick[b]].boxes);
               }
             }
             return E2;
@@ -5495,8 +5521,8 @@
             for (var a = 0; a < n; a++) {
               if (a === i2 || pick[a] < 0) continue;
               var ob = cands[a][pick[a]].boxes;
-              if (pick[i2] >= 0) d -= pairArea(cands[i2][pick[i2]].boxes, ob);
-              if (j2 >= 0) d += pairArea(cands[i2][j2].boxes, ob);
+              if (pick[i2] >= 0) d -= pairCost(cands[i2][pick[i2]].boxes, ob);
+              if (j2 >= 0) d += pairCost(cands[i2][j2].boxes, ob);
             }
             return d;
           }
@@ -5509,10 +5535,8 @@
             // to accept is a name stepping out a rung or sliding along --
             // some fraction of its own area. A temperature in the wrong
             // units either freezes at once or never settles.
-            var scale = 0;
-            for (var a = 0; a < n; a++) scale += capArea(movable[a]);
-            var T0 = (scale / n) * hot;
-            var rnd = capRand(Math.round(scale) + n * 7919);
+            var T0 = capScale * hot;
+            var rnd = capRand(Math.round(capScale * n) + n * 7919);
             for (var t = 0; t < moves; t++) {
               var T = T0 * (1 - t / moves);
               var i3 = Math.floor(rnd() * n); if (i3 >= n) i3 = n - 1;
@@ -8722,7 +8746,11 @@
     // every hour label underneath it giving way in turn. A badge is an
     // annotation ON the scale, and one taking most of the scale has stopped
     // being one.
-    function dayBadge(d, a, spent, room) {
+    // `breaks` says whether this badge is a DAY BOUNDARY. The badge at the
+    // head of the axis is not one: the board opens there, it did not cross
+    // into anything, and a single-day board that marked its own start as a
+    // daybreak would be claiming a midnight it never reaches.
+    function dayBadge(d, a, spent, room, breaks) {
       if (!d || !d.date_label) return null;
       var w = spent ? null : d.weather;
       // transform hands over at most one, and it is a fact about the day the
@@ -8749,7 +8777,8 @@
         // that looks for where a day turns over -- the suite included --
         // reads the outermost element, and a marker whose name is buried on
         // a child inside it is a marker nothing can find.
-        var box = el('span', 'metro-gen metro-daybadge metro-daybreak flex flex--row flex--center-y gap--xsmall absolute');
+        var box = el('span', 'metro-gen metro-daybadge' + (breaks ? ' metro-daybreak' : '')
+          + ' flex flex--row flex--center-y gap--xsmall absolute');
         // `metro-date` because that is what it is, and because the cases
         // that watch which day the board names have always called it that:
         // the words moved off the band and the vocabulary did not.
@@ -8895,16 +8924,17 @@
     // from the long date down to the short weekday. So the badge is the
     // preferred shape and this is the last rung under it, which is exactly
     // what the board drew here before the badge existed.
-    var dayCls = 'metro-axis-note metro-daybreak label label--small font--bold text--black';
-    function dayMark(d, a, spent, room) {
+    function dayMark(d, a, spent, room, breaks) {
       if (!d || !d.date_label) return null;
-      var b = dayBadge(d, a, spent, room);
+      var b = dayBadge(d, a, spent, room, breaks);
       if (b) return b;
-      return axisNote([d.date_label, d.weekday_short || d.weekday_label], a, 'start', dayCls);
+      return axisNote([d.date_label, d.weekday_short || d.weekday_label], a, 'start',
+        'metro-axis-note' + (breaks ? ' metro-daybreak' : '')
+        + ' label label--small font--bold text--black');
     }
     var firstBreak = AXIS.boundaries.length ? aFor(AXIS.boundaries[0].min) : axisEnd;
     dayMark(DAY_RUN[0], axisStart + EDGE, spentToday,
-      badgeRoom(axisStart + EDGE, firstBreak));
+      badgeRoom(axisStart + EDGE, firstBreak), false);
     if (nowA != null) {
       // The clock reads as a badge on the scale, at the head of its own
       // rule -- a solid-ink pill, so "now" is the one time on the strip that
@@ -8917,7 +8947,7 @@
       // it belongs beside that day's own name.
       var from = aFor(b.min) + 3 * S;
       var to = bi + 1 < AXIS.boundaries.length ? aFor(AXIS.boundaries[bi + 1].min) : axisEnd;
-      dayMark(DAY_RUN[b.day], from, false, badgeRoom(from, to));
+      dayMark(DAY_RUN[b.day], from, false, badgeRoom(from, to), true);
     });
     if (earlier) axisNote([tr('earlier', earlier), '+' + earlier], axisStart + EDGE, 'start', 'metro-axis-note label label--small font--bold text--black');
     if (later + dropped) axisNote([tr('more', later + dropped), '+' + (later + dropped)], axisEnd - EDGE, 'end', 'metro-axis-note label label--small font--bold text--black');
@@ -9037,8 +9067,60 @@
   // the last size laid out and skip the repeat; a real resize still gets
   // through because the size really differs.
   var scheduled = null, lastSize = '';
-  function runNow() { lastSize = canvas.offsetWidth + 'x' + canvas.offsetHeight; run(); }
+  // THE FIRST RUN CAN MEASURE THE WRONG FONT, AND EVERY NUMBER IN THIS ENGINE
+  // IS A MEASUREMENT.
+  //
+  // `document.fonts.ready` resolves once the fonts that are PENDING have
+  // loaded, and a face nothing has asked for yet is not pending. On a cold
+  // page it therefore resolves before the board has drawn a single word: the
+  // first run measures every label in the fallback face, the real face is
+  // requested BY that run, and it arrives afterwards -- twelve to seventeen
+  // per cent wider here. Nothing re-ran, because `load` had already fired by
+  // then too.
+  //
+  // The board was being laid out for text narrower than the text it draws,
+  // and it showed everywhere at once: hours booked clear of each other came
+  // out touching, a label clamped to the leading edge hung off it, and
+  // captions the assignment believed were clean came out grazing. It was
+  // invisible because the board looked fine -- a board laid out to slightly
+  // wrong metrics is plausible, which is what made it expensive.
+  //
+  // So the board watches its own text. A probe in a label's own classes is
+  // measured after every run and again over the second that follows; if its
+  // width has moved, the metrics that laid the board out are stale and it is
+  // laid out again. That covers a font arriving late, a stylesheet arriving
+  // late, and the framework's own engines restyling afterwards. They are the
+  // same fault, none of them announce themselves, and none of them can be
+  // waited for by name.
+  var metricEl = null, lastMetric = -1;
+  function textMetric() {
+    if (!metricEl) {
+      // No `metro-gen`: every run clears those, and this one has to outlive
+      // them to be comparable across runs.
+      metricEl = document.createElement('span');
+      metricEl.className = 'metro-hour label label--small font--bold absolute';
+      metricEl.setAttribute('aria-hidden', 'true');
+      metricEl.style.left = '-9999px';
+      metricEl.style.top = '0';
+      metricEl.textContent = '00:00 Wg';
+      canvas.appendChild(metricEl);
+    }
+    return metricEl.getBoundingClientRect().width;
+  }
+  function runNow() {
+    lastSize = canvas.offsetWidth + 'x' + canvas.offsetHeight;
+    run();
+    lastMetric = textMetric();
+  }
   function scheduleRun() { if (scheduled) clearTimeout(scheduled); scheduled = setTimeout(runNow, 60); }
+  var metricTries = 0;
+  function watchMetrics() {
+    if (lastMetric >= 0) {
+      var now = textMetric();
+      if (Math.abs(now - lastMetric) > 0.5) { lastMetric = now; scheduleRun(); }
+    }
+    if (++metricTries < 10) setTimeout(watchMetrics, 120);
+  }
   // The observer path additionally skips a redraw at a size already drawn.
   // Fonts arriving change text metrics without changing the canvas, so those
   // triggers must NOT be filtered — only resize is.
@@ -9047,6 +9129,7 @@
     scheduleRun();
   }
   scheduleRun();
+  watchMetrics();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleRun).catch(scheduleRun);
   window.addEventListener('load', scheduleRun);
   if (window.ResizeObserver) new ResizeObserver(scheduleRunIfResized).observe(canvas);
