@@ -27,7 +27,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { execFileSync } = require('child_process');
+const { execFileSync, execFile } = require('child_process');
 
 const ROOT = path.join(__dirname, '../..');
 const PLUGIN = path.join(ROOT, 'plugin');
@@ -551,12 +551,37 @@ function pageFor(metro, screenClasses, slot, liquidExtra, page) {
 
 // ---------------------------------------------------------------- rendering
 
+// WHERE HEADLESS CHROMIUM LEAVES ITS SCRATCH PROFILES, AND WHY THEY ARE SWEPT
+// RATHER THAN REDIRECTED.
+//
+// Chromium makes a scratch profile per launch and leaves it behind: thirty-two
+// thousand of them had accumulated under CHROME_PROFILES at about 670KB each,
+// twenty-two gigabytes of a fifty-six gigabyte disk, none of them ever read
+// again. The obvious fix -- give each render its own --user-data-dir inside
+// this run's temp directory -- makes every launch a FIRST run, and a first run
+// on this box hangs for over a hundred seconds on a page with three words in
+// it. So the profiles stay where Chromium wants them, sharing the state that
+// makes a launch cheap, and the run sweeps the ones it left on the way out.
+const CHROME_PROFILES = path.join(os.homedir(), '.cache', 'google-chrome-for-testing-headless');
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'metro-layout-'));
 let renderSeq = 0;
 
 // What the run spent, printed as one line at the end. A suite this slow
 // gets optimised by guess unless it says where the time went.
-const spent = { renders: 0, renderMs: 0, hits: 0, disk: 0, builds: 0, buildMs: 0 };
+// Everything under it that this run is responsible for -- which is everything,
+// since nothing else on the box launches this binary. Swept at the end rather
+// than as we go: a profile in use by a render still running must not vanish
+// underneath it.
+function sweepChromeProfiles() {
+  try {
+    for (const n of fs.readdirSync(CHROME_PROFILES)) {
+      if (!/^scoped_dir/.test(n)) continue;
+      try { fs.rmSync(path.join(CHROME_PROFILES, n), { recursive: true, force: true }); } catch (e) {}
+    }
+  } catch (e) { /* no such directory is the state we wanted anyway */ }
+}
+
+const spent = { renders: 0, renderMs: 0, hits: 0, disk: 0, builds: 0, buildMs: 0, warmMs: 0, warmers: 0 };
 
 // Renders that survive the process, keyed on the EXACT bytes about to be
 // rendered plus the window they are rendered into. That key is the whole
@@ -625,7 +650,8 @@ function renderUncached(metro, viewport, liquidExtra) {
       return hit;
     } catch (e) { /* not cached, or half-written: render it */ }
   }
-  const file = path.join(tmpDir, 'page' + (renderSeq++) + '.html');
+  const seq = renderSeq++;
+  const file = path.join(tmpDir, 'page' + seq + '.html');
   fs.writeFileSync(file, html);
   const t0 = Date.now();
   const dom = execFileSync(CHROME, [
@@ -742,9 +768,75 @@ for (const file of fs.readdirSync(path.join(__dirname, 'cases')).sort()) {
   require(path.join(__dirname, 'cases', file))(test, helpers);
 }
 
+// WARM THE CACHE ON EVERY CORE, because the suite can only read it on one.
+//
+// Each case calls `layout()` synchronously, so a render is one Chromium
+// launched with execFileSync and waited for: on a five-core box the load
+// average during a full run was 0.95, with four cores idle and the wall clock
+// entirely decided by how many cold renders the run needed. The reports are
+// content-addressed on disk, so they can be produced in any order by anyone.
+//
+// So before the cases start, the (fixture x viewport) matrix -- which is most
+// of what a run asks for -- is rendered by a pool of workers, and the serial
+// pass that follows reads their files. A viewport a case builds for itself is
+// not in the matrix and still renders serially, which is a handful per run.
+function renderAsync(metro, viewport, liquidExtra) {
+  const html = pageFor(metro, viewport.classes, viewport.slot, liquidExtra, viewport.page);
+  const disk = path.join(REPORT_CACHE, crypto.createHash('sha1')
+    .update(html + '|' + viewport.w + 'x' + viewport.h + '|' + CHROME).digest('hex') + '.json');
+  if (fs.existsSync(disk)) return Promise.resolve();
+  const seq = renderSeq++;
+  const file = path.join(tmpDir, 'warm' + seq + '.html');
+  fs.writeFileSync(file, html);
+  return new Promise((resolve) => {
+    execFile(CHROME, [
+      '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+      '--window-size=' + viewport.w + ',' + viewport.h,
+      '--virtual-time-budget=8000', '--dump-dom', 'file://' + file,
+    ], { encoding: 'utf-8', maxBuffer: 256 * 1024 * 1024, timeout: 120000 }, (err, dom) => {
+      // A warm-up that fails is not a failure: the case that needs it will
+      // render it again serially and report properly.
+      if (err || !dom) return resolve();
+      const m = dom.match(/<script type="application\/json" id="metro-report">([\s\S]*?)<\/script>/);
+      if (!m) return resolve();
+      try {
+        const rep = JSON.parse(m[1]);
+        if (!rep.debug) return resolve();
+        fs.mkdirSync(REPORT_CACHE, { recursive: true });
+        const part = disk + '.' + process.pid + '.' + (renderSeq++) + '.part';
+        fs.writeFileSync(part, JSON.stringify(rep));
+        fs.renameSync(part, disk);
+      } catch (e) { /* a cache that cannot be written is not an error */ }
+      resolve();
+    });
+  });
+}
+
+async function prewarm() {
+  if (CACHE_OFF) return;
+  const jobs = [];
+  const fx = require('./fixtures');
+  for (const f of fx) for (const v of VIEWPORTS) jobs.push([f.metro, v]);
+  // One worker per core bar the one this process is on. Chromium is the whole
+  // cost here and each launch is its own process, so this scales with cores
+  // rather than with anything in node.
+  const N = Math.max(1, Math.min(jobs.length, (os.cpus().length || 2) - 1));
+  let next = 0;
+  const t0 = Date.now();
+  await Promise.all(Array.from({ length: N }, async () => {
+    while (next < jobs.length) {
+      const j = jobs[next++];
+      try { await renderAsync(j[0], j[1], null); } catch (e) { /* see above */ }
+    }
+  }));
+  spent.warmMs = Date.now() - t0;
+  spent.warmers = N;
+}
+
 (async function main() {
   let pass = 0, fail = 0, known = 0;
   const only = process.argv[2];
+  await prewarm();
   for (const t of tests) {
     if (only && t.name.indexOf(only) < 0) continue;
     let err = null;
@@ -767,7 +859,10 @@ for (const file of fs.readdirSync(path.join(__dirname, 'cases')).sort()) {
   console.log(spent.renders + ' render(s) ' + (spent.renderMs / 1000).toFixed(1) + 's, '
     + spent.disk + ' from cache, ' + spent.hits + ' repeated, '
     + spent.builds + ' build(s) ' + (spent.buildMs / 1000).toFixed(1) + 's'
+    + (spent.warmers ? ', warmed on ' + spent.warmers + ' worker(s) '
+       + (spent.warmMs / 1000).toFixed(1) + 's' : '')
     + (CACHE_OFF ? ' (cache off)' : ''));
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+  sweepChromeProfiles();
   process.exit(fail ? 1 : 0);
 })();
