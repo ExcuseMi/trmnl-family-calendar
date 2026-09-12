@@ -49,7 +49,8 @@ No server of your own.
    with the
    [Configuration editor](https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html),
    which also previews the map at every device size, or write it by hand
-   (see [CONFIG.md](CONFIG.md)). No ICS links yet? The editor's **Start**
+   (see [CONFIG.md](CONFIG.md)). It asks two questions per calendar: the ICS
+   link, and who it is for. No ICS links yet? The editor's **Examples**
    section has three presets (*Family of 4*, *Work vs Personal Split*,
    *Solo Freelancer Line*): pick one, draw the map, then swap the
    placeholder links for your own. Each demo board is also a worked example:
