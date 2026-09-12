@@ -1602,6 +1602,20 @@ var QUIET_DAY_MAX_EVENTS = 2;
 // for the same reason the count is.
 var ROLL_START_MIN = 6 * 60;
 var ROLL_END_MIN = 1440 + 18 * 60;
+// ...AND FURTHER WHEN TODAY IS ALREADY SPENT.
+//
+// Six in the evening of the following day is the right end for a board that
+// opens this morning: past that it is asking a reader at breakfast to care
+// about the night after next. It is the wrong end for a board read at ten at
+// night, which has almost no today left in it -- nearly the whole axis is
+// tomorrow already, and cutting tomorrow at six wall the one evening the
+// reader is actually planning for.
+//
+// This is what the "Show: today, then tomorrow from the evening" setting used
+// to be for, and it bought the same thing by DELETING today: at nine it threw
+// away the rest of the evening while people were standing in front of the
+// board. Stretching the end instead keeps both.
+var ROLL_END_LATE_MIN = 1440 + 23 * 60;
 // WHAT IS LEFT OF TODAY, NOT WHAT TODAY HAD, AND ONLY IN TWO STEPS.
 //
 // Counting the whole day answers "was this a quiet day", and nobody asks
@@ -2743,20 +2757,27 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   // what a screen on a wall actually wants: in the evening, what you need
   // to see is what you are getting up to, and by then today has already
   // happened.
+  // "TODAY, THEN TOMORROW FROM THE EVENING" IS WHAT THE ROLLING WINDOW DOES,
+  // and it does it better, so the setting that used to say so is gone.
+  //
+  // That setting swapped one day for the other at a fixed hour -- nine by
+  // default, late on purpose, because the evening is when a board on a wall is
+  // read most and an earlier switch threw away dinner while people were
+  // standing in front of it. Nine still threw away whatever was left of the
+  // evening, and it did it as a cliff: the board a reader looked at before
+  // brushing their teeth was a different board from the one an hour earlier.
+  //
+  // The rolling window reaches tomorrow from four in the afternoon, keeps the
+  // rest of tonight while it does, and stretches its far end to the end of
+  // tomorrow once today is spent (see ROLL_END_LATE_MIN). Measured on a busy
+  // Wednesday: from 17:00 a rolling board already carried tomorrow's first
+  // event with all of tonight still on it, while the switch at 21:00 deleted
+  // four events to show two.
+  //
+  // A board somebody already set to "auto" is read as "today" rather than
+  // refused: the rolling view is what they were asking for.
   var showPref = cf(input, 'show_day').trim().toLowerCase();
-  var showIx = 0;
-  if (showPref === 'tomorrow') showIx = 1;
-  else if (showPref === 'auto') {
-    // LATE. Six in the evening was too early by hours: the evening is the
-    // part of the day a family board is read most, and swapping it for
-    // tomorrow at 18:00 threw away dinner, the lesson at seven and the
-    // pub at nine while everybody was still standing in front of it. Nine
-    // is past all of that and still early enough to be useful for the
-    // morning.
-    var sh = parseInt(cf(input, 'switch_hour').trim(), 10);
-    if (!isFinite(sh) || sh < 0 || sh > 23) sh = 21;
-    if (nowMin >= sh * 60) showIx = 1;
-  }
+  var showIx = showPref === 'tomorrow' ? 1 : 0;
   // Whether a quiet day may borrow the next one at all. The reader's call,
   // not because the automatic rule is in doubt, but because a board that
   // changes shape on its own needs a way to be told not to.
@@ -3111,7 +3132,10 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     // morning back and undo the count that got here.
     stillToCome.forEach(function (e) { winFrom = Math.min(winFrom, e.startMin - dayLo - 60); });
     winFrom = Math.max(0, Math.floor(winFrom / 60) * 60);
-    dayHi = dayLo + ROLL_END_MIN;
+    // Once the window itself has rolled past the afternoon, the board is
+    // mostly tomorrow and may as well say so to the end of it.
+    var rollEnd = winFrom >= ROLL_SPLIT_MIN ? ROLL_END_LATE_MIN : ROLL_END_MIN;
+    dayHi = dayLo + rollEnd;
     // The held-back day now counts, and only now: its line weights and any
     // line it brings with it join the registry here, once the board has
     // decided it is drawing that day at all.
@@ -3146,7 +3170,7 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   }
   events = onShownDay(events);
   if (rolling) {
-    winTo = ROLL_END_MIN;
+    winTo = rollEnd;
     events.forEach(function (e) {
       winTo = Math.max(winTo, (e.endMin == null ? e.startMin : e.endMin) + 90);
     });

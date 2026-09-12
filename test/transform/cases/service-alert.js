@@ -431,23 +431,23 @@ module.exports = function (test, h) {
     assertEqual((a || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 08:00 (90%)', 'got ' + JSON.stringify(a));
   });
 
-  test('the evening switch-over takes the banner to the next day with the board', async () => {
-    // show_day=auto swaps the board to tomorrow at switch_hour. The
-    // banner has to swap with it: an alert about the day that is no
-    // longer drawn is an alert about nothing on the screen.
+  test('the banner is about the day the board is drawing', async () => {
+    // An alert about a day that is not on the screen is an alert about
+    // nothing. This used to be asked of the evening switch-over -- show_day
+    // swapped the board to tomorrow at a set hour and the banner had to swap
+    // with it. That setting is gone (rolling reaches tomorrow without giving
+    // up today), so it is asked of the choice that still picks a day.
     const body = forecastDays([
       { date: D0, max: 88, by: { 9: 88 } },
       { date: D1, max: 92, by: { 16: 92 } },
     ]);
-    const auto = { show_day: 'auto', switch_hour: '18' };
+    const today = await alertAt(at(9), body, { show_day: 'today' });
+    assertEqual((today || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (88%)',
+      'a board about today: ' + JSON.stringify(today));
 
-    const before = await alertAt(at(9), body, auto);
-    assertEqual((before || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (88%)',
-      'before the switch the board is today: ' + JSON.stringify(before));
-
-    const after = await alertAt(at(19), body, auto);
-    assertEqual((after || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 16:00 (92%)',
-      'after the switch the board is tomorrow: ' + JSON.stringify(after));
+    const tomorrow = await alertAt(at(9), body, { show_day: 'tomorrow' });
+    assertEqual((tomorrow || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 16:00 (92%)',
+      'a board about tomorrow: ' + JSON.stringify(tomorrow));
   });
 
   test('a board replaying this morning\'s snapshot does not replay this morning\'s alert', async () => {

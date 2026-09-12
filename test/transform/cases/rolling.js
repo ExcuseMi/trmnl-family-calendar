@@ -175,17 +175,21 @@ module.exports = function (test, h) {
     assertEqual(titles.sort(), [['Dentist', 14 * 60], ['Sprint Review', DAY + 9 * 60]],
       'a board about tomorrow drew the wrong two days: ' + JSON.stringify(titles));
     assertEqual(r.now_min, null, 'a board that is not about today still carried a clock');
-    // And the evening switch-over takes the whole window with it.
+    // A BOARD SOMEBODY LEFT ON "auto" IS READ AS TODAY. The setting that used
+    // to swap one day for the other in the evening is gone -- rolling reaches
+    // tomorrow without giving up today -- but a saved value outlives the
+    // option it was chosen from, and the board it produces has to be a board.
     const at = Date.parse('2026-09-09T21:00:00Z');
-    const auto = (await runTransform(net(feed([
-      ['20260910', '1400', '1500', 'Dentist'],
-      ['20260911', '0900', '1000', 'Sprint Review'],
-    ])), at).run(baseInput(at, {
-      use_demo_data: 'false', lat_lon: '51.05,3.72', show_day: 'auto',
+    const rows = [['20260910', '1400', '1500', 'Dentist'], ['20260911', '0900', '1000', 'Sprint Review']];
+    const run = async (show) => (await runTransform(net(feed(rows)), at).run(baseInput(at, {
+      use_demo_data: 'false', lat_lon: '51.05,3.72', show_day: show,
       config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
     }))).data;
-    assertEqual(auto.events.map((e) => e.title).sort(), ['Dentist', 'Sprint Review'],
-      'the evening board should have switched over to tomorrow and kept rolling');
+    const legacy = await run('auto'), plain = await run('today');
+    assertEqual(legacy.events.map((e) => e.title).sort(), plain.events.map((e) => e.title).sort(),
+      'a saved "auto" drew a different board from today');
+    assertEqual(legacy.title_word, plain.title_word,
+      'a saved "auto" named a different day from today');
   });
 
   test('a day the board is not drawing leaves the board as it found it', async () => {

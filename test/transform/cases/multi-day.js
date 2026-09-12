@@ -133,10 +133,23 @@ module.exports = function (test, h) {
       + 'wrong day');
   });
 
-  test('switching over in the evening shows tomorrow, and not before', async () => {
-    // A screen on a wall: in the evening what you need to see is what you
-    // are getting up to, and by then today has already happened.
+  test('the board reaches tomorrow by rolling, not by giving up on today', async () => {
+    // THIS REPLACES A SETTING. There was a "today, then tomorrow from the
+    // evening on" option with an hour beside it, and at that hour the board
+    // swapped one day for the other -- a cliff, and a lossy one: at nine it
+    // threw away whatever was left of the evening while the family was still
+    // standing in front of it. The rolling window reaches tomorrow from four
+    // in the afternoon and keeps tonight while it does, which is what that
+    // setting was trying to buy. So the setting is gone and this case watches
+    // the behaviour that replaced it.
+    // A BUSY today on purpose: a day with one thing left on it is quiet, and a
+    // quiet day borrows tomorrow at any hour, which is a different rule (see
+    // cases/rolling.js). What this case is about is the board reaching
+    // tomorrow because today is SPENT, so today has to have had something in
+    // it to spend.
     const ics = icsWithEvents([
+      { start: '20260909T090000Z', end: '20260909T093000Z', summary: 'Standup' },
+      { start: '20260909T110000Z', end: '20260909T120000Z', summary: 'Workshop' },
       { start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today Meeting' },
       { start: '20260910T090000Z', end: '20260910T100000Z', summary: 'Tomorrow Meeting' },
     ]);
@@ -145,34 +158,43 @@ module.exports = function (test, h) {
       const when = at(nowIso);
       const r = await runTransform(net(ics), when).run(
         baseInput(when, Object.assign({
-          use_demo_data: 'false', lat_lon: '51.05,3.72', rolling_view: 'one',
+          use_demo_data: 'false', lat_lon: '51.05,3.72',
           config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
         }, fields)));
-      return r.data.events.map((i) => i.title);
+      return r.data;
     };
-    assertEqual(await board('2026-09-09T09:00:00Z', { show_day: 'auto' }), ['Today Meeting'],
-      'the morning board should still be today');
-    // NOT AT SIX, AND NOT AT SEVEN. The default is late on purpose: the
-    // evening is when a board on a wall is read most, so a switch at 18:00
-    // threw away dinner and everything after it while the family was still
-    // standing in front of it.
-    assertEqual(await board('2026-09-09T19:00:00Z', { show_day: 'auto' }), ['Today Meeting'],
-      'the board gave up on today while the evening was still going');
-    assertEqual(await board('2026-09-09T21:00:00Z', { show_day: 'auto' }), ['Tomorrow Meeting'],
-      'the late board should have switched over');
-    // and the hour is the reader's to set
-    assertEqual(await board('2026-09-09T15:00:00Z', { show_day: 'auto', switch_hour: '14' }),
-      ['Tomorrow Meeting'], 'a switch hour of 14 did not take effect at 15:00');
-    assertEqual(await board('2026-09-09T13:00:00Z', { show_day: 'auto', switch_hour: '14' }),
-      ['Today Meeting'], 'a switch hour of 14 took effect at 13:00');
-  });
+    const morning = await board('2026-09-09T09:00:00Z');
+    assertEqual(morning.events.map((i) => i.title).sort(),
+      ['Standup', 'Today Meeting', 'Workshop'],
+      'the morning board should be today and nothing else');
+    assertEqual(morning.rolling, null, 'a busy morning board should not be rolling');
 
-  test('a nonsense switch hour falls back rather than breaking the board', async () => {
-    const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today Meeting' }]);
-    for (const bad of ['', 'evening', '99', '-3']) {
-      const r = await runTransform(net(ics), NOW).run(input({ show_day: 'auto', switch_hour: bad }));
-      assert(Array.isArray(r.data.events), 'a switch hour of ' + JSON.stringify(bad) + ' broke the payload');
-    }
+    // By the evening it carries both, and today is still on it: that is the
+    // whole difference from the switch it replaced.
+    const evening = await board('2026-09-09T19:00:00Z');
+    const titles = evening.events.map((i) => i.title);
+    assert(titles.indexOf('Tomorrow Meeting') >= 0,
+      'the evening board never reached tomorrow: ' + JSON.stringify(titles));
+    assert(titles.indexOf('Today Meeting') >= 0,
+      'the evening board dropped today to get there: ' + JSON.stringify(titles));
+
+    // ...AND IT REACHES THE END OF TOMORROW ONCE TODAY IS SPENT. Six in the
+    // evening of the following day is the right far end for a board opened
+    // this morning and the wrong one for a board read at ten at night, which
+    // is almost all tomorrow already.
+    const late = await board('2026-09-09T22:00:00Z');
+    assert(late.rolling, 'a board read late should be rolling');
+    assert(late.rolling.end_min >= 24 * 60 + 22 * 60,
+      'the window stops at ' + late.rolling.end_min + ', cutting off tomorrow evening');
+
+    // A board somebody had already set to "auto" is read as today rather than
+    // refused: rolling is what they were asking for.
+    const legacy = await board('2026-09-09T22:00:00Z', { show_day: 'auto' });
+    assertEqual(legacy.events.map((i) => i.title).sort(),
+      late.events.map((i) => i.title).sort(),
+      'a saved "auto" should draw the same board as today does');
+    assertEqual(legacy.title_word, late.title_word,
+      'a saved "auto" named a different day from today');
   });
 
   // -------------------------------------------------------------------
@@ -262,19 +284,24 @@ module.exports = function (test, h) {
     assertEqual(tom.data.now_min, null, 'tomorrow\'s board carried a "now": ' + tom.data.now_min);
   });
 
-  test('the evening switch-over takes the clock off the board with the day', async () => {
-    // show_day=auto at 19:00, switching at 18:00. This is the state a wall
-    // screen is in every single evening, so it is the one that has to be
-    // right.
+  test('a board that is not about today carries no clock, and tomorrow\'s sky', async () => {
+    // "Now" is a fact about today. Drawn on a board showing tomorrow it points
+    // at a minute of a day the board is not about, and the sky marker has to
+    // travel with the board for the same reason.
+    //
+    // This used to be asked of the evening switch-over, which was the state a
+    // wall screen was in every single evening. That setting is gone -- the
+    // rolling window reaches tomorrow without giving up today -- so the
+    // question is asked of the setting that still picks a day outright.
     const evening = Date.parse('2026-09-09T19:00:00Z');
     const r = await runTransform(skyNet(BOTH), evening).run(
       baseInput(evening, {
-        use_demo_data: 'false', lat_lon: '51.05,3.72', show_day: 'auto', switch_hour: '18',
+        use_demo_data: 'false', lat_lon: '51.05,3.72', show_day: 'tomorrow',
         config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
       }));
-    assert(r.data.events.some((i) => i&& i.title === 'Tomorrow Meeting'),
-      'the board should have switched to tomorrow');
-    assertEqual(r.data.now_min, null, 'the switched board still carried a "now": ' + r.data.now_min);
+    assert(r.data.events.some((i) => i && i.title === 'Tomorrow Meeting'),
+      'the board should be drawing tomorrow');
+    assertEqual(r.data.now_min, null, 'a board about tomorrow carried a "now": ' + r.data.now_min);
     assertEqual(sky(r.data, 'weather'), [9 * 60, 12 * 60], 'and tomorrow\'s rain with it');
   });
 
