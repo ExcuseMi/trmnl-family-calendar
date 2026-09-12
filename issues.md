@@ -551,6 +551,22 @@ is open.
   end of the day, purely to blunt the order dependence -- which the assignment
   removes, so that could go if the render cost ever matters.
 
+  A CONVERGENCE'S NAME IS IN THE SAME SEARCH, which took three measured steps
+  to get right and is the clearest statement of what this entry is about.
+  Pinned above its pill and placed FIRST, it took the paper and a solo event
+  with nowhere else was written over it. Given a search of its own and still
+  placed first, it moved to clean paper and landed on a name that was already
+  there, because it could not ask that name to shift: two boards, measured.
+  In the assignment with everything else, what makes it a convergence's name
+  is price rather than privilege -- the centred spot free, sliding cheap,
+  standing off dearer, the far side of the bundle dearer still, not drawn at
+  all three times what any other name costs. Two more faults fell out of
+  giving it a real search: it had never been charged for a rail through its
+  own words (`runCrosses` excuses a shared event's own members, rightly, for
+  rule 37's question and wrongly for this one), and it had never been charged
+  for sliding off the pill it names -- "Lunch with Alex" ended ninety pixels
+  before its own event began.
+
 
 - [x] **E22. The board was laid out against a font it was not drawing in.**
   Every number in the layout engine is a measurement, and the first (usually
@@ -881,10 +897,13 @@ is open.
   label) gets worse, and that is the price. Rules 27 and 28 need amending
   and two new rules writing; the full wording is in the plan.
 
-- [ ] **E14b. Two boards still reuse a drop column at a morning convergence.**
+- [ ] **E14b. Three boards now reuse a drop column at a morning convergence.**
   `five-lines` turns Bart and Lisa 1px apart leaving the school run;
-  `crew-day` gives Amy and Fry the same column leaving the delivery. Both are
-  pinned known in `test/layout/cases/fan-out.js`.
+  `crew-day` gives Amy and Fry the same column leaving the delivery; and
+  `regroups` turns Marge and Homer 3px apart, which appeared when the header
+  band came off and every line on the board moved. The first two are pinned
+  known in `test/layout/cases/fan-out.js`; the third is the same defect on a
+  board that had been missing it by a few pixels.
 
   Not the run home, which is fixed: these lines have most of the day still to
   come, so the hold they are leaving is not their last and the stagger that
