@@ -381,24 +381,19 @@ module.exports = function (test, h) {
       'tomorrow\'s holiday was stated on today\'s board');
   });
 
-  test('a board set to tomorrow states tomorrow\'s', async () => {
-    const r = await runTransform(serve(allDayIcs(
-      [{ start: '20261226', end: '20261227', summary: 'Boxing Day' }])), NOW)
-      .run(baseInput(NOW, Object.assign(cfgWith(config()), { show_day: 'tomorrow' })));
-    assertEqual((r.data.holidays || []).map((x) => x.title), ['Boxing Day']);
-  });
-
-  test('and an all-day event tomorrow reaches a board set to tomorrow', async () => {
-    // The same lost-day bug, seen from the line's side: with every entry
-    // read as day 0, a board showing tomorrow dropped all of them.
-    const r = await runTransform(serve(allDayIcs(
-      [{ start: '20261226', end: '20261227', summary: 'Ada on leave' }])), NOW)
-      .run(baseInput(NOW, Object.assign(cfgWith({
-        lines: [{ name: 'Ada' }],
-        calendars: [{ url: 'https://example.com/a.ics', name: 'Ada' }],
-      }), { show_day: 'tomorrow' })));
-    assertEqual((r.data.all_day || []).map((a) => a.title), ['Ada on leave']);
-  });
+  // THE OTHER HALF OF THAT PAIR IS GONE WITH THE SETTING IT NEEDED.
+  //
+  // Two cases here used to show a board set to tomorrow and check that
+  // tomorrow's holiday, and tomorrow's all-day state, reached it: the same
+  // lost-day bug seen from both sides, where every all-day entry arrived
+  // having forgotten which day it belonged to and was read as day 0.
+  //
+  // Nothing draws tomorrow instead of today any more. The case above still
+  // guards the half that can be asked -- tomorrow's holiday must not be
+  // announced today -- and the half that cannot is recorded in issues.md as
+  // E25: a rolling board draws tomorrow's appointments but not tomorrow's
+  // all-day states or its holiday, so a board that reaches into Christmas Day
+  // does not say so.
 
   test('a range that started before the board still says where it is in it', async () => {
     // The run of days transform gathers is today and tomorrow, so a break

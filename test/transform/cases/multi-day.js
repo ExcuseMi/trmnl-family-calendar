@@ -45,92 +45,106 @@ module.exports = function (test, h) {
   }
   function input(fields) {
     return baseInput(NOW, Object.assign({
-      use_demo_data: 'false', lat_lon: '51.05,3.72', rolling_view: 'one',
+      use_demo_data: 'false', lat_lon: '51.05,3.72',
       config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
     }, fields || {}));
   }
+  // A DAY WITH ENOUGH ON IT TO STAY ONE DAY. These cases used to ask for a
+  // single-day board with `rolling_view: 'one'`; that setting is gone and a
+  // quiet day always borrows the next one now, so a case that wants one day
+  // has to earn it the way a real board does -- by having a day on it.
+  const BUSY_TODAY = [
+    { start: '20260909T090000Z', end: '20260909T093000Z', summary: 'Standup' },
+    { start: '20260909T110000Z', end: '20260909T120000Z', summary: 'Workshop' },
+    { start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' },
+  ];
 
-  test('the payload describes exactly the day being drawn', async () => {
-    const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
-    const { run } = runTransform(net(ics), NOW);
-    const r = await run(input());
-    assert(Array.isArray(r.data.days), 'no days array at all');
-    assertEqual(r.data.days.length, 1, 'the board draws one day, so it is told about one day');
+  test('the payload describes exactly the days being drawn', async () => {
+    const busy = await runTransform(net(icsWithEvents(BUSY_TODAY)), NOW).run(input());
+    assert(Array.isArray(busy.data.days), 'no days array at all');
+    assertEqual(busy.data.days.length, 1, 'a busy board draws one day, so it is told about one');
+
+    // ...and a quiet one is told about the day it borrowed, and no more.
+    const quiet = await runTransform(net(icsWithEvents([BUSY_TODAY[2]])), NOW).run(input());
+    assertEqual(quiet.data.days.length, 2, 'a quiet board did not borrow tomorrow');
   });
 
   test('the day being drawn is rebased onto its own midnight', async () => {
-    // Whichever day it is. Everything downstream reads minutes from
-    // midnight, and none of it should have to know which midnight.
-    const ics = icsWithEvents([{ start: '20260910T090000Z', end: '20260910T100000Z', summary: 'Tomorrow' }]);
-    const r = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
-    const e = r.data.events.find((i) => i&& i.title === 'Tomorrow');
-    assert(e, 'tomorrow\'s event is missing on a board set to tomorrow');
-    assertEqual(e.start_min, 9 * 60, 'a 09:00 event on the day being shown should be at 540');
+    // Everything downstream reads minutes from midnight, and none of it
+    // should have to know which midnight.
+    const r = await runTransform(net(icsWithEvents(BUSY_TODAY)), NOW).run(input());
+    const e = r.data.events.find((i) => i && i.title === 'Today');
+    assert(e, 'the afternoon event is missing');
+    assertEqual(e.start_min, 14 * 60, 'a 14:00 event should be at 840');
     assertEqual(r.data.days[0].start_min, 0, 'the day being shown does not start at zero');
     assertEqual(r.data.days[0].end_min, DAY, 'the day being shown is not a day long');
   });
 
-  test('the board shows one day, and the setting says which', async () => {
-    const ics = icsWithEvents([
-      { start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today Meeting' },
+  test('a busy board draws today and nothing else', async () => {
+    // THE SETTING THAT USED TO SAY WHICH DAY IS GONE. "Tomorrow" drew
+    // tomorrow all day long, which on a screen on a wall is a board that is
+    // wrong every morning: it cannot say what time it is, because now is not
+    // on it. What a reader wanted from it they get from the afternoon onward
+    // anyway, and with today still underneath.
+    const ics = icsWithEvents(BUSY_TODAY.concat([
       { start: '20260910T090000Z', end: '20260910T100000Z', summary: 'Tomorrow Meeting' },
-    ]);
+    ]));
     const t = await runTransform(net(ics), NOW).run(input());
-    const titlesT = t.data.events.map((i) => i.title);
-    assertEqual(titlesT, ['Today Meeting'], 'a board set to today drew something else');
-
-    const m = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
-    const titlesM = m.data.events.map((i) => i.title);
-    assertEqual(titlesM, ['Tomorrow Meeting'], 'a board set to tomorrow drew something else');
+    assertEqual(t.data.events.map((i) => i.title).sort(),
+      ['Standup', 'Today', 'Workshop'], 'a busy morning board drew another day');
+    assertEqual(t.data.title_word, null, 'a board about today should not name a different day');
   });
 
-  test('a recurrence is evaluated against the day being shown', async () => {
-    // It is Wednesday. A Thursday-only standup is not on today's board and
-    // IS on tomorrow's. Evaluated against today whichever day is drawn, a
-    // board set to tomorrow would show today's meetings at tomorrow's date,
-    // which is the worst of both.
-    const ics = icsWithEvents([
-      { start: '20260903T090000Z', end: '20260903T091500Z', summary: 'Thursday Standup',
-        rrule: 'FREQ=WEEKLY;BYDAY=TH' },
-    ]);
-    const today = await runTransform(net(ics), NOW).run(input());
-    assertEqual(today.data.events.length, 0,
-      'a Thursday standup was drawn on a Wednesday board');
-    const tomorrow = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
-    const t = tomorrow.data.events;
-    assertEqual(t.length, 1, 'the Thursday standup is missing from Thursday');
-    assertEqual(t[0].start_min, 9 * 60, 'it is not at its own time of day');
+  test('a recurrence is evaluated against the day it lands on', async () => {
+    // It is Wednesday. A Thursday-only standup is not on a board about
+    // Wednesday, and IS on the Thursday a quiet Wednesday borrows. Evaluated
+    // against today whichever day it is drawn on, the borrowed day would show
+    // Wednesday's meetings at Thursday's date, which is the worst of both.
+    const rec = { start: '20260903T090000Z', end: '20260903T091500Z', summary: 'Thursday Standup',
+      rrule: 'FREQ=WEEKLY;BYDAY=TH' };
+    const busy = await runTransform(net(icsWithEvents(BUSY_TODAY.concat([rec]))), NOW).run(input());
+    assertEqual(busy.data.events.filter((e) => e.title === 'Thursday Standup').length, 0,
+      'a Thursday standup was drawn on a busy Wednesday board');
+
+    const quiet = await runTransform(net(icsWithEvents([rec])), NOW).run(input());
+    const t = quiet.data.events.filter((e) => e.title === 'Thursday Standup');
+    assertEqual(t.length, 1, 'the Thursday standup is missing from the borrowed Thursday');
+    assertEqual(t[0].start_min, DAY + 9 * 60, 'it is not at its own time of day');
   });
 
-  test('the window stays inside the day being drawn', async () => {
-    const ics = icsWithEvents([
+  test('the window stays inside the day being drawn, unless the board rolled', async () => {
+    const ics = icsWithEvents(BUSY_TODAY.concat([
       { start: '20260909T060000Z', end: '20260909T070000Z', summary: 'Early' },
       { start: '20260909T220000Z', end: '20260909T230000Z', summary: 'Late' },
-    ]);
+    ]));
     const r = await runTransform(net(ics), NOW).run(input());
+    assertEqual(r.data.rolling, null, 'this board should be busy enough to stay one day');
     assert(r.data.day_start_min >= 0, 'the window starts before midnight');
     assert(r.data.day_end_min <= DAY, 'the window runs past midnight into a day nobody asked for');
   });
 
-  test('the forecast is the one for the day being drawn', async () => {
-    // A board set to tomorrow that carries today's temperature is wrong
-    // about the only day it is drawing.
-    const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
-    const today = await runTransform(net(ics), NOW).run(input());
-    const tomorrow = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
-    assertEqual(today.data.header_weather.hi, 18, 'today\'s high is not today\'s');
-    assertEqual(tomorrow.data.header_weather.hi, 21, 'a board set to tomorrow shows today\'s high');
+  test('the forecast is the one for the day it is about', async () => {
+    const busy = await runTransform(net(icsWithEvents(BUSY_TODAY)), NOW).run(input());
+    assertEqual(busy.data.header_weather.hi, 18, 'today\'s high is not today\'s');
+    assertEqual(busy.data.days[0].weather.hi, 18, 'the drawn day carries somebody else\'s weather');
+
+    // ...and the borrowed day carries its own, which is the whole reason a
+    // rolling board has two of them.
+    const quiet = await runTransform(net(icsWithEvents([BUSY_TODAY[2]])), NOW).run(input());
+    assertEqual(quiet.data.days.length, 2, 'a quiet board did not borrow tomorrow');
+    assertEqual(quiet.data.days[1].weather.hi, 21,
+      'the borrowed day shows today\'s high, which is a fact about the wrong day');
   });
 
-  test('the header names the day it is drawing, and calls it Today only when it is', async () => {
-    const ics = icsWithEvents([{ start: '20260909T140000Z', end: '20260909T150000Z', summary: 'Today' }]);
-    const today = await runTransform(net(ics), NOW).run(input());
-    const tomorrow = await runTransform(net(ics), NOW).run(input({ show_day: 'tomorrow' }));
-    assert(today.data.date_label !== tomorrow.data.date_label,
-      'both boards carry the same date: ' + today.data.date_label);
-    assertEqual(today.data.title_word, null, 'a board showing today should keep the word Today');
-    assert(tomorrow.data.title_word, 'a board showing tomorrow still says Today, which names the '
-      + 'wrong day');
+  test('the board is always about today, and says so', async () => {
+    // `title_word` names the day when the board is NOT about today. Nothing
+    // draws another day outright any more -- a rolling board is today PLUS
+    // tomorrow, not tomorrow instead of today -- so it is always null, and
+    // the date is always today's.
+    const r = await runTransform(net(icsWithEvents(BUSY_TODAY)), NOW).run(input());
+    assertEqual(r.data.title_word, null, 'the board named a day other than today');
+    assert(r.data.date_label, 'the board carries no date at all');
+    assert(r.data.now_min != null, 'a board about today should carry the time');
   });
 
   test('the board reaches tomorrow by rolling, not by giving up on today', async () => {
@@ -258,60 +272,38 @@ module.exports = function (test, h) {
     assert(/Rain Starts/i.test(labels[0] || ''), 'the one marker should be the rain starting: ' + JSON.stringify(labels));
   });
 
-  test('a board showing tomorrow gets tomorrow\'s rain, not today\'s', async () => {
-    const r = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
-    assertEqual(sky(r.data, 'weather'), [9 * 60, 12 * 60],
-      'tomorrow rains 09:00-12:00: ' + JSON.stringify(r.data.weather.filter((i) => i.type === 'weather')));
-  });
-
-  test('a board showing tomorrow gets tomorrow\'s sunset', async () => {
-    // A couple of minutes, which is the whole point: nobody would ever
-    // spot this on the board, so it has to be spotted here.
-    const today = await runTransform(skyNet(BOTH), NOW).run(input());
-    assertEqual(sky(today.data, 'sun'), [6 * 60 + 30, 20 * 60 + 30], 'today\'s sun');
-    const tom = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
-    assertEqual(sky(tom.data, 'sun'), [6 * 60 + 32, 20 * 60 + 27], 'tomorrow\'s sun');
-  });
-
-  test('there is no "now" on a day that is not now', async () => {
-    // now_min is what draws the clock badge and parks a car on every line
-    // at that minute. On tomorrow's board that minute has not happened to
-    // anybody, and the marker would be claiming five people are somewhere
-    // they have not been yet.
-    const today = await runTransform(skyNet(BOTH), NOW).run(input());
-    assertEqual(today.data.now_min, 9 * 60, 'today\'s board should carry the clock');
-    const tom = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
-    assertEqual(tom.data.now_min, null, 'tomorrow\'s board carried a "now": ' + tom.data.now_min);
-  });
-
-  test('a board that is not about today carries no clock, and tomorrow\'s sky', async () => {
-    // "Now" is a fact about today. Drawn on a board showing tomorrow it points
-    // at a minute of a day the board is not about, and the sky marker has to
-    // travel with the board for the same reason.
+  test('the sky and the sun belong to the day the board opens on', async () => {
+    // A couple of minutes between one day's sunset and the next, which is the
+    // whole point: nobody would ever spot this on the board, so it has to be
+    // spotted here.
     //
-    // This used to be asked of the evening switch-over, which was the state a
-    // wall screen was in every single evening. That setting is gone -- the
-    // rolling window reaches tomorrow without giving up today -- so the
-    // question is asked of the setting that still picks a day outright.
-    const evening = Date.parse('2026-09-09T19:00:00Z');
-    const r = await runTransform(skyNet(BOTH), evening).run(
-      baseInput(evening, {
-        use_demo_data: 'false', lat_lon: '51.05,3.72', show_day: 'tomorrow',
-        config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
-      }));
-    assert(r.data.events.some((i) => i && i.title === 'Tomorrow Meeting'),
-      'the board should be drawing tomorrow');
-    assertEqual(r.data.now_min, null, 'a board about tomorrow carried a "now": ' + r.data.now_min);
-    assertEqual(sky(r.data, 'weather'), [9 * 60, 12 * 60], 'and tomorrow\'s rain with it');
+    // This used to be asked twice, once of a board set to tomorrow. Nothing
+    // draws tomorrow instead of today any more, so the question is only worth
+    // asking of the day the board opens on.
+    const today = await runTransform(skyNet(BOTH), NOW).run(input());
+    // A ROLLING BOARD CARRIES BOTH DAYS' SUN, which is right and is the
+    // detail this case exists to catch: the borrowed day's sunrise is at its
+    // own minute past midnight, not repeated at today's.
+    assertEqual(sky(today.data, 'sun'),
+      [6 * 60 + 30, 20 * 60 + 30, DAY + 6 * 60 + 32], 'the sun on a rolling board');
+  });
+
+  test('the board carries the clock, because it is about now', async () => {
+    // now_min is what draws the clock badge and parks a car on every line at
+    // that minute. It used to be withheld from a board set to tomorrow, where
+    // that minute had not happened to anybody. There is no such board now:
+    // a rolling board is today PLUS tomorrow, and now is on the today half.
+    const r = await runTransform(skyNet(BOTH), NOW).run(input());
+    assertEqual(r.data.now_min, 9 * 60, 'the board should carry the clock');
   });
 
   test('the day on the board carries its own forecast in days[0]', async () => {
     // The header and days[0].weather are the same fact told twice, and
     // they disagreed: a snapshot with no run of days in it left the header
     // filled and days[0].weather null.
-    const r = await runTransform(skyNet(BOTH), NOW).run(input({ show_day: 'tomorrow' }));
+    const r = await runTransform(skyNet(BOTH), NOW).run(input());
     assert(r.data.days[0].weather, 'no forecast on the day being drawn');
-    assertEqual(r.data.days[0].weather.hi, 21, 'tomorrow\'s high');
-    assertEqual(r.data.header_weather.hi, 21, 'the header should agree with it');
+    assertEqual(r.data.days[0].weather.hi, 18, 'today\'s high');
+    assertEqual(r.data.header_weather.hi, 18, 'the header should agree with it');
   });
 };

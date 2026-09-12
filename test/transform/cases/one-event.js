@@ -184,12 +184,16 @@ module.exports = function (test, h) {
     const r = await runTransform(async () => okText(icsWithEvents([
       { start: '20260907T043000Z', end: '20260907T053000Z', summary: 'Early Shift' },
       { start: '20260907T200000Z', end: '20260907T203000Z', summary: 'Late Call' },
-    // Two events is a quiet day, and a quiet day borrows the next one
-    // unless it is told not to. This case is about how ONE day's window
-    // fits its own content, so it asks for the one day.
-    ])), NOW).run(baseInput(NOW, Object.assign(cfgWith({
+      // A THIRD EVENT SO THE DAY STAYS ITS OWN. Two is a quiet day and a
+      // quiet day borrows the next one; this case is about how ONE day's
+      // window fits its own content, and it used to ask for that with
+      // `rolling_view: 'one'`. That setting is gone -- a board that quietly
+      // shows more of what is coming needs no opt-out -- so the day has to
+      // earn being one day, the way a real board does.
+      { start: '20260907T120000Z', end: '20260907T130000Z', summary: 'Midday' },
+    ])), NOW).run(baseInput(NOW, cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }],
-    }), { rolling_view: 'one' })));
+    })));
     const items = eventItems(r.data);
     const first = Math.min.apply(null, items.map((e) => e.start_min));
     const last = Math.max.apply(null, items.map((e) => e.end_min));

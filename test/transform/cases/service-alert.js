@@ -411,43 +411,26 @@ module.exports = function (test, h) {
     assertEqual(a, null, 'got ' + JSON.stringify(a));
   });
 
-  test('a board showing tomorrow is warned about tomorrow', async () => {
-    const a = await alertAt(at(9), forecastDays([
-      { date: D0, max: 20, by: {} },
-      { date: D1, max: 95, by: { 17: 95 } },
-    ]), { show_day: 'tomorrow' });
-    assertEqual(a, { kind: 'rain', text: 'SERVICE ALERT · Heavy Rain Expected at 17:00 (95%)' },
-      'got ' + JSON.stringify(a));
-  });
-
-  test('on a board showing tomorrow, an early hour is ahead of us, not behind', async () => {
-    // The clock only bounds the day it belongs to. 08:00 tomorrow is
-    // still to come at eight in the evening today, and dropping it as
-    // "past" would silence every morning alert on a tomorrow board.
-    const a = await alertAt(at(20), forecastDays([
-      { date: D0, max: 20, by: {} },
-      { date: D1, max: 90, by: { 8: 90 } },
-    ]), { show_day: 'tomorrow' });
-    assertEqual((a || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 08:00 (90%)', 'got ' + JSON.stringify(a));
-  });
+  // TWO CASES HERE NEEDED A BOARD SET TO TOMORROW, and nothing draws one now.
+  //
+  // They checked that such a board was warned about ITS day rather than
+  // today's, and that an early hour on it counted as ahead rather than
+  // behind -- the clock bounds the day it belongs to, so 08:00 tomorrow is
+  // still to come at eight in the evening today. Both were about the day
+  // index travelling with the alert. The half that survives is below: the
+  // banner is about the day the board is drawing, asked of the day it draws.
 
   test('the banner is about the day the board is drawing', async () => {
     // An alert about a day that is not on the screen is an alert about
-    // nothing. This used to be asked of the evening switch-over -- show_day
-    // swapped the board to tomorrow at a set hour and the banner had to swap
-    // with it. That setting is gone (rolling reaches tomorrow without giving
-    // up today), so it is asked of the choice that still picks a day.
+    // nothing. Both days are in the forecast and only one is on the board, so
+    // a banner naming tomorrow's rain would be naming weather nobody can see.
     const body = forecastDays([
       { date: D0, max: 88, by: { 9: 88 } },
       { date: D1, max: 92, by: { 16: 92 } },
     ]);
-    const today = await alertAt(at(9), body, { show_day: 'today' });
-    assertEqual((today || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (88%)',
-      'a board about today: ' + JSON.stringify(today));
-
-    const tomorrow = await alertAt(at(9), body, { show_day: 'tomorrow' });
-    assertEqual((tomorrow || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 16:00 (92%)',
-      'a board about tomorrow: ' + JSON.stringify(tomorrow));
+    const a = await alertAt(at(9), body);
+    assertEqual((a || {}).text, 'SERVICE ALERT · Heavy Rain Expected at 09:00 (88%)',
+      'the banner should be about today: ' + JSON.stringify(a));
   });
 
   test('a board replaying this morning\'s snapshot does not replay this morning\'s alert', async () => {

@@ -46,26 +46,6 @@ custom_fields:
     https://calendar.example.com/sam.ics
   description: 'Paste one calendar link per line. That is all: each calendar becomes a line on the map. Leave it empty and the board shows an example day.<br /><br /><strong>Finding a link</strong><br />Google Calendar: calendar settings, <em>Secret address in iCal format</em>.<br />iCloud: share the calendar publicly, copy the <code>webcal://</code> link.<br />Outlook: calendar settings, publish, copy the ICS link.<br /><br />Want more? The <a href="https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html" target="_blank">Configuration Editor</a> builds it for you and previews the map. Paste what it gives you here. For a public-holiday calendar, add <code>holiday</code> after its link, with a space, so it is not drawn as a person. Details: <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin/blob/main/CONFIG.md" target="_blank">CONFIG.md</a>.'
   optional: true
-- keyname: show_day
-  field_type: select
-  name: Show
-  group: The Day
-  description: 'Which day the board draws. Today is what a screen on a wall usually wants: it reaches tomorrow by itself from four in the afternoon, keeping whatever is left of tonight, which is what the old "from the evening on" setting was for and could only do by throwing tonight away.'
-  options:
-  - Today: today
-  - Tomorrow: tomorrow
-  default: today
-  optional: true
-- keyname: rolling_view
-  field_type: select
-  name: Quiet Days
-  group: The Day
-  description: 'What to draw when there is almost nothing left of the day. Stretch runs the board on past midnight, through to six the following evening, so a day with one appointment left still says something about what is coming; it happens by itself when two events or fewer remain and never on a busier board. Counted over the whole day until four in the afternoon and from four o''clock after that, so the board changes shape at most once a day and never while somebody is reading it. One day draws the day alone, whatever is on it.'
-  options:
-  - Stretch a quiet day into tomorrow: stretch
-  - Always one day: one
-  default: stretch
-  optional: true
 - keyname: time_format
   field_type: select
   name: Time Format
