@@ -41,23 +41,42 @@ it, which is where somebody changing that code will be standing.
 
 ## A. The board is wrong right now
 
-- [ ] **A4. Simultaneous branches on different lines overlap.** "Coffee
-  (100 cups)" (Fry, 07:30) and "Bend Some Girders" (Bender, 07:30) drop
-  their stubs at the same axis position, a few px apart.
+- [ ] **A4. Two lines turn on one column where a corridor ends on the
+  minute the next one begins.** Three boards, and the suite has carried it
+  as known since it learned to measure runs: `crew-day` (amy and fry at
+  x=462 and 463), `five-lines` (bar and lis, 1px), `regroups` (mar and hom,
+  4px). Two rails on one column read as one line with a gap in it.
 
-- [ ] **A7. Quadrant on TRMNL X: a backwards branch is mangled.** "Family
-  Dinner" on the Simpsons board. Its stub runs the wrong way and detaches.
-  A large part of this is fixed: a backward group's flat rail was drawn as
-  `bridge(elbow + RAMP_LEAD, g.to)`, which is right for a forward group and
-  nonsense for a backward one (the ramp's tail stops at `elbow -
-  RAMP_LEAD`, so the bridge began a whole lead the other side of the elbow
-  and ran to an end it had already passed, drawing nothing). The rail
-  stopped two corner radii past its own elbow with its terminus bar left
-  further down the lane on its own. `cases/loose-ends.js` catches it.
-  Left open until it has been looked at on the board it was reported from:
-  `five-lines` on an X quadrant now draws "Family Dinner" correctly, but
-  that report predates the harness fix in A11, so it was written about a
-  picture that was not a quadrant.
+  The original report named two branch stubs at 07:30 on `crew-day`. Those
+  are both marks on their own trunks now and the stubs are gone; the defect
+  is the same shape one level down, and this is what it actually is.
+
+  NOT a missing stagger. Every convergence hands its members a staggered
+  exit and entry (`lead`/`trail`/`rank` on the hold, a corner and a bit
+  apart) and it works everywhere there is a gap to spend it in. Where Good
+  News Everyone ends at 09:00 and the Delivery Run starts at 09:00 there is
+  no gap at all, and two things follow. `routeRaiseAt` never asks for the
+  transition -- it returns the first hold's level up to its end and the
+  second hold's from its start, so the span between them, staggered or not,
+  is not drawn. And the span itself came back with a NEGATIVE run, because
+  `from` was staggered past `to`; that one is fixed, since `corridorBlocks`
+  reads it.
+
+  Both ways of finding the stagger some axis were tried and measured:
+
+  - Let the turn finish INSIDE the hold it arrives at (`routeRaiseAt`
+    honouring a span that overruns). The line is then mid-move at the
+    event's own `_nodeA`, which is where `recomputeLineDists` measures the
+    branch origin, so every distance the band solver is given is wrong: the
+    board collapsed into a third of the canvas at the largest text.
+  - Take it from the hold before instead, leaving a corner early. Rule 24
+    forbids it in words -- a branch does not leave before the shared event
+    is over -- and it is the lie 29b names.
+
+  So the axis has to come from somewhere else, or the two corridors have to
+  be reconciled into one move. rules.md carries the same gap under rule 13
+  ("13 between two abutting holds"), which is this entry seen from the
+  rules' side; whatever fixes one closes the other.
 
 - [ ] **A8. A long wrapped track name overlaps the first event label.**
   Known, carried over: "Demo - Planet / Express Crew" touches "07:30 - 08:15
@@ -881,6 +900,7 @@ it, which is where somebody changing that code will be standing.
 One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 
 - P2. The 45 reclaim runs after the captions now, and takes nothing (29g)
+- A7. The backwards branch on an X quadrant, looked at on a real quadrant
 - A1. Tracks squashed into a third of the board
 - A2. Line names sitting on their own rails
 - A3. Station captions collide

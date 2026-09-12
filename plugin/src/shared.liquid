@@ -1805,7 +1805,20 @@
         }
         from += (prev.rank || 0) * step;
       }
-      if (i < hs.length && hs[i].lead) to = Math.max(from + 1, to - hs[i].lead);
+      // A SPAN MAY NOT BE SHORTER THAN NOTHING.
+      //
+      // The clamp used to be applied only where this hold asked to be
+      // arrived at EARLY, which is the one case where it cannot bind. The
+      // case where it can is a line staggered on the way out of a hold that
+      // ends where this one begins: `from` is pushed a corner and a bit
+      // past `to`, `octSpan` is handed a negative room, and the span comes
+      // back 29px long backwards. Bender's drop into the delivery run was
+      // one of those. Nothing DRAWS it -- `routeRaiseAt` never reaches a
+      // transition between two holds that touch, which is the defect
+      // `issues.md` A4 is about -- but `corridorBlocks` reads every span to
+      // work out which lanes a ramp sweeps, and a backwards one blocks the
+      // wrong stretch of the wrong lanes.
+      if (i < hs.length) to = Math.max(from + 1, to - (hs[i].lead || 0));
       // ...and past the previous stop's own name, when that is the way we
       // are going. A move the other way passes nothing and waits for nothing.
       if (prev && prev.capA1 != null && prev.capSide != null) {
@@ -6694,6 +6707,40 @@
       // of those got their 45 back, and what stopped the rest -- the line's
       // own furniture, another line, or a name
       reclaim: metroDbgReclaim,
+      // WHERE EACH LINE ACTUALLY GOES, which `events` cannot say: a hold
+      // is a stretch of somebody else's day this line is spending at
+      // another level, and a span is the move between two of them. Both
+      // are here because the defects in this machinery are all differences
+      // between what a line was ASKED to do and what it drew -- a stagger
+      // that had no axis to happen in, a span that came back backwards --
+      // and neither is visible in the picture or in the events.
+      // A hold: [a0, a1, level, kind, lead, trail, rank].
+      routes: (function () {
+        var o = {};
+        LEGEND.forEach(function (p) {
+          o[p.key] = (p._route || []).map(function (h) {
+            return [Math.round(h.a0), Math.round(h.a1), Math.round(h.lvl),
+                    h.shared ? 'sh' : h.home ? 'home' : '?',
+                    Math.round(h.lead || 0), Math.round(h.trail || 0),
+                    h.rank == null ? -1 : h.rank];
+          });
+        });
+        return o;
+      })(),
+      // ...and the transition that lands on each of them: [i, a0, run, from, by].
+      spans: (function () {
+        var o = {};
+        LEGEND.forEach(function (p) {
+          if (!p._route) return;
+          var a = [];
+          for (var i = 0; i <= p._route.length; i++) {
+            var sp = routeSpan(p, i);
+            a.push([i, Math.round(sp.a0), Math.round(sp.R), Math.round(sp.base), Math.round(sp.d)]);
+          }
+          o[p.key] = a;
+        });
+        return o;
+      })(),
       // The run the board settled on, and the nights inside it, in minutes
       // and in axis px: a case asking whether the corridor really spans
       // 22:00 to 06:00 should not have to re-derive the scale to find out.

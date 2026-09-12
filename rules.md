@@ -600,7 +600,10 @@ Known gaps, so nobody reads this as a description of a board that exists:
 - **13 between two abutting holds.** Where a corridor ends on the same minute
   the next one starts there is no gap to turn in, so the line climbs dead
   vertical: Bart and Lisa go straight up out of the school run into the
-  school day. The rule says hold short instead, and nothing does.
+  school day. The rule says hold short instead, and nothing does -- and with
+  nothing to turn in, every line doing it turns on one x, which is the same
+  defect from the other side. `issues.md` A4 has the diagnosis and the two
+  ways of buying the turn some axis that were tried and measured.
 - **16/17** is newly written and newly implemented; the clearance it keeps is
   a fixed fraction of a line step rather than anything measured against the
   events that need the space.

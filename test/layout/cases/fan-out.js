@@ -31,19 +31,20 @@ module.exports = function (test, h) {
   // gap in it, whatever else is true.
   const SAME = 3;           // layout px: closer than this is the same column
 
-  // Two boards still reuse a column, and both were invisible until this case
-  // learned to measure runs instead of adjacent samples. Neither is the run
-  // home: they are morning convergences, where the lines involved have more
-  // of the day to come, so the stagger that was fixed for the last hold does
-  // not reach them. See issues.md E15.
+  // Three boards still reuse a column, and all three were invisible until
+  // this case learned to measure runs instead of adjacent samples. None is
+  // the run home: each is a corridor that ends on the minute the next one
+  // begins, which leaves the stagger no axis to happen in and the
+  // transition itself undrawn. See issues.md A4, which has the two ways of
+  // finding it some axis and what each of them cost.
   const KNOWN = {
-    'five-lines': 'bar and lis turn 1px apart leaving the school run: E15',
-    'crew-day': 'amy and fry share a column leaving the delivery: E15',
+    'five-lines': 'bar and lis turn 1px apart leaving the school run: A4',
+    'crew-day': 'amy and fry share a column leaving the delivery: A4',
     // The third board to show it, and it showed it by MOVING: taking the
     // header band off the map shifted every line on every board, and marge
     // and homer -- who had been missing each other by a few pixels here --
     // landed on the same column. Same defect, same entry.
-    'regroups': 'mar and hom turn 4px apart leaving the morning hold: E14b',
+    'regroups': 'mar and hom turn 4px apart leaving the morning hold: A4',
   };
 
   // Every near-vertical RUN a line draws, by owner.
