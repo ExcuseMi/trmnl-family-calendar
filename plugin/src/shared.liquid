@@ -42,7 +42,7 @@
 <div class="layout layout--col gap--none metro-root">
 
   <div class="metro-header flex flex--col gap--xsmall px--3 py--2 flex-none">
-    <div class="metro-header-top flex flex--row flex--center-y flex--wrap gap--medium">
+    <div class="metro-header-top flex flex--row flex--center-y flex--wrap gap--medium{% if data.days.size > 1 %} metro-header-top--days{% endif %}">
       <!-- The plugin's mark, inlined because the device renders this template
            on its own and cannot fetch repo files. Keep in step with
            assets/icon.svg: same geometry, same single-fill structure; the
@@ -67,8 +67,38 @@
         </mask>
         <circle cx="256" cy="256" r="240" mask="url(#metro-mark-cut)"/>
       </svg>
-      <span class="metro-title title title--large font--bold">{% if data.title_word %}{{ data.title_word }}{% else %}{{ data.i18n.today | default: "Today" }}{% endif %}</span>
-      {% if data.date_label %}<span class="metro-date metro-pill label label--base font--bold">{{ data.date_label }}</span>{% endif %}
+      {%- comment -%}
+        THE HEADER NAMES EVERY DAY THE BOARD DRAWS, NOT THE FIRST ONE.
+
+        It used to say "Today" and one date while the map ran on past
+        midnight into a second day, and it carried ONE forecast: a board
+        showing Thursday's events under Wednesday's rain, with nothing in
+        the header admitting Thursday was there at all. The hour strip
+        marks where the day turns over, which is where that belongs, but a
+        marker on a scale says WHERE the boundary is, not what the board
+        covers or what the weather will be either side of it.
+
+        So the header is a row of days, one per day in the run, in the same
+        order the map draws them: today at the left, tomorrow at the right,
+        which makes the row a legend for the two halves of the board
+        underneath it. A single-day board has one day in the run and comes
+        out exactly as it always did -- the grow that pushed its weather to
+        the right edge is inside that day's block, where it belongs, rather
+        than between blocks.
+
+        Only the FIRST day gets the title word and the ink pill. "Today" is
+        a statement about one of them, and two ink badges side by side
+        compete for the job of being the header's anchor -- the same reason
+        a holiday is not a second pill.
+      {%- endcomment -%}
+      {%- for d in data.days -%}
+      <span class="metro-day flex flex--row flex--center-y gap--xsmall{% unless forloop.first %} metro-day--next{% endunless %}">
+        {%- if forloop.first -%}
+          <span class="metro-title title title--large font--bold">{% if data.title_word %}{{ data.title_word }}{% else %}{{ data.i18n.today | default: "Today" }}{% endif %}</span>
+          {% if d.date_label %}<span class="metro-date metro-pill label label--base font--bold">{{ d.date_label }}</span>{% endif %}
+        {%- else -%}
+          {% if d.date_label %}<span class="metro-date-next label label--base font--bold metro-quiet">{{ d.date_label }}</span>{% endif %}
+        {%- endif -%}
       {%- comment -%}
         WHAT THE DAY IS, beside the date that says which day it is.
 
@@ -93,7 +123,7 @@
         to live would be inventing a second thing to keep in step.
       {%- endcomment -%}
       {%- assign holiday = data.holidays | first -%}
-      {% if holiday %}
+      {% if holiday and forloop.first %}
         <span class="metro-holiday flex flex--row flex--center-y gap--xsmall">
           <svg class="metro-holiday-ring no-shrink" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="6" r="5"></circle><circle cx="6" cy="6" r="2.5"></circle></svg>
           <span class="metro-holiday-name label label--base font--bold">{{ holiday.title }}</span>
@@ -107,15 +137,24 @@
         question nobody had asked. window_label still travels in the
         payload: the smaller views have no scale to read it off.
       {%- endcomment -%}
-      <div class="grow"></div>
-      {% if data.header_weather.hi %}
-        <span class="metro-weather flex flex--row flex--center-y gap--xsmall">
-          {% if data.header_weather.icon %}<img class="metro-wicon image--adaptive" src="{{ data.header_weather.icon }}">{% endif %}
-          <span class="metro-temp title title--base">{{ data.header_weather.hi }}&deg;<span class="metro-quiet"> / {{ data.header_weather.lo }}&deg;</span></span>
-          {% assign rain_pct = data.i18n.rain_pct | default: "{n}% rain" | replace: "{n}", data.header_weather.rain_chance %}
-          <span class="metro-cond label label--small metro-quiet">{{ data.header_weather.condition }} &middot; {{ rain_pct }}</span>
-        </span>
-      {% endif %}
+        {%- comment -%}
+          A day's own forecast, beside the day it belongs to. The single-day
+          board keeps the weather at the right edge because this grow is
+          inside the one block there is; a two-day board puts each day's
+          weather with its date and separates the blocks instead.
+        {%- endcomment -%}
+        {% if data.days.size == 1 %}<div class="grow"></div>{% endif %}
+        {% if d.weather.hi %}
+          <span class="metro-weather flex flex--row flex--center-y gap--xsmall">
+            {% if d.weather.icon %}<img class="metro-wicon image--adaptive" src="{{ d.weather.icon }}">{% endif %}
+            <span class="metro-temp title title--base">{{ d.weather.hi }}&deg;<span class="metro-quiet"> / {{ d.weather.lo }}&deg;</span></span>
+            {% assign rain_pct = data.i18n.rain_pct | default: "{n}% rain" | replace: "{n}", d.weather.rain_chance %}
+            <span class="metro-cond label label--small metro-quiet">{{ d.weather.condition }} &middot; {{ rain_pct }}</span>
+          </span>
+        {% endif %}
+      </span>
+      {%- unless forloop.last -%}<div class="grow"></div>{%- endunless -%}
+      {%- endfor -%}
     </div>
     {%- comment -%}
       Two things the board cannot say for itself. A line missing because its
@@ -199,6 +238,16 @@
   .metro-label { line-height: 1.05; }
   .metro-hour, .metro-axis-note { white-space: nowrap; }
   .metro-header--compact .metro-window, .metro-header--compact .metro-cond { display: none; }
+  /* A SECOND DAY COSTS THE ROW WHAT THE CONDITION WAS SPENDING.
+     The header is one row and its height comes off the map, so a two-day
+     header that wraps has taken a band of canvas to say something the
+     board was already saying. The condition text is the first thing to go,
+     the same way it goes when the header is squeezed: "Rain - 80% rain"
+     twice over is most of the width and the numbers beside it carry the
+     day anyway. Kept where there is genuinely room, which is the large
+     header on a panel like the X. */
+  .metro-header-top--days .metro-cond { display: none; }
+  .metro-header--large .metro-header-top--days .metro-cond { display: inline; }
   /* Which day of a week-long holiday this is goes the way the condition
      and the alert lines go when the header is squeezed: it is an
      explanation, and the NAME of the day is what has to survive. */
