@@ -187,6 +187,146 @@
   .steps { padding-left: 18px; margin: 8px 0 0; }
   .steps li { margin-bottom: 4px; }
 
+  /* ---------------------------------------------------------------- THE WIZARD
+     ONE QUESTION ON SCREEN, IN TYPE YOU CAN READ ACROSS A KITCHEN.
+     The stations below are a form: seven headings, every control visible at
+     once, and a reader who has to work out which of them is theirs. That is
+     the right shape for somebody editing a configuration they already
+     understand and the wrong one for somebody being asked to set this up for
+     the first time, which is nearly everybody who opens this page. So the
+     wizard asks one thing, in one column, at a size that survives reading
+     glasses and a phone held at arm's length, and the form stays exactly
+     where it was for anyone who wants it.
+     Sizes here are deliberately larger than the rest of the page: 17px body,
+     24px questions, 52px-tall targets. A 44px target is the accessibility
+     floor, not a goal. */
+  /* THE STEP COUNT HAS TO SURVIVE THE STICKY BAR.
+     Every screen change scrolls the section into view, and the bar at the top
+     of the page wraps to three rows on a phone -- taller than the 130px of
+     scroll-margin a station carries. So the first line of the wizard, which
+     is the one that says how far through this is, arrived underneath it. The
+     margin is deliberately larger than the bar can ever be: the wizard is the
+     first thing in the column, so a margin bigger than its offset simply
+     clamps the scroll to the top of the page, which is where it wants to be. */
+  #station-wizard { padding-left: 0; max-width: 720px; font-size: 17px; scroll-margin-top: 260px; }
+  /* No spine, no station dot: the wizard is not a stop on the line below it,
+     it is the whole journey for anybody who never opens that. */
+  #station-wizard > h2::before { display: none; }
+  #station-wizard > h2.wz-q { text-transform: none; }
+  /* The question is focused when a screen changes, so a screen reader is told
+     what is being asked rather than dropped into a text box. It is not a
+     control, though, and a focus ring around a heading reads as a text field
+     with the question typed into it: everybody who can see the screen has
+     already been told, by the screen changing. */
+  #station-wizard > h2.wz-q:focus, #station-wizard > h2.wz-q:focus-visible,
+  .wz-proof h3:focus, .wz-bad h3:focus, .wz-consent h3:focus,
+  .wz-proof h3:focus-visible, .wz-bad h3:focus-visible, .wz-consent h3:focus-visible { outline: none; }
+  .wz-step-of { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute); }
+  /* The dots are decoration for a count the words already give, so they are
+     hidden from assistive tech and the words are not. */
+  .wz-dots { display: flex; gap: 6px; margin: 6px 0 18px; }
+  .wz-dots i { width: 26px; height: 6px; border-radius: 3px; background: var(--rule); }
+  .wz-dots i.on { background: var(--ink); }
+  .wz-dots i.now { background: var(--ink); height: 10px; margin-top: -2px; }
+  .wz-q { font-size: 27px; line-height: 1.2; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .wz-lede { font-size: 17px; color: var(--mute); margin: 0 0 20px; max-width: 40em; }
+  .wz-lede strong { color: var(--ink); }
+  #station-wizard label { font-size: 15px; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--ink); }
+  /* A BIG BOX YOU CANNOT MISS AND CANNOT MISTYPE INTO.
+     A calendar link is 150 characters of noise; at 12px in a 200px field
+     nobody can see whether the paste worked. It gets the width of the column
+     and wraps. */
+  #station-wizard input[type=text], #station-wizard textarea, #station-wizard select {
+    font-size: 17px; padding: 13px 14px; border-radius: 10px; width: 100%;
+  }
+  #station-wizard textarea { font-size: 14px; }
+  #station-wizard input[type=text] { min-height: 52px; }
+  #station-wizard button { font-size: 17px; padding: 13px 22px; min-height: 52px; }
+  #station-wizard button.wz-small { font-size: 15px; padding: 8px 16px; min-height: 44px; }
+  .wz-field { margin-bottom: 18px; }
+  .wz-field > label { display: block; margin-bottom: 6px; }
+  .wz-hint { font-size: 15px; color: var(--mute); margin: 8px 0 0; }
+  /* One column of full-width choices, because a row of three on a phone is
+     three half-legible buttons. Each says what it is and what it costs. */
+  .wz-choice { display: flex; flex-direction: column; gap: 10px; margin: 0 0 18px; }
+  .wz-choice button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; border-radius: 12px; width: 100%; }
+  .wz-choice button[hidden] { display: none; }
+  .wz-choice .note { font-weight: 400; font-size: 15px; line-height: 1.35; color: var(--mute); }
+  .wz-choice button:hover .note, .wz-choice button:focus-visible .note { color: var(--ink); }
+  .wz-choice button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .wz-choice button[aria-pressed="true"] .note { color: var(--paper); }
+  /* The provider buttons are a picker, so they wrap into a grid: they are two
+     words each, not a sentence. */
+  .wz-providers { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .wz-providers button { justify-content: center; text-align: center; }
+  .wz-providers button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  /* CLICK BY CLICK, WITH THE MENU NAMES AS THEY ARE SPELLED ON SCREEN.
+     "Find your calendar's ICS feed" is not an instruction. This is. */
+  .wz-steps { border: 3px solid var(--ink); border-radius: 12px; padding: 14px 18px 14px 16px; margin: 0 0 18px; background: var(--soft); }
+  .wz-steps h3 { margin: 0 0 8px; font-size: 18px; }
+  .wz-steps ol { margin: 0; padding-left: 24px; }
+  .wz-steps li { margin-bottom: 8px; }
+  .wz-steps .warn { margin: 10px 0 0; font-weight: 600; }
+  /* THE EVIDENCE. A URL is abstract. "Found 14 appointments, the next is
+     Swimming on Tuesday at 4" is not, and it is the only thing on this page
+     that tells a reader the link they pasted is the right link. */
+  .wz-proof { border: 3px solid #1a7a1a; border-radius: 12px; padding: 14px 16px; margin: 0 0 18px; }
+  .wz-proof h3 { margin: 0 0 8px; font-size: 19px; color: #1a7a1a; }
+  .wz-proof ul { margin: 6px 0 0; padding-left: 22px; }
+  .wz-proof li { margin-bottom: 4px; }
+  .wz-bad { border: 3px solid #b3261e; border-radius: 12px; padding: 14px 16px; margin: 0 0 18px; }
+  .wz-bad h3 { margin: 0 0 8px; font-size: 19px; color: #b3261e; }
+  /* The consent box. It is a decision about handing over a password, so it is
+     drawn as one: the links it would send are printed, the host is named, and
+     neither button is preselected. */
+  .wz-consent { border: 3px solid var(--ink); border-radius: 12px; padding: 14px 16px; margin: 0 0 18px; }
+  .wz-consent h3 { margin: 0 0 8px; font-size: 19px; }
+  .wz-consent ul { margin: 8px 0; padding-left: 20px; overflow-wrap: anywhere; }
+  .wz-consent code { font-size: 14px; overflow-wrap: anywhere; }
+  .wz-people { list-style: none; margin: 0 0 14px; padding: 0; }
+  .wz-people li { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .wz-people li input { flex: 1 1 auto; }
+  .wz-nav { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 22px; padding-top: 18px; border-top: 3px solid var(--ink); }
+  /* `display: flex` outranks the browser's own rule for [hidden], so a screen
+     whose way on and way back are both hidden was drawing a heavy rule across
+     the page with nothing under it. The page has met this before: see
+     `.choice button[hidden]`. */
+  .wz-nav[hidden] { display: none; }
+  .wz-nav .spacer { flex: 1 1 auto; }
+  .wz-status { font-size: 16px; min-height: 1.4em; margin: 12px 0 0; }
+  /* A row per person on the review screen: what their line is drawn from, and
+     one button to change it. No drag handles anywhere on this page. */
+  .wz-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border: 2px solid var(--ink); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .wz-row .who { font-weight: 800; font-size: 19px; flex: 0 0 auto; }
+  .wz-row .from { color: var(--mute); flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+  .wz-json { margin-top: 18px; }
+  .wz-link { background: none; border: none; padding: 0; min-height: 0; font-size: 15px; font-weight: 600; color: var(--mute); text-decoration: underline; cursor: pointer; }
+  .wz-link:hover { color: var(--ink); background: none; }
+
+  /* Which stage shows what. The wizard and the form are the same editor: one
+     asks, the other shows everything at once, and both write the same state.
+     Gating is CSS on the data attribute so nothing leaves the document. */
+  [data-stage="wizard"] #station-demo, [data-stage="wizard"] #station-start,
+  [data-stage="wizard"] #station-agent, [data-stage="wizard"] #station-lines,
+  [data-stage="wizard"] #station-calendars, [data-stage="wizard"] #station-rules,
+  [data-stage="wizard"] #station-output,
+  [data-stage="demo"] #station-wizard, [data-stage="ai"] #station-wizard,
+  [data-stage="build"] #station-wizard { display: none; }
+  /* The spine down the left is the metro conceit that makes the form read as
+     one line with a stop per section. The wizard is one stop, and with no
+     52px of indent to sit in the bar was simply drawn straight through the
+     text of every question. */
+  [data-stage="wizard"] .col-steps::before { display: none; }
+  /* THE BOARD IS THE FEEDBACK, SO IT GOES ABOVE THE QUESTION ON A PHONE.
+     In one column the preview sits below whatever is being filled in, which
+     on the screen where somebody's family first appears on the board is the
+     one place it must not be. Only once there is something drawn: an empty
+     panel above the first question is just a panel in the way. */
+  @media (max-width: 1180px) {
+    [data-stage="wizard"].has-board .col-preview { order: -1; }
+    [data-stage="wizard"].has-board { display: flex; flex-direction: column; }
+  }
+
   /* A narrow window is a laptop with a browser at half width, not a phone, but
      it has to survive one: the spine and its 52px of indent are the first things
      that stop paying for themselves, and the top bar has to wrap rather than
@@ -218,12 +358,16 @@
   <img src="../assets/icon.svg" alt="">
   <div>
     <h1>Metro Calendar</h1>
-    <div class="sub">Configuration: build the JSON for the plugin's <strong>Calendars</strong> field and see the map before you paste it.</div>
+    <!-- The first line anybody reads, and it used to open with the word JSON.
+         The page's front door is the wizard now, and the person it is for has
+         no idea what that is and no reason to acquire one. -->
+    <div class="sub">Set your family's board up, see it draw, and copy the result into TRMNL.</div>
   </div>
   <div class="top-actions">
     <button id="undoBtn" class="small" disabled>Undo</button>
   </div>
   <nav aria-label="Sections of this page">
+    <a href="#station-wizard">Set up</a>
     <a href="#station-demo">Examples</a>
     <a href="#station-start">Paste</a>
     <a href="#station-agent">AI</a>
@@ -234,9 +378,45 @@
   </nav>
 </header>
 
-<main class="line" id="page" data-stage="demo">
+<main class="line" id="page" data-stage="wizard">
 
  <div class="col-steps" id="colSteps">
+
+  <!-- ONE QUESTION AT A TIME, AND GETTING THE LINK IS TREATED AS THE WALL IT IS.
+       This is the front door now. Everything below it is the same editor with
+       every control on screen at once, which is the right page for somebody
+       who already knows what a rule is and the wrong one for the person this
+       tool is actually for: somebody in their seventies, on a phone, who has
+       been handed a device and told it shows the family's day.
+
+       The hard part was never the questions. "Paste your calendar's secret
+       ICS address" ends the attempt for most people, so the link screen is
+       most of this: pick your calendar service, follow the clicks by the
+       names they are actually spelled on screen, paste, and then SEE that it
+       worked -- fourteen appointments, the next three read out in words. A
+       URL is abstract. Its contents are not.
+
+       The body of each screen is built in script rather than written out
+       eight times here, because a screen is a question, a control and a way
+       on, and eight copies of that in markup drift apart. The shell is here
+       so the heading, the progress and the status line are one element each
+       with one id each, which is what a screen reader and a deep link need. -->
+  <section class="station" id="station-wizard" aria-labelledby="wzQ">
+    <p class="wz-step-of" id="wzStepOf"></p>
+    <div class="wz-dots" id="wzDots" aria-hidden="true"></div>
+    <h2 class="wz-q" id="wzQ" tabindex="-1">Let us set up your calendar board</h2>
+    <p class="wz-lede" id="wzLede"></p>
+    <div id="wzBody"></div>
+    <div class="wz-nav" id="wzNav">
+      <button id="wzBack" class="wz-small" hidden>Back</button>
+      <span class="spacer"></span>
+      <button id="wzNext" class="primary" hidden>Next</button>
+    </div>
+    <p class="wz-status status" id="wzStatus" role="status" aria-live="polite"></p>
+    <p class="wz-hint" style="margin-top:18px">
+      <button type="button" class="wz-link" id="wzExpert">I would rather see every setting at once</button>
+    </p>
+  </section>
 
   <!-- WHAT IT DOES, BEFORE WHAT YOU HAVE TO DO. The three examples used to be
        a row inside Start, under a paste box; they are the first thing now,
@@ -259,6 +439,12 @@
     <div class="card plain">
       <div class="toolbar"><button id="goReal" class="big">I'm ready to do this for real</button></div>
       <div id="realChoice" class="choice" hidden>
+        <!-- Listed first because it is the route almost everybody should take:
+             it asks one thing at a time and it knows where the links live. -->
+        <button id="chooseWizard" type="button">
+          <strong>Take me through it step by step</strong>
+          <span class="note">One question per screen, with click-by-click instructions for finding each calendar's link, and a check that it worked before you move on.</span>
+        </button>
         <button id="chooseAi" type="button">
           <strong>Let an AI write it</strong>
           <span class="note">You get a prompt describing the plugin and your calendars. Paste it into an assistant, paste the answer back. Quickest if your calendars mix several people.</span>
@@ -268,7 +454,7 @@
           <span class="note">Two questions per calendar: paste its link, say who it is for. That is the whole setup for most households.</span>
         </button>
       </div>
-      <p class="hint" id="realHint" hidden>Either way the example is cleared first, so you start on your own calendars rather than editing Springfield.</p>
+      <p class="hint" id="realHint" hidden>Whichever you pick, the example is cleared first, so you start on your own calendars rather than editing Springfield.</p>
     </div>
   </section>
 
@@ -366,7 +552,7 @@
         <span id="addStatus" class="status" role="status" aria-live="polite"></span>
       </div>
       <p class="hint">A name nobody has used yet becomes a new person. Two people sharing one feed: write both names with a comma between them. A feed where only <em>some</em> events are somebody's -- a school calendar, a household one -- is split by rules, under <strong>More options</strong> on its card.</p>
-      <p class="hint">Finding the link: in Google Calendar it is that calendar's settings, <em>Secret address in iCal format</em>. On iCloud, share the calendar publicly and copy the <code>webcal://</code> link. In Outlook, publish the calendar and copy the ICS link.</p>
+      <p class="hint">Finding the link: in Google Calendar it is that calendar's settings, <em>Secret address in iCal format</em>. On iCloud, share the calendar publicly and copy the <code>webcal://</code> link. In Outlook, publish the calendar and copy the ICS link. <a href="#station-wizard" data-goto-stage="wizard">The step-by-step setup</a> spells out every click for five services and checks each link for you.</p>
     </div>
     <div id="calendars"></div>
     <p class="hint" id="calendarsEmpty">No calendars yet. Paste a link above and say whose it is.</p>
@@ -386,7 +572,7 @@
        here reaches every calendar and rule that named that person. -->
   <section class="station" id="station-lines">
     <h2>People on the map <small>one line each, in this order</small></h2>
-    <p class="lede">Nothing to fill in: these are the answers from above. Rename somebody and their calendars and rules follow. The first person also gets any event no rule claims. Which side of the map a line runs on, and its colour and dash pattern, are the plugin's own choice, balanced once it has counted the day.</p>
+    <p class="lede">Nothing to fill in: these are the answers from above. Rename somebody and their calendars and rules follow. A calendar nobody has said anything about belongs to the whole household, so it shows on <em>every</em> line rather than on whoever happens to be first. The order here only decides the dash patterns. Which side of the map a line runs on, and its colour, are the plugin's own choice, balanced once it has counted the day.</p>
     <div id="lines"></div>
     <p class="hint" id="linesEmpty">Nobody yet. Answer <em>who is this for?</em> on a calendar above and they appear here.</p>
   </section>
@@ -480,7 +666,7 @@
       <span id="previewStatus" class="status" role="status" aria-live="polite"></span>
     </div>
     <div id="stage" class="stage" hidden><div id="stageNote" class="stage-note" hidden></div><div id="stageInner" class="stage-inner"></div></div>
-    <p class="hint" id="stageEmpty" style="margin-top:12px">Nothing drawn yet. Pick one of the examples and press <strong>Render the example</strong>, or press <strong>Draw the map</strong> once you have a calendar in.</p>
+    <p class="hint" id="stageEmpty" style="margin-top:12px">Nothing drawn yet. It draws itself as soon as this page has read one of your calendars, and <strong>Draw the map</strong> does it again at any time.</p>
     <div id="sources" class="sources" style="margin-top:12px;"></div>
     <details class="adv" id="previewSettings"><summary>Device, language, and the hour it is drawn at</summary>
       <div class="adv-body">
@@ -810,6 +996,12 @@
     paintPeopleFeeds();
     syncPromptControls();
     refreshStale();
+    // EVERY EDIT IS A SAVE POINT, ONCE THE WIZARD IS UNDER WAY.
+    // Somebody who has found two links out of four and closed the tab has to
+    // find them again, and that is where the attempt ends. Nothing is written
+    // until the wizard has actually been started, so merely opening the page
+    // leaves nothing behind. See wzSave.
+    if (wiz && wiz.started) wzSave();
   }
 
   // ------------------------------------------------------------ import
@@ -1406,12 +1598,17 @@
         // That used to be spelled out under every line. It is a fact about
         // the plugin, not about this line, and repeating it once per line
         // told the reader nothing they could act on: the swatch already shows
-        // what the line got, and the section lede says who chose it. The only
-        // thing that IS particular to a line is being first, which is the one
-        // line that stayed.
-        idx === 0 ? el("div", { class: "row" }, [
-          el("div", { class: "hint" }, ["Also gets any event no rule claims."]),
-        ]) : null,
+        // what the line got, and the section lede says who chose it.
+        //
+        // BEING FIRST STOPPED MEANING ANYTHING, SO THE LINE THAT SAID SO IS GONE.
+        // The first person's card used to read "Also gets any event no rule
+        // claims", because an unrouted calendar landed on the first entry in
+        // `lines`. It lands on EVERY entry now -- a calendar nobody has said
+        // anything about is the household's, which is what a calendar nobody
+        // has said anything about almost always is -- so the sentence was not
+        // merely stale, it named the wrong person and nothing else on the page
+        // contradicted it. Order still decides the dash patterns, which the
+        // section lede says once.
       ]));
     });
   }
@@ -1750,7 +1947,7 @@
         el("summary", { text: "More options: split this feed between people, rename, hide, headers" }),
         el("div", { class: "adv-body" }, [
           el("div", { class: "rule-step", text: "When only some of this feed is somebody's" }),
-          el("p", { class: "hint", text: "One rule per group: “anything with L6 in it is Bart's”, “anything called Family Dinner is everybody's”. Rules are checked in order and the last match wins for each effect, so they also rename class codes and hide noise. Whatever no rule claims falls to the answer above, or to the first person if there is none. Comma-separate a value to match any of several (\"L1, L3, L4\"); click \"not\" to invert a condition." }),
+          el("p", { class: "hint", text: "One rule per group: “anything with L6 in it is Bart's”, “anything called Family Dinner is everybody's”. Rules are checked in order and the last match wins for each effect, so they also rename class codes and hide noise. Whatever no rule claims falls to the answer above, and if there is no answer either, to everybody: a feed nobody has spoken for is the household's. Comma-separate a value to match any of several (\"L1, L3, L4\"); click \"not\" to invert a condition." }),
           rulesWrap, addRule,
           el("div", { class: "rule-step", style: "margin-top:14px", text: "What this feed is called" }),
           el("div", { class: "row" }, [
@@ -1881,9 +2078,16 @@
     urlBox.value = "";
     whoBox.value = "";
     renderAll();
+    // AN UNANSWERED FEED IS THE HOUSEHOLD'S NOW, AND THAT IS USUALLY RIGHT.
+    // It used to land on whoever happened to be first in `lines`, which made
+    // "I left the name off" a confident wrong answer nothing on the board
+    // admitted to. A calendar with no name and no rules goes on every line, so
+    // leaving the answer blank is the correct and complete way to say "this
+    // one is the whole house's" -- and there is nothing more to write for it.
     setStatus("addStatus", names.length
       ? "Added, on " + (names.length === 1 ? names[0] + "'s line" : "the lines of " + names.join(" and ")) + ". Next calendar?"
-      : "Added. Say who it is for on its card below, or the whole feed lands on the first person's line.", "ok");
+      : "Added for the whole household: with nobody named, everything in this feed shows on every line at once. "
+        + "Say who it is for on its card below if it is one person's.", "ok");
     // Straight back to the first question, because the answer to "next
     // calendar?" is usually yes: a household is four or five of these.
     focusNoScroll(urlBox);
@@ -2028,7 +2232,11 @@
           // reads the same shape every morning
           { url: "https://calendar.example.com/noah.ics", name: "Noah", hideIfEmpty: false },
           // shared household feed: unnamed, so the odd thing no rule routes
-          // falls back to the first line instead of drawing a fifth line
+          // falls back to EVERY line, which is what a shared household feed
+          // means. It used to fall to whichever line happened to be first,
+          // which is why the two rules below name all four people explicitly:
+          // they still earn their keep, because an interchange drawn once is
+          // not the same picture as the same event on four lines.
           {
             url: "https://calendar.example.com/family-shared.ics",
             rules: [
@@ -2128,9 +2336,15 @@
               { match: { type: "regex", value: "^[A-Za-z]+:\\s*(.+)$" }, rewrite: "$1" }
             ]
           },
-          // gym, dentist, the rest of a life: unnamed and unrouted, so it
-          // lands on the first line, which is this one person's own line
-          { url: "https://calendar.example.com/personal.ics" }
+          // gym, dentist, the rest of a life: it belongs on the freelancer's
+          // OWN line, which is Studio. It used to be written as a bare url,
+          // relying on an unrouted calendar landing on the first line. That
+          // rule changed underneath it -- an unnamed, unruled calendar is the
+          // household's now and goes on every line -- and this preset would
+          // have drawn the dentist three times, once on each client's line.
+          // Named after the line it belongs to, which is what CONFIG.md asks
+          // for and what every other calendar in these presets already does.
+          { url: "https://calendar.example.com/personal.ics", name: "Studio" }
         ]
       }
     }
@@ -2493,19 +2707,19 @@
     out.push("```json");
     out.push(schemaText());
     out.push("```");
-    out.push("- Matchers: `any`, `all`, `exact`, `word`, `contains`, `regex`, `status`, `weekday`, `duration` (`min`/`max` in minutes, both inclusive), `time` (`from`/`to` as \"HH:MM\", `from` inclusive and `to` exclusive). Combine with `{\"type\": \"and\", \"matchers\": [...]}` or `\"or\"`; negate with `{\"type\": \"not\", \"matcher\": {...}}` — ONE matcher there, not a list. A `not` written with `matchers` compiles to nothing and its whole rule is dropped, silently.");
-    out.push("- `status` is the ORGANISER's status for the event — `confirmed`, `tentative` or `cancelled` — and never your own reply. Whether YOU declined an invitation is not in the feed as far as this plugin is concerned, so there is no way to match on it. Do not write a rule that tries.");
+    out.push("- Matchers: `any`, `all`, `exact`, `word`, `contains`, `regex`, `status`, `weekday`, `duration` (`min`/`max` in minutes, both inclusive), `time` (`from`/`to` as \"HH:MM\", `from` inclusive and `to` exclusive). Combine with `{\"type\": \"and\", \"matchers\": [...]}` or `\"or\"`; negate with `{\"type\": \"not\", \"matcher\": {...}}` -- ONE matcher there, not a list. A `not` written with `matchers` compiles to nothing and its whole rule is dropped, silently.");
+    out.push("- `status` is the ORGANISER's status for the event -- `confirmed`, `tentative` or `cancelled` -- and never your own reply. Whether YOU declined an invitation is not in the feed as far as this plugin is concerned, so there is no way to match on it. Do not write a rule that tries.");
     out.push("- A text matcher reads the title, plus the description when the calendar has one. Give it `\"field\"` to read something else: `title`, `location`, `description`, `categories` or `any`. Route on `location` when the titles are uninformative but the place is not (a school, an office, a pitch), and on `categories` when the feed sets them. Naming `description` or `any` turns `includeDescription` on by itself.");
     out.push("- Rules run in order; the last match wins for each effect. A calendar's own rules beat the top-level ones.");
     out.push("- A calendar's `name` is NOT a caption: an event that no rule routes falls back to it, and that fallback name is drawn as a LINE on the map. So name a calendar after the person whose line it is, or leave `name` off entirely when the calendar's rules route every event somewhere. A calendar called \"Deliveries\" or \"Planet Express\" with one unrouted event in it puts a \"Deliveries\" line on a board that was supposed to have one line per person.");
     out.push("- The fallback order in full: the calendar's `name`, else EVERY entry in `lines` (an unrouted calendar is the household's), else the feed's own name. Count the lines your configuration produces before you send it: it is one per entry in `lines`, PLUS one for every named calendar that can still leak an unrouted event. That total must match the number of people you found.");
     out.push("- `rename` defaults to true for a rule that names a line, which rewrites the matched text into that line's name. Set `\"rename\": false` when you only want to route, not retitle.");
     out.push("- The exception: on an `any` or `all` match `rename` defaults to FALSE, because there is no particular matched text to rename and silently overwriting every title would be surprising. A catch-all that routes a whole calendar to one person needs no `rename` key at all.");
-    out.push("- A regex `value` has its leading and trailing spaces stripped before it is compiled. To eat the space around a separator — \"Mila - Ballet\", \"Mila: Ballet\" — put `\\\\s*` or `\\\\s+` in the pattern rather than a literal space at either end, or the space survives into the rewritten title.");
+    out.push("- A regex `value` has its leading and trailing spaces stripped before it is compiled. To eat the space around a separator -- \"Mila - Ballet\", \"Mila: Ballet\" -- put `\\\\s*` or `\\\\s+` in the pattern rather than a literal space at either end, or the space survives into the rewritten title.");
     out.push("- Only events that recur with `RRULE:FREQ=WEEKLY` (with or without BYDAY/UNTIL), or that fall on today, are drawn.");
     out.push("- `\"hideIfEmpty\": false` on a line or a calendar keeps its line on the board on a day it has nothing.");
-    out.push("- `\"allDay\": true` on a rule moves a normally TIMED event into the all-day strip, which is drawn at the head of the line rather than anywhere on the clock. Use it for something a calendar exported as a full day of hours — midnight to midnight, or 00:00 to 23:59 — which is a holiday or a leave day wearing a timed event's clothes. A genuine all-day entry needs no rule.");
-    out.push("- Two feeds often carry the same real event. It is drawn ONCE, as an interchange joining those people's lines, only if after your rules run the title, the start and the end all match exactly. If the same thing arrives with different wording in each feed — bare in the family calendar, prefixed with a name in somebody's own export — write the `rewrite` rules so both come out character for character identical. Anything less and it is drawn twice.");
+    out.push("- `\"allDay\": true` on a rule moves a normally TIMED event into the all-day strip, which is drawn at the head of the line rather than anywhere on the clock. Use it for something a calendar exported as a full day of hours -- midnight to midnight, or 00:00 to 23:59 -- which is a holiday or a leave day wearing a timed event's clothes. A genuine all-day entry needs no rule.");
+    out.push("- Two feeds often carry the same real event. It is drawn ONCE, as an interchange joining those people's lines, only if after your rules run the title, the start and the end all match exactly. If the same thing arrives with different wording in each feed -- bare in the family calendar, prefixed with a name in somebody's own export -- write the `rewrite` rules so both come out character for character identical. Anything less and it is drawn twice.");
     out.push("");
     out.push("## A worked example");
     out.push("A finished configuration for a household of four with three feeds: one feed that is one person, one school feed split by class code, and one shared feed where every title is prefixed with a name. Note what it does NOT do: no `side`, no `color`, no `timeZone`, no `locale`, and no `name` on the two calendars whose rules route everything, because a name there would have drawn a line called \"School\" and a line called \"Family\".");
@@ -3035,6 +3249,8 @@
   // date, and no status line describing a draw that is no longer on screen.
   function resetPreview() {
     drawnSig = null;
+    var page = document.getElementById("page");
+    if (page) page.classList.remove("has-board");
     var stage = document.getElementById("stage");
     if (stage) { stage.hidden = true; stage.className = "stage"; }
     var note = document.getElementById("stageNote");
@@ -3128,6 +3344,13 @@
       // board it drew before instead of the space it has.
       document.getElementById("stage").hidden = false;
       document.getElementById("stageEmpty").hidden = true;
+      // THE BOARD IS THE FEEDBACK, SO ON A PHONE IT GOES ABOVE THE QUESTION.
+      // In one column the preview sits below whatever is being filled in,
+      // which on the screen where somebody's family first appears on the map
+      // is the one place it must not be. Only once there IS a board: an empty
+      // panel above the first question is a panel in the way.
+      var page = document.getElementById("page");
+      if (page) page.classList.add("has-board");
       inner.style.width = "";
       var scale = Math.min(1, (inner.clientWidth || 900) / dev.w);
       trmnl.style.transform = "scale(" + scale + ")";
@@ -3279,7 +3502,9 @@
   document.getElementById("goReal").addEventListener("click", function () {
     document.getElementById("realChoice").hidden = false;
     document.getElementById("realHint").hidden = false;
-    document.getElementById("chooseAi").focus();
+    // The step-by-step route is the one almost everybody should take, so it is
+    // the one the keyboard lands on.
+    document.getElementById("chooseWizard").focus();
   });
   // Not every document has a viewport to scroll: jsdom has no layout at all,
   // so this is a nicety and never a step anything else depends on.
@@ -3326,6 +3551,7 @@
   document.querySelectorAll('.mc-top nav a[href^="#station-"]').forEach(function (a) {
     a.addEventListener("click", function () {
       var id = a.getAttribute("href").slice(1);
+      if (id === "station-wizard") { setStage("wizard"); wzPaint(); return; }
       if (id === "station-demo") { setStage("demo"); return; }
       if (id === "station-agent" && stage() === "demo") { setStage("ai"); return; }
       var sec = document.getElementById(id);
@@ -3334,6 +3560,1318 @@
   });
   document.querySelectorAll("[data-goto-stage]").forEach(function (a) {
     a.addEventListener("click", function () { setStage(a.getAttribute("data-goto-stage")); });
+  });
+
+  // ============================================================ THE WIZARD
+  //
+  // Everything above is the editor: every control on screen at once, which is
+  // the right page for somebody who already knows what a rule is. This is the
+  // page for everybody else, and "everybody else" here means a specific
+  // person -- in their seventies, on a phone or a borrowed laptop, doing this
+  // once, alone, with nobody to ask. Nothing below ever says rule, matcher,
+  // regex, interchange, line or JSON.
+  //
+  // It writes into the SAME `state` the editor does, through the same
+  // functions, so the preview, the export, the undo and the round trip are
+  // the ones already tested. There is no second model of a configuration
+  // here, and no second implementation of the board: pressing Draw is
+  // literally `#runPreview`.
+  //
+  // Four things shape it.
+  //
+  //  1. GETTING THE LINK IS THE WALL, not the questions. "Paste your
+  //     calendar's secret ICS address" ends the attempt for most people, so
+  //     the link screen is the biggest thing here: pick your calendar
+  //     service, follow the clicks by the names they are spelled on screen,
+  //     and there is a way out ("I cannot find it") that leads somewhere.
+  //  2. PROVE IT WORKED. A link is abstract; fourteen appointments with the
+  //     next three read out in words are not. Nothing is added to the
+  //     configuration until the page has read the feed and shown what is in
+  //     it, or until the reader has deliberately chosen to add it unread.
+  //  3. LET THE DATA ANSWER. A feed called "Nala" full of events with Nala in
+  //     the title is Nala's, and a yes/no question beats a text box.
+  //  4. THEY WILL CLOSE THE TAB. Answers are saved in this browser as they
+  //     are given, and offered back on the next visit as a question.
+
+  // ---- what a feed actually says, in words a person can check -------------
+  //
+  // This is NOT a second ICS parser for the board: transform.js does that,
+  // properly, with time zones and recurrence rules, and it is what draws the
+  // map. This reads just enough to prove to a human that the link they pasted
+  // is the link they meant. Its one known inaccuracy is deliberate: a DTSTART
+  // carrying a TZID is read as local time rather than converted, so a feed
+  // published in another zone can be an hour or two out in this summary. The
+  // titles, the count and the days are what somebody recognises, and the
+  // board beside it has the hour right.
+  function unfoldIcs(text) {
+    // An ICS line longer than 75 octets continues on the next line after one
+    // space or tab. Joined first, or a title breaks in half mid-word.
+    return String(text == null ? "" : text).replace(/\r?\n[ \t]/g, "").split(/\r?\n/);
+  }
+  function icsUnescape(v) {
+    return String(v).replace(/\\[nN]/g, " ").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\").trim();
+  }
+  function icsDate(v) {
+    var s = String(v).trim();
+    var m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?/.exec(s);
+    if (!m) return null;
+    if (m[7]) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], m[6] ? +m[6] : 0));
+    return new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 0, m[5] ? +m[5] : 0, m[6] ? +m[6] : 0);
+  }
+  function icsFacts(text) {
+    var out = { count: 0, name: "", events: [] };
+    var cur = null;
+    unfoldIcs(text).forEach(function (row) {
+      if (/^X-WR-CALNAME[;:]/i.test(row)) { out.name = icsUnescape(row.slice(row.indexOf(":") + 1)); return; }
+      if (row === "BEGIN:VEVENT") { cur = {}; return; }
+      if (row === "END:VEVENT") { if (cur && cur.title) { out.count++; out.events.push(cur); } cur = null; return; }
+      if (!cur) return;
+      var i = row.indexOf(":");
+      if (i < 0) return;
+      var head = row.slice(0, i), val = row.slice(i + 1);
+      var key = head.split(";")[0].toUpperCase();
+      if (key === "SUMMARY") cur.title = icsUnescape(val);
+      else if (key === "LOCATION") cur.where = icsUnescape(val);
+      else if (key === "DTSTART") {
+        cur.start = icsDate(val);
+        cur.allDay = /VALUE=DATE(?!-)/i.test(head) || /^\d{8}$/.test(val.trim());
+      } else if (key === "RRULE") {
+        cur.weekly = /FREQ=WEEKLY/i.test(val);
+        var d = /BYDAY=([A-Z,]+)/i.exec(val);
+        cur.byday = d ? d[1].toUpperCase() : "";
+      }
+    });
+    return out;
+  }
+  function wzLocale() {
+    var n = document.getElementById("pLocale");
+    return (n && n.value) || "en";
+  }
+  function wzTime(d) {
+    try { return d.toLocaleTimeString(wzLocale(), { hour: "numeric", minute: "2-digit" }); }
+    catch (e) { return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
+  }
+  function wzDay(d) {
+    try { return d.toLocaleDateString(wzLocale(), { weekday: "long", day: "numeric", month: "short" }); }
+    catch (e) { return d.toDateString(); }
+  }
+  // Monday the 1st of January 2024, so a BYDAY code becomes a weekday name in
+  // the reader's own language without a table of seven strings per language.
+  var BYDAY_ORDER = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+  function wzWeekdayName(code) {
+    var i = BYDAY_ORDER.indexOf(String(code).toUpperCase().slice(-2));
+    if (i < 0) return "";
+    try { return new Date(2024, 0, 1 + i).toLocaleDateString(wzLocale(), { weekday: "long" }); }
+    catch (e) { return code; }
+  }
+  function wzWhen(ev) {
+    if (ev.weekly) {
+      var days = (ev.byday ? ev.byday.split(",") : []).map(wzWeekdayName).filter(Boolean);
+      var every = days.length === 0 ? "every week"
+        : days.length === 1 ? "every " + days[0]
+        : days.length > 3 ? "most days"
+        : "every " + days.slice(0, -1).join(", ") + " and " + days[days.length - 1];
+      return every + (ev.start && !ev.allDay ? " at " + wzTime(ev.start) : "");
+    }
+    if (!ev.start) return "";
+    if (ev.allDay) return "all day on " + wzDay(ev.start);
+    return "on " + wzDay(ev.start) + " at " + wzTime(ev.start);
+  }
+  // The three worth reading out: the next ones that have not happened yet,
+  // then the weekly ones, and if the feed holds nothing in the future at all
+  // the earliest three with a sentence that says so, rather than three dates
+  // from 2019 presented as "next".
+  function wzPick(facts) {
+    var now = new Date();
+    var soon = facts.events.filter(function (e) { return e.start && !e.weekly && e.start >= now; })
+      .sort(function (a, b) { return a.start - b.start; });
+    var weekly = facts.events.filter(function (e) { return e.weekly; });
+    if (soon.length || weekly.length) return { upcoming: true, list: soon.concat(weekly).slice(0, 3) };
+    var old = facts.events.filter(function (e) { return e.start; }).sort(function (a, b) { return b.start - a.start; });
+    return { upcoming: false, list: (old.length ? old : facts.events).slice(0, 3) };
+  }
+  // ---- LET THE DATA ANSWER THE QUESTION ----------------------------------
+  //
+  // A feed whose own name is "Nala" and whose events are all called "Nala:
+  // something" is Nala's, and the page can say so rather than asking. Scored
+  // rather than matched, because a shared household feed mentions everybody
+  // once and belongs to nobody: the name of the feed is worth a lot and the
+  // share of events carrying one person's name is worth the rest, and a feed
+  // has to clear half before a guess is offered at all.
+  function wzEscapeRx(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+  function wzGuessPerson(facts, names) {
+    var best = null, bestScore = 0;
+    names.forEach(function (n) {
+      if (!n || n.length < 2) return;
+      var rx;
+      // \p{L} needs the u flag and is what stops "Al" matching "Always".
+      // A browser too old for it gets the plainer word boundary.
+      try { rx = new RegExp("(^|[^\\p{L}])" + wzEscapeRx(n) + "([^\\p{L}]|$)", "iu"); }
+      catch (e) { rx = new RegExp("\\b" + wzEscapeRx(n) + "\\b", "i"); }
+      var score = 0;
+      if (facts.name && rx.test(facts.name)) score += 100;
+      if (facts.count) {
+        var hits = facts.events.filter(function (e) { return rx.test(e.title || ""); }).length;
+        score += Math.round(100 * hits / facts.count);
+      }
+      if (score > bestScore) { bestScore = score; best = n; }
+    });
+    return bestScore >= 50 ? best : null;
+  }
+
+  // ---- where the link lives, per service --------------------------------
+  //
+  // The menu names are quoted as they are spelled on screen, because a reader
+  // is comparing this text to what is in front of them word for word. The
+  // caution on each one is not padding: a public iCloud calendar really is
+  // readable by anyone with the link, and Outlook really does offer two links
+  // of which only one is the right one.
+  var WZ_PROVIDERS = [
+    { id: "google", label: "Google Calendar",
+      steps: [
+        "Open calendar.google.com in a web browser. This will not work in the phone app: it has to be the website, on a computer or on a phone browser asking for the desktop site.",
+        "Down the left-hand side, find the calendar's name under “My calendars”.",
+        "Hover over the name, click the three dots that appear beside it, and choose “Settings and sharing”.",
+        "Scroll a long way down, to the section headed “Integrate calendar”.",
+        "The last box is “Secret address in iCal format”. Click the copy button at the end of it.",
+      ],
+      warn: "Use the SECRET address, not the “Public address” above it. It ends in .ics. Treat it like a password: anybody who has it can read this calendar." },
+    { id: "icloud", label: "Apple iCloud",
+      steps: [
+        "On an iPhone or iPad: open the Calendar app and tap “Calendars” at the bottom.",
+        "Tap the small (i) beside the calendar you want.",
+        "Turn on “Public Calendar”, then tap “Share Link…” and choose Copy.",
+        "On a Mac instead: in the Calendar app, right-click the calendar in the list on the left, choose “Share Calendar…”, tick “Public Calendar” and copy the link.",
+      ],
+      warn: "The link starts with webcal:// and that is fine, paste it exactly as it is. Note that Apple only offers this for a calendar made public, which means anybody with the link can read it." },
+    { id: "outlook", label: "Outlook or Office 365",
+      steps: [
+        "Open your calendar in a web browser: outlook.office.com/calendar for a work or school account, outlook.live.com/calendar for a personal one.",
+        "Click the gear icon at the top right, then “Calendar”, then “Shared calendars”.",
+        "Under “Publish a calendar” pick the calendar, set the permission to “Can view all details”, and click Publish.",
+        "Two links appear. Copy the second one, the one that ends in .ics.",
+      ],
+      warn: "The first link ends in .html and is a web page, not a calendar feed. It will not work here. If your workplace has switched publishing off, the button will be greyed out, and the .ics file route below is the way round it." },
+    { id: "nextcloud", label: "Nextcloud",
+      steps: [
+        "Open Nextcloud in a browser and go to the Calendar app.",
+        "Click the three dots beside the calendar's name in the list on the left.",
+        "Choose “Copy subscription link”. On an older Nextcloud it is “Share link”: switch it on, copy the link, and add ?export to the end of it.",
+      ],
+      warn: "The link usually ends in ?export. That is correct, leave it there." },
+    { id: "synology", label: "Synology",
+      steps: [
+        "Open the Calendar app in DSM.",
+        "Click the three dots beside the calendar's name and choose “Share” (older versions call it the calendar's settings).",
+        "Switch on the public or CalDAV sharing option and copy the address it offers.",
+      ],
+      warn: "It has to be reachable from the internet, not only from your home network: the display fetches the calendar itself. If the address contains your router's local number, such as 192.168.something, it will not work and the .ics file route below is the answer." },
+    { id: "other", label: "Something else",
+      steps: [
+        "Look in the calendar's own settings for the words “publish”, “subscribe”, “iCal”, “ICS” or “feed”.",
+        "You want an address ending in .ics, or starting with webcal://. An address ending in .html is a web page and will not work.",
+        "If there is an “Export” button instead, use it: it saves a file, and you can hand that file to this page with the button below.",
+      ],
+      warn: "" },
+  ];
+  // The common public holiday calendars, as Google publishes them. These are
+  // public addresses, not anybody's secret one, and every one of them is
+  // checked before it is added: a wrong guess here shows up as "that did not
+  // answer" rather than as a silently empty board.
+  var WZ_HOLIDAYS = [
+    ["Belgium", "en.belgian"], ["Netherlands", "en.dutch"], ["United Kingdom", "en.uk"],
+    ["Ireland", "en.irish"], ["United States", "en.usa"], ["Canada", "en.canadian"],
+    ["Germany", "en.german"], ["France", "en.french"], ["Spain", "en.spain"],
+    ["Italy", "en.italian"], ["Australia", "en.australian"],
+  ];
+  function wzHolidayUrl(id) {
+    return "https://calendar.google.com/calendar/ical/" + id
+      + "%23holiday%40group.v.calendar.google.com/public/basic.ics";
+  }
+
+  // ---- the answers ------------------------------------------------------
+  var wiz = {
+    started: false,
+    screen: "welcome",
+    people: [""],
+    shape: "",
+    // What is left to ask for: one entry per calendar still to be found.
+    // { kind: "person"|"shared"|"holiday", who: "Alex" }
+    queue: [],
+    qi: 0,
+    // the link screen's own working state, thrown away when it moves on
+    provider: "",
+    url: "",
+    facts: null,
+    feedText: "",
+    who: null,
+    askWho: false,
+    pendingRelay: false,
+    lost: false,
+  };
+  // ---- saved in this browser, offered back as a question ----------------
+  //
+  // THEY WILL CLOSE THE TAB. Halfway through hunting for the third link is
+  // exactly where somebody stops for the day, and losing two links they have
+  // already found is enough to end the attempt for good.
+  //
+  // What is kept: the answers, the configuration, and the calendar text
+  // already read (capped, so a huge feed does not fill the browser's store).
+  // The calendar text is kept because without it the board cannot draw on the
+  // next visit, and a resume that cannot show the board is half a resume.
+  // None of it is ever sent anywhere -- there is nowhere for this page to
+  // send it -- and "start fresh" deletes the lot.
+  //
+  // It is NEVER restored on its own. The page asks, names the day it was
+  // saved, and does nothing until the answer is yes.
+  var WZ_KEY = "metro-calendar-setup-v1";
+  var WZ_FEED_BUDGET = 400000;
+  function wzStore() {
+    try { return window.localStorage; } catch (e) { return null; }
+  }
+  // Every edit in the editor comes through renderJson, which comes through
+  // here, and that is per keystroke in a URL field. Serialising a few hundred
+  // kilobytes of calendar text on each one is a page that stutters while you
+  // type, so the write waits for the typing to stop. Nothing depends on the
+  // save having happened by any particular moment: it is read on the next
+  // visit, and a quarter of a second before closing the tab is not a window
+  // anybody hits.
+  var wzSaveTimer = null;
+  function wzSave() {
+    if (!wiz.started) return;
+    if (wzSaveTimer) clearTimeout(wzSaveTimer);
+    wzSaveTimer = setTimeout(wzSaveNow, 250);
+  }
+  function wzSaveNow() {
+    wzSaveTimer = null;
+    if (!wiz.started) return;
+    var store = wzStore();
+    if (!store) return;
+    // NOTHING WORTH OFFERING BACK IS NOTHING TO KEEP. "Start again from the
+    // beginning" deletes the saved answers and then starts, and starting is
+    // itself a save: written unconditionally, the press that promised to
+    // delete the record put an empty one straight back, and the store went on
+    // holding something after the reader had asked for it to be gone.
+    var names = wiz.people.filter(function (n) { return n && n.trim(); });
+    if (!names.length && !configuredUrls().length) { wzForget(); return; }
+    var feeds = {}, spent = 0;
+    configuredUrls().forEach(function (u) {
+      var t = icsOverrides[u];
+      if (!t || icsFromExample[u]) return;
+      if (spent + t.length > WZ_FEED_BUDGET) return;
+      feeds[u] = t; spent += t.length;
+    });
+    try {
+      store.setItem(WZ_KEY, JSON.stringify({
+        at: Date.now(),
+        answers: { screen: wiz.screen, people: wiz.people, shape: wiz.shape, queue: wiz.queue, qi: wiz.qi },
+        config: buildConfig(),
+        feeds: feeds,
+      }));
+    } catch (e) { /* a full or blocked store is not a reason to stop setting up */ }
+  }
+  function wzSaved() {
+    var store = wzStore();
+    if (!store) return null;
+    try {
+      var raw = store.getItem(WZ_KEY);
+      if (!raw) return null;
+      var d = JSON.parse(raw);
+      if (!d || !d.config || !Array.isArray(d.config.calendars)) return null;
+      // Nothing worth offering back: no calendars and no names typed.
+      var names = (d.answers && d.answers.people ? d.answers.people : []).filter(function (n) { return n && n.trim(); });
+      if (!d.config.calendars.length && !names.length) return null;
+      return d;
+    } catch (e) { return null; }
+  }
+  function wzForget() {
+    var store = wzStore();
+    if (!store) return;
+    try { store.removeItem(WZ_KEY); } catch (e) { /* nothing to do about it */ }
+  }
+  function wzRestore(d) {
+    snapshot("restore the saved answers");
+    loadConfig(d.config);
+    Object.keys(d.feeds || {}).forEach(function (u) { icsOverrides[u] = d.feeds[u]; });
+    feedsChanged();
+    var a = d.answers || {};
+    wiz.people = (a.people && a.people.length ? a.people : lineNames()).slice();
+    if (!wiz.people.length) wiz.people = [""];
+    wiz.shape = a.shape || "";
+    wiz.queue = Array.isArray(a.queue) ? a.queue : [];
+    wiz.qi = typeof a.qi === "number" ? a.qi : 0;
+    wiz.started = true;
+    document.getElementById("importIn").value = JSON.stringify(d.config, null, 2);
+    markLoaded();
+    clearPresetPick();
+    renderAll();
+    wzGo(a.screen && a.screen !== "welcome" ? a.screen : "board");
+  }
+
+  // ---- reading a configuration back into the answers --------------------
+  //
+  // RECONFIGURING IS MORE COMMON THAN FIRST SETUP. Somebody who set this up
+  // in March and wants to add a child's swimming calendar in September should
+  // be able to paste back what TRMNL already holds and find every answer
+  // where they left it, rather than starting from "who lives here" and typing
+  // four links again. Every shape this wizard writes is read back here.
+  function wzAdopt() {
+    wiz.people = lineNames();
+    if (!wiz.people.length) wiz.people = [""];
+    var own = 0, shared = 0;
+    state.calendars.forEach(function (c) {
+      if (c.holiday) return;
+      if (c.assign.length === 1) own++;
+      else if (!c.assign.length && !c.name.trim() && !c.rules.length) shared++;
+      else shared++;
+    });
+    wiz.shape = own && shared ? "mix" : own ? "each" : shared ? "shared" : "";
+    wiz.queue = [];
+    wiz.qi = 0;
+    wiz.started = true;
+  }
+
+  // ---- the frame -------------------------------------------------------
+  var WZ_PHASES = [
+    ["people", "Who lives here"],
+    ["shape", "How your calendars are arranged"],
+    ["links", "Finding each calendar"],
+    ["board", "Checking the board"],
+    ["done", "Putting it into TRMNL"],
+  ];
+  function wzPhase() {
+    switch (wiz.screen) {
+      case "people": return 0;
+      case "shape": return 1;
+      case "link": case "extras": return 2;
+      case "board": return 3;
+      case "done": return 4;
+      default: return -1;
+    }
+  }
+  function wzSay(text, cls) {
+    var n = document.getElementById("wzStatus");
+    if (!n) return;
+    n.textContent = text || "";
+    n.className = "wz-status status " + (cls || "");
+  }
+  function wzGo(screen) {
+    wiz.screen = screen;
+    setStage("wizard");
+    wzSay("", "");
+    wzPaint();
+    wzSave();
+    // The heading, not the first field: a screen reader that is handed a text
+    // box has been told what to type and not what the question was. Sighted
+    // readers get the same benefit -- the page has visibly moved on.
+    var q = document.getElementById("wzQ");
+    if (q) focusNoScroll(q);
+    show("station-wizard");
+  }
+  // The board is the feedback, so it is drawn rather than waited for. Pressing
+  // the page's own Draw button is deliberate: there is exactly one preview on
+  // this page and it runs the plugin's real code.
+  function wzDraw() {
+    var btn = document.getElementById("runPreview");
+    if (btn && !btn.disabled) btn.click();
+  }
+  function wzBigButton(label, onClick, cls) {
+    var b = el("button", { type: "button", class: cls || "" }, [label]);
+    b.addEventListener("click", onClick);
+    return b;
+  }
+  function wzChoice(items) {
+    var wrap = el("div", { class: "wz-choice" });
+    items.forEach(function (it) {
+      if (!it) return;
+      // `el` writes every key it is given, so a null id would land as the
+      // literal string "null" on every button that has no id of its own.
+      var attrs = { type: "button" };
+      if (it.id) attrs.id = it.id;
+      var b = el("button", attrs, [
+        el("strong", { text: it.label }),
+        it.note ? el("span", { class: "note", text: it.note }) : null,
+      ]);
+      if (it.pressed !== undefined) b.setAttribute("aria-pressed", it.pressed ? "true" : "false");
+      b.addEventListener("click", it.onClick);
+      wrap.appendChild(b);
+    });
+    return wrap;
+  }
+
+  function wzPaint() {
+    var body = document.getElementById("wzBody");
+    if (!body) return;
+    body.innerHTML = "";
+    var back = document.getElementById("wzBack");
+    var next = document.getElementById("wzNext");
+    back.hidden = true; next.hidden = true; next.disabled = false;
+    back.onclick = null; next.onclick = null;
+    // the progress words first, because they are what says how long this is
+    var phase = wzPhase();
+    var stepOf = document.getElementById("wzStepOf");
+    stepOf.textContent = phase < 0 ? "" : "Step " + (phase + 1) + " of " + WZ_PHASES.length + ": " + WZ_PHASES[phase][1];
+    var dots = document.getElementById("wzDots");
+    dots.innerHTML = "";
+    if (phase >= 0) {
+      WZ_PHASES.forEach(function (p, i) {
+        dots.appendChild(el("i", { class: i < phase ? "on" : i === phase ? "now" : "" }));
+      });
+    }
+    (WZ_SCREENS[wiz.screen] || WZ_SCREENS.welcome)(body, back, next);
+    document.getElementById("wzNav").hidden = back.hidden && next.hidden;
+  }
+
+  var WZ_SCREENS = {};
+
+  // ---- welcome ---------------------------------------------------------
+  WZ_SCREENS.welcome = function (body) {
+    document.getElementById("wzQ").textContent = "Let us set up your calendar board";
+    document.getElementById("wzLede").innerHTML = "This display draws your household's day as an underground map: "
+      + "one line for each person, and their appointments as stops along it. To fill it in, it needs to be able to "
+      + "read your calendars. <strong>Nine or ten questions, and it will check each answer as you go.</strong>";
+    var saved = wzSaved();
+    if (saved) {
+      var when = new Date(saved.at);
+      var cals = saved.config.calendars.length;
+      var card = el("div", { class: "wz-steps" }, [
+        el("h3", { text: "You were part way through this before" }),
+        el("p", { style: "margin:0 0 10px",
+          text: "Answers from " + wzDay(when) + " at " + wzTime(when) + " are saved in this browser: "
+            + (saved.answers && saved.answers.people ? plural(saved.answers.people.filter(function (n) { return n && n.trim(); }).length, "name", "names") : "no names")
+            + " and " + plural(cals, "calendar", "calendars") + ". Nothing was sent anywhere." }),
+      ]);
+      card.appendChild(wzChoice([
+        { id: "wzResume", label: "Carry on where I left off", onClick: function () { wzRestore(saved); } },
+        { id: "wzFresh", label: "Start again from the beginning",
+          note: "This deletes the saved answers from this browser.",
+          onClick: function () { wzForget(); wzStart(); } },
+      ]));
+      body.appendChild(card);
+    }
+    body.appendChild(wzChoice([
+      saved ? null : { id: "wzStart", label: "Start setting it up",
+        note: "Begin with who is in the house.", onClick: wzStart },
+      { id: "wzReopen", label: "I have already set this up once",
+        note: "Paste what is in TRMNL now and every answer comes back filled in, ready to change.",
+        onClick: function () { wzGo("reopen"); } },
+      { id: "wzSeeExample", label: "Show me what the board looks like first",
+        note: "Three finished examples you can draw without any calendar links at all.",
+        onClick: function () { setStage("demo"); show("station-demo"); } },
+    ]));
+  };
+  function wzStart() {
+    wiz.started = true;
+    wiz.people = lineNames();
+    if (!wiz.people.length) wiz.people = [""];
+    wzGo("people");
+  }
+
+  // ---- paste back what TRMNL has --------------------------------------
+  WZ_SCREENS.reopen = function (body, back) {
+    document.getElementById("wzQ").textContent = "Paste what you already have";
+    document.getElementById("wzLede").textContent = "In TRMNL, open this plugin's settings and copy everything out of the "
+      + "box called Calendars. Paste it below. Nothing is changed until you press the button.";
+    var ta = el("textarea", { id: "wzPaste", rows: "7", "aria-label": "What is in the Calendars box in TRMNL now" });
+    body.appendChild(el("div", { class: "wz-field" }, [ta]));
+    body.appendChild(wzBigButton("Read it and fill in my answers", function () {
+      var raw = ta.value;
+      if (!raw.trim()) { wzSay("There is nothing in the box yet. Paste what TRMNL has, then press this.", "err"); return; }
+      var res = parseImport(raw);
+      if (res.error) {
+        wzSay("That could not be read: " + res.error.replace(/[.\s]*$/, "")
+          + ". Nothing has changed. Check you copied the whole box, from the first character to the last.", "err");
+        return;
+      }
+      snapshot("load what TRMNL had");
+      loadConfig(res.data);
+      document.getElementById("importIn").value = raw;
+      clearPresetPick();
+      markLoaded();
+      wzAdopt();
+      var cals = state.calendars.filter(function (c) { return c.url.trim(); }).length;
+      wzGo("board");
+      wzSay("Read it: " + plural(cals, "calendar", "calendars")
+        + (wiz.people.filter(Boolean).length ? " for " + wiz.people.filter(Boolean).join(", ") : "")
+        + ". Change whatever you like, then copy the result back.", "ok");
+    }, "primary"));
+    back.hidden = false;
+    back.onclick = function () { wzGo("welcome"); };
+  };
+
+  // ---- who lives here -------------------------------------------------
+  WZ_SCREENS.people = function (body, back, next) {
+    document.getElementById("wzQ").textContent = "Who lives here?";
+    document.getElementById("wzLede").textContent = "One first name each. Everybody you name gets their own line on "
+      + "the map, so put in the people whose day you want to see, and leave out anybody whose calendar you have no way of reading.";
+    var list = el("ul", { class: "wz-people" });
+    function rows() {
+      list.innerHTML = "";
+      wiz.people.forEach(function (name, i) {
+        var id = "wzName" + i;
+        var input = el("input", { type: "text", id: id, value: name, autocomplete: "off",
+          placeholder: i === 0 ? "Alex" : "another name", "aria-label": "Name of person " + (i + 1) });
+        input.addEventListener("input", function () { wiz.people[i] = input.value; });
+        input.addEventListener("keydown", function (e) {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          if (i === wiz.people.length - 1 && input.value.trim()) { addRow(); return; }
+          next.click();
+        });
+        var li = el("li", {}, [input]);
+        if (wiz.people.length > 1) {
+          var rm = el("button", { type: "button", class: "wz-small",
+            "aria-label": "Remove " + (name.trim() || "person " + (i + 1)) }, ["Remove"]);
+          rm.addEventListener("click", function () {
+            wiz.people.splice(i, 1);
+            rows();
+            var first = list.querySelector("input");
+            if (first) focusNoScroll(first);
+          });
+          li.appendChild(rm);
+        }
+        list.appendChild(li);
+      });
+    }
+    function addRow() {
+      wiz.people.push("");
+      rows();
+      var boxes = list.querySelectorAll("input");
+      focusNoScroll(boxes[boxes.length - 1]);
+    }
+    rows();
+    body.appendChild(list);
+    body.appendChild(wzBigButton("Add another person", addRow, "wz-small"));
+    body.appendChild(el("p", { class: "wz-hint", text: "It does not have to be a person. “Work” and "
+      + "“Home” are two lines on plenty of these boards." }));
+    back.hidden = false;
+    back.onclick = function () { wzGo("welcome"); };
+    next.hidden = false;
+    next.textContent = "Next";
+    next.onclick = function () {
+      var names = [], seen = {};
+      wiz.people.forEach(function (n) {
+        var t = String(n).trim();
+        if (!t || seen[t.toLowerCase()]) return;
+        seen[t.toLowerCase()] = true;
+        names.push(t);
+      });
+      if (!names.length) { wzSay("Put at least one name in before going on.", "err"); return; }
+      wiz.people = names;
+      // The people are made now, so the board has lines to draw even before a
+      // single link is in: an empty line with a name on it is the shape of
+      // what is coming.
+      names.forEach(ensurePerson);
+      // and anybody taken off this screen goes out of the configuration too,
+      // or they stay on the board with nothing on them and nothing to say why
+      lineNames().forEach(function (n) {
+        if (names.indexOf(n) === -1) {
+          retargetLineRefs(n, "");
+          var i = personIndex(n);
+          if (i !== -1) state.lines.splice(i, 1);
+        }
+      });
+      // back into the order this screen put them in
+      state.lines.sort(function (a, b) { return names.indexOf(a.name.trim()) - names.indexOf(b.name.trim()); });
+      renderAll();
+      wzGo("shape");
+    };
+  };
+
+  // ---- one each, or one shared ----------------------------------------
+  WZ_SCREENS.shape = function (body, back) {
+    document.getElementById("wzQ").textContent = "How are your calendars arranged?";
+    var who = wiz.people.filter(Boolean);
+    document.getElementById("wzLede").textContent = "You named " + who.join(", ")
+      + ". Do they each keep their own calendar, or is there one calendar with everybody's things in it?";
+    function choose(shape) {
+      wiz.shape = shape;
+      wiz.queue = [];
+      if (shape === "each" || shape === "mix") {
+        who.forEach(function (n) { wiz.queue.push({ kind: "person", who: n }); });
+      }
+      if (shape === "shared" || shape === "mix") wiz.queue.push({ kind: "shared" });
+      wiz.qi = 0;
+      wzResetLink();
+      wzGo(wiz.queue.length ? "link" : "extras");
+    }
+    body.appendChild(wzChoice([
+      { id: "wzShapeEach", label: "Each of us has our own calendar",
+        note: "The usual arrangement. You will be asked for " + plural(who.length, "link", "links") + ", one per person.",
+        pressed: wiz.shape === "each", onClick: function () { choose("each"); } },
+      { id: "wzShapeShared", label: "We all use one calendar together",
+        note: "One link, and everything in it shows on everybody's line. There is nothing else to set up for this.",
+        pressed: wiz.shape === "shared", onClick: function () { choose("shared"); } },
+      { id: "wzShapeMix", label: "Some of both",
+        note: "A calendar each, and a shared one as well for the things that are everybody's.",
+        pressed: wiz.shape === "mix", onClick: function () { choose("mix"); } },
+    ]));
+    back.hidden = false;
+    back.onclick = function () { wzGo("people"); };
+  };
+
+  // ---- the link screen ------------------------------------------------
+  function wzResetLink() {
+    wiz.provider = "";
+    wiz.url = "";
+    wiz.facts = null;
+    wiz.feedText = "";
+    wiz.who = null;
+    wiz.askWho = false;
+    wiz.pendingRelay = false;
+    wiz.lost = false;
+  }
+  function wzTask() { return wiz.queue[wiz.qi] || null; }
+  function wzTaskLabel(task) {
+    if (!task) return "this calendar";
+    if (task.kind === "person") return task.who + "'s calendar";
+    if (task.kind === "holiday") return "the public holidays";
+    return "the calendar you all share";
+  }
+  WZ_SCREENS.link = function (body, back, next) {
+    var task = wzTask();
+    if (!task) { wzGo("extras"); return; }
+    var q = document.getElementById("wzQ");
+    var lede = document.getElementById("wzLede");
+    if (task.kind === "person") {
+      q.textContent = "Where is " + task.who + "'s calendar?";
+      lede.textContent = "Every calendar has a hidden address that other programs can read it at. It is not the "
+        + "page you look at your calendar on. Pick where " + task.who + "'s calendar lives and the exact clicks are below.";
+    } else if (task.kind === "shared") {
+      q.textContent = "Where is the calendar you all share?";
+      lede.textContent = "The household one: the bin day, the meals, whatever is everybody's. Anything in it will "
+        + "show on every line at once, and there is nothing else you need to tell it.";
+    } else {
+      q.textContent = "Which country's public holidays?";
+      lede.textContent = "Public holidays are read out beside the date at the top of the board, and take no room "
+        + "on the map. Pick a country, or paste your own link if you already subscribe to one.";
+    }
+    // Which calendar service, and the clicks for it. A holiday feed does not
+    // need this: it is a country, not somebody's account.
+    if (task.kind === "holiday") {
+      var grid = el("div", { class: "wz-providers", role: "group", "aria-label": "Country" });
+      WZ_HOLIDAYS.forEach(function (row) {
+        var b = el("button", { type: "button", "aria-pressed": wiz.url === wzHolidayUrl(row[1]) ? "true" : "false" }, [row[0]]);
+        b.addEventListener("click", function () {
+          wiz.url = wzHolidayUrl(row[1]);
+          wiz.facts = null;
+          wzPaint();
+          var box = document.getElementById("wzUrl");
+          if (box) focusNoScroll(box);
+          wzSay("Filled in the usual address for " + row[0] + ". Press Check this link to make sure it answers.", "");
+        });
+        grid.appendChild(b);
+      });
+      body.appendChild(grid);
+    } else {
+      var plabel = el("div", { class: "wz-field" }, [el("label", { text: "Which one of these is it in?" })]);
+      body.appendChild(plabel);
+      var pgrid = el("div", { class: "wz-providers", role: "group", "aria-label": "Which calendar service" });
+      WZ_PROVIDERS.forEach(function (p) {
+        var b = el("button", { type: "button", id: "wzProv-" + p.id,
+          "aria-pressed": wiz.provider === p.id ? "true" : "false" }, [p.label]);
+        b.addEventListener("click", function () {
+          wiz.provider = wiz.provider === p.id ? "" : p.id;
+          wzPaint();
+        });
+        pgrid.appendChild(b);
+      });
+      body.appendChild(pgrid);
+      var chosen = WZ_PROVIDERS.filter(function (p) { return p.id === wiz.provider; })[0];
+      if (chosen) {
+        var steps = el("div", { class: "wz-steps" }, [el("h3", { text: "In " + chosen.label + ":" })]);
+        var ol = el("ol");
+        chosen.steps.forEach(function (s) { ol.appendChild(el("li", { text: s })); });
+        steps.appendChild(ol);
+        if (chosen.warn) steps.appendChild(el("p", { class: "warn", text: chosen.warn }));
+        body.appendChild(steps);
+      }
+    }
+    // the box, and the one press that proves it
+    var urlBox = el("input", { type: "text", id: "wzUrl", value: wiz.url, autocomplete: "off", spellcheck: "false",
+      placeholder: "https://… or webcal://…" });
+    urlBox.addEventListener("input", function () {
+      wiz.url = urlBox.value.trim();
+      wiz.facts = null;
+    });
+    urlBox.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); wzCheck(); }
+    });
+    body.appendChild(el("div", { class: "wz-field" }, [
+      el("label", { text: "Paste the calendar link here", "for": "wzUrl" }), urlBox,
+    ]));
+    if (!wiz.facts) {
+      body.appendChild(wzBigButton("Check this link", wzCheck, "primary"));
+      body.appendChild(el("p", { class: "wz-hint", text: "Nothing is added until this has read the calendar and "
+        + "shown you what is in it." }));
+    }
+    // what came back
+    if (wiz.pendingRelay) body.appendChild(wzConsentBox());
+    if (wiz.facts) body.appendChild(wzProofBox(task));
+    // the ways out, which have to lead somewhere
+    var file = el("input", { type: "file", accept: ".ics,text/calendar", id: "wzFile", hidden: "hidden" });
+    file.addEventListener("change", function () {
+      var f = file.files && file.files[0];
+      if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        var text = String(rd.result || "");
+        if (!/BEGIN:VCALENDAR/i.test(text)) {
+          wzSay("That file is not a calendar. A calendar file's name ends in .ics and its first line reads "
+            + "BEGIN:VCALENDAR.", "err");
+          return;
+        }
+        wiz.feedText = text;
+        wiz.facts = icsFacts(text);
+        wzPaint();
+        wzSay("Read " + f.name + ". The display still needs the link as well, because it fetches the calendar "
+          + "itself every half hour: the file only lets this page show you the board now.", "ok");
+      };
+      rd.readAsText(f);
+    });
+    body.appendChild(file);
+    var outs = [
+      { id: "wzUpload", label: "I have the calendar as a file instead",
+        note: "If your calendar app has an Export button, it saves a .ics file. This page can read that to show you "
+          + "the board, though the display itself still needs a link.",
+        onClick: function () { file.click(); } },
+      { id: "wzLost", label: "I cannot find the link",
+        onClick: function () { wiz.lost = true; wzPaint(); } },
+    ];
+    if (wiz.queue.length > 1 || task.kind !== "person") {
+      outs.push({ id: "wzSkip", label: "Skip this one for now",
+        note: "You can come back and add it later without starting again.",
+        onClick: function () { wzSay("", ""); wzAdvance(); } });
+    }
+    body.appendChild(el("details", { class: "adv" }, [
+      el("summary", { text: "This is not going well" }),
+      el("div", { class: "adv-body" }, [wzChoice(outs)]),
+    ]));
+    if (wiz.lost) body.appendChild(wzLostBox(task));
+    back.hidden = false;
+    back.onclick = function () {
+      if (wiz.qi > 0) { wiz.qi--; wzResetLink(); wzGo("link"); return; }
+      wzGo("shape");
+    };
+    // The way on appears once the page has something to show for the link,
+    // and NOT while it is still asking whose calendar this is: a Next button
+    // beside an unanswered yes/no question gets pressed, and whichever answer
+    // the page was leaning towards becomes the one nobody chose.
+    if (wiz.facts && !wiz.askWho) {
+      next.hidden = false;
+      next.textContent = task.kind === "holiday" ? "Add these holidays"
+        : wiz.who ? "Add it to " + wiz.who + "'s line"
+        : task.kind === "person" ? "Add it to " + task.who + "'s line"
+        : "Add it to everybody's line";
+      next.onclick = wzAddCurrent;
+    }
+  };
+  // WHAT THE DATA SAYS, IN WORDS SOMEBODY CAN CHECK AGAINST THEIR OWN DIARY.
+  function wzProofBox(task) {
+    var f = wiz.facts;
+    if (!f.count) {
+      // A calendar that reads fine and holds nothing is a real answer and a
+      // common one: the wrong calendar of five, or a brand new one.
+      return el("div", { class: "wz-bad" }, [
+        el("h3", { text: "That is a calendar, but there is nothing in it" }),
+        el("p", { style: "margin:0",
+          text: (f.name ? "The calendar calls itself “" + f.name + "”, and it " : "It ")
+            + "holds no appointments at all. That usually means it is not the calendar you meant, or the link is "
+            + "for a calendar nobody has put anything in yet. You can still add it." }),
+      ]);
+    }
+    var pick = wzPick(f);
+    var box = el("div", { class: "wz-proof" }, [
+      el("h3", { text: "Found " + plural(f.count, "appointment", "appointments") + " in it" }),
+    ]);
+    if (f.name) box.appendChild(el("p", { style: "margin:0 0 6px",
+      text: "The calendar calls itself “" + f.name + "”." }));
+    box.appendChild(el("p", { style: "margin:0",
+      text: pick.upcoming
+        ? (pick.list.length === 1 ? "Here it is:" : "Here are the next " + pick.list.length + ":")
+        : "Nothing in it is still to come. The most recent " + plural(pick.list.length, "one", "ones") + ":" }));
+    var ul = el("ul");
+    pick.list.forEach(function (ev) {
+      var when = wzWhen(ev);
+      ul.appendChild(el("li", { text: ev.title + (when ? " " + when : "") + (ev.where ? ", at " + ev.where : "") }));
+    });
+    box.appendChild(ul);
+    box.appendChild(el("p", { class: "wz-hint", style: "margin:10px 0 0",
+      text: "Does that look like the right calendar? If not, go back to the box above and paste a different link." }));
+    // ---- and now LET THE DATA ANSWER THE QUESTION -----------------------
+    //
+    // A feed called "Nala" full of events with Nala in the title is Nala's,
+    // and a yes/no question beats a text box every time. The version of this
+    // worth having is not "whose is it?" but the cross-check: the reader is on
+    // Alex's screen and the calendar they pasted is plainly Nala's, which is
+    // exactly what happens with two tabs open. Nothing else on this page could
+    // ever have caught that, and the board would simply have been wrong.
+    var names = lineNames();
+    var guess = wzGuessPerson(f, names);
+    var expect = task.kind === "person" ? task.who : null;
+    wiz.askWho = false;
+    if (expect && guess && guess !== expect) {
+      box.appendChild(el("p", { class: "status err", style: "margin:10px 0 6px",
+        text: "This looks like " + guess + "'s calendar rather than " + expect + "'s. Which is it?" }));
+      box.appendChild(wzChoice([
+        { id: "wzWhoExpected", label: "It really is " + expect + "'s", pressed: wiz.who === expect,
+          onClick: function () { wiz.who = expect; wzPaint(); } },
+        { id: "wzWhoGuess", label: "You are right, it is " + guess + "'s", pressed: wiz.who === guess,
+          onClick: function () { wiz.who = guess; wzPaint(); } },
+      ]));
+      wiz.askWho = wiz.who === null;
+    } else if (expect) {
+      wiz.who = expect;
+    } else if (task.kind === "shared" && guess) {
+      box.appendChild(el("p", { style: "margin:10px 0 6px",
+        text: "This looks like it is " + guess + "'s rather than everybody's. Is it?" }));
+      box.appendChild(wzChoice([
+        { id: "wzWhoGuess", label: "Yes, it is " + guess + "'s", pressed: wiz.who === guess,
+          onClick: function () { wiz.who = guess; wzPaint(); } },
+        { id: "wzWhoEveryone", label: "No, it is the whole house's", pressed: wiz.who === "",
+          onClick: function () { wiz.who = ""; wzPaint(); } },
+      ]));
+      wiz.askWho = wiz.who === null;
+    }
+    return box;
+  }
+  // THE MOST PRIVATE ROUTE FIRST, AND THE SERVER NAMED.
+  //
+  // A calendar link is a password in a URL. The page tries to read the
+  // calendar directly first, which sends the link only to the calendar's own
+  // provider, who wrote it. Nearly every provider refuses a request made from
+  // a web page, and then the only route left is the relay -- so that is asked
+  // for, here, with this exact link printed, the server named, and neither
+  // answer preselected. The answer is not remembered: the next link asks
+  // again, because it is a different link.
+  function wzConsentBox() {
+    var host = RELAY.replace(/^https?:\/\//, "").split("/")[0];
+    var box = el("div", { class: "wz-consent" }, [
+      el("h3", { text: "Your calendar would not let this page read it" }),
+      el("p", { style: "margin:0 0 8px", text: "That is normal and it is not your mistake: almost no calendar "
+        + "service lets a web page read a feed directly. The display itself has no such problem, so your board "
+        + "will work either way. To show it to you here, this page can ask a small helper server to fetch it." }),
+      el("p", { style: "margin:0", text: "It would send this one address, and nothing else:" }),
+      el("ul", {}, [el("li", {}, [el("code", { text: wiz.url })])]),
+      el("p", { style: "margin:0 0 8px", text: "That address is a password: anybody holding it can read this "
+        + "calendar. The server is " + host + ", which belongs to the person who wrote this plugin, not to TRMNL. "
+        + "It keeps no copy, writes nothing down, and never records the address in a log." }),
+    ]);
+    box.appendChild(wzChoice([
+      { id: "wzRelayYes", label: "Send this one address and read the calendar",
+        onClick: wzRelayFetch },
+      { id: "wzRelayNo", label: "No. I will hand over the file instead",
+        note: "Export the calendar from your own app and give this page the .ics file. Nothing leaves the page.",
+        onClick: function () {
+          wiz.pendingRelay = false;
+          wzPaint();
+          var f = document.getElementById("wzFile");
+          if (f) f.click();
+        } },
+      { id: "wzRelaySkip", label: "No. Add it without showing me what is in it",
+        note: "The link goes into your configuration and the display will fetch it itself. This page just cannot "
+          + "show you the board until then.",
+        onClick: function () { wiz.pendingRelay = false; wiz.facts = null; wzAddUnread(); } },
+    ]));
+    return box;
+  }
+  function wzLostBox(task) {
+    return el("div", { class: "wz-steps" }, [
+      el("h3", { text: "If the link is nowhere to be found" }),
+      el("ol", {}, [
+        el("li", { text: "Look for an Export button instead. It saves a file ending in .ics, and “I have the "
+          + "calendar as a file instead” above will read it. The display will still need a link eventually, but "
+          + "you will at least see the board." }),
+        el("li", { text: "Ask whoever set the calendar up. On a work calendar the setting is often switched off by "
+          + "the employer, and no amount of looking will find it." }),
+        el("li", { text: "Skip it. A board with three of four people on it is a useful board, and you can add the "
+          + "fourth later by pasting your configuration back into this page." }),
+        el("li", { text: "Make a new calendar in Google Calendar, put " + (task.kind === "person" ? task.who + "'s" : "the")
+          + " things in that, and use its link. It is free, and it is the one service where these instructions always work." }),
+      ]),
+    ]);
+  }
+  // ---- checking a link ------------------------------------------------
+  function wzCheck() {
+    var url = (document.getElementById("wzUrl") || {}).value || "";
+    url = String(url).trim();
+    wiz.url = url;
+    if (!url) { wzSay("Paste the link into the box first.", "err"); return; }
+    if (/\s/.test(url)) {
+      wzSay("That has a space in the middle of it, so part of it is missing or something extra got copied along "
+        + "with it. A calendar link is one unbroken piece of text.", "err");
+      return;
+    }
+    if (!looksLikeLink(url)) {
+      wzSay("That does not look like a calendar link. One starts with https:// or webcal://, and usually ends in "
+        + ".ics. The web page you read your calendar on is not the same thing.", "err");
+      return;
+    }
+    if (/\.html?($|[?#])/i.test(url)) {
+      wzSay("That link ends in .html, which is a web page rather than a calendar. In Outlook it is the first of "
+        + "the two links it offers: you want the other one, ending in .ics.", "err");
+      return;
+    }
+    var already = state.calendars.filter(function (c) { return c.url.trim() === url; })[0];
+    if (already) {
+      wzSay("This exact link is already in your configuration"
+        + (already.assign.length ? ", on " + already.assign.join(" and ") + "'s line" : "")
+        + ". Two tabs open is the usual reason. Check you copied the right one.", "err");
+      return;
+    }
+    if (icsOverrides[url]) { wzFeedRead(icsOverrides[url], "already read"); return; }
+    wzSay("Reading the calendar…", "");
+    // Directly first: that sends the link to the calendar's own provider and
+    // to nobody else.
+    fetchIcs(url).then(function (text) {
+      if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error("not a calendar");
+      wzFeedRead(text, "read straight from your calendar");
+    }).catch(function () {
+      if (!RELAY) {
+        wzSay("This page could not read that calendar, which is normal: almost no calendar service lets a web "
+          + "page read a feed. The link may still be perfectly good, and the display will manage it. Hand over the "
+          + "file if you want to see the board now, or add it unread.", "err");
+        wiz.pendingRelay = false;
+        wzPaint();
+        return;
+      }
+      wiz.pendingRelay = true;
+      wzSay("", "");
+      wzPaint();
+      wzReveal(".wz-consent h3");
+    });
+  }
+  // WHAT CAME BACK IS WHAT HAS TO BE ON SCREEN.
+  //
+  // The link screen is long -- five numbered steps and a warning above the box
+  // -- so the evidence and the consent question both appear well below the
+  // fold on a phone. Scrolling to the top of the section (which is what every
+  // other move on this page wants) puts the reader back at the question they
+  // have just answered, with the answer out of sight underneath. So the answer
+  // is scrolled to and its heading is focused, which is also what tells a
+  // screen reader that something arrived.
+  function wzReveal(selector) {
+    var node = document.querySelector("#wzBody " + selector);
+    if (!node) return;
+    if (node.scrollIntoView) node.scrollIntoView({ block: "center" });
+    node.setAttribute("tabindex", "-1");
+    focusNoScroll(node);
+  }
+  function wzRelayFetch() {
+    var url = wiz.url;
+    var btn = document.getElementById("wzRelayYes");
+    if (btn) btn.disabled = true;
+    wzSay("Fetching the calendar…", "");
+    realFetch(RELAY + "?url=" + encodeURIComponent(url)).then(function (r) {
+      if (r.ok) return r.text();
+      // The relay says WHY in a sentence, and that sentence is the only part
+      // a reader can act on. A status code is not.
+      return r.text().then(function (why) {
+        throw new Error((why || "").trim().slice(0, 160) || "the server would not say why");
+      });
+    }).then(function (text) {
+      if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error("what came back was not a calendar. The link may point at a login page rather than at the calendar itself");
+      wiz.pendingRelay = false;
+      wzFeedRead(text, "fetched for you");
+    }).catch(function (e) {
+      if (btn) btn.disabled = false;
+      wzSay("That did not work: " + (e && e.message ? e.message : "the calendar could not be fetched")
+        + ". Check you copied the whole link. If it is a work calendar it may need a password, which this cannot "
+        + "supply: hand over the file instead, or add it unread and let the display try.", "err");
+    });
+  }
+  function wzFeedRead(text, how) {
+    icsOverrides[wiz.url] = text;
+    delete icsFromExample[wiz.url];
+    delete fetchErrors[wiz.url];
+    feedsChanged();
+    wiz.feedText = text;
+    wiz.facts = icsFacts(text);
+    wiz.pendingRelay = false;
+    wzPaint();
+    wzSay("Your calendar was " + how + ".", "ok");
+    wzReveal(".wz-proof h3");
+    wzReveal(".wz-bad h3");
+  }
+  // ---- adding what was found -----------------------------------------
+  //
+  // THE ZERO-CONFIGURATION ANSWER IS NOW THE COMMON ONE.
+  //
+  // A calendar with no name and no rules belongs to the whole household: the
+  // plugin puts anything in it on every line at once. That used to land on
+  // whoever happened to be first in the list, so a shared feed had to be
+  // spelled out with a rule naming everybody. It does not any more, so the
+  // shared calendar is written as nothing but its address, and this wizard
+  // says so in words rather than writing four names into a rule that would
+  // then be wrong the day somebody moves out.
+  function wzAddCurrent() {
+    var task = wzTask();
+    if (!task) return;
+    var c = newCalendar();
+    c.url = wiz.url;
+    if (task.kind === "holiday") {
+      c.holiday = true;
+    } else {
+      var who = task.kind === "person" ? (wiz.who || task.who) : wiz.who;
+      if (who) {
+        // One person's feed: named after them, which is what labels it on the
+        // board if it ever stops answering, and routed to their line.
+        applyWho(c, "", [who]);
+        ensurePerson(who);
+      }
+      // and if `who` is empty this is the household's: no name, no rules, and
+      // the plugin puts it on every line.
+    }
+    state.calendars.push(c);
+    renderAll();
+    var said = task.kind === "holiday"
+      ? "Added. Public holidays will read beside the date at the top of the board."
+      : (task.kind === "person" || wiz.who)
+        ? "Added to " + (wiz.who || task.who) + "'s line."
+        : "Added for the whole house: everything in it will show on every line at once, which is why there was "
+          + "nothing else to ask.";
+    wzAdvance(said);
+  }
+  function wzAddUnread() {
+    var task = wzTask();
+    if (!task) return;
+    var c = newCalendar();
+    c.url = wiz.url;
+    if (task.kind === "holiday") c.holiday = true;
+    else if (task.kind === "person") { applyWho(c, "", [task.who]); ensurePerson(task.who); }
+    state.calendars.push(c);
+    renderAll();
+    wzAdvance("Added without reading it. The display will fetch it itself, so if the link is good your board will "
+      + "be right even though this page cannot show it yet.");
+  }
+  function wzAdvance(said) {
+    wiz.qi++;
+    wzResetLink();
+    // The board redraws here rather than on the review screen, because this is
+    // the moment the answer earned something: one more person's line, with
+    // their day on it.
+    wzDraw();
+    if (wiz.qi < wiz.queue.length) wzGo("link");
+    else wzGo("extras");
+    if (said) wzSay(said, "ok");
+  }
+
+  // ---- anything else? -------------------------------------------------
+  WZ_SCREENS.extras = function (body, back, next) {
+    document.getElementById("wzQ").textContent = "Anything else to add?";
+    var cals = state.calendars.filter(function (c) { return c.url.trim(); }).length;
+    document.getElementById("wzLede").textContent = cals
+      ? "You have " + plural(cals, "calendar", "calendars") + " in so far. Most households stop here."
+      : "Nothing is in yet, so the board has nothing to draw. Add at least one calendar.";
+    var hasHoliday = state.calendars.some(function (c) { return c.holiday; });
+    var hasShared = state.calendars.some(function (c) {
+      return c.url.trim() && !c.holiday && !c.assign.length && !c.name.trim() && !c.rules.length;
+    });
+    function queueOne(item) {
+      wiz.queue.push(item);
+      wiz.qi = wiz.queue.length - 1;
+      wzResetLink();
+      wzGo("link");
+    }
+    var items = [];
+    if (!hasShared) {
+      items.push({ id: "wzAddShared", label: "A calendar we all share",
+        note: "The bin day, the meals, the school term. Everything in it shows on every line.",
+        onClick: function () { queueOne({ kind: "shared" }); } });
+    }
+    if (!hasHoliday) {
+      items.push({ id: "wzAddHoliday", label: "Public holidays",
+        note: "Read out beside the date at the top of the board, and they take no room on the map.",
+        onClick: function () { queueOne({ kind: "holiday" }); } });
+    }
+    lineNames().forEach(function (n) {
+      items.push({ label: "Another calendar for " + n,
+        note: "A second one, for work or for a club.",
+        onClick: function () { queueOne({ kind: "person", who: n }); } });
+    });
+    items.push({ id: "wzAddPerson", label: "Somebody I forgot",
+      note: "Back to the list of names.", onClick: function () { wzGo("people"); } });
+    body.appendChild(wzChoice(items));
+    back.hidden = false;
+    back.onclick = function () {
+      if (wiz.queue.length) { wiz.qi = wiz.queue.length - 1; wzResetLink(); wzGo("link"); return; }
+      wzGo("shape");
+    };
+    next.hidden = false;
+    next.textContent = "No, that is everything";
+    next.disabled = !cals;
+    next.onclick = function () { wzGo("board"); wzDraw(); };
+  };
+
+  // ---- the board is the answer, so look at the board ------------------
+  WZ_SCREENS.board = function (body, back, next) {
+    document.getElementById("wzQ").textContent = "Here is your board";
+    document.getElementById("wzLede").textContent = "This is drawn by the display's own code, so it is what the "
+      + "panel will show. Check each person has what you expect, then go on.";
+    var names = lineNames();
+    if (!names.length) {
+      body.appendChild(el("p", { class: "status err", text: "Nobody is on the board yet." }));
+    }
+    // A WRONG LINK HAS TO BE REMOVABLE WITHOUT LEAVING THE WIZARD.
+    //
+    // The way out marked "something is wrong that I cannot fix here" leads to
+    // the full settings page, which is the right home for splitting a school
+    // feed between two children. Deleting a calendar somebody pasted twice is
+    // not that: it is the commonest correction there is, and sending anybody
+    // to a seven-section form to make it would be sending them somewhere they
+    // asked not to go. Snapshotted, so the Undo button at the top of the page
+    // puts it back the way it does everywhere else.
+    function removeCals(label, list) {
+      var b = wzBigButton("Remove", function () {
+        snapshot("remove " + label);
+        list.forEach(function (c) {
+          var i = state.calendars.indexOf(c);
+          if (i !== -1) state.calendars.splice(i, 1);
+        });
+        renderAll();
+        wzPaint();
+        wzDraw();
+        wzSay("Removed. The Undo button at the top of the page puts it back.", "ok");
+      }, "wz-small");
+      b.setAttribute("aria-label", "Remove " + label);
+      return b;
+    }
+    names.forEach(function (n) {
+      var feeds = feedsForPerson(n);
+      var mine = state.calendars.filter(function (c) {
+        return c.url.trim() && (c.assign.indexOf(n) !== -1 || c.name.trim() === n);
+      });
+      var row = el("div", { class: "wz-row" }, [
+        el("span", { class: "who", text: n }),
+        el("span", { class: "from", text: feeds.length
+          ? "from " + feeds.join(", ")
+          : "no calendar yet, so this line will be empty" }),
+      ]);
+      row.appendChild(wzBigButton(feeds.length ? "Add another" : "Find it", function () {
+        wiz.queue.push({ kind: "person", who: n });
+        wiz.qi = wiz.queue.length - 1;
+        wzResetLink();
+        wzGo("link");
+      }, "wz-small"));
+      if (mine.length) row.appendChild(removeCals(plural(mine.length, "calendar", "calendars") + " for " + n, mine));
+      body.appendChild(row);
+    });
+    var shared = state.calendars.filter(function (c) {
+      return c.url.trim() && !c.holiday && !c.assign.length && !c.name.trim() && !c.rules.length;
+    });
+    shared.forEach(function (c) {
+      body.appendChild(el("div", { class: "wz-row" }, [
+        el("span", { class: "who", text: "Everybody" }),
+        el("span", { class: "from", text: "from " + shortUrl(c.url) + ", shown on every line" }),
+        removeCals("the shared calendar", [c]),
+      ]));
+    });
+    state.calendars.filter(function (c) { return c.holiday; }).forEach(function (c) {
+      body.appendChild(el("div", { class: "wz-row" }, [
+        el("span", { class: "who", text: "Holidays" }),
+        el("span", { class: "from", text: "from " + shortUrl(c.url) + ", read beside the date" }),
+        removeCals("the public holidays", [c]),
+      ]));
+    });
+    var unread = unreadUrls();
+    if (unread.length) {
+      body.appendChild(el("p", { class: "wz-hint", text: plural(unread.length, "calendar", "calendars")
+        + " could not be read by this page, so " + (unread.length === 1 ? "it is" : "they are")
+        + " missing from the picture. The display fetches calendars itself and does not have that problem." }));
+    }
+    body.appendChild(el("div", { style: "margin-top:14px" }, [
+      wzBigButton("Draw it again", wzDraw, "wz-small"),
+    ]));
+    body.appendChild(el("details", { class: "adv" }, [
+      el("summary", { text: "Something is wrong that I cannot fix here" }),
+      el("div", { class: "adv-body" }, [
+        el("p", { class: "wz-hint", text: "One calendar holding several people's things, an event you want hidden, "
+          + "a title you want shortened: all of that is on the full settings page, which has every control on it at "
+          + "once. Your answers so far come with you." }),
+        wzBigButton("Open the full settings page", function () {
+          setStage("build");
+          show("station-calendars");
+        }, "wz-small"),
+      ]),
+    ]));
+    back.hidden = false;
+    back.onclick = function () { wzGo("extras"); };
+    next.hidden = false;
+    next.textContent = "This looks right";
+    next.onclick = function () { wzGo("done"); };
+  };
+
+  // ---- the one copy button -------------------------------------------
+  WZ_SCREENS.done = function (body, back) {
+    document.getElementById("wzQ").textContent = "Last step: put it into TRMNL";
+    document.getElementById("wzLede").textContent = "Everything you answered is now one block of text. Copy it, "
+      + "then paste it into TRMNL once. You will not have to do this again unless your calendars change.";
+    body.appendChild(wzBigButton("Copy it", wzCopyJson, "primary"));
+    var ol = el("ol", { class: "wz-steps", style: "list-style-position:inside; padding-left:16px" });
+    [
+      "Open trmnl.com in a browser and sign in.",
+      "Go to Plugins, then this plugin, then Edit.",
+      "Turn OFF the switch called “Use Demo Data”.",
+      "Find the big box called “Calendars”. Delete anything in it and paste what you just copied.",
+      "Fill in “Location” with your town, so the board can show the weather.",
+      "Press Save. The display picks it up the next time it wakes, within about half an hour.",
+    ].forEach(function (s) { ol.appendChild(el("li", { text: s })); });
+    body.appendChild(ol);
+    // JSON IS AN OUTPUT, NOT A SCREEN. It is here, once, behind a disclosure,
+    // for the one reader in fifty who wants to see it.
+    var ta = el("textarea", { id: "wzJson", rows: "12", readonly: "readonly",
+      "aria-label": "The text this page will copy" });
+    ta.value = document.getElementById("jsonOut").value;
+    body.appendChild(el("details", { class: "adv wz-json", id: "wzJsonWrap" }, [
+      el("summary", { text: "Show me the text it copies" }),
+      el("div", { class: "adv-body" }, [ta]),
+    ]));
+    body.appendChild(el("p", { class: "wz-hint", text: "Your answers stay saved in this browser, so you can come "
+      + "back to this page and change something without starting again." }));
+    back.hidden = false;
+    back.onclick = function () { wzGo("board"); };
+  };
+  // navigator.clipboard is absent on a page opened straight from a file, and
+  // the fallback needs the text to be selectable, which it is not while the
+  // disclosure holding it is shut. So the disclosure is opened on that path
+  // only: a reader who never meets the fallback never sees the JSON.
+  function wzCopyJson() {
+    var text = document.getElementById("jsonOut").value;
+    function ok() {
+      wzSay("Copied. Now paste it into the box called Calendars in TRMNL, following the steps below.", "ok");
+    }
+    function fallback() {
+      var det = document.getElementById("wzJsonWrap");
+      if (det) det.open = true;
+      var ta = document.getElementById("wzJson");
+      if (!ta) { wzSay("This browser would not let the page copy for you.", "err"); return; }
+      ta.value = text;
+      copyFrom(ta, "wzStatus");
+      var n = document.getElementById("wzStatus");
+      if (n) n.className = "wz-status " + n.className;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fallback);
+    else fallback();
+  }
+
+  // ...and the one moment the wait cannot be afforded: the tab going away
+  // with a change still pending. `pagehide` fires for a close, a navigation
+  // and a phone putting the browser to sleep, which is exactly the population
+  // this save exists for.
+  window.addEventListener("pagehide", function () { if (wzSaveTimer) wzSaveNow(); });
+  document.getElementById("wzExpert").addEventListener("click", function () {
+    setStage("build");
+    show("station-calendars");
+  });
+  document.getElementById("chooseWizard").addEventListener("click", function () {
+    clearForReal();
+    wiz.started = true;
+    wiz.people = [""];
+    wiz.shape = "";
+    wiz.queue = [];
+    wiz.qi = 0;
+    wzResetLink();
+    wzGo("people");
   });
 
   // ------------------------------------------------------------ init
@@ -3345,11 +4883,18 @@
   paintPresets();
   paintUndo();
   renderAll();
+  // The wizard is the page. It is painted rather than jumped to, so a reader
+  // arriving at tools/config-editor.html lands on one question and not on
+  // seven sections they have not filled in. `?full` opens the editor instead,
+  // for anybody who has this page bookmarked for the form.
+  if (/[?&]full\b/.test(location.search)) setStage("build");
+  else wzPaint();
   document.getElementById("pNow").value = (function () { var d = new Date(); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); })();
   // ?example opens the page as it opens for everybody and draws the first
   // example, which is the one state of this page that takes two clicks to
   // reach and so is the one nobody screenshots.
   if (/[?&]example\b/.test(location.search)) {
+    setStage("demo");
     document.getElementById("renderExample").click();
   }
   // ?demo opens the page with the demo configuration loaded and drawn (also handy for screenshots)

@@ -3,15 +3,23 @@
 const fs = require('fs');
 const path = require('path');
 
-// THE PAGE OPENS ON WHAT IT DRAWS, NOT ON WHAT YOU HAVE TO FILL IN.
+// THE PAGE OPENS ON ONE QUESTION.
 //
-// It used to open as the whole form at once: paste box, AI, lines, calendars,
-// rules, preview, JSON, with the three examples a small row inside the first
-// of them. Somebody arriving has not decided to configure anything yet, they
-// are deciding whether this is worth configuring, and a board they have
-// watched draw answers that better than seven sections they have not filled
-// in. So the examples come first and everything else is gated behind a choice
-// of how to do it for real.
+// It has opened on three different things now, and each move was the same
+// argument made harder. First it was the whole form at once: paste box, AI,
+// lines, calendars, rules, preview, JSON, with the three examples a small row
+// inside the first of them. Then it opened on the examples, because somebody
+// arriving has not decided to configure anything yet and a board they have
+// watched draw answers "is this worth my evening" better than seven sections
+// they have not filled in.
+//
+// It opens on the WIZARD now, because deciding it is worth the evening was
+// never the part that defeated anybody. Finding a calendar's hidden address
+// is, and a page that opens on seven headings leaves that entirely to the
+// reader. The wizard asks one thing at a time, spells out the clicks for each
+// calendar service by the names they are spelled on screen, and proves each
+// link worked before moving on. The examples are still one press away, and
+// the form is still there in full for anybody who wants it.
 //
 // The gate is CSS on a data attribute, never a section taken out of the page:
 // a section that is not in the DOM cannot be linked to, cannot be read by a
@@ -20,14 +28,31 @@ const path = require('path');
 module.exports = function (test, h) {
   const { loadEditor, click, assert, assertEqual } = h;
 
-  test('the page opens on the examples, with nothing to fill in yet', () => {
+  test('the page opens on the wizard, with one question on it', () => {
     const { document } = loadEditor();
-    assertEqual(document.getElementById('page').getAttribute('data-stage'), 'demo');
+    assertEqual(document.getElementById('page').getAttribute('data-stage'), 'wizard');
     // still all there, just not shown
-    ['station-agent', 'station-start', 'station-lines', 'station-calendars',
+    ['station-demo', 'station-agent', 'station-start', 'station-lines', 'station-calendars',
       'station-rules', 'station-output'].forEach((id) => {
       assert(document.getElementById(id), id + ' was taken out of the page rather than hidden');
     });
+    // and it is a question, not a form: one heading, and no text box until
+    // something has been asked for
+    assert(/\?|set up/i.test(document.getElementById('wzQ').textContent),
+      'the wizard opens without asking anything: ' + document.getElementById('wzQ').textContent);
+    assertEqual(document.querySelectorAll('#wzBody input[type=text]').length, 0,
+      'the first screen is already a form');
+  });
+
+  // Both are still reachable in one press, from the page the reader lands on.
+  test('the examples and the full form are one press away from the wizard', () => {
+    const { document } = loadEditor();
+    click(document.getElementById('wzSeeExample'));
+    assertEqual(document.getElementById('page').getAttribute('data-stage'), 'demo');
+
+    const again = loadEditor();
+    click(again.document.getElementById('wzExpert'));
+    assertEqual(again.document.getElementById('page').getAttribute('data-stage'), 'build');
   });
 
   // THE CALENDARS COME BEFORE THE PEOPLE, BECAUSE THE PEOPLE COME OUT OF THEM.
@@ -41,6 +66,7 @@ module.exports = function (test, h) {
     const { document } = loadEditor();
     const ids = [...document.querySelectorAll('.col-steps > section')].map((s) => s.id);
     assertEqual(ids, [
+      'station-wizard',
       'station-demo', 'station-start', 'station-agent', 'station-calendars',
       'station-lines', 'station-rules', 'station-output',
     ]);
@@ -51,11 +77,16 @@ module.exports = function (test, h) {
     assert(document.getElementById('runPreview'), 'the draw button went missing in the move');
   });
 
-  test('"I am ready to do this for real" offers the two ways, and either one clears the example', () => {
+  test('"I am ready to do this for real" offers the three ways, and each one clears the example', () => {
     const { document } = loadEditor();
     assert(document.getElementById('realChoice').hidden, 'the choice is showing before it is asked for');
     click(document.getElementById('goReal'));
     assert(!document.getElementById('realChoice').hidden, 'the choice did not open');
+    // Step by step is listed first and is the one the keyboard lands on: it is
+    // the route almost everybody leaving the examples should take.
+    assertEqual([...document.getElementById('realChoice').querySelectorAll('button')].map((b) => b.id),
+      ['chooseWizard', 'chooseAi', 'chooseManual']);
+    assertEqual(document.activeElement, document.getElementById('chooseWizard'));
 
     click(document.getElementById('chooseManual'));
     assertEqual(document.getElementById('page').getAttribute('data-stage'), 'build');
@@ -158,8 +189,8 @@ module.exports = function (test, h) {
     const { document } = loadEditor();
     const hrefs = [...document.querySelectorAll('.mc-top nav a')]
       .map((a) => a.getAttribute('href')).filter((hr) => hr.charAt(0) === '#');
-    assertEqual(hrefs, ['#station-demo', '#station-start', '#station-agent', '#station-calendars',
-      '#station-lines', '#station-output']);
+    assertEqual(hrefs, ['#station-wizard', '#station-demo', '#station-start', '#station-agent',
+      '#station-calendars', '#station-lines', '#station-output']);
     // ids are load-bearing: they are what the nav, the docs and every deep link point at
     hrefs.forEach((hr) => assert(document.querySelector(hr), 'nav points at a section that is not there: ' + hr));
   });

@@ -49,8 +49,15 @@ No server of your own.
    with the
    [Configuration editor](https://excusemi.github.io/trmnl-metro-calendar-plugin/tools/config-editor.html),
    which also previews the map at every device size, or write it by hand
-   (see [CONFIG.md](CONFIG.md)). It asks two questions per calendar: the ICS
-   link, and who it is for. No ICS links yet? The editor's **Examples**
+   (see [CONFIG.md](CONFIG.md)). The editor opens as a step-by-step setup:
+   who lives here, then one screen per calendar with click-by-click
+   instructions for finding its link in Google Calendar, iCloud, Outlook,
+   Nextcloud or Synology, and a check that reads the calendar back to you
+   ("Found 14 appointments, the next is Swimming on Tuesday at 4") before it
+   adds anything. It saves your answers in your browser as you go, and
+   pasting back what TRMNL already has reopens it with every answer filled
+   in. Add `?full` to the address for the old page with every control on it
+   at once. No ICS links yet? The editor's **Examples**
    section has three presets (*Family of 4*, *Work vs Personal Split*,
    *Solo Freelancer Line*): pick one, draw the map, then swap the
    placeholder links for your own. Each demo board is also a worked example:
