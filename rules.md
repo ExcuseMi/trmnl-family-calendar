@@ -267,6 +267,15 @@ Where the two disagree, this one is newer.
     This does not license the 90 anywhere else. Rule 13 stands: outside a
     convergence, a move that cannot pay for its 45 holds short instead of
     turning square.
+
+    Measured, once 29g could ask the question of a FINISHED board. Let the
+    convergence 90s be candidates and there are 206 of them across the 32
+    landscape boards; of those, seven can be softened without moving a
+    single thing, and the seven are not an improvement. Maggie leaves her
+    nap at half past two and reaches dinner at seven on one unbroken
+    diagonal, which draws four and a half hours of travelling where she was
+    at home. The rest are refused because something is hung on the stretch
+    of rail that would move -- 97 a branch's foot or a mark, 23 a name.
 29b. **45 by default, 90 when the day runs out.** A 45 costs one pixel of
     axis for every pixel it climbs, so whether it is available is
     arithmetic, not preference: where the remaining runway is shorter than
@@ -595,19 +604,13 @@ Known gaps, so nobody reads this as a description of a board that exists:
 - **16/17** is newly written and newly implemented; the clearance it keeps is
   a fixed fraction of a line step rather than anything measured against the
   events that need the space.
-- **29g** is stated and NOT implemented, deliberately. It was built and
-  measured: the two-pass version works and finds real cases (65 moves on
-  five-lines alone were squared against a rail that was not there), and it
-  changes nothing on any board -- 49 boards, every fixture on all three
-  viewports, vertical and 45 shares identical to the decimal place. Every one
-  of those 65 is also a convergence move, so 29f keeps it square, correctly,
-  and most boards have no level change to soften at all. It was reverted
-  rather than shipped because it costs a full second computation of every
-  span on every render and buys nothing today. E28 in `issues.md` has the
-  measurements and the non-obvious part of the mechanism (it cannot be done
-  in one pass: asking where another line is calls that line's own span
-  solver, which asks back, and the board never draws). Rebuild it if 29f
-  changes or a board turns up with level changes that are not convergences.
+- **29g** is kept, and on today's boards it takes nothing back: every 90 on
+  every one of the 32 landscape boards is a convergence's, which is 29f's
+  and not this rule's to take. `reclaimDiagonals` in `shared.liquid` says
+  what it costs to keep a pass that does nothing -- a walk over the spans,
+  and no more unless there is something to reclaim -- and why it cannot be
+  asked any earlier than it is. Portrait boards are out of it entirely,
+  because `labelBoxes` has nothing to say there: see the 32/33 gap above.
 - **E10** in `issues.md`: an event during a diagonal run should be a mark on
   the run, not a branch drawn beside it. Tried once, reverted. Rule 24 makes
   it matter more: where the gate leaves no 45, the branch takes a right

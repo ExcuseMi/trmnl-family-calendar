@@ -265,4 +265,23 @@ module.exports = function (test, h) {
         + bad.slice(0, 4).join('; '));
     });
   }
+
+  // RULE 29g, AS A TRIPWIRE RATHER THAN AS AN ASSERTION ABOUT ANGLES.
+  //
+  // The reclaim takes back a 90 that was squared only because another
+  // line's BASELINE lay across it while that line was somewhere else. On
+  // every board here it finds no such move: the only 90s these boards draw
+  // are convergences', which 29f keeps square on purpose. That is a fact
+  // about the fixtures, not about the rule, and the day it stops being true
+  // is the day somebody should look at the picture rather than at this
+  // number -- a reclaimed 45 is a line that now leaves earlier than it did,
+  // and whether that reads right is not a thing a suite can answer.
+  test('no board has a 90 that was bought with an empty baseline', () => {
+    const seen = [];
+    for (const f of fixtures) {
+      const r = layout(f, ROOMY).debug.reclaim;
+      if (r && r[0]) seen.push(f.name + ': ' + r[0] + ' candidate(s), ' + r[1] + ' taken');
+    }
+    assert(seen.length === 0, seen.join('; '));
+  });
 };

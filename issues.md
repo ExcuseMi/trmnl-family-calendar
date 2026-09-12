@@ -37,30 +37,6 @@ it, which is where somebody changing that code will be standing.
   reason a member cannot be free, so it may be that mechanism rather than a
   new one.
 
-- [ ] **P2. The 45 reclaim has to run after the captions, and it runs before.**
-  Rule 29g: a 90 that could be a 45 without disturbing anything becomes one.
-  Built twice, measured both times, reverted both times, and the second
-  attempt is the one worth reading.
-
-  With convergence approaches included it does exactly what the rule asks:
-  45 goes from about 1% of track ink to 11-24%, on 26 of 49 boards, and the
-  vertical share roughly halves. It also breaks six boards -- a rail through
-  a name on four, a caption past a neighbour on two -- and on one, the
-  shared long event loses its capsule outright. Confining the diagonal to
-  axis with no events on it improved that and did not fix it.
-
-  The cause is the whole issue: the reclaim runs while the trunks are built
-  and the captions do not exist yet, so it can prove it is not crossing a
-  rail and cannot even ask whether it is ploughing through a name. That is
-  rule 29f's argument arriving as a measurement -- the diagonals really do
-  bunch the labels.
-
-  Making it work means running the reclaim after the captions are placed and
-  re-placing what it disturbs, which reorders the passes rather than tweaking
-  one. Keep the mechanism from the attempts: it cannot be done in a single
-  pass, because asking where another line is calls that line's own span
-  solver, which asks back, and the board never draws.
-
 ---
 
 ## A. The board is wrong right now
@@ -904,6 +880,7 @@ it, which is where somebody changing that code will be standing.
 
 One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 
+- P2. The 45 reclaim runs after the captions now, and takes nothing (29g)
 - A1. Tracks squashed into a third of the board
 - A2. Line names sitting on their own rails
 - A3. Station captions collide

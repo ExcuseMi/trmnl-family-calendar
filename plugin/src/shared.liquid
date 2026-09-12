@@ -1736,6 +1736,12 @@
       if (where > 0) return { a0: from, R: R, r: r };
       return { a0: from + (room - R) / 2, R: R, r: r };
     }
+    // Set only while `reclaimDiagonals` is rebuilding ONE span to see what
+    // it would look like unsquared. It is off for every other call,
+    // including the ones the reclaim's own sampling makes of other lines:
+    // those must answer with the board as it stands, or the question is
+    // asked of a board nobody has drawn.
+    var RECLAIM_OPEN = false;
     function routeSpan(p, i) {
       // the transition that lands on hold i (i === hs.length means the run
       // home after the last one), memoised per line since the sampler asks
@@ -1911,7 +1917,35 @@
           if (qc > loC + 0.5 && qc < hiC - 0.5) crosses = true;
         });
       }
-      var steep = crosses || (i < hs.length && hs[i].shared) || (prev && prev.shared);
+      // WHICH OF THE TWO REASONS BOUGHT THIS 90 (rule 29g).
+      //
+      // A convergence at either end keeps its 90 and is not asked again:
+      // that is 29f, and it is the mark 29a says a 90 IS. A baseline lying
+      // across the move is the other reason, and it is a SUSPICION rather
+      // than a fact -- it asks where a line lives, not where it is at this
+      // minute, and a line that is itself up in a corridor has left its
+      // baseline empty.
+      //
+      // So it is recorded, and `reclaimDiagonals` re-asks it of the
+      // finished board once every name on it has been placed. `RECLAIM_OPEN`
+      // is that pass asking: the span is rebuilt as though nothing were in
+      // the way, and the 45 it wants is then measured against everything
+      // that is actually there before it is allowed to stand.
+      var conv = !!((i < hs.length && hs[i].shared) || (prev && prev.shared));
+      // A CONVERGENCE'S 90 IS NOT A CANDIDATE, AND THAT WAS MEASURED.
+      //
+      // Allowing it (`crosses || conv` here, and dropping `conv` below) is
+      // the version that makes the reclaim look like it does something: 206
+      // candidates across the 32 landscape boards instead of none. Asked of
+      // the finished board, seven of those 206 turn out to be free -- the
+      // rest move a branch's foot, a mark or a name -- and the seven are
+      // not an improvement. Maggie leaves her nap at half past two and
+      // arrives at dinner at seven on one unbroken diagonal, which says she
+      // spent the afternoon travelling. That is 29a: a 45 is a lane change
+      // and a 90 is an arrival, and she is arriving.
+      var baselineOnly = crosses && !conv;
+      if (RECLAIM_OPEN) crosses = false;
+      var steep = crosses || conv;
       if (steep && i < hs.length) from = Math.max(from, to - CORNER * 3);
       if (steep && i === hs.length) to = Math.min(to, from + CORNER * 3);
       // GOING HOME IS OPTIONAL. A line has to START the day on its own
@@ -1967,6 +2001,7 @@
       // then the move fills what room there is.
       var sp = octSpan(from, to, lvl - prevLvl, where);
       sp.base = prevLvl; sp.d = lvl - prevLvl;
+      sp.onlyBaseline = baselineOnly;   // rule 29g's candidates, and nothing else
       p[key][i] = sp;
       return sp;
     }
@@ -2492,7 +2527,7 @@
     // the loop's "is this tier better" question answered no to all of them.
     // The scoring changes that followed were being made against a number
     // nobody was computing.
-    var capClashes = 0, capPierces = 0, metroDbgCaps = null, metroDbgWhy = null;
+    var capClashes = 0, capPierces = 0, metroDbgCaps = null, metroDbgWhy = null, metroDbgReclaim = null;
     // Which tracks were found to need the gap beside their own line. Empty
     // on the first solve, because it can only be answered by a board that
     // has been drawn; `settleSides` fills it in and solves again.
@@ -5165,6 +5200,7 @@
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
     buildTrunks();
     placeOnLineCaptions();
+    reclaimDiagonals();
 
     // CALLED ONCE PER ATTEMPT, not once at the end.
     //
@@ -6435,6 +6471,217 @@
 
       recomputeLineDists();
     }
+    // ---- rule 29g: the 45s nothing was in the way of, taken back --------
+    //
+    // LAST, AND THAT IS THE WHOLE POINT OF IT.
+    //
+    // A move goes square for one of three reasons: it arrives at or leaves
+    // a convergence (29f, and it keeps its 90), the runway genuinely runs
+    // out (29b, and `octSpan` will say so again), or something lies across
+    // it. Only the third is decided against a guess: the span solver knows
+    // where every line LIVES and not where it is at that minute, so a line
+    // that was itself up in a corridor squared somebody else's move to
+    // avoid a rail that was not there.
+    //
+    // Re-asking it is cheap. Doing it in the right place is the work. Built
+    // into the span solver it cannot be done at all -- asking where another
+    // line really is calls that line's own solver, which asks back, and the
+    // board never draws. Done as a second pass while the trunks are built
+    // it CAN be answered, and the answer is worth nothing: at that moment
+    // no name has been placed, so the pass can prove it is not crossing a
+    // rail and cannot even ask whether it is ploughing through a word. Both
+    // were built and measured. The second softened a quarter of the ink on
+    // twenty-six boards and put a rail through a name on four of them,
+    // which is 29f's own argument arriving as a measurement: the diagonals
+    // really do bunch the labels.
+    //
+    // So it runs HERE, after `placeOnLineCaptions`, when the board is
+    // finished and every name on it has a box. Nothing downstream reads a
+    // span except the drawing, which reads it live.
+    //
+    // And nothing moves to make it possible, which is the rule as written.
+    // There is no re-placement, no re-scoring and no second opinion: a 45
+    // is taken only where the board it would be drawn on is the board that
+    // is already there. If anything of the line's own is hung on the
+    // stretch that would move -- a branch's foot, a mark, a name -- or if
+    // the softened rail would pass near another line, through another
+    // name, across a rail or through an interchange's drop, the 90 stands.
+    function reclaimDiagonals() {
+      // PORTRAIT BOARDS ARE OUT. `labelBoxes` answers nothing when the axis
+      // runs down the page (rule 32/33's gap), so there the question "does
+      // this 45 go through a name" cannot be asked -- and a reclaim that
+      // cannot see the names is exactly the pass this one exists to avoid.
+      if (!horizontal) return;
+      // THE CHEAP HALF OF THE QUESTION FIRST.
+      //
+      // Which 90s were bought with a baseline alone is already written on
+      // the spans, so asking costs a walk over them, and on every board
+      // measured so far the answer is NONE -- every 90 on these boards is a
+      // convergence's, which is 29f's and is not ours to take. Nothing
+      // below this line runs on a board with nothing to reclaim, which is
+      // what makes it honest to keep the pass: it is a scan, not a second
+      // layout.
+      var work = [];
+      LEGEND.forEach(function (p) {
+        if (!p._route) return;
+        for (var i = 0; i <= p._route.length; i++) {
+          var sp = routeSpan(p, i);
+          if (sp.onlyBaseline && sp.d) work.push([p, i]);
+        }
+      });
+      metroDbgReclaim = [0, 0, 0, 0, 0, 0];
+      if (!work.length) return;
+      var cand = work.length, took = 0, blockOwn = 0, blockLine = 0, blockName = 0, blockCap = 0;
+      var boxes = labelBoxes();
+      var bars = collectBars();
+      // Every rail and ramp on the board, as the paper it covers. A trunk
+      // is sampled where it really is; a branch is a box, which is wider
+      // than the ink and deliberately so -- this pass gives up a 45 rather
+      // than risk one.
+      var rails = [];
+      visible.forEach(function (e) {
+        if (e._dropped || e._laneDist == null || e._onTrack) return;
+        var c = spineC + e._sign * e._laneDist;
+        var a0 = e._elbow == null ? e._nodeA : e._elbow, a1 = e._endA;
+        if (e._textStart != null) {
+          a0 = Math.min(a0, e._textStart); a1 = Math.max(a1, e._textStart + e._textLen);
+        }
+        rails.push({ e: e, a0: Math.min(a0, a1) - TAIL, a1: Math.max(a0, a1) + TAIL,
+                     c0: c - LINE_GAP, c1: c + LINE_GAP });
+        if (isFinite(e._diagFrom) && isFinite(e._elbow)) {
+          var rc = lineCAt(e._p, e._diagFrom);
+          rails.push({ e: e, a0: Math.min(e._diagFrom, e._elbow), a1: Math.max(e._diagFrom, e._elbow),
+                       c0: Math.min(rc, c) - LINE_GAP / 2, c1: Math.max(rc, c) + LINE_GAP / 2 });
+        }
+      });
+      // AND THE NAMES AT THE HEADS OF THE LINES.
+      //
+      // Those are not in `labelBoxes` -- they belong to lines, not events --
+      // and they are not placed until the drawing, which is after this. So
+      // they are reserved rather than read: a box at the head of the axis,
+      // as wide as the name and a name's height either side of the line it
+      // labels, because whether it ends up above its line or under it is
+      // decided down there. Without this a softened rail climbed straight
+      // through "Marge" on five-lines, which is the one name on the board
+      // that cannot move out of the way and cannot be dropped.
+      //
+      // The name at the FOOT is reserved too, and it took a measurement to
+      // see why. That one gives itself up when there is no gap for it, so
+      // it looked like the one name that needs no help -- but the gap it
+      // asks about is other people's EVENTS and other people's NAMES, not
+      // other people's rails, because until this pass existed no rail was
+      // ever anywhere but flat down there. Maggie's run home, softened,
+      // came down through "Marge" at the right-hand edge: eleven pixels,
+      // two failures, and a name that had every right to be where it was.
+      LEGEND.forEach(function (q) {
+        if (!q._nameW) return;
+        var pad = q._nameH + LINE_GAP;
+        var h0 = axisStart - 2 * S, h1 = axisStart + q._nameW + HEAD_CLEAR;
+        var hc = lineCAt(q, (h0 + h1) / 2);
+        rails.push({ e: { _p: q }, a0: h0, a1: h1, c0: hc - pad, c1: hc + pad });
+        var tc = spreadCFor(q);
+        rails.push({ e: { _p: q }, a0: axisEnd - NODE_R - 6 * S - q._nameW, a1: axisEnd,
+                     c0: tc - pad, c1: tc + pad });
+      });
+      function segBox(x0, y0, x1, y1, b) {
+        var t0 = 0, t1 = 1, dx = x1 - x0, dy = y1 - y0;
+        var ps = [-dx, dx, -dy, dy], qs = [x0 - b.a0, b.a1 - x0, y0 - b.c0, b.c1 - y0];
+        for (var k = 0; k < 4; k++) {
+          if (!ps[k]) { if (qs[k] < 0) return false; continue; }
+          var r = qs[k] / ps[k];
+          if (ps[k] < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+          else { if (r < t0) return false; if (r < t1) t1 = r; }
+        }
+        return true;
+      }
+      // Is anything of this line's own hung on the stretch of rail that
+      // would move? A branch leaves the trunk at `_diagFrom` and its height
+      // is read off the trunk there; a mark's dot sits ON the trunk and its
+      // name was placed beside it. Move the rail under any of them and the
+      // drawing is wrong in a way no later pass would correct.
+      function ownFurniture(p, w0, w1) {
+        var hit = 0;   // 0 nothing, 1 a name over the stretch, 2 something structural
+        visible.forEach(function (e) {
+          if (hit === 2 || e._dropped) return;
+          if (e._p !== p && !(e._involved && e._involved.indexOf(p) >= 0)) return;
+          var a0 = Math.min(e._nodeA, e._endA), a1 = Math.max(e._nodeA, e._endA);
+          if (isFinite(e._diagFrom)) { a0 = Math.min(a0, e._diagFrom); a1 = Math.max(a1, e._diagFrom); }
+          if (isFinite(e._elbow)) { a0 = Math.min(a0, e._elbow); a1 = Math.max(a1, e._elbow); }
+          if (a0 < w1 && w0 < a1) { hit = 2; return; }
+          if (e._textStart != null && e._textStart < w1 && w0 < e._textStart + e._textLen) hit = 1;
+        });
+        return hit;
+      }
+      work.forEach(function (job) {
+        var p = job[0], i = job[1];
+        var old = routeSpan(p, i);
+        p._octs[i] = null;
+        RECLAIM_OPEN = true;
+        var ns = routeSpan(p, i);
+        RECLAIM_OPEN = false;
+        p._octs[i] = old;
+        // Nothing to take back: the runway ran out anyway, which is 29b
+        // and is not this pass's business.
+        if (!(ns.R > old.R + 0.5)) return;
+        var w0 = Math.min(old.a0, ns.a0), w1 = Math.max(old.a0 + old.R, ns.a0 + ns.R);
+        var ownHit = ownFurniture(p, w0, w1);
+        if (ownHit) { if (ownHit === 1) blockCap++; else blockOwn++; return; }
+        // An interchange's drop is a heavy bar across the board at one
+        // minute. A 45 through it is not a crossing, it is a mess.
+        var barHit = false;
+        ['A', 'B'].forEach(function (sk) {
+          bars[sk].forEach(function (b) { if (b.a0 < w1 && w0 < b.a1) barHit = true; });
+        });
+        if (barHit) { blockLine++; return; }
+        // Now the new ink itself, read off the board with the softened span
+        // in place, so the samples are the line the drawing would draw
+        // rather than an estimate of it.
+        p._octs[i] = ns;
+        var n = Math.max(12, Math.ceil((w1 - w0) / (4 * S)));
+        var pts = [], k;
+        for (k = 0; k <= n; k++) {
+          var aa = w0 + (w1 - w0) * (k / n);
+          pts.push([aa, lineCAt(p, aa)]);
+        }
+        var nearLine = false, thruName = false;
+        LEGEND.forEach(function (q) {
+          if (nearLine || q === p) return;
+          var sgn = 0;
+          for (var j = 0; j <= n; j++) {
+            var gap = pts[j][1] - lineCAt(q, pts[j][0]);
+            // touching counts as crossing: the six pixels of paper a rail
+            // keeps from another rail is the same clearance a name gets
+            if (Math.abs(gap) < LINE_GAP) { nearLine = true; return; }
+            if (sgn && (gap > 0) !== (sgn > 0)) { nearLine = true; return; }
+            sgn = gap;
+          }
+        });
+        if (!nearLine) {
+          for (k = 0; k < pts.length - 1 && !thruName; k++) {
+            boxes.forEach(function (b) {
+              if (thruName || b.e._p === p) return;
+              if (segBox(pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1], b)) thruName = true;
+            });
+            rails.forEach(function (b) {
+              if (thruName || b.e._p === p) return;
+              if (segBox(pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1], b)) thruName = true;
+            });
+          }
+        }
+        if (nearLine || thruName) {
+          p._octs[i] = old;
+          if (nearLine) blockLine++; else blockName++;
+        } else {
+          took++;
+        }
+      });
+      // A branch's origin is measured off the trunk it leaves, so anything
+      // taken back has to be told to the events. Nothing that moved has a
+      // branch on it -- `ownFurniture` saw to that -- but the distances are
+      // read from the line and the line is not where it was.
+      if (took) recomputeLineDists();
+      metroDbgReclaim = [cand, took, blockOwn, blockCap, blockLine, blockName];
+    }
     function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._lineDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA), e._routeShared ? 'shared' : e._onTrack ? 'mark' : 'shelf']; }); }
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal,
@@ -6443,6 +6690,10 @@
       // place, how many it could not draw, how many still touch, and the
       // energy of the board it kept
       caps: metroDbgCaps,
+      // rule 29g: how many 90s were bought with a baseline alone, how many
+      // of those got their 45 back, and what stopped the rest -- the line's
+      // own furniture, another line, or a name
+      reclaim: metroDbgReclaim,
       // The run the board settled on, and the nights inside it, in minutes
       // and in axis px: a case asking whether the corridor really spans
       // 22:00 to 06:00 should not have to re-derive the scale to find out.
