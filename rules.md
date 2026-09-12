@@ -17,6 +17,27 @@ Where the two disagree, this one is newer.
 2. **Quiet hours are compressed, not cut.** The scale runs faster through
    stretches with nothing on them, and the change of rate is drawn on the
    hour strip and on the lines (the speed marks).
+2a. **A quiet day is drawn with the next one.** Two events or fewer on the
+   day being shown and the board runs from six that morning to six the
+   following evening, because a day with one appointment on it spends most
+   of the board on hours nobody has anything in, and what is coming is the
+   thing a quiet day still has to say. Counted per civil day over the whole
+   day, never from the clock forwards, and the window is anchored to the
+   day and not to "now": the panel refreshes every fifteen minutes and the
+   board may not rearrange itself under somebody reading it. A busier day
+   is the single day it always was.
+2b. **The night is a zone, not a moment.** Ten at night to six in the
+   morning is drawn as a corridor of upright hairlines the depth of the
+   board, with more ink on its two edges than between them, so a reader can
+   see how much of a two-day board is night. Where the night and a
+   compressed stretch are the same hours -- which is usually -- the
+   corridor is the mark and the express hatch stands off: two hatches over
+   one stretch of time say two different things are happening to it.
+2c. **Each day names itself on the hour strip.** An hour label says only
+   the time, and "09:00" on a 36-hour board is two different mornings, so
+   the day a midnight opens is written at that midnight, in capitals, among
+   the hours rather than loose on the map. The day the board OPENS on is
+   named there only where the header is not already naming it.
 3. **One line per person, parallel to the axis**, at a fixed distance from
    the spine that is decided once per board.
 4. **A line is named at its own head**, and the name and the line must agree:

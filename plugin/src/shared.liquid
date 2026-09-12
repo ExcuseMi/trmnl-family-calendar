@@ -252,6 +252,12 @@
     box-shadow: inset 0 0 0 2px var(--framework-semantic-text-primary-text-color, #000);
   }
   .metro-terminus { white-space: nowrap; }
+  /* A date marker on the hour strip is set in capitals, so that a name
+     among numbers reads as a different KIND of thing at a glance rather
+     than as another tick with letters in it. It is the same size as the
+     hours: bigger, it would be the loudest thing on a strip whose job is
+     the clock. */
+  .metro-daybreak { text-transform: uppercase; letter-spacing: 0.04em; }
   .metro-sky { white-space: nowrap; }
   .metro-hour, .metro-axis-note, .metro-terminus, .metro-sky { padding: 1px 3px; }
   /* nothing above or below: see the line-height note. Either side is the
@@ -1155,10 +1161,87 @@
         return u;
       }
 
-      // input: { days: n available, content: [{start_min,end_min}], axisPx, k }
+      // THE NIGHT EITHER SIDE OF A MIDNIGHT: ten at night to six in the
+      // morning, which is the stretch a board covering two days has to say
+      // is NIGHT rather than simply more axis. A reader looking at one
+      // continuous scale has no other way to tell "later today" from
+      // "tomorrow", and the midnight bar alone is a line, not a duration.
+      //
+      // It comes out of the model rather than the drawing because it is a
+      // fact about the run of days, and because the drawing has to be able
+      // to ask whether a compressed stretch and a night are the same
+      // minutes: they usually are, and two marks over one stretch of time
+      // say two different things are happening to it.
+      function nightsAround(k, boundaries, from, to) {
+        var before = k.nightBefore == null ? 120 : k.nightBefore;
+        var after = k.nightAfter == null ? 360 : k.nightAfter;
+        var out = [];
+        for (var i = 0; i < boundaries.length; i++) {
+          var mid = boundaries[i].min;
+          var n0 = Math.max(from, mid - before), n1 = Math.min(to, mid + after);
+          if (n1 - n0 > 1) out.push({ from: n0, to: n1, day: boundaries[i].day });
+        }
+        return out;
+      }
+
+      // A WINDOW INTO THE RUN, when the caller has one.
+      //
+      // A quiet day borrows the next one, and the day it borrowed is not a
+      // whole day: the board runs from six in the morning to six the
+      // following evening. So there is nothing to choose here -- which
+      // minutes the board is about has already been decided upstream, from
+      // the events, where it can be decided the same way at every refresh.
+      // All this does is clip the same compression profile to those minutes
+      // and say whether what comes out is READABLE.
+      //
+      // Two ways it says no, and both fall back to the ordinary single-day
+      // board. A 36-hour window on a small panel can leave an hour narrower
+      // than a short meeting's own two marks, and a day is better than a
+      // run nobody can read. And a borrowed day with nothing on it inside
+      // the window is the "empty last day" case the day counter already
+      // refuses: a shorter board with a night stuck on the end.
+      function windowed(k, win, content, axisPx) {
+        var count = Math.ceil(win.to / DAY);
+        var segs = [];
+        segmentsFor(k, count, content).forEach(function (s) {
+          var from = Math.max(s.from, win.from), to = Math.min(s.to, win.to);
+          if (to - from < 0.5) return;
+          var last = segs[segs.length - 1];
+          if (last && last.rate === s.rate && Math.abs(last.to - from) < 0.5) { last.to = to; return; }
+          segs.push({ from: from, to: to, rate: s.rate });
+        });
+        if (!segs.length) return null;
+        var boundaries = [];
+        for (var b = 1; b < count; b++) {
+          if (b * DAY > win.from && b * DAY < win.to) boundaries.push({ min: b * DAY, day: b });
+        }
+        if (!boundaries.length) return null;
+        var afterLast = boundaries[boundaries.length - 1].min;
+        var borrowed = false;
+        for (var c = 0; c < content.length; c++) {
+          if (content[c].end_min > afterLast && content[c].start_min < win.to) { borrowed = true; break; }
+        }
+        if (!borrowed) return null;
+        var units = unitsOf(segs), busy = 0;
+        for (var i = 0; i < segs.length; i++) if (segs[i].rate === 1) busy += segs[i].to - segs[i].from;
+        var pxPerBusyHour = units > 0 ? (axisPx / units) * 60 : 0;
+        if (pxPerBusyHour < k.minPxPerHourRun) return null;
+        return {
+          dayCount: count, winStart: win.from, winEnd: win.to,
+          segments: segs, units: units, busyMin: busy, pxPerBusyHour: pxPerBusyHour,
+          boundaries: boundaries, nights: nightsAround(k, boundaries, win.from, win.to),
+        };
+      }
+
+      // input: { days: n available, content: [{start_min,end_min}], axisPx, k,
+      //          window: {from,to} or null }
       function fit(input) {
         var k = input.k, avail = Math.max(1, input.days);
         var content = input.content || [];
+        if (input.window && input.window.to > input.window.from) {
+          var w = windowed(k, input.window, content, input.axisPx);
+          if (w) return w;
+        }
         // As many days as the board can give a readable one to. Counted
         // down rather than up, so a board that can hold three holds three.
         var best = null;
@@ -1192,6 +1275,7 @@
           segments: best.segs, units: best.units,
           busyMin: best.busy, pxPerBusyHour: best.pxPerBusyHour,
           boundaries: boundaries,
+          nights: nightsAround(k, boundaries, 0, best.count * DAY),
         };
       }
 
@@ -1395,13 +1479,24 @@
     // The scale, from the model. It decided how many days fit and what each
     // minute of them is worth; all that is left here is turning its units
     // into this canvas's pixels.
+    // THE WINDOW, WHERE THERE IS ONE. A day with almost nothing on it
+    // borrows the next one, and transform says so by sending the minutes
+    // the board is about: six in the morning through to six the following
+    // evening. Absent on every ordinary board, and absent is the default
+    // everywhere below, so a board that was not stretched is the board it
+    // always was.
+    var ROLL = (METRO.rolling && METRO.rolling.end_min > METRO.rolling.start_min)
+      ? { from: METRO.rolling.start_min, to: METRO.rolling.end_min } : null;
     var AXIS = TimeAxis.fit({
       days: DAY_RUN.length,
       content: axisContent,
       axisPx: axisEnd - axisStart,
+      window: ROLL,
       k: {
         contentPad: 75, minDaySpan: 6 * 60, minExpress: MIN_EXPRESS_MIN,
         expressRate: EXPRESS_RATE,
+        // What counts as night, either side of a midnight the board draws.
+        nightBefore: 2 * 60, nightAfter: 6 * 60,
         // little cross room means few lanes means fewer hours are readable
         minPxPerHour: (horizontal ? 46 : 38) * S * (crossPx < 260 * S ? 1.8 : 1),
         minPxPerHourRun: (horizontal ? 26 : 22) * S * (crossPx < 260 * S ? 1.8 : 1),
@@ -1409,15 +1504,42 @@
     });
     var dayCount = AXIS.dayCount;
     var pxPerMin = (axisEnd - axisStart) / (AXIS.units || 1);
+    // what the rest of the file still calls the window: the stretch of the
+    // run the board decided to draw. A whole number of days on an ordinary
+    // board, the rolling window where there is one.
+    var dayFrom = AXIS.winStart, dayTo = AXIS.winEnd;
     function aFor(min) {
-      return axisStart + TimeAxis.posOf(AXIS, clamp(min, 0, dayCount * 1440)) * pxPerMin;
+      return axisStart + TimeAxis.posOf(AXIS, clamp(min, dayFrom, dayTo)) * pxPerMin;
     }
     // the scale of the busy stretch — what the hour labels are spaced by
     var pxPerHour = 60 * pxPerMin;
     function isExpress(min) { return TimeAxis.isExpress(AXIS, min); }
-    // what the rest of the file still calls the window: the run the board
-    // decided to draw
-    var dayFrom = 0, dayTo = dayCount * 1440;
+    // Is this minute inside a night the board is drawing? The corridor, the
+    // express hatch and the speed marks all have to agree about that, and
+    // asking the model is the only way they can.
+    var NIGHTS = AXIS.nights || [];
+    function inNight(from, to) {
+      for (var i = 0; i < NIGHTS.length; i++) {
+        if (to > NIGHTS[i].from && from < NIGHTS[i].to) return true;
+      }
+      return false;
+    }
+    // The parts of a stretch of minutes that are NOT night, in order. What
+    // the express hatch is left to draw once the corridor has taken its
+    // own hours.
+    function clearOfNight(from, to) {
+      var runs = [[from, to]];
+      NIGHTS.forEach(function (n) {
+        var next = [];
+        runs.forEach(function (r) {
+          if (n.to <= r[0] || n.from >= r[1]) { next.push(r); return; }
+          if (r[0] < n.from) next.push([r[0], n.from]);
+          if (n.to < r[1]) next.push([n.to, r[1]]);
+        });
+        runs = next;
+      });
+      return runs;
+    }
     if (winLabel) winLabel.textContent = timeLabel(dayFrom) + ' ' + timeLabel(dayTo);
 
     // ---- sidings: convert each track's raw minute ranges to clamped
@@ -5646,6 +5768,12 @@
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal,
       corner: CORNER, minDiag: MIN_DIAG, win: [dayFrom, dayTo],
+      // The run the board settled on, and the nights inside it, in minutes
+      // and in axis px: a case asking whether the corridor really spans
+      // 22:00 to 06:00 should not have to re-derive the scale to find out.
+      days: dayCount, rolling: !!ROLL,
+      midnights: AXIS.boundaries.map(function (b) { return [b.min, Math.round(aFor(b.min))]; }),
+      nights: NIGHTS.map(function (n) { return [n.from, n.to, Math.round(aFor(n.from)), Math.round(aFor(n.to))]; }),
       spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
@@ -5683,15 +5811,25 @@
         if (a1 - a0 < 6 * S) return;
         // the hatch: diagonals across the strip, close enough to read as a
         // texture and light enough to leave the hour labels legible
+        //
+        // ONCE OVER THE SAME HOURS. A compressed stretch and a night
+        // corridor are usually the same minutes, and two hatches over one
+        // stretch of time say two different things are happening to it.
+        // Where they overlap the corridor is the mark, and this draws only
+        // what is left over.
         var step = 7 * S, h = bandThick;
-        for (var x = a0; x < a1; x += step) {
-          var p0 = toXY(x, 0), p1 = toXY(Math.min(x + h, a1), h);
-          var hl = svgEl('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
-            'stroke-width': 1 * S, 'stroke-opacity': 0.35 });
-          hl.style.stroke = INK;
-          hl.setAttribute(ROLE_ATTR, 'express');
-          svg.appendChild(hl);
-        }
+        clearOfNight(sg.from, sg.to).forEach(function (r) {
+          var b0 = aFor(r[0]), b1 = aFor(r[1]);
+          if (b1 - b0 < 6 * S) return;
+          for (var x = b0; x < b1; x += step) {
+            var p0 = toXY(x, 0), p1 = toXY(Math.min(x + h, b1), h);
+            var hl = svgEl('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
+              'stroke-width': 1 * S, 'stroke-opacity': 0.35 });
+            hl.style.stroke = INK;
+            hl.setAttribute(ROLE_ATTR, 'express');
+            svg.appendChild(hl);
+          }
+        });
         // SPEED LINES along every rail in the stretch. The hatch says the
         // time is compressed; this says what that means for the lines, and
         // it is the mark everyone already reads as fast: short strokes
@@ -5709,7 +5847,13 @@
         // thing a speed mark cannot do is point somewhere other than the way
         // the thing is going.
         var lineLen = 11 * S, pitch = 17 * S;
+        var nightA = NIGHTS.map(function (n) { return [aFor(n.from), aFor(n.to)]; });
         for (var sx = a0 + 6 * S; sx < a1 - lineLen - 4 * S; sx += pitch) {
+          // Not through the corridor. The night says the scale is running
+          // fast there already, and a speed mark on top of it is the same
+          // sentence twice over a stretch that is mostly hatch.
+          var sxA = sx;
+          if (nightA.some(function (r) { return sxA + lineLen > r[0] && sxA < r[1]; })) continue;
           LEGEND.forEach(function (p) {
             var w = Math.max(2, p.line_width) * S * weightScale;
             var cA = lineCAt(p, sx), cB = lineCAt(p, sx + lineLen);
@@ -5730,6 +5874,13 @@
         }
         // the portals: where the scale changes, across the whole map, so
         // the change is visible on the lines and not only on the strip
+        //
+        // Not around a night. A stretch that contains one already has the
+        // corridor's own two edges across the map, and a portal a couple of
+        // compressed hours outside each of them adds a second pair of
+        // vertical rules saying nearly the same thing in nearly the same
+        // place, which reads as four things happening rather than one.
+        if (inNight(sg.from, sg.to)) return;
         [a0, a1].forEach(function (at) {
           if (at <= axisStart + 1 || at >= axisEnd - 1) return;
           var q0 = toXY(at, bandLo), q1 = toXY(at, crossPx);
@@ -5739,6 +5890,57 @@
           pl.setAttribute(ROLE_ATTR, 'express');
           svg.appendChild(pl);
         });
+      });
+    })();
+
+    // ---- the night corridor ---------------------------------------------
+    //
+    // Ten at night to six in the morning, drawn as a zone rather than as a
+    // moment. A board covering two days is one continuous scale, and
+    // without this the reader has a midnight bar and no way to feel how
+    // much of the board is night: "tomorrow at nine" and "later tonight"
+    // look like the same distance apart.
+    //
+    // VERTICAL HAIRLINES, not a fill and not a diagonal hatch. A gray block
+    // behind a metro map reads as a hole punched in it, and diagonal
+    // hatching is already the express mark on the strip. Upright strokes at
+    // a wide pitch are the quietest texture that survives a 1-bit panel:
+    // there is nothing to dither, the lines are simply thin and far apart.
+    // They run the whole depth, strip included, so the corridor is one
+    // thing rather than a mark on the scale and a separate mark on the map.
+    //
+    // Behind everything. A line that runs through the night really does run
+    // through it.
+    (function drawNightCorridors() {
+      NIGHTS.forEach(function (n) {
+        var a0 = aFor(n.from), a1 = aFor(n.to);
+        if (a1 - a0 < 4 * S) return;
+        // FEW ENOUGH TO READ AS A ZONE. At a fixed pitch the corridor came
+        // out as a picket fence: a night is compressed, so eight hours of
+        // it is a hand's width of axis, and ten hairlines across it read as
+        // a barrier rather than as a stretch of time. Half a dozen strokes
+        // say the same thing quietly, so the pitch is taken from how wide
+        // the corridor actually turned out and floored so a night that is
+        // NOT compressed (somebody is out at two in the morning) does not
+        // spread its strokes out into unrelated verticals.
+        var pitch = clamp((a1 - a0) / 4, 12 * S, 24 * S);
+        // The two EDGES carry more ink than the strokes between them, so the
+        // corridor has a start and an end rather than being a handful of
+        // verticals that happen to be near midnight. It is the same job the
+        // express portals do where the scale changes, done by the corridor
+        // itself instead of by a second pair of rules beside it.
+        function night(at, edge) {
+          var p0 = toXY(at, 0), p1 = toXY(at, crossPx);
+          var hl = svgEl('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
+            'stroke-width': 1 * S,
+            'stroke-opacity': edge ? (ONE_BIT ? 0.7 : 0.38) : (ONE_BIT ? 0.5 : 0.16) });
+          hl.style.stroke = INK;
+          hl.setAttribute(ROLE_ATTR, 'night');
+          svg.appendChild(hl);
+        }
+        for (var x = a0 + pitch; x < a1 - pitch * 0.4; x += pitch) night(x, false);
+        night(a0, true);
+        night(a1, true);
       });
     })();
 
@@ -5767,17 +5969,12 @@
           bar.setAttribute(ROLE_ATTR, 'midnight');
           svg.appendChild(bar);
         });
-        // the day it opens, named on the bar, so the reader is told what
-        // they have crossed into rather than only that they crossed
-        var d = DAY_RUN[b.day];
-        if (!d || !d.date_label) return;
-        var lab = el('span', 'metro-gen metro-axis-note label label--small font--bold text--black absolute');
-        lab.textContent = d.date_label;
-        canvas.appendChild(lab);
-        var lm = measure(lab);
-        var lxy = toXY(a + 4 * S, lo + 2 * S);
-        lab.style.left = clamp(lxy[0], 0, Math.max(0, W - lm.w)) + 'px';
-        lab.style.top = lxy[1] + 'px';
+        // The day it opens is NAMED ON THE STRIP, not here. Written at the
+        // top of the map it was a loose label in the first band's paper,
+        // free to land on a line, a caption or a car; the strip is where
+        // this board writes times, it is already reserved, and the note
+        // machinery there keeps every mark on it clear of the others. See
+        // the daybreak markers in the hour-axis section below.
       });
     })();
 
@@ -8128,6 +8325,51 @@
       // rule — the same solid-ink pill the header uses, so "now" is the
       // one time on the strip that is stated rather than annotated.
       axisNote(timeLabel(nowMin), nowA, 'centre', 'metro-axis-note metro-pill label label--small font--bold');
+    }
+    // ---- daybreak markers: which day this stretch of axis belongs to
+    //
+    // A board that runs past midnight is ONE continuous scale, and an hour
+    // label says only the time: "09:00" on a 36-hour board is two different
+    // mornings. So each day names itself along the strip -- the day the
+    // board opens on at the head of the axis, the day each midnight opens
+    // exactly where that midnight falls -- and the reader is told what they
+    // have crossed into rather than only that they crossed.
+    //
+    // On the STRIP, through the same note machinery the clock badge uses,
+    // so a date marker cannot be written over an hour tick, over the clock,
+    // or over the overflow notes: whatever cannot fit falls back to the
+    // short weekday and then gives way.
+    //
+    // Nothing at all on a single-day board. There is one day, the header
+    // already says which, and a marker would be saying it twice.
+    if (AXIS.boundaries.length) {
+      var dayCls = 'metro-axis-note metro-daybreak label label--small font--bold text--black';
+      AXIS.boundaries.forEach(function (b) {
+        var d = DAY_RUN[b.day];
+        if (!d || !d.date_label) return;
+        axisNote([d.date_label, d.weekday_short || d.weekday_label],
+          aFor(b.min) + 3 * S, 'start', dayCls);
+      });
+      // THE DAY THE BOARD OPENS ON, but only where the header is not
+      // already saying it. On a full board it is: the date badge is the
+      // header's hard anchor, and a second copy of the same words at the
+      // head of the strip is the board answering a question it has just
+      // answered, in the one place the clock badge also wants. Where the
+      // header has been dropped for want of depth -- a quadrant, a half
+      // slot -- nothing else on the board names the first day, and then
+      // this is the only thing that says which day the left-hand half of a
+      // 36-hour scale belongs to.
+      //
+      // The clock badge still has first claim on that spot, so a board read
+      // in the first hour of its own window names only the day it crosses
+      // into. What time it is beats what day it started on, and the marker
+      // comes back on the next refresh that moves the badge along.
+      var datePill = ROOT.querySelector('.metro-date');
+      var d0 = DAY_RUN[0];
+      if (d0 && d0.date_label && !(datePill && datePill.offsetWidth > 0)) {
+        axisNote([d0.date_label, d0.weekday_short || d0.weekday_label],
+          axisStart + EDGE, 'start', dayCls);
+      }
     }
     if (earlier) axisNote([tr('earlier', earlier), '+' + earlier], axisStart + EDGE, 'start', 'metro-axis-note label label--small font--bold text--black');
     if (later + dropped) axisNote([tr('more', later + dropped), '+' + (later + dropped)], axisEnd - EDGE, 'end', 'metro-axis-note label label--small font--bold text--black');

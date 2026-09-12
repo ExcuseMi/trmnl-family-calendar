@@ -184,9 +184,12 @@ module.exports = function (test, h) {
     const r = await runTransform(async () => okText(icsWithEvents([
       { start: '20260907T043000Z', end: '20260907T053000Z', summary: 'Early Shift' },
       { start: '20260907T200000Z', end: '20260907T203000Z', summary: 'Late Call' },
-    ])), NOW).run(baseInput(NOW, cfgWith({
+    // Two events is a quiet day, and a quiet day borrows the next one
+    // unless it is told not to. This case is about how ONE day's window
+    // fits its own content, so it asks for the one day.
+    ])), NOW).run(baseInput(NOW, Object.assign(cfgWith({
       calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }],
-    })));
+    }), { rolling_view: 'one' })));
     const items = eventItems(r.data);
     const first = Math.min.apply(null, items.map((e) => e.start_min));
     const last = Math.max.apply(null, items.map((e) => e.end_min));
