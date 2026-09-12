@@ -2381,7 +2381,7 @@
     // the loop's "is this tier better" question answered no to all of them.
     // The scoring changes that followed were being made against a number
     // nobody was computing.
-    var capClashes = 0, capPierces = 0, metroDbgCaps = null;
+    var capClashes = 0, capPierces = 0, metroDbgCaps = null, metroDbgWhy = null;
     // Which tracks were found to need the gap beside their own line. Empty
     // on the first solve, because it can only be answered by a board that
     // has been drawn; `settleSides` fills it in and solves again.
@@ -3191,7 +3191,7 @@
       }
 
       function buildSide(k, tracks, lanesFor, stepPx, sepPx, opts) {
-        var acc = 0, slots = [], dist = {}, bandEnd = {}, inward = {};
+        var acc = 0, slots = [], dist = {}, bandEnd = {}, inward = {}, why = [];
         opts = opts || {};
         // Half a pitch for the first track on each side, a whole one after
         // that: with no gutter left in the middle the two innermost lines
@@ -3331,16 +3331,22 @@
           // What a line still needs beyond itself is room for its own name.
           // Its marks' names go in the caption gap booked on the inward
           // side, which is what `markRoom` is.
+          var accWas = acc;
           acc = n ? start + (n - 1) * stepPx + k.lineGap + k.maxLabelThick
                   : acc + k.nameH / 2;
           // where this track's band stops: its line, its siding room and
           // all of its own lanes. Anything beyond belongs to the next.
           bandEnd[t.key] = acc;
+          // WHAT THIS TRACK'S BAND IS MADE OF, kept so E21 can be argued
+          // about with numbers: where its line sits, how many rungs it asked
+          // for and which way they went, and how much band that bought.
+          why.push({ key: t.key, dist: Math.round(dist[t.key]), want: want, inN: inN,
+                     out: n, from: Math.round(accWas), to: Math.round(acc) });
         });
         // Innermost first, whichever side of a line they hang off, because
         // everything downstream reads this ladder as "nearest rung first".
         slots.sort(function (a, b) { return a.dist - b.dist; });
-        return { slots: slots, extent: acc, dist: dist, bandEnd: bandEnd, inward: inward };
+        return { slots: slots, extent: acc, dist: dist, bandEnd: bandEnd, inward: inward, why: why };
       }
 
       // The fallback when bands cannot fit: every track at a fixed pitch
@@ -3606,6 +3612,7 @@
           extentA: sol.A.extent, extentB: sol.B.extent,
           needA: sol.needA, needB: sol.needB, room: room,
           dist: dist, bandEnd: bandEnd,
+          why: { A: sol.A.why, B: sol.B.why },
           weightScale: weightScale, spineC: spineC,
           considered: considered,
           fits: sol.needA + sol.needB <= room
@@ -3927,7 +3934,7 @@
       });
       weightScale = cross.weightScale;
       spineC = cross.spineC;
-      needA = cross.needA; needB = cross.needB;
+      needA = cross.needA; needB = cross.needB; metroDbgWhy = cross.why;
     }
     applyCross();
 
@@ -6272,6 +6279,36 @@
       nights: NIGHTS.map(function (n) { return [n.from, n.to, Math.round(aFor(n.from)), Math.round(aFor(n.to))]; }),
       spineC: spineC, step: step, laneStep: laneStep, colW: colW,
       usedA: usedA, usedB: usedB, needA: needA, needB: needB, maxLabelThick: maxLabelThick, titleClass: titleClass,
+      // what each track ASKED for against what it was given, and how far out
+      // each side's band actually stops: E21 is the gap between these and the
+      // ink, and it cannot be argued about without them
+      demand: demand, alloc: alloc, laneStep: laneStep, sep: sep, why: metroDbgWhy,
+      bandEnd: (function () {
+        var o = {};
+        LEGEND.forEach(function (p) { o[p.key] = Math.round(p._bandEnd == null ? -1 : p._bandEnd); });
+        return o;
+      })(),
+      lanesUsed: (function () {
+        var o = {};
+        LEGEND.forEach(function (p) { o[p.key] = 0; });
+        visible.forEach(function (e) {
+          if (e._dropped || e._lane == null || e._laneOwner == null) return;
+          if (o[e._laneOwner] == null) return;
+          o[e._laneOwner] = Math.max(o[e._laneOwner], e._lane + 1);
+        });
+        return o;
+      })(),
+      // how far the last of each side's lanes actually reaches, against what
+      // the band was sized for
+      laneReach: (function () {
+        var a = 0, b = 0;
+        visible.forEach(function (e) {
+          if (e._dropped || e._lane == null || e._laneDist == null) return;
+          if (e._sideKey === 'A') a = Math.max(a, e._laneDist);
+          else b = Math.max(b, e._laneDist);
+        });
+        return [Math.round(a), Math.round(b)];
+      })(),
       bands: LEGEND.map(function (p) { return [p.key, demand[p.key], alloc[p.key], Math.round(p._dist)]; }), sep: Math.round(sep), crossPx: Math.round(crossPx),
       packed: !!packedFallback,
       shapes: visible.filter(function (e) { return !e._dropped && e._involved && e._involved.length < 2 && e.end_min > e.start_min; }).map(function (e) {
