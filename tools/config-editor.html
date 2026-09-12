@@ -2228,7 +2228,10 @@
       setStatus("importStatus", "That loaded, but there are no calendars in it. Check the key is spelled “calendars”: anything this format does not recognise is ignored without a word.", "err");
       return;
     }
-    var msg = "Loaded " + plural(cals, "calendar", "calendars") + " and " + plural(state.lines.length, "person", "people") + ".";
+    // A bare list of links carries nobody, and "and 0 people" reads as a
+    // failure rather than as the next question.
+    var msg = "Loaded " + plural(cals, "calendar", "calendars")
+      + (state.lines.length ? " and " + plural(state.lines.length, "person", "people") : "") + ".";
     if (res.mode === "recovered") msg += " It came out of a chat window, so " + res.repairs + " had to be taken out of it first: check the calendars below are the ones you meant.";
     if (res.mode === "links") msg += " Now say who each one is for, on its card under Your calendars.";
     if (res.skipped && res.skipped.length) msg += " " + plural(res.skipped.length, "line", "lines") + " did not look like a link and " + (res.skipped.length === 1 ? "was" : "were") + " left out.";
