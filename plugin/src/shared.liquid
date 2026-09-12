@@ -8871,7 +8871,13 @@
       // the strip with it
       if (reserved.some(function (r) { return overlaps(ext, r); })) continue;
       if (hourTaken.some(function (r) { return overlaps(ext, r); })) continue;
-      hourTaken.push([ext[0] - 2 * S, ext[1] + 2 * S]);
+      // SIX PIXELS, NOT TWO, BECAUSE THE PROBE IS NOT THE LABEL.
+      //
+      // The span booked here is the width of the PROBE ("00:00"), and a
+      // real label is a hair wider at some sizes, so two hours booked two
+      // pixels apart can come out touching by three. Found on a board with
+      // a taller canvas, where the type grows with it, and true here too.
+      hourTaken.push([ext[0] - 6 * S, ext[1] + 6 * S]);
       // no opaque background: the hour labels sit ON the strip, the way a
       // scale's numbers sit on its rule.
       var lab = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute');
