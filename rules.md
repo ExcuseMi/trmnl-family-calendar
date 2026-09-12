@@ -54,68 +54,36 @@ Where the two disagree, this one is newer.
    once the badge has moved along. The one shape change this allows is a gain; losing
    today, which the evening switch-over does, is a different rule and a
    blunter one.
-2b. **The night is a zone, not a moment.** Ten at night to six in the
-   morning is drawn as a corridor of upright hairlines the depth of the
-   board, with more ink on its two edges than between them, so a reader can
-   see how much of a two-day board is night. Where the night and a
-   compressed stretch are the same hours -- which is usually -- the
-   corridor is the mark and the express HATCH stands off: two hatches over
-   one stretch of time say two different things are happening to it.
+2b. **The night is not drawn.** It was, for a long time: ten at night to
+   six in the morning as a corridor of upright hairlines the depth of the
+   board, because a board covering two days is one continuous scale and
+   "the midnight bar alone is a line, not a duration".
 
-   A speed mark runs PARALLEL TO ITS RAIL or it is not drawn. Its angle is
-   the chord between its two ends, which is the rail's own angle only while
-   the rail is straight between them; over an elbow it is the average of the
-   diagonal and the flat, so the mark sits beside the ramp pointing
-   somewhere the line is not going, which is the one thing a speed mark must
-   not do. The rail is sampled across the mark's span and a mark that bows
-   is skipped, leaving a small gap at each corner: "this stretch runs fast"
-   is a statement about a run, and a corner is not one.
+   It never read as a duration on the board that needed it. A rolling board
+   compresses the night hardest, so the zone it is meant to draw is exactly
+   where there is least room to draw one, and it came out as a handful of
+   vertical rules bunched a thumb apart beside the midnight bar. Thinning it
+   twice -- a fractional pitch, no stroke on top of the midnight -- made it
+   quieter without making it legible, and the question it kept prompting
+   from the person reading the actual panel was "what are all these vertical
+   lines?". A mark nobody can name is not a quiet mark, it is noise.
 
-   The marks go ON TOP of the rails, not under them. Built with the rest of
-   the express marking, which happens before the trunks are drawn, they were
-   appended in place and every rail, ramp and car went on over them. On a
-   quiet stretch that is invisible because there is nothing over them; on
-   the stretch this marking is FOR there is everything, because a rolling
-   board squeezes the compressed hours into a couple of hundred pixels that
-   every line converges through and every car is parked in. Sixty marks in
-   the document, correctly placed, four visible pixels between them. They
-   still go under the stations and the cars: a speed mark is about the line,
-   a ring or a car is about a person.
+   ONE VERTICAL IN THE NIGHT, AND IT IS THE MIDNIGHT. What is left says the
+   same things better and all of it was already load-bearing: the midnight
+   bar says where the day changes, the day badges on the strip name which
+   day each side of it is, the hour labels jump from 9:33pm to 4am to 8am,
+   and the express hatch and the speed marks say those hours are compressed.
+   The night was the only one of the five that had to be explained.
 
-   The hatch, and only the hatch. The speed marks run straight through a
-   night, and standing them off it too was a real fault for as long as
-   rolling boards have existed: on a 36-hour board the night IS the
-   compression, so a board with thirteen compressed hours carried six
-   strokes, all of them at the far left, and rule 2's "drawn on the lines"
-   was not being kept anywhere. The two marks are not the same sentence.
-   The corridor is a fact about the TIME, drawn once, behind everything, in
-   ink; a speed mark is a fact about a LINE, drawn in that line's own
-   colour beside its own rail. Only the hatch would be saying it twice --
-   same ink, same strip, same minutes.
-2b-i. **A squeezed night is fewer strokes, not more.** The corridor's
-   infill was placed at a pitch, which caps the COUNT but not the density: a
-   rolling board compresses eight hours of night into about eighty pixels,
-   five hairlines land a thumb apart, the midnight bar lands on top of one
-   of them, and what the reader sees is six vertical rules bunched together
-   and asks what they are. Below about a hundred and twenty pixels the
-   infill is placed by fraction instead, so the count stops growing as the
-   compression tightens, and no stroke is drawn where the midnight bar
-   already is: two marks in one place are one thicker mark, and this is
-   meant to be the quieter of the two. Not cut to the two edges alone --
-   that was tried, and two verticals a thumb apart with a board between them
-   read as two separate rules rather than as a zone.
-2a-ii. **A board too small for the run gives up the far end, not the run.**
-   "A day is better than a run nobody can read" is true, and it was read as
-   "so fall back to the day" -- but the fallback is not A day, it is DAY
-   ZERO, and the whole reason a board is rolling is that day zero is spent.
-   A quadrant at half past nine at night drew Saturday midnight to midnight
-   with every event already over. So the window shrinks instead: it keeps
-   its start and gives up the far end a borrowed event at a time, then gives
-   up the spent start too and opens at the night, and only a panel that can
-   read none of those falls back to the day. Giving up the start is not what
-   2a-i forbids: that rule is about the start moving with the CLOCK, four
-   times an hour, under whoever is reading. This moves with the PANEL, so a
-   given slot shows the same board all evening.
+   The hatch and the speed marks therefore cover the night rather than
+   standing off it: the stand-off existed because two marks over one stretch
+   of time say two different things are happening to it, and with the
+   corridor gone the hatch is the only thing saying the scale changes there.
+   The express portals still stand off a night, for the opposite reason --
+   the midnight bar is in the middle of that stretch and it should be the
+   only vertical the reader has to name.
+
+   The model still tracks the night. It is how the axis knows a run has one.
 2c. **Each day names itself on the hour strip, and the strip is the
    header.** An hour label says only the time, and "09:00" on a 36-hour
    board is two different mornings, so the day a midnight opens is written

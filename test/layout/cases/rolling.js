@@ -3,15 +3,16 @@
 // THE 36-HOUR BOARD, drawn.
 //
 // A day with almost nothing on it borrows the next one: the board runs from
-// six in the morning to six the following evening, with a night corridor
-// either side of the midnight it crosses and each day named on the strip.
+// six in the morning to six the following evening, crossing one midnight,
+// with each day named on the strip.
 //
 // Four things have to be true of that drawing, and each of them is a way it
 // could be well formed and still be a lie: it may not happen on a day that
-// is not quiet, the corridor has to cover the hours it claims to, a line
-// has to run THROUGH midnight rather than stop at it (a person does not end
-// at midnight), and an event on the second day has to be drawn at the
-// second day's time and not at the first day's.
+// is not quiet, the midnight it crosses has to be the only vertical mark in
+// the night (the corridor that used to be there is gone -- see below), a
+// line has to run THROUGH midnight rather than stop at it (a person does
+// not end at midnight), and an event on the second day has to be drawn at
+// the second day's time and not at the first day's.
 
 module.exports = function (test, h) {
   const { layout, VIEWPORTS, fixtures, pathsWhere, textLabels, overlap, assert, assertEqual } = h;
@@ -116,44 +117,58 @@ module.exports = function (test, h) {
       + dayNames(rep).length + ' of its days');
   });
 
-  test('the night corridor covers ten at night to six in the morning', () => {
+  test('the night is not drawn as a corridor any more', () => {
+    // THE CORRIDOR IS GONE, and these two cases used to be the whole of its
+    // specification: eight hours of upright hairlines the depth of the
+    // board, and the express hatch standing off them so two hatches never
+    // marked one stretch of time.
+    //
+    // It never read as the duration it was meant to be. A rolling board
+    // compresses the night hardest, so the zone it draws is exactly where
+    // there is least room to draw one, and it came out as a handful of
+    // vertical rules bunched a thumb apart beside the midnight bar. Two
+    // rounds of thinning made it quieter without making it legible, and the
+    // person reading the actual panel asked, twice, what the vertical lines
+    // were. A mark nobody can name is not quiet, it is noise.
+    //
+    // The model still knows where the night is -- that is how the axis
+    // knows a run has one, and the express portals still ask -- so what
+    // this holds is that nothing DRAWS it.
     const rep = layout(roll, ROOMY);
     assertEqual(rep.debug.nights.map((n) => [n[0], n[1]]), [[22 * 60, 1440 + 6 * 60]],
-      'the model put the night somewhere else');
-    const marks = nightMarks(rep);
-    assert(marks.length >= 3, 'the corridor is ' + marks.length + ' stroke(s): it cannot read as a zone');
-    const Z = rep.debug.Z;
-    const lo = Math.min.apply(null, marks.map((m) => m.x));
-    const hi = Math.max.apply(null, marks.map((m) => m.x + m.w));
-    const want = [rep.debug.nights[0][2] * Z, rep.debug.nights[0][3] * Z];
-    assert(Math.abs(lo - want[0]) < 4 && Math.abs(hi - want[1]) < 4,
-      'the corridor is drawn at ' + Math.round(lo) + '..' + Math.round(hi)
-      + ' for a night the scale puts at ' + Math.round(want[0]) + '..' + Math.round(want[1]));
-    // AND IT IS REALLY THOSE HOURS. Nothing happens between 21:45 and 07:45
-    // on this board, so the whole corridor is inside one compressed stretch
-    // at one rate: two of its eight hours are before midnight, so the bar
-    // belongs a quarter of the way along it. Drawn from the wrong minutes,
-    // the bar would sit in the middle.
-    const mid = rep.debug.midnights[0][1] * Z;
-    const share = (mid - lo) / (hi - lo);
-    assert(Math.abs(share - 0.25) < 0.06, 'midnight sits ' + Math.round(share * 100)
-      + '% of the way through a corridor that should have two of its eight hours before it');
-    // the map's own depth, not a mark on the scale: the night is a stretch
-    // of the BOARD
-    assert(marks.every((m) => m.h > rep.canvas.h * 0.5),
-      'the corridor does not run the depth of the board');
+      'the model stopped tracking the night, which the axis needs');
+    assertEqual(nightMarks(rep).length, 0,
+      'the corridor is back: ' + nightMarks(rep).length + ' stroke(s)');
   });
 
-  test('the night corridor and the express hatch do not both mark the same hours', () => {
-    // Two hatches over one stretch of time say two different things are
-    // happening to it. The night is compressed, so they would otherwise sit
-    // on exactly the same minutes.
+  test('one vertical mark in the night, and it is the midnight', () => {
+    // What the corridor's removal is FOR. The reader should find a single
+    // vertical in that stretch and know what it is without being told; the
+    // corridor's edges and infill were three more that nobody could name,
+    // and the express portals used to stand off the corridor for the same
+    // reason they still stand off the night.
+    const rep = layout(roll, ROOMY);
+    const Z = rep.debug.Z;
+    const [, , na, nb] = rep.debug.nights[0];
+    const tall = (rep.rects || []).filter((p) => p.h > rep.canvas.h * 0.5
+      && p.x > na * Z - 4 && p.x + p.w < nb * Z + 4);
+    const roles = [...new Set(tall.map((p) => p.role))];
+    assertEqual(roles, ['midnight'],
+      'the night carries ' + JSON.stringify(roles) + ', not just the midnight bar');
+  });
+
+  test('the strip says the night is compressed, now nothing else does', () => {
+    // The hatch used to draw only the parts of a compressed stretch that
+    // were NOT night, because the corridor spoke for those hours. With the
+    // corridor gone, standing off would leave the most compressed hours on
+    // the board unmarked, so the hatch covers them -- and it is the only
+    // thing left saying the scale changes there.
     const rep = layout(roll, ROOMY);
     const Z = rep.debug.Z;
     const [, , na, nb] = rep.debug.nights[0];
     const inside = (rep.rects || []).filter((p) => p.role === 'express'
       && p.x > na * Z + 2 && p.x + p.w < nb * Z - 2);
-    assertEqual(inside.length, 0, inside.length + ' express mark(s) inside the night corridor');
+    assert(inside.length > 0, 'the compressed night carries no express hatch at all');
   });
 
   for (const vname of ['x-landscape', 'og-landscape', 'x-portrait']) {

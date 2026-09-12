@@ -1561,31 +1561,16 @@
     // the scale of the busy stretch — what the hour labels are spaced by
     var pxPerHour = 60 * pxPerMin;
     function isExpress(min) { return TimeAxis.isExpress(AXIS, min); }
-    // Is this minute inside a night the board is drawing? The corridor, the
-    // express hatch and the speed marks all have to agree about that, and
-    // asking the model is the only way they can.
+    // Is this minute inside a night the board is drawing? The express
+    // portals are the last mark that asks: the corridor that used to be the
+    // main caller is gone, and the hatch and the speed marks both cover the
+    // night now rather than standing off it.
     var NIGHTS = AXIS.nights || [];
     function inNight(from, to) {
       for (var i = 0; i < NIGHTS.length; i++) {
         if (to > NIGHTS[i].from && from < NIGHTS[i].to) return true;
       }
       return false;
-    }
-    // The parts of a stretch of minutes that are NOT night, in order. What
-    // the express hatch is left to draw once the corridor has taken its
-    // own hours.
-    function clearOfNight(from, to) {
-      var runs = [[from, to]];
-      NIGHTS.forEach(function (n) {
-        var next = [];
-        runs.forEach(function (r) {
-          if (n.to <= r[0] || n.from >= r[1]) { next.push(r); return; }
-          if (r[0] < n.from) next.push([r[0], n.from]);
-          if (n.to < r[1]) next.push([n.to, r[1]]);
-        });
-        runs = next;
-      });
-      return runs;
     }
     if (winLabel) winLabel.textContent = timeLabel(dayFrom) + ' ' + timeLabel(dayTo);
 
@@ -6493,8 +6478,16 @@
         // stretch of time say two different things are happening to it.
         // Where they overlap the corridor is the mark, and this draws only
         // what is left over.
+        //
+        // OVER THE NIGHT TOO, now the corridor is gone. This used to draw
+        // only the parts of a compressed stretch that were NOT night,
+        // because two hatches over one stretch of time say two different
+        // things are happening to it and the corridor was the one that got
+        // to speak. With the corridor removed the hatch is the only thing
+        // left saying the strip's scale changes here, and standing it off
+        // the night left the most compressed hours on the board unmarked.
         var step = 7 * S, h = bandThick;
-        clearOfNight(sg.from, sg.to).forEach(function (r) {
+        [[sg.from, sg.to]].forEach(function (r) {
           var b0 = aFor(r[0]), b1 = aFor(r[1]);
           if (b1 - b0 < 6 * S) return;
           for (var x = b0; x < b1; x += step) {
@@ -6607,11 +6600,14 @@
         // the portals: where the scale changes, across the whole map, so
         // the change is visible on the lines and not only on the strip
         //
-        // Not around a night. A stretch that contains one already has the
-        // corridor's own two edges across the map, and a portal a couple of
-        // compressed hours outside each of them adds a second pair of
+        // STILL NOT AROUND A NIGHT, and now for the opposite reason. This
+        // deferred to the corridor's two edges: a portal a couple of
+        // compressed hours outside each of them was a second pair of
         // vertical rules saying nearly the same thing in nearly the same
-        // place, which reads as four things happening rather than one.
+        // place. The corridor is gone, so that pair is gone -- but the
+        // midnight bar is still there, in the middle of the same stretch,
+        // and the whole point of removing the corridor was that the reader
+        // should find one vertical mark in the night and know what it is.
         if (inNight(sg.from, sg.to)) return;
         [a0, a1].forEach(function (at) {
           if (at <= axisStart + 1 || at >= axisEnd - 1) return;
@@ -6625,94 +6621,34 @@
       });
     })();
 
-    // ---- the night corridor ---------------------------------------------
+    // ---- the night corridor: REMOVED ----------------------------------
     //
-    // Ten at night to six in the morning, drawn as a zone rather than as a
-    // moment. A board covering two days is one continuous scale, and
-    // without this the reader has a midnight bar and no way to feel how
-    // much of the board is night: "tomorrow at nine" and "later tonight"
-    // look like the same distance apart.
+    // Ten at night to six in the morning used to be drawn as a corridor of
+    // upright hairlines the depth of the board, on the reasoning that a
+    // board covering two days is one continuous scale and the reader has no
+    // other way to feel how much of it is night -- "the midnight bar alone
+    // is a line, not a duration".
     //
-    // VERTICAL HAIRLINES, not a fill and not a diagonal hatch. A gray block
-    // behind a metro map reads as a hole punched in it, and diagonal
-    // hatching is already the express mark on the strip. Upright strokes at
-    // a wide pitch are the quietest texture that survives a 1-bit panel:
-    // there is nothing to dither, the lines are simply thin and far apart.
-    // They run the whole depth, strip included, so the corridor is one
-    // thing rather than a mark on the scale and a separate mark on the map.
+    // It never read as a duration on the board that needed it. A rolling
+    // board compresses the night hardest, so the zone it is meant to draw
+    // is exactly where there is least room to draw one, and the corridor
+    // came out as a handful of vertical rules bunched a thumb apart next to
+    // the midnight bar. Two rounds of thinning it -- a fractional pitch, no
+    // stroke on top of the midnight -- made it quieter without making it
+    // legible, and the question it kept prompting from the person reading
+    // the actual panel was "what are all these vertical lines?". A mark
+    // nobody can name is not a quiet mark, it is noise.
     //
-    // Behind everything. A line that runs through the night really does run
-    // through it.
-    (function drawNightCorridors() {
-      NIGHTS.forEach(function (n) {
-        var a0 = aFor(n.from), a1 = aFor(n.to);
-        if (a1 - a0 < 4 * S) return;
-        // FEW ENOUGH TO READ AS A ZONE. At a fixed pitch the corridor came
-        // out as a picket fence: a night is compressed, so eight hours of
-        // it is a hand's width of axis, and ten hairlines across it read as
-        // a barrier rather than as a stretch of time. Half a dozen strokes
-        // say the same thing quietly, so the pitch is taken from how wide
-        // the corridor actually turned out and floored so a night that is
-        // NOT compressed (somebody is out at two in the morning) does not
-        // spread its strokes out into unrelated verticals.
-        //
-        // AND ON A SQUEEZED NIGHT, NONE AT ALL. The pitch is a share of the
-        // corridor's own width, which keeps the count down but not the
-        // DENSITY: a rolling board compresses eight hours of night into
-        // about eighty pixels, so five hairlines land thirty-six pixels
-        // apart, the midnight bar lands on top of one of them, and what the
-        // reader sees is six vertical rules bunched in a hand's width -- a
-        // picket fence, which is exactly what the pitch above was written
-        // to avoid, arrived at from the other direction.
-        //
-        // Cutting to the two edges alone was the first answer and it goes
-        // too far: the suite holds that a corridor of two strokes is a pair
-        // of rules, not a zone, and that is right -- two verticals a
-        // thumb's width apart with a board between them read as two
-        // separate marks. What a squeezed night needs is FEWER strokes, not
-        // none: the edges, and a stroke or two between them placed by
-        // fraction rather than by pitch, so the count stops growing as the
-        // compression tightens.
-        var pitch = clamp((a1 - a0) / 4, 12 * S, 24 * S);
-        var tight = (a1 - a0) < 120 * S;
-        // and never one where the midnight bar already is: two marks in the
-        // same place are one thicker mark, and this one is meant to be the
-        // quieter of the two
-        var midA = AXIS.boundaries.map(function (b) { return aFor(b.min); });
-        function clearOfMidnight(at) {
-          for (var mi = 0; mi < midA.length; mi++) {
-            if (Math.abs(at - midA[mi]) < 6 * S) return false;
-          }
-          return true;
-        }
-        // The two EDGES carry more ink than the strokes between them, so the
-        // corridor has a start and an end rather than being a handful of
-        // verticals that happen to be near midnight. It is the same job the
-        // express portals do where the scale changes, done by the corridor
-        // itself instead of by a second pair of rules beside it.
-        function night(at, edge) {
-          var p0 = toXY(at, 0), p1 = toXY(at, crossPx);
-          var hl = svgEl('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
-            'stroke-width': 1 * S,
-            'stroke-opacity': edge ? (ONE_BIT ? 0.7 : 0.38) : (ONE_BIT ? 0.5 : 0.16) });
-          hl.style.stroke = INK;
-          hl.setAttribute(ROLE_ATTR, 'night');
-          svg.appendChild(hl);
-        }
-        if (tight) {
-          [1 / 3, 2 / 3].forEach(function (f) {
-            var x = a0 + (a1 - a0) * f;
-            if (clearOfMidnight(x)) night(x, false);
-          });
-        } else {
-          for (var x = a0 + pitch; x < a1 - pitch * 0.4; x += pitch) {
-            if (clearOfMidnight(x)) night(x, false);
-          }
-        }
-        night(a0, true);
-        night(a1, true);
-      });
-    })();
+    // What is left says the same things better, and each of them is already
+    // load-bearing: the MIDNIGHT BAR says where the day changes, the DAY
+    // BADGES on the strip name which day each side of it is, the HOUR
+    // LABELS jump from 9:33pm to 4am to 8am, and the EXPRESS HATCH and the
+    // SPEED MARKS say those hours are compressed. The night was the only
+    // one of the five that had to be explained.
+    //
+    // NIGHTS is kept in the model. It is not dead: `nightsAround` is how the
+    // axis knows a run has a night in it at all, and the express marking
+    // still asks about it.
 
     // ---- midnight: where one day ends and the next begins ---------------
     //
