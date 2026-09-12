@@ -52,6 +52,21 @@ const h = {
     return box;
   },
   jsonOut(document) { return JSON.parse(document.getElementById('jsonOut').value); },
+  // THE FLOW THE TOOL HAS. A link, who it is for, press the button: that is
+  // the only way to add a calendar and the only way a person comes into
+  // existence, so every case that needs either sets them up through here
+  // rather than by reaching into a card the page no longer draws. It used to
+  // take two halves -- type a name into a blank line card, then type a URL
+  // into a blank calendar card and ctrl-click the name in a multi-select --
+  // and the tests were the last thing still doing it that way.
+  addFeed(document, url, who) {
+    h.fireInput(document.getElementById('newUrl'), url);
+    if (who !== undefined) h.fireInput(document.getElementById('newWho'), who);
+    h.click(document.getElementById('addCalendar'));
+    return [...document.querySelectorAll('#calendars .card')].pop();
+  },
+  // The card for the last calendar added, and its answer box.
+  whoBox(card) { return card.querySelector('input.who-input'); },
   selectMulti(sel, values) {
     Array.from(sel.options).forEach((o) => { o.selected = values.indexOf(o.value) !== -1; });
     sel.dispatchEvent(new sel.ownerDocument.defaultView.Event('change', { bubbles: true }));

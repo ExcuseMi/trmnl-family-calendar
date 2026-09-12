@@ -117,9 +117,9 @@ module.exports = function (test, h) {
     assert(undoBtn.disabled, 'the button should go quiet when there is nothing left to undo');
   });
 
-  test('undo puts back a removed track and a removed rule', () => {
+  test('undo puts back a removed person and a removed rule', () => {
     const { document } = loadEditor();
-    fireInput(document.querySelector('#lines .card .title-input'), 'Sam');
+    h.addFeed(document, 'https://a.example/sam.ics', 'Sam');
     click(document.getElementById('addGlobalRule'));
     fireInput(document.querySelector('#globalRules .rule .cond input[type=text]'), 'Dentist');
     const rule = document.querySelector('#globalRules .rule');
@@ -137,14 +137,14 @@ module.exports = function (test, h) {
     click([...document.querySelectorAll('#lines .card button')].find((b) => b.textContent === 'Remove'));
     assertEqual(jsonOut(document).lines, []);
     click(document.getElementById('undoBtn'));
-    assertEqual(jsonOut(document).lines, [{ name: 'Sam' }], 'undo did not put the track back');
+    assertEqual(jsonOut(document).lines, [{ name: 'Sam' }], 'undo did not put the person back');
   });
 
   test('there is nothing to copy from an empty editor, and the page says so', () => {
     const { document } = loadEditor();
     assert(document.getElementById('copyJson').disabled, 'an empty configuration is not worth copying');
     assert(!document.getElementById('outEmpty').hidden, 'nothing tells the reader why');
-    fireInput(document.querySelector('#calendars .card input[type=text]:not(.title-input)'), 'https://a.example/x.ics');
+    h.addFeed(document, 'https://a.example/x.ics');
     assert(!document.getElementById('copyJson').disabled, 'one calendar is enough to have something to paste');
     assert(document.getElementById('outEmpty').hidden);
   });

@@ -72,6 +72,18 @@
   [data-stage="ai"] #station-demo, [data-stage="ai"] #station-lines,
   [data-stage="ai"] #station-calendars, [data-stage="ai"] #station-rules,
   [data-stage="build"] #station-demo { display: none; }
+  /* THE TWO QUESTIONS ARE THE PAGE. A link, and who it is for: everything
+     else on this station is either an answer already given or an option
+     nobody has to look at, so the box that asks them is the only thing here
+     drawn as a box. */
+  #addFeed { border-width: 4px; }
+  #addFeed .field.grow { flex: 1 1 320px; }
+  #addFeed .step-n { font-weight: 800; }
+  .who-input { width: 190px; }
+  .card-head .cal-title { flex: 1 1 auto; min-width: 0; font-size: 17px; overflow-wrap: anywhere; }
+  .card-head .cal-title .quiet { font-weight: 400; color: var(--mute); }
+  .who-quick { gap: 6px; }
+  .who-quick .hint { margin-right: 2px; }
   button.big { padding: 11px 22px; font-size: 15px; }
   .choice[hidden] { display: none; }
   .choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 12px; }
@@ -215,8 +227,8 @@
     <a href="#station-demo">Examples</a>
     <a href="#station-start">Paste</a>
     <a href="#station-agent">AI</a>
-    <a href="#station-lines">Lines</a>
     <a href="#station-calendars">Calendars</a>
+    <a href="#station-lines">People</a>
     <a href="#station-output">JSON</a>
     <a href="https://github.com/ExcuseMi/trmnl-metro-calendar-plugin">GitHub</a>
   </nav>
@@ -253,7 +265,7 @@
         </button>
         <button id="chooseManual" type="button">
           <strong>Fill it in myself</strong>
-          <span class="note">One line per person, one calendar per feed, rules only if a calendar holds more than one person's day.</span>
+          <span class="note">Two questions per calendar: paste its link, say who it is for. That is the whole setup for most households.</span>
         </button>
       </div>
       <p class="hint" id="realHint" hidden>Either way the example is cleared first, so you start on your own calendars rather than editing Springfield.</p>
@@ -262,7 +274,7 @@
 
   <section class="station" id="station-start">
     <h2>Paste what you have <small>a configuration, or just ICS links</small></h2>
-    <p class="lede">Already have a configuration in TRMNL, or an answer back from an assistant? Paste it here. Plain ICS links, one per line, work too: that is the whole setup for a line per calendar.</p>
+    <p class="lede">Already have a configuration in TRMNL, or an answer back from an assistant? Paste it here. Plain ICS links, one per line, work too: each becomes a calendar waiting to be told who it is for.</p>
     <div class="card plain">
       <label for="importIn" class="sr-only">Paste a configuration, or one ICS link per line</label>
       <textarea id="importIn" rows="4" placeholder='{"lines": [...], "calendars": [...]}&#10;or just&#10;https://calendar.example.com/work.ics&#10;https://calendar.example.com/family.ics'></textarea>
@@ -324,25 +336,71 @@
     </div>
   </section>
 
-  <section class="station" id="station-lines">
-    <h2>Lines <small>one line on the map per person</small></h2>
-    <p class="lede">One line per person. Which side of the map a line runs on, and what colour and dash pattern it gets, are all chosen for you: sides are balanced once the map is drawn, busiest line first and evenly split. The first line is also who gets any event no rule claims.</p>
-    <div id="lines"></div>
-    <div class="toolbar"><button id="addLine">+ Add a line</button></div>
+  <!-- A LINK, AND WHO IT IS FOR. THAT IS THE CONFIGURATION.
+       A line on the map IS a person, so "here is a calendar, it belongs to
+       Homer" decides everything the plugin needs: Homer joins the people, and
+       the feed gets the one rule that sends every event it holds to him. This
+       station used to be the second half of a pair -- fill in a list of lines,
+       then come here and point each calendar at one of them -- and the first
+       half was a form about the map's internals that nobody had the answers
+       to before they had the calendars. The people are the answers now. -->
+  <section class="station" id="station-calendars">
+    <h2>Your calendars <small>a link, and who it is for</small></h2>
+    <p class="lede">Add one calendar per person. Two answers each: where the calendar lives, and whose day it is. Every new name draws one more line on the map, so this is the whole setup for a household.</p>
+    <div class="card plain" id="addFeed">
+      <div class="row">
+        <div class="field grow">
+          <label for="newUrl"><span class="step-n">1.</span> The calendar's ICS link</label>
+          <input type="text" id="newUrl" placeholder="https://&hellip;/calendar.ics (or webcal://&hellip;)">
+        </div>
+        <div class="field">
+          <label for="newWho"><span class="step-n">2.</span> Who is this for?</label>
+          <input type="text" id="newWho" class="who-input" list="peopleNames" autocomplete="off" placeholder="Homer">
+        </div>
+      </div>
+      <div class="toolbar who-quick" id="whoQuick" hidden></div>
+      <div class="toolbar">
+        <button id="addCalendar" class="primary">Add this calendar</button>
+        <button id="newUpload">Upload the .ics file</button>
+        <input type="file" id="newFile" accept=".ics,text/calendar" hidden>
+        <span id="addStatus" class="status" role="status" aria-live="polite"></span>
+      </div>
+      <p class="hint">A name nobody has used yet becomes a new person. Two people sharing one feed: write both names with a comma between them. A feed where only <em>some</em> events are somebody's -- a school calendar, a household one -- is split by rules, under <strong>More options</strong> on its card.</p>
+      <p class="hint">Finding the link: in Google Calendar it is that calendar's settings, <em>Secret address in iCal format</em>. On iCloud, share the calendar publicly and copy the <code>webcal://</code> link. In Outlook, publish the calendar and copy the ICS link.</p>
+    </div>
+    <div id="calendars"></div>
+    <p class="hint" id="calendarsEmpty">No calendars yet. Paste a link above and say whose it is.</p>
+    <!-- Every "who is this for?" field on the page offers the same list, so
+         the second calendar for somebody is a pick rather than a spelling
+         test: two people called Alex and Alexa are one typo away from one
+         line drawn twice, and nothing downstream can tell them apart. -->
+    <datalist id="peopleNames"></datalist>
   </section>
 
-  <section class="station" id="station-calendars">
-    <h2>Calendars <small>the ICS feeds the events come from</small></h2>
-    <p class="lede">Each calendar needs its ICS link. Pick whose line its events go on, ctrl-clicking (cmd-clicking on a Mac) for more than one; open <em>Rules</em> when one calendar mixes several lines or you want to rename or hide things.</p>
-    <div id="calendars"></div>
-    <div class="toolbar"><button id="addCalendar">+ Add a calendar</button></div>
+  <!-- THE PEOPLE ARE WHAT THE ANSWERS ADDED UP TO, NOT A FORM.
+       This was "Lines", above the calendars, and it was the first thing the
+       page asked anybody to fill in: a list of people to declare before there
+       was anything to put on them, with side and colour pickers that the
+       plugin has long since taken over. It is a view now. It reads back what
+       "who is this for?" produced and lets it be corrected, and a correction
+       here reaches every calendar and rule that named that person. -->
+  <section class="station" id="station-lines">
+    <h2>People on the map <small>one line each, in this order</small></h2>
+    <p class="lede">Nothing to fill in: these are the answers from above. Rename somebody and their calendars and rules follow. The first person also gets any event no rule claims. Which side of the map a line runs on, and its colour and dash pattern, are the plugin's own choice, balanced once it has counted the day.</p>
+    <div id="lines"></div>
+    <p class="hint" id="linesEmpty">Nobody yet. Answer <em>who is this for?</em> on a calendar above and they appear here.</p>
   </section>
 
   <section class="station" id="station-rules">
-    <h2>Rules for every calendar <small>optional</small></h2>
-    <p class="lede">The same rules as inside a calendar, applied to all of them. For example, "anything called Dentist goes on Sam's line". A calendar's own rule wins over one of these. Where a rule names a line, ctrl-click (cmd-click on a Mac) to put the event on more than one: that is how a shared event is drawn once, as an interchange.</p>
-    <div id="globalRules"></div>
-    <div class="toolbar"><button id="addGlobalRule">+ Add a rule</button></div>
+    <h2>Rules for every calendar <small>optional, and rarely needed</small></h2>
+    <details class="adv" id="globalRulesAdv">
+      <summary>Rules that apply to all of your calendars at once</summary>
+      <div class="adv-body">
+        <p class="hint">The same rules as inside a calendar, applied to all of them. For example, "anything called Dentist goes on Sam's line". A calendar's own rule wins over one of these. Where a rule names a person, ctrl-click (cmd-click on a Mac) to put the event on more than one: that is how a shared event is drawn once, as an interchange.</p>
+        <div id="globalRules"></div>
+        <div class="toolbar"><button id="addGlobalRule">+ Add a rule</button></div>
+      </div>
+    </details>
   </section>
 
 
@@ -479,6 +537,13 @@
     return e;
   }
   function uid() { return Math.random().toString(36).slice(2, 9); }
+  // Put the cursor in a field without the browser scrolling to it. Every
+  // place this is used has just decided where the page should be looking,
+  // and focus's own idea of "into view" ignores the sticky bar at the top.
+  function focusNoScroll(node) {
+    if (!node || !node.focus) return;
+    try { node.focus({ preventScroll: true }); } catch (e) { node.focus(); }
+  }
   function setStatus(id, text, cls) { var n = document.getElementById(id); n.textContent = text; n.className = "status " + (cls || ""); }
   function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
   // Select the text and copy it. navigator.clipboard is absent on a page opened
@@ -739,6 +804,10 @@
     if (note) note.hidden = !empty;
     var copy = document.getElementById("copyJson");
     if (copy) copy.disabled = empty;
+    // Every edit on this page comes through here, and any of them can change
+    // which calendars a person's line is drawn from. Repainted rather than
+    // redrawn: see paintPeopleFeeds.
+    paintPeopleFeeds();
     syncPromptControls();
     refreshStale();
   }
@@ -958,7 +1027,12 @@
     state.locale = typeof data.locale === "string" ? data.locale : "";
     state.timeFormat = typeof data.timeFormat === "string" ? data.timeFormat : "";
     state.temperatureUnit = typeof data.temperatureUnit === "string" ? data.temperatureUnit : "";
-    if (!state.calendars.length) state.calendars.push(newCalendar());
+    // An empty calendar card used to be pushed in here, and by the init, and
+    // again whenever the last one was removed: with no way to add a calendar
+    // except an "+ Add" button at the bottom of the list, a list of none was a
+    // dead end. The form at the top of the station is the way in now, so an
+    // empty list is an empty list, and the page says so instead of showing a
+    // card with nothing in it that exports nothing.
     renderAll();
   }
   // Whatever a chat window did to the JSON on its way here: a ```json fence
@@ -1063,8 +1137,17 @@
     return state.lines.some(function (t) { return t._id !== exceptId && t.name.trim() === name; });
   }
   // Every place a line can be named: a rule's line list, top level or inside
-  // a calendar, and a calendar's own "whose line is this" picker. An empty
-  // `to` drops the reference, which is what removing a line means.
+  // a calendar, a calendar's answer to "who is this for?", and a calendar's
+  // own NAME. An empty `to` drops the reference, which is what removing a
+  // person means.
+  //
+  // THE NAME IS A REFERENCE TOO, AND IT WAS THE ONE THAT GOT AWAY.
+  // An event no rule routes falls back to the calendar's name, and that name
+  // is drawn as a line. Answering "who is this for?" now writes the person's
+  // name onto the feed -- which is what labels it when it goes down -- so
+  // removing Homer while a calendar was still called Homer took his line out
+  // of every rule and then had the plugin resolve it straight back out of the
+  // name, with nobody called Homer anywhere in the editor to explain it.
   function retargetLineRefs(from, to) {
     if (!from || from === to) return;
     function swap(list) {
@@ -1077,8 +1160,127 @@
     state.rules.forEach(function (r) { swap(r.lines); });
     state.calendars.forEach(function (c) {
       swap(c.assign);
+      if (c.name.trim() === from) c.name = to;
       c.rules.forEach(function (r) { swap(r.lines); });
     });
+  }
+  // ------------------------------------------------------------ people
+  //
+  // A person is an entry in `lines`, and this is everything the page does to
+  // that list now: add one because a calendar was answered for, rename one,
+  // move one, take one away. There is no "+ Add a line" any more -- a person
+  // with no calendar draws an empty line, which is the one thing the old form
+  // made easy and nobody wanted.
+  function personIndex(name) {
+    for (var i = 0; i < state.lines.length; i++) if (state.lines[i].name.trim() === name) return i;
+    return -1;
+  }
+  function ensurePerson(name) {
+    if (!name || personIndex(name) !== -1) return false;
+    var t = newLine();
+    t.name = name;
+    state.lines.push(t);
+    return true;
+  }
+  // Is this person named anywhere other than on `exceptCal`? Asked before a
+  // rename carries them along: renaming the answer on one calendar must not
+  // rename the person out from under another calendar or a rule that still
+  // means the old name.
+  function personUsedElsewhere(name, exceptCal) {
+    if (!name) return false;
+    var used = state.rules.some(function (r) { return r.lines.indexOf(name) !== -1; });
+    return used || state.calendars.some(function (c) {
+      if (c === exceptCal) return false;
+      return c.assign.indexOf(name) !== -1 || c.name.trim() === name
+        || c.rules.some(function (r) { return r.lines.indexOf(name) !== -1; });
+    });
+  }
+  function renamePerson(from, to) {
+    var i = personIndex(from);
+    if (i === -1 || !to) return false;
+    state.lines[i].name = to;
+    state.lines[i]._refName = to;
+    retargetLineRefs(from, to);
+    return true;
+  }
+  // The names every "who is this for?" field offers. One datalist for the
+  // whole page: the field is a plain text box because a new person is just a
+  // new name, and the list is what stops the second calendar for somebody
+  // being a spelling test.
+  function paintPeopleNames() {
+    var list = document.getElementById("peopleNames");
+    if (list) {
+      list.innerHTML = "";
+      lineNames().forEach(function (n) { list.appendChild(el("option", { value: n })); });
+    }
+    var quick = document.getElementById("whoQuick");
+    if (!quick) return;
+    quick.innerHTML = "";
+    var names = lineNames();
+    quick.hidden = !names.length;
+    if (!names.length) return;
+    quick.appendChild(el("span", { class: "hint", text: "Already here:" }));
+    names.forEach(function (n) {
+      var b = el("button", { class: "small", type: "button", text: n, title: "Another calendar for " + n });
+      b.addEventListener("click", function () {
+        var box = document.getElementById("newWho");
+        box.value = n;
+        focusNoScroll(box);
+      });
+      quick.appendChild(b);
+    });
+  }
+  // "Homer" is one person, "Homer, Marge" is a feed they share. A comma is a
+  // list separator everywhere else on this page (a rule's value box splits on
+  // one), so it is the same here rather than a second control for the case
+  // where a whole feed belongs to two people.
+  //
+  // A NAME THAT DIFFERS ONLY IN CASE IS THE SAME PERSON TO THE PLUGIN.
+  // parseConfig keys its line registry on the folded name, so "homer" typed
+  // on the second calendar and "Homer" on the first are one line on the
+  // board -- while the editor would have shown two people, two cards and two
+  // entries in `lines`, and no way to see why the map disagreed. So a name
+  // that matches somebody already here is snapped to their spelling.
+  function canonicalPerson(name) {
+    var folded = name.toLowerCase();
+    var hit = null;
+    state.lines.forEach(function (t) {
+      var n = t.name.trim();
+      if (!hit && n && n.toLowerCase() === folded) hit = n;
+    });
+    return hit || name;
+  }
+  function parseWho(v) {
+    var seen = {}, out = [];
+    String(v == null ? "" : v).split(",").forEach(function (part) {
+      var t = part.trim();
+      if (!t || seen[t.toLowerCase()]) return;
+      seen[t.toLowerCase()] = true;
+      out.push(canonicalPerson(t));
+    });
+    return out;
+  }
+  function whoText(c) { return c.assign.join(", "); }
+  // Enough of a link to tell two of somebody's calendars apart, which is the
+  // file name where there is one and the host where there is not.
+  function shortUrl(u) {
+    var bare = String(u).replace(/^(https?|webcal):\/\//i, "").replace(/[?#].*$/, "");
+    var last = bare.split("/").filter(Boolean).pop() || bare;
+    return /\./.test(last) && last !== bare.split("/")[0] ? last : bare.split("/")[0];
+  }
+  // A feed that is one person's is NAMED after them: it is what the board
+  // calls it when it has been unreachable for hours, and the alternative is a
+  // fragment of a URL. Two or more and the name goes, because a name that is
+  // nobody is a line waiting to be drawn.
+  //
+  // Only ever the name this field wrote itself, or none at all. An imported
+  // feed called "School" keeps being called School when its events are routed
+  // to Bart: that name is the user's, and there is a field for it under More
+  // options if they want it gone.
+  function applyWho(c, before, names) {
+    var wasOurs = !c.name.trim() || c.name.trim() === before;
+    c.assign = names;
+    if (wasOurs) c.name = names.length === 1 ? names[0] : "";
   }
   // A multi-select is the one control here that does not explain itself: an
   // unselected list looks like "all of them", and picking two needs a key
@@ -1087,22 +1289,57 @@
   // page next to it rather than in a tooltip.
   function linePicker(values, onChange, label) {
     var names = lineNames();
-    var sel = el("select", { multiple: "multiple", title: "Ctrl-click (Cmd-click on a Mac) to pick more than one", "aria-label": label || "Which line's line" });
-    if (!names.length) { sel.appendChild(el("option", { value: "", disabled: "disabled", text: "add a line first" })); sel.disabled = true; return sel; }
+    var sel = el("select", { multiple: "multiple", title: "Ctrl-click (Cmd-click on a Mac) to pick more than one", "aria-label": label || "Whose line this event goes on" });
+    if (!names.length) { sel.appendChild(el("option", { value: "", disabled: "disabled", text: "nobody yet: add a calendar first" })); sel.disabled = true; return sel; }
     sel.setAttribute("size", String(Math.min(Math.max(names.length, 2), 6)));
     names.forEach(function (n) { var o = el("option", { value: n, text: n }); if (values.indexOf(n) !== -1) o.selected = true; sel.appendChild(o); });
     sel.addEventListener("change", function () { onChange(Array.from(sel.selectedOptions).map(function (o) { return o.value; }).filter(Boolean)); });
     return sel;
   }
 
+  // What this person's line is actually drawn from, said on their own card.
+  // A person the page invented out of a typo has nothing here, and that empty
+  // line is the whole tell: the old form let you declare six people and
+  // wonder why two of their lines came out blank.
+  function feedsForPerson(name) {
+    if (!name) return [];
+    var out = [];
+    state.calendars.forEach(function (c) {
+      var u = c.url.trim();
+      if (!u) return;
+      var mine = c.assign.indexOf(name) !== -1 || c.name.trim() === name
+        || c.rules.some(function (r) { return r.lines.indexOf(name) !== -1; });
+      // A feed named after this very person reads as "From Homer" on Homer's
+      // own card, which says nothing. The file it fetches does.
+      if (mine) out.push(c.name.trim() && c.name.trim() !== name ? c.name.trim() : shortUrl(u));
+    });
+    state.rules.forEach(function (r) {
+      if (r.lines.indexOf(name) !== -1 && out.indexOf("a rule for every calendar") === -1) out.push("a rule for every calendar");
+    });
+    return out;
+  }
+  // WHAT A PERSON'S LINE IS DRAWN FROM CHANGES FROM ANOTHER SECTION.
+  //
+  // A rule written on a calendar card down in Your calendars can hand Bart
+  // half a school feed, and the sentence on Bart's card is then wrong. It
+  // cannot be fixed by redrawing the people, because whoever is typing that
+  // rule may well be typing their own name into a person's card at the same
+  // time and a rebuild would take the field away mid-word. So each card
+  // leaves behind a painter for its one line of prose, and everything that
+  // changes the configuration runs them.
+  var peopleFeedPainters = [];
+  function paintPeopleFeeds() { peopleFeedPainters.forEach(function (f) { f(); }); }
   function renderLines() {
     var wrap = document.getElementById("lines");
     wrap.innerHTML = "";
+    peopleFeedPainters = [];
+    var none = document.getElementById("linesEmpty");
+    if (none) none.hidden = state.lines.length > 0;
     var looks = lineLook();
     state.lines.forEach(function (p, idx) {
       var look = looks[p._id] || { style: "solid", width: 3, color: p.color, side: "right" };
       var sw = swatchSvg(look.color, look.style, look.width);
-      var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "You (e.g. Sam)" : "Name", value: p.name, "aria-label": "Name of line " + (idx + 1) });
+      var name = el("input", { type: "text", class: "title-input", placeholder: "Name", value: p.name, "aria-label": "Name of person " + (idx + 1) });
       // The name this line's rules are written against, so a rename can take
       // them along. It is the name the card was drawn with until a rename
       // moves it on.
@@ -1123,26 +1360,42 @@
           retargetLineRefs(before, after);
           p._refName = after;
         }
-        renderJson(); renderCalendars(); renderGlobalRules();
+        renderJson(); renderCalendars(); renderGlobalRules(); paintPeopleNames();
       });
       name.addEventListener("change", function () { renderLines(); });
       var up = el("button", { class: "ghost small", title: "Move up", text: "↑" }); up.disabled = idx === 0;
       up.addEventListener("click", function () { state.lines.splice(idx - 1, 0, state.lines.splice(idx, 1)[0]); renderAll(); });
       var down = el("button", { class: "ghost small", title: "Move down", text: "↓" }); down.disabled = idx === state.lines.length - 1;
       down.addEventListener("click", function () { state.lines.splice(idx + 1, 0, state.lines.splice(idx, 1)[0]); renderAll(); });
-      var rm = el("button", { class: "ghost small", text: "Remove", title: "Remove this line" });
+      var rm = el("button", { class: "ghost small", text: "Remove", title: "Remove this person" });
       rm.addEventListener("click", function () {
         var gone = p.name.trim();
-        snapshot("remove " + (gone || "a line"));
-        // Take the line out of the rules that routed to it, or they go on
-        // naming it and the plugin draws it anyway. Snapshotted first, so
-        // undo brings the line back with its rules intact.
+        snapshot("remove " + (gone || "a person"));
+        // Take the person out of the rules that routed to them, and off the
+        // calendars that were answered for them, or all of those go on naming
+        // them and the plugin draws the line anyway. Snapshotted first, so
+        // undo brings them back with their calendars and rules intact.
         if (gone && !otherLineHasName(gone, p._id)) retargetLineRefs(gone, "");
         state.lines.splice(idx, 1);
         renderAll();
       });
+      var feedLine = el("div", { class: "hint line-feeds" });
+      function paintFeeds() {
+        var feeds = feedsForPerson(p.name.trim());
+        feedLine.textContent = feeds.length
+          ? (feeds.length === 1 ? "From " + feeds[0] : "From " + feeds.length + " calendars: " + feeds.join(", "))
+          : "No calendar yet: add one above and put this name in “Who is this for?”.";
+      }
+      paintFeeds();
+      peopleFeedPainters.push(paintFeeds);
       wrap.appendChild(el("div", { class: "card line" }, [
         el("div", { class: "card-head" }, [sw, name, up, down, rm]),
+        // WHAT THIS LINE IS DRAWN FROM, which is the only thing this card can
+        // say that the person's name does not. A line with nothing behind it
+        // is either a typo or somebody whose calendar has not been added yet,
+        // and on a board it is simply missing -- an empty line is hidden --
+        // so the place to notice it is here.
+        el("div", { class: "row" }, [feedLine]),
         // Side and colour used to be pickers here. Both are decided by the plugin now
         // (sides balanced by today's event count, colour and dash pattern by line order),
         // and the pickers only ever produced worse boards than the automatic choice. An
@@ -1281,7 +1534,7 @@
         if (onChange) onChange();
       }
       renderConditions(r, conds, refresh);
-      var persons = linePicker(r.lines, function (v) { r.lines = v; refresh(); }, "Put the event on this line's line");
+      var persons = linePicker(r.lines, function (v) { r.lines = v; refresh(); }, "Put the event on this person's line");
       var rename = el("input", { type: "checkbox" }); rename.checked = r.rename;
       rename.addEventListener("change", function () { r.rename = rename.checked; refresh(); });
       var rewrite = el("input", { type: "text", placeholder: "new title, or what to put in place of the matched text", value: r.rewrite, style: "flex:1 1 320px; min-width:180px", "aria-label": "New title, or what to put in place of the matched text" });
@@ -1337,8 +1590,19 @@
   function renderCalendars() {
     var wrap = document.getElementById("calendars");
     wrap.innerHTML = "";
+    var none = document.getElementById("calendarsEmpty");
+    if (none) none.hidden = state.calendars.length > 0;
     state.calendars.forEach(function (c, idx) {
-      var name = el("input", { type: "text", class: "title-input", placeholder: idx === 0 ? "Work" : "Calendar " + (idx + 1), value: c.name, "aria-label": "Name of calendar " + (idx + 1) });
+      // THE NAME IS NOT THE QUESTION ANY MORE, SO IT IS NOT AT THE TOP.
+      //
+      // It used to be the card's title, the first field on it, and the thing
+      // most likely to put a line nobody asked for on the board -- a feed
+      // called "Deliveries" with one unrouted event in it draws a Deliveries
+      // line. "Who is this for?" answers it instead: the answer is written
+      // onto the name as well, so a feed that is one person's is labelled
+      // with that person when it goes down. What is left here is the case the
+      // answer cannot cover, which is a feed whose own name is worth keeping.
+      var name = el("input", { type: "text", class: "cal-name", placeholder: "usually left to the answer above", value: c.name, "aria-label": "Name of calendar " + (idx + 1) });
       // A calendar's name is not a label: an event no rule routes falls back to it, and the
       // fallback name becomes a LINE. Someone generated a config where every calendar had a
       // descriptive name ("Planet Express", "Deliveries") and got seven lines for five
@@ -1364,9 +1628,30 @@
         var n = c.name.trim();
         var known = lineNames().some(function (t) { return t.toLowerCase() === n.toLowerCase(); });
         nameWarn.textContent = (!n || known || routesEverything()) ? ""
-          : "\u201C" + n + "\u201D is not one of your lines, so any event here that no rule routes falls back to it and draws \u201C" + n + "\u201D as its own line on the map. Assign a line below, name this calendar after one, add \u201C" + n + "\u201D as a line, or clear the name.";
+          : "\u201C" + n + "\u201D is not one of your people, so any event here that no rule routes falls back to it and draws \u201C" + n + "\u201D as a line of its own on the map. Answer \u201CWho is this for?\u201D above, or clear the name under More options.";
       }
-      name.addEventListener("input", function () { c.name = name.value; checkName(); renderJson(); });
+      // WHAT THIS CARD IS, AT THE TOP OF IT: whose it is, or the name it came
+      // in with, or the host it fetches from. There are as many of these as
+      // there are people in the house, and a card headed "Calendar 3" says
+      // nothing at all. It is repainted by everything that can change the
+      // answer, a rule included: a school feed becomes "split by rules
+      // between Bart, Lisa" the moment the rule that splits it is written,
+      // rather than the next time the whole station happens to be redrawn.
+      var head = el("strong", { class: "cal-title" });
+      function paintHead() {
+        head.innerHTML = "";
+        var whoNow = whoText(c);
+        head.appendChild(document.createTextNode(whoNow || c.name.trim()
+          || (c.url.trim() ? shortUrl(c.url.trim()) : "New calendar")));
+        if (whoNow) return;
+        var byRule = c.rules.reduce(function (all, r) {
+          return all.concat(r.lines.filter(function (n) { return all.indexOf(n) === -1; }));
+        }, []);
+        if (byRule.length) head.appendChild(el("span", { class: "quiet",
+          text: " · split by rules between " + byRule.join(", ") }));
+      }
+      function cardChanged() { checkName(); paintHead(); }
+      name.addEventListener("input", function () { c.name = name.value; cardChanged(); renderJson(); });
       name.addEventListener("change", function () { renderLines(); });
       var urlId = "cal-url-" + c._id;
       var url = el("input", { type: "text", id: urlId, placeholder: "https://…/calendar.ics (or webcal://…)", value: c.url });
@@ -1380,22 +1665,57 @@
           : /\s/.test(u) ? "This has a space in it, so it will not fetch. Paste the whole ICS address on one line."
           : "This does not look like an ICS link. One starts with https:// or webcal://, and a calendar's web page is not the same thing as its feed.";
       }
-      url.addEventListener("input", function () { c.url = url.value; checkUrl(); renderJson(); renderSources(); });
-      var assignId = "cal-line-" + c._id;
-      var assign = linePicker(c.assign, function (v) { c.assign = v; checkName(); renderJson(); renderLines(); }, "Assign the line the events in this calendar go on");
-      assign.id = assignId;
+      url.addEventListener("input", function () { c.url = url.value; checkUrl(); paintHead(); renderJson(); renderSources(); });
+      // THE ONE QUESTION THIS CARD ASKS.
+      //
+      // A multi-select of declared lines used to sit here, which could only
+      // offer people who had already been typed into a form above it and
+      // needed a modifier key nobody is born knowing to pick two. A name in a
+      // box can do both: a name nobody has used yet is a new person, and two
+      // names with a comma between them is a feed two people share.
+      var whoId = "cal-who-" + c._id;
+      var who = el("input", { type: "text", id: whoId, class: "who-input", list: "peopleNames",
+        autocomplete: "off", placeholder: "a name", value: whoText(c),
+        title: "One name, or several separated by commas. A feed where only some events are somebody's is split by a rule under More options." });
+      // The answer as it stood when this card was drawn. Editing the answer
+      // edits the PERSON where it safely can -- correcting "Homr" to "Homer"
+      // should not leave a line called Homr behind with nothing on it -- and
+      // only adds a new one when the old name is spoken for somewhere else.
+      var whoRef = c.assign.length === 1 ? c.assign[0] : "";
+      who.addEventListener("input", function () {
+        applyWho(c, whoRef, parseWho(who.value));
+        cardChanged(); renderJson(); paintPeopleNames();
+      });
+      who.addEventListener("change", function () {
+        var names = parseWho(who.value);
+        var after = names.length === 1 ? names[0] : "";
+        var changed = false;
+        if (whoRef && after && whoRef !== after && personIndex(after) === -1
+          && !personUsedElsewhere(whoRef, c)) changed = renamePerson(whoRef, after);
+        else names.forEach(function (n) { if (ensurePerson(n)) changed = true; });
+        whoRef = after;
+        // The field snaps to the answer as it was recorded, which is how a
+        // name typed in somebody else's capitals comes back in theirs.
+        who.value = whoText(c);
+        // REDRAW ONLY WHEN THE PEOPLE MOVED. This fires on the way OUT of the
+        // field, so it is usually somebody tabbing on to the next card, and
+        // renderAll takes every card away and puts a new one back: the field
+        // they had just reached lost the focus they had just given it. When
+        // nothing was added or renamed there is nothing on the page that
+        // needs rebuilding anyway.
+        if (changed) renderAll(); else renderJson();
+      });
       var rm = el("button", { class: "ghost small", text: "Remove", title: "Remove this calendar" });
       rm.addEventListener("click", function () {
         snapshot("remove " + (c.name.trim() || c.url.trim() || "a calendar"));
         state.calendars.splice(idx, 1);
-        if (!state.calendars.length) state.calendars.push(newCalendar());
         renderAll();
       });
       // advanced: rules, headers, description matching
       var rulesWrap = el("div", {});
-      renderRules(c.rules, rulesWrap, checkName);
+      renderRules(c.rules, rulesWrap, cardChanged);
       var addRule = el("button", { class: "small", text: "+ Add a rule" });
-      addRule.addEventListener("click", function () { c.rules.push(newRule()); renderRules(c.rules, rulesWrap, checkName); checkName(); });
+      addRule.addEventListener("click", function () { c.rules.push(newRule()); renderRules(c.rules, rulesWrap, cardChanged); cardChanged(); });
       var addHeaderHint = el("p", { class: "hint", text: "Only for a feed behind a token or a password. A public ICS link needs none." });
       var headersWrap = el("div", {});
       function renderHeaders() {
@@ -1417,12 +1737,26 @@
       desc.addEventListener("change", function () { c.includeDescription = desc.checked; renderJson(); });
       var keep = el("input", { type: "checkbox" }); keep.checked = c.keepEmpty;
       keep.addEventListener("change", function () { c.keepEmpty = keep.checked; renderJson(); });
+      var nameId = "cal-name-" + c._id;
+      name.id = nameId;
+      // ONE FEED, SEVERAL PEOPLE: REACHABLE, AND NOT IN THE WAY.
+      //
+      // A household or a school calendar really does hold several people's
+      // days, and the format splits one by rules. That is the advanced path
+      // and it is behind this summary, because it is a handful of users and
+      // the simple case is everybody: the card above says what routes a whole
+      // feed, and this says what routes part of one.
       var adv = el("details", { class: "adv" }, [
-        el("summary", { text: "Rules, headers & advanced options" }),
+        el("summary", { text: "More options: split this feed between people, rename, hide, headers" }),
         el("div", { class: "adv-body" }, [
-          el("div", { class: "rule-step", text: "Rules for this calendar" }),
-          el("p", { class: "hint", text: "Checked in order; the last matching rule wins for each effect. Use these when one calendar holds several lines' events, or to rename class codes and hide noise. Comma-separate a value to match any of several (\"L1, L3, L4\"); click \"not\" to invert a condition. Combine both for \"one of these, except that one\", with no regex needed." }),
+          el("div", { class: "rule-step", text: "When only some of this feed is somebody's" }),
+          el("p", { class: "hint", text: "One rule per group: “anything with L6 in it is Bart's”, “anything called Family Dinner is everybody's”. Rules are checked in order and the last match wins for each effect, so they also rename class codes and hide noise. Whatever no rule claims falls to the answer above, or to the first person if there is none. Comma-separate a value to match any of several (\"L1, L3, L4\"); click \"not\" to invert a condition." }),
           rulesWrap, addRule,
+          el("div", { class: "rule-step", style: "margin-top:14px", text: "What this feed is called" }),
+          el("div", { class: "row" }, [
+            el("div", { class: "field grow" }, [el("label", { text: "Name", "for": nameId }), name]),
+          ]),
+          el("p", { class: "hint", text: "Written for you from the answer above, and used to name the feed if it stops answering. A name that is not one of your people is also where an event no rule routes ends up, which draws that name as a line: clear it if this feed is split by rules." }),
           el("div", { class: "rule-step", style: "margin-top:14px", text: "HTTP headers for this feed" }),
           addHeaderHint,
           headersWrap, addHeader,
@@ -1432,14 +1766,15 @@
       ]);
       checkName();
       checkUrl();
+      paintHead();
       wrap.appendChild(el("div", { class: "card calendar" }, [
-        el("div", { class: "card-head" }, [name, rm]),
-        nameWarn,
+        el("div", { class: "card-head" }, [head, rm]),
         el("div", { class: "row" }, [
-          el("div", { class: "field grow" }, [el("label", { text: "ICS link", "for": urlId }), url]),
-          el("div", { class: "field" }, [el("label", { text: "Assign a line", "for": assignId }), assign]),
+          el("div", { class: "field grow" }, [el("label", { text: "The calendar's ICS link", "for": urlId }), url]),
+          el("div", { class: "field" }, [el("label", { text: "Who is this for?", "for": whoId }), who]),
         ]),
         urlWarn,
+        nameWarn,
         adv,
       ]));
     });
@@ -1470,8 +1805,8 @@
   // Start again on somebody's own calendars, not on an edited Springfield.
   function clearForReal() {
     snapshot("clear the example");
-    state.lines = [newLine()];
-    state.calendars = [newCalendar()];
+    state.lines = [];
+    state.calendars = [];
     state.rules = [];
     state.timeZone = ""; state.locale = ""; state.timeFormat = ""; state.temperatureUnit = "";
     document.getElementById("importIn").value = "";
@@ -1502,10 +1837,91 @@
     setStatus("presetStatus", "", "");
   }
 
-  function renderAll() { renderLines(); renderCalendars(); renderGlobalRules(); renderJson(); renderSources(); }
+  function renderAll() { renderLines(); renderCalendars(); renderGlobalRules(); renderJson(); renderSources(); paintPeopleNames(); }
 
-  document.getElementById("addLine").addEventListener("click", function () { state.lines.push(newLine()); renderAll(); });
-  document.getElementById("addCalendar").addEventListener("click", function () { state.calendars.push(newCalendar()); renderAll(); });
+  // ------------------------------------------------------------ add a calendar
+  //
+  // The whole of setting this up, for the household that has one calendar per
+  // person: a link, a name, press the button, again for the next person. It
+  // replaces a pair of forms -- declare your lines here, then point each
+  // calendar at one of them there -- that asked for the map's structure
+  // before anybody had the parts to build it out of.
+  //
+  // The file is kept next to it rather than behind it. A calendar the browser
+  // cannot fetch is the normal case, not a fault (a feed sends no CORS
+  // header), so being able to hand the page the .ics at the moment the link
+  // goes in is what makes the preview draw at all. The link is still
+  // required: the device fetches by URL, and a file is only ever what this
+  // page draws from.
+  var pendingIcs = null;
+  var pendingIcsName = "";
+  function addFeedFromForm() {
+    var urlBox = document.getElementById("newUrl");
+    var whoBox = document.getElementById("newWho");
+    var url = urlBox.value.trim();
+    var names = parseWho(whoBox.value);
+    if (!url) {
+      setStatus("addStatus", pendingIcs
+        ? "Paste the calendar's address as well: the device fetches it by link, and " + pendingIcsName + " is only what this page draws from."
+        : "Paste the calendar's ICS link first.", "err");
+      focusNoScroll(urlBox);
+      return false;
+    }
+    if (!looksLikeLink(url)) {
+      setStatus("addStatus", "That does not look like an ICS link. One starts with https:// or webcal://, and a calendar's web page is not the same thing as its feed.", "err");
+      focusNoScroll(urlBox);
+      return false;
+    }
+    var c = newCalendar();
+    c.url = url;
+    applyWho(c, "", names);
+    state.calendars.push(c);
+    names.forEach(ensurePerson);
+    if (pendingIcs) { icsOverrides[url] = pendingIcs; delete icsFromExample[url]; pendingIcs = null; pendingIcsName = ""; feedsChanged(); }
+    urlBox.value = "";
+    whoBox.value = "";
+    renderAll();
+    setStatus("addStatus", names.length
+      ? "Added, on " + (names.length === 1 ? names[0] + "'s line" : "the lines of " + names.join(" and ")) + ". Next calendar?"
+      : "Added. Say who it is for on its card below, or the whole feed lands on the first person's line.", "ok");
+    // Straight back to the first question, because the answer to "next
+    // calendar?" is usually yes: a household is four or five of these.
+    focusNoScroll(urlBox);
+    return true;
+  }
+  document.getElementById("addCalendar").addEventListener("click", addFeedFromForm);
+  // Enter is "go" in both boxes: the first one moves on to the question it
+  // cannot answer for you, the second one adds. Neither is a multi-line
+  // field, so Enter belongs to the form rather than to the text.
+  document.getElementById("newUrl").addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    var whoBox = document.getElementById("newWho");
+    if (!whoBox.value.trim() && document.getElementById("newUrl").value.trim()) { focusNoScroll(whoBox); return; }
+    addFeedFromForm();
+  });
+  document.getElementById("newWho").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); addFeedFromForm(); }
+  });
+  document.getElementById("newUpload").addEventListener("click", function () {
+    document.getElementById("newFile").click();
+  });
+  document.getElementById("newFile").addEventListener("change", function () {
+    var input = document.getElementById("newFile");
+    var f = input.files && input.files[0];
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      pendingIcs = String(rd.result || "");
+      pendingIcsName = f.name;
+      // A file already in hand and a link already typed is nothing left to
+      // ask, so it goes in rather than waiting for a second press.
+      if (document.getElementById("newUrl").value.trim()) { addFeedFromForm(); return; }
+      setStatus("addStatus", "Read " + f.name + ". It will be used to draw the map for the link you paste next.", "ok");
+      focusNoScroll(document.getElementById("newUrl"));
+    };
+    rd.readAsText(f);
+  });
   document.getElementById("addGlobalRule").addEventListener("click", function () { state.rules.push(newRule()); renderGlobalRules(); });
 
   // ------------------------------------------------------------ presets
@@ -1812,9 +2228,12 @@
       setStatus("importStatus", "That loaded, but there are no calendars in it. Check the key is spelled “calendars”: anything this format does not recognise is ignored without a word.", "err");
       return;
     }
-    var msg = "Loaded " + plural(cals, "calendar", "calendars") + " and " + plural(state.lines.length, "line", "lines") + ".";
+    // A bare list of links carries nobody, and "and 0 people" reads as a
+    // failure rather than as the next question.
+    var msg = "Loaded " + plural(cals, "calendar", "calendars")
+      + (state.lines.length ? " and " + plural(state.lines.length, "person", "people") : "") + ".";
     if (res.mode === "recovered") msg += " It came out of a chat window, so " + res.repairs + " had to be taken out of it first: check the calendars below are the ones you meant.";
-    if (res.mode === "links") msg += " Now say whose line each one is, under Calendars.";
+    if (res.mode === "links") msg += " Now say who each one is for, on its card under Your calendars.";
     if (res.skipped && res.skipped.length) msg += " " + plural(res.skipped.length, "line", "lines") + " did not look like a link and " + (res.skipped.length === 1 ? "was" : "were") + " left out.";
     setStatus("importStatus", msg, "ok");
   }
@@ -2887,7 +3306,20 @@
     var box = document.getElementById("importIn");
     if (box && box.focus) box.focus();
   });
-  document.getElementById("chooseManual").addEventListener("click", function () { intoStage("build", "station-lines"); });
+  // Straight to the two questions, with the cursor in the first of them: the
+  // manual route used to land on the list of lines, which is a view of
+  // answers nobody has given yet.
+  // FOCUS SCROLLS, AND IT DOES NOT KNOW ABOUT THE STICKY BAR.
+  // `intoStage` has just put the station under the top bar, using the
+  // scroll-margin every station carries for exactly that. Focusing the field
+  // afterwards scrolled it into view again by its own rules, which put the
+  // station's heading back under the bar: the page arrived with its title
+  // cut in half. preventScroll leaves the scroll where the station asked for
+  // it and still lands the cursor in the first question.
+  document.getElementById("chooseManual").addEventListener("click", function () {
+    intoStage("build", "station-calendars");
+    focusNoScroll(document.getElementById("newUrl"));
+  });
   // The bar at the top points at sections a stage may be hiding. A nav link
   // that scrolls to nothing is worse than no nav link, so following one puts
   // the page in a stage that has what it points at.
@@ -2905,8 +3337,11 @@
   });
 
   // ------------------------------------------------------------ init
-  state.lines.push(newLine());
-  state.calendars.push(newCalendar());
+  // Nothing seeded. The page opened with one blank line card and one blank
+  // calendar card, which was the old form saying "start typing here"; the
+  // first question is asked by the form at the top of the calendars station
+  // now, and a blank person is exactly what this rewrite exists to stop
+  // anybody having to invent.
   paintPresets();
   paintUndo();
   renderAll();

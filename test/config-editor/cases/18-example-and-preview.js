@@ -29,7 +29,7 @@ module.exports = function (test, h) {
     // the user's own work, and a real edit so the confirm is asked for
     document.getElementById('importIn').value = 'https://mine.example/a.ics';
     click(document.getElementById('loadImport'));
-    fireInput(document.querySelector('#calendars .card .title-input'), 'Robin');
+    fireInput(document.querySelector('#calendars .card input.who-input'), 'Robin');
     const mine = document.getElementById('jsonOut').value;
 
     click(document.querySelector('.mc-top nav a[href="#station-demo"]'));

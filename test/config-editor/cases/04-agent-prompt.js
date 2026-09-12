@@ -165,9 +165,7 @@ module.exports = function (test, h) {
 
   test('with a calendar in, the prompt stops asking and starts working', () => {
     const { document } = loadEditor();
-    const url = document.querySelector('#calendars .card input[type=text][placeholder*="ics"]')
-      || document.querySelectorAll('#calendars .card input[type=text]')[1];
-    fireInput(url, 'https://example.com/a.ics');
+    h.addFeed(document, 'https://example.com/a.ics', 'Fry');
     click(document.getElementById('makePrompt'));
     const p = document.getElementById('promptOut').value;
     assert(!/STOP: no calendars were given/.test(p), 'it still thinks it has nothing to read');

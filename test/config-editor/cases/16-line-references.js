@@ -29,7 +29,7 @@ module.exports = function (test, h) {
     return { window, document };
   }
   const lineCards = (document) => [...document.querySelectorAll('#lines .card')];
-  const removeLine = (card) => click(card.querySelector('button[title="Remove this line"]'));
+  const removeLine = (card) => click(card.querySelector('button[title="Remove this person"]'));
 
   test('removing a line takes it out of the rules that routed to it', () => {
     const { window, document } = loaded();
