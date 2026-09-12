@@ -8477,6 +8477,61 @@
         cap.style.fill = PAPER; cap.style.stroke = INK;
         cap.setAttribute(ROLE_ATTR, 'capsule'); cap.setAttribute(OWNER_ATTR, e.owner);
         svg.appendChild(cap);
+        // WHO IS ACTUALLY IN IT.
+        //
+        // The capsule is paper-filled so it masks the rails it crosses, and
+        // that is right -- inside an interchange the individual lines are
+        // not the point. But it masks EVERY rail between its two ends,
+        // including a line that is merely passing behind it, so the one
+        // question a reader has of a family event is the one the mark
+        // cannot answer: is Marge at the dinner, or just going past?
+        //
+        // This is not the ring-per-track that was tried and rejected above.
+        // That drew a full stop mark on each rail -- "here is a stop, and
+        // another, and another", five marks to add up. These are small
+        // members INSIDE one outline: the capsule is still a single mark
+        // and still reads as one place, and the dots only say how many
+        // people are in it and which rows they came from. It is what the
+        // Underground does at a multi-line interchange, one circle per line
+        // inside the one symbol, so you can count them.
+        //
+        // Ink, not the line's own colour: they sit on paper inside the
+        // pill, where a pale line's own grey would disappear, and the
+        // question is "who", which the ROW answers, not the shade.
+        //
+        // AND ONLY WHERE THERE IS SOMETHING TO DISAMBIGUATE. Measured across
+        // every capsule on every fixture and all three viewports: sixty
+        // capsules, and exactly ONE spans a rail that is not a member
+        // (Homer, on regroups standing up). That is structural rather than
+        // luck -- our lines come TO the event, so a convergence pulls its
+        // members into a tight corridor and the pill it spans usually holds
+        // nobody else. On a real transit map the lines stay where they are
+        // and the interchange symbol reaches across whatever lies between,
+        // which is why the Underground needs a circle per line and we
+        // almost never do.
+        //
+        // So the members are drawn on the one board in sixty that needs
+        // them and nowhere else. Ink that answers a question nobody can ask
+        // is just ink, and on the other fifty-nine the dots came out as a
+        // dotted stripe down a pill that was perfectly clear without them.
+        var spansOutsider = false;
+        LEGEND.forEach(function (q) {
+          if (spansOutsider || e._involved.indexOf(q) >= 0) return;
+          var qc = lineCAt(q, capAt);
+          if (qc > lo + 0.5 && qc < hi - 0.5) spansOutsider = true;
+        });
+        if (spansOutsider && e._involved.length > 1) {
+          var memR = Math.max(1.4 * S, capR * 0.28);
+          e._involved.forEach(function (q) {
+            var mc = lineCAt(q, capAt);
+            var mxy = toXY(e._nodeA, mc);
+            var dot = svgEl('circle', { cx: mxy[0], cy: mxy[1], r: memR });
+            dot.style.fill = INK; dot.style.stroke = 'none';
+            dot.setAttribute(ROLE_ATTR, 'capsule-member');
+            dot.setAttribute(OWNER_ATTR, q.key);
+            svg.appendChild(dot);
+          });
+        }
         // A UNION HUB GETS THE SECOND RING.
         //
         // Two people meeting and the whole household meeting were drawn

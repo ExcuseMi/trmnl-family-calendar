@@ -220,6 +220,21 @@ Where the two disagree, this one is newer.
     line's ink is the one mark that cannot be seen, because it is the same
     ink as the rail it sits on. (This rule used to say "a filled dot", which
     the drawing has never done and never should.)
+28a. **A capsule names its members only where something else is inside it.**
+    The Underground draws one circle per line inside a multi-line
+    interchange, so you can count who is there. Measured across every
+    capsule on every fixture and all three viewports -- sixty of them --
+    exactly ONE spans a rail that is not a member. That is structural, not
+    luck: our lines come TO the event, so a convergence pulls its members
+    into a tight corridor and the pill it spans holds nobody else. A real
+    transit map's lines stay where they are and its interchange symbol
+    reaches across whatever lies between, which is why it needs the circles
+    and we almost never do.
+    So the members are marked on the board that needs it and nowhere else.
+    A mark that answers a question nobody can ask is just ink, and on the
+    other fifty-nine it came out as a dotted stripe down a pill that was
+    perfectly clear without it.
+
 29. **A tick stands square to the rail it marks**, not to the clock.
 30. **A convergence ends in a tick on one rail**, in that line's own colour --
     not a bar across the corridor, which says the lines all stop there.
@@ -233,7 +248,7 @@ Where the two disagree, this one is newer.
     doing anything. Making everything a 90 says every adjustment is an
     event; making everything a 45 turns a four-band move into a diagonal
     across the whole afternoon.
-29c. **A convergence takes the 90 by preference, not by defeat.** 29b reads
+29f. **A convergence takes the 90 by preference, not by defeat.** 29b reads
     as though the right angle into a family event were a compromise the
     arithmetic forced, and measuring the board makes it sound worse than it
     is: about a third of all track ink is vertical and under three per cent
