@@ -1,13 +1,13 @@
 module.exports = function (test, h) {
   const { loadEditor, fireInput, fireChange, click, buttonByText, checkByLabel, jsonOut, selectMulti, assert, assertEqual } = h;
 
-  // Setting up the track BEFORE the rule/condition matters: naming a
-  // track re-renders #globalRules (so every rule can offer them in its
-  // track picker), which would detach any rule/condition DOM reference
-  // grabbed beforehand.
+  // Setting the PERSON up before the rule/condition matters: a person
+  // arriving re-renders #globalRules (so every rule can offer them in its
+  // picker), which would detach any rule/condition DOM reference grabbed
+  // beforehand. And a person arrives by a calendar being answered for, which
+  // is the only way this page makes one.
   function ruleWithCondition(document, value, negate) {
-    fireInput(document.querySelector('#lines .card .title-input'), 'Sam');
-    fireChange(document.querySelector('#lines .card .title-input'));
+    h.addFeed(document, 'https://a.example/sam.ics', 'Sam');
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), value);

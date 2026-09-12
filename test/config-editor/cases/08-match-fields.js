@@ -15,11 +15,12 @@
 module.exports = function (test, h) {
   const { loadEditor, fireInput, fireChange, click, buttonByText, jsonOut, selectMulti, assert, assertEqual } = h;
 
-  // A page with one track and one global rule on it, ready to be filled in.
+  // A page with one person and one global rule on it, ready to be filled in.
+  // The person comes with a calendar, because that is the only way the page
+  // makes one: a line IS somebody whose calendar is on the board.
   function withRule() {
     const { document } = loadEditor();
-    fireInput(document.querySelector('#lines .card .title-input'), 'Sam');
-    fireChange(document.querySelector('#lines .card .title-input'));
+    h.addFeed(document, 'https://a.example/sam.ics', 'Sam');
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     selectMulti(rule.querySelector('select[multiple]'), ['Sam']);

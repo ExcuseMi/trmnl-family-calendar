@@ -90,7 +90,7 @@ module.exports = function (test, h) {
     assert(/mine\.ics/.test(card.querySelector('.status').textContent), 'sanity: the file should load');
 
     // anything that redraws the panel
-    click(document.getElementById('addLine'));
+    h.addFeed(document, 'https://calendar.example.com/another.ics', 'Robin');
     const after = document.querySelector('#sources .card');
     assert(!/Example feed/.test(after.querySelector('.status').textContent),
       'the uploaded file was relabelled as the example\'s own: ' + after.querySelector('.status').textContent);

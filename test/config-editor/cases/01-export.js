@@ -1,9 +1,21 @@
 module.exports = function (test, h) {
-  const { loadEditor, fireInput, fireChange, click, buttonByText, checkByLabel, jsonOut, selectMulti, assert, assertEqual } = h;
+  const { loadEditor, fireInput, fireChange, click, buttonByText, checkByLabel, jsonOut, selectMulti, assert, assertEqual, addFeed } = h;
+
+  // A person exists because a calendar was answered for, so every case below
+  // that needs one to route a rule to gets one the way the page makes them.
+  function withPerson(name) {
+    const { window, document } = loadEditor();
+    addFeed(document, 'https://example.com/' + name.toLowerCase() + '.ics', name);
+    return { window, document };
+  }
 
   test('a fresh editor exports an empty configuration', () => {
     const { document } = loadEditor();
     assertEqual(jsonOut(document), { lines: [], calendars: [] });
+    assert(!document.querySelector('#calendars .card'),
+      'the page opens with a blank calendar card again, which exports nothing and asks for everything');
+    assert(!document.querySelector('#lines .card'),
+      'the page opens with a blank person on it');
   });
 
   // Side and colour used to be two <select>s on every track card. They are gone: the
@@ -11,10 +23,10 @@ module.exports = function (test, h) {
   // panel's theme, and neither could be guessed well from this page. What must NOT happen
   // is that opening an old configuration here silently strips them, so the two halves are
   // tested apart: no control to set one, but an imported one survives the round trip.
-  test('a line card offers no side or colour control', () => {
-    const { document } = loadEditor();
+  test('a person\'s card offers no side or colour control', () => {
+    const { document } = withPerson('Sam');
     const card = document.querySelector('#lines .card');
-    fireInput(card.querySelector('.title-input'), 'Sam');
+    assertEqual(card.querySelector('.title-input').value, 'Sam');
     assertEqual(card.querySelectorAll('select').length, 0);
     assertEqual(jsonOut(document).lines, [{ name: 'Sam' }]);
     const labels = [...document.querySelectorAll('#lines label')].map((l) => l.textContent);
@@ -31,21 +43,24 @@ module.exports = function (test, h) {
     assertEqual(jsonOut(document).lines, [{ name: 'Sam', color: 'gray-20', side: 'left' }, { name: 'Alex' }]);
   });
 
-  test('a calendar assigned to a track exports a leading "any" rule', () => {
+  // THE WHOLE CONFIGURATION FOR THE ORDINARY CASE, FROM TWO ANSWERS.
+  //
+  // A link and a name. What comes out is the shape the plugin is built
+  // around, and the same shape demo-config.json is written in: the person in
+  // `lines`, the feed named after them so the board can say whose feed is
+  // down, and the one rule that sends everything in it to their line.
+  test('a link and a name export the person, the feed and its catch-all rule', () => {
     const { document } = loadEditor();
-    fireInput(document.querySelector('#lines .card .title-input'), 'Alex');
-    fireChange(document.querySelector('#lines .card .title-input'));
-    const cal = document.querySelector('#calendars .card');
-    fireInput(cal.querySelector('input[type=text]:not(.title-input)'), 'https://example.com/a.ics');
-    fireInput(cal.querySelector('.title-input'), 'Alex');
-    selectMulti(cal.querySelector('select[multiple]'), ['Alex']);
-    assertEqual(jsonOut(document).calendars, [{ url: 'https://example.com/a.ics', name: 'Alex', rules: [{ match: { type: 'any' }, line: 'Alex' }] }]);
+    addFeed(document, 'https://example.com/a.ics', 'Alex');
+    assertEqual(jsonOut(document), {
+      lines: [{ name: 'Alex' }],
+      calendars: [{ url: 'https://example.com/a.ics', name: 'Alex',
+        rules: [{ match: { type: 'any' }, line: 'Alex' }] }],
+    });
   });
 
-  test('a global rule with a word condition, a track and hide exports correctly', () => {
-    const { document } = loadEditor();
-    fireInput(document.querySelector('#lines .card .title-input'), 'Kids');
-    fireChange(document.querySelector('#lines .card .title-input'));
+  test('a global rule with a word condition, a person and hide exports correctly', () => {
+    const { document } = withPerson('Kids');
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), 'L2');
@@ -78,9 +93,7 @@ module.exports = function (test, h) {
   });
 
   test('a rule can move a timed event to the head of the line', () => {
-    const { document } = loadEditor();
-    fireInput(document.querySelector('#lines .card .title-input'), 'Mia');
-    fireChange(document.querySelector('#lines .card .title-input'));
+    const { document } = withPerson('Mia');
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), 'Leave');
@@ -100,9 +113,7 @@ module.exports = function (test, h) {
   });
 
   test('two conditions export as an and-matcher', () => {
-    const { document } = loadEditor();
-    fireInput(document.querySelector('#lines .card .title-input'), 'Sam');
-    fireChange(document.querySelector('#lines .card .title-input'));
+    const { document } = withPerson('Sam');
     click(document.getElementById('addGlobalRule'));
     const rule = document.querySelector('#globalRules .rule');
     fireInput(rule.querySelector('.cond input[type=text]'), 'Piano');

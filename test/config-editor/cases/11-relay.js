@@ -16,8 +16,7 @@ module.exports = function (test, h) {
 
   function withUnreadCalendar() {
     const { document } = loadEditor();
-    const url = document.querySelectorAll('#calendars .card input[type=text]')[1];
-    fireInput(url, 'https://cal.example.com/secret-address.ics');
+    h.addFeed(document, 'https://cal.example.com/secret-address.ics', 'Sam');
     return document;
   }
   // Copy is off entirely while NOTHING has been read: an event-less prompt
@@ -85,8 +84,7 @@ module.exports = function (test, h) {
       }
       return Promise.reject(new Error('no network in tests'));
     });
-    fireInput(document.querySelectorAll('#calendars .card input[type=text]')[1],
-      'https://cal.example.com/not-a-calendar');
+    h.addFeed(document, 'https://cal.example.com/not-a-calendar', 'Sam');
     click(document.getElementById('copyPrompt'));
     click(document.getElementById('relayUse'));
     await new Promise((r) => setTimeout(r, 50));

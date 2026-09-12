@@ -135,14 +135,42 @@ module.exports = function (test, h) {
     });
   });
 
-  test('a plain "any" rule is still shown as the calendar\'s line picker', () => {
+  // ...and the answer to "who is this for?" is where it is shown. It used to
+  // be a multi-select of declared lines; a box with the name in it says the
+  // same thing without a modifier key, and it is the same box the whole flow
+  // is built on, so a configuration read back from TRMNL and one typed in
+  // from scratch look identical on the card.
+  test('a plain "any" rule is shown as the answer to who the calendar is for', () => {
     const rule = { match: { type: 'any' }, line: 'Mia' };
     const { document } = loadCfg({
       lines: [{ name: 'Mia' }], calendars: [{ url: 'https://a.example/m.ics', rules: [rule] }],
     });
     assertEqual(jsonOut(document).calendars[0].rules, [rule]);
-    const picked = [...document.querySelector('#calendars select[multiple]').selectedOptions].map((o) => o.value);
-    assertEqual(picked, ['Mia'], 'the calendar owner should be shown in the picker, not as a rule card');
+    assertEqual(document.querySelector('#calendars input.who-input').value, 'Mia',
+      'the calendar owner should be shown as the answer, not as a rule card');
+    assert(!document.querySelector('#calendars .card > .row select[multiple]'),
+      'the line multi-select is back on the calendar card');
+  });
+
+  // A FEED TWO PEOPLE SHARE IS TWO NAMES, NOT A SECOND CONTROL.
+  //
+  // `"line": ["Marge", "Homer"]` on a catch-all is a real shape -- a couple's
+  // shared calendar, where every event belongs to both of them -- and it used
+  // to need a ctrl-click in a multi-select to say. A comma is a list
+  // separator everywhere else on this page, so it is one here too, and the
+  // round trip has to survive it.
+  test('a feed a whole household shares round-trips as a comma-separated answer', () => {
+    const rule = { match: { type: 'any' }, line: ['Marge', 'Homer'] };
+    const { document } = loadCfg({
+      lines: [{ name: 'Marge' }, { name: 'Homer' }],
+      calendars: [{ url: 'https://a.example/both.ics', rules: [rule] }],
+    });
+    assertEqual(document.querySelector('#calendars input.who-input').value, 'Marge, Homer');
+    assertEqual(jsonOut(document).calendars[0].rules, [rule]);
+    // and a name is not written onto a feed that is nobody's in particular:
+    // that name would be drawn as a line of its own the moment a rule missed
+    assert(!('name' in jsonOut(document).calendars[0]),
+      'a shared feed was named after the pair of them: ' + JSON.stringify(jsonOut(document).calendars[0]));
   });
 
   test('a value with a comma in it is not split into two words', () => {

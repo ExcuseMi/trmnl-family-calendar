@@ -30,12 +30,19 @@ module.exports = function (test, h) {
     });
   });
 
+  // THE CALENDARS COME BEFORE THE PEOPLE, BECAUSE THE PEOPLE COME OUT OF THEM.
+  //
+  // Lines used to be the first thing to fill in: a list of people to declare,
+  // with nothing yet to put on them, and side and colour pickers the plugin
+  // has long since taken over. A line IS a person, so "here is a calendar, it
+  // is Homer's" declares one. The people section is a view of those answers
+  // now, and it sits after the question it reads.
   test('the steps run in the order somebody does them, with the preview beside them', () => {
     const { document } = loadEditor();
     const ids = [...document.querySelectorAll('.col-steps > section')].map((s) => s.id);
     assertEqual(ids, [
-      'station-demo', 'station-start', 'station-agent', 'station-lines',
-      'station-calendars', 'station-rules', 'station-output',
+      'station-demo', 'station-start', 'station-agent', 'station-calendars',
+      'station-lines', 'station-rules', 'station-output',
     ]);
     // The preview is not a step: it is the panel the steps draw into, and it
     // sits in its own column so it stays in view.
@@ -151,8 +158,8 @@ module.exports = function (test, h) {
     const { document } = loadEditor();
     const hrefs = [...document.querySelectorAll('.mc-top nav a')]
       .map((a) => a.getAttribute('href')).filter((hr) => hr.charAt(0) === '#');
-    assertEqual(hrefs, ['#station-demo', '#station-start', '#station-agent', '#station-lines',
-      '#station-calendars', '#station-output']);
+    assertEqual(hrefs, ['#station-demo', '#station-start', '#station-agent', '#station-calendars',
+      '#station-lines', '#station-output']);
     // ids are load-bearing: they are what the nav, the docs and every deep link point at
     hrefs.forEach((hr) => assert(document.querySelector(hr), 'nav points at a section that is not there: ' + hr));
   });
