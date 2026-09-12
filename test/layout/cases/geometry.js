@@ -62,10 +62,10 @@ module.exports = function (test, h) {
   // end up on somebody else's. Drawing the board from both ends of the day
   // and keeping the better one cleared every x-landscape board and these two
   // did not follow. They want the placer to see a whole side at once.
-  const OVERLAP_KNOWN = {
-    'long-event-day/og-landscape': 'captions are placed greedily and this panel has no slack: E19',
-    'three-day/og-landscape': 'captions are placed greedily and this panel has no slack: E19',
-  };
+  // Both came off this list when a caption written over another started
+  // being lifted off and asked again with the whole board standing. That is
+  // the repair pass; E19 is what it is for.
+  const OVERLAP_KNOWN = {};
   const PIERCE_KNOWN_VIEW = {};
   const PIERCE_KNOWN = {};
 

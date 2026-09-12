@@ -47,16 +47,21 @@
     badge and a forecast, 58px deep on every panel -- an eighth of an
     800x480 board and a fourteenth of an X, taken off the map on every
     render. Four of the five things it did, the hour strip was already
-    doing: what time it is now, which day each half of a 36-hour board
+    doing: what time it is now, which day each half of a two-day board
     belongs to, what has scrolled off either end, and where the scale
-    changes rate. The fifth was the weather, and on a two-day board the
-    weather is a fact about a DAY, so it belongs at that day's own end of
-    the scale rather than in a row above both of them. `dayBadge` draws all
-    of it now, through the same reservation the hours and the clock use.
+    changes rate. The fifth was the weather, and the weather is a fact
+    about a DAY, so it belongs at that day's own end of the scale rather
+    than in a row above all of them. `dayBadge` draws all of it now.
     The board already knew how to do without this band: every slot too
     shallow to spare it has been dropping it for as long as there have been
     slots, and the strip has been naming the day there ever since.
   {%- endcomment -%}
+  <div class="divider divider--on-white flex-none"></div>
+
+  <div class="metro-canvas relative grow w--full">
+    <svg class="metro-svg absolute"></svg>
+  </div>
+
   {%- comment -%}
     Two things the board cannot say for itself, and the one part of the old
     header that had nowhere else to go. A line missing because its feed has
@@ -65,12 +70,6 @@
     exactly like a fresh one. Under the map rather than over it: they are
     rare, they are prose, and the map is what the reader came for.
   {%- endcomment -%}
-  <div class="divider divider--on-white flex-none"></div>
-
-  <div class="metro-canvas relative grow w--full">
-    <svg class="metro-svg absolute"></svg>
-  </div>
-
   {% if data.calendars_down and data.calendars_down.size > 0 %}
     {%- assign down_names = data.calendars_down | join: ", " -%}
     {%- assign feed_down_tpl = data.i18n.feed_down | default: "{n} unavailable" -%}
@@ -133,12 +132,51 @@
      lane ladder is built out of. */
   .metro-label { line-height: 1.05; }
   .metro-hour, .metro-axis-note { white-space: nowrap; }
-  /* WHAT THE STRIP DROPS FIRST when a day's badge will not fit beside the
-     clock: the forecast, then the long date, then the short weekday, then
-     the badge itself. The ladder is in `dayBadge`; what is here is only
-     that a badge is one line and never wraps, because the strip's depth is
-     measured before anything is written on it. */
-  .metro-daybadge { white-space: nowrap; }
+  /* A SECOND DAY COSTS THE ROW WHAT THE CONDITION WAS SPENDING.
+     The header is one row and its height comes off the map, so a two-day
+     header that wraps has taken a band of canvas to say something the
+     board was already saying. The condition text is the first thing to go,
+     the same way it goes when the header is squeezed: "Rain - 80% rain"
+     twice over is most of the width and the numbers beside it carry the
+     day anyway. Kept where there is genuinely room, which is the large
+     header on a panel like the X. */
+  /* A row of days is a legend for the axis below it, so it starts where the
+     axis starts rather than being centred over the panel. The header is a
+     column that centres what it holds, and a row shrink-wrapped to its own
+     words cannot line up with anything: it takes the full width first, and
+     then its contents are free to sit where the axis puts them. */
+  /* A DAY'S NAME OVER ITS OWN STRETCH OF AXIS, as far as that can be had.
+     Their WIDTHS cannot be the day's width -- an evening is a third of the
+     axis and "Thu 10 Sep 21/13 Rain - 80% rain" does not fit a third of an
+     800px panel at any size worth reading -- and their STARTS cannot be
+     the day's start either: measured on a real board, aligning them meant
+     deleting today's forecast to make room, which is trading information
+     for tidiness the wrong way round.
+     What is left is worth having on its own. The row spans the map rather
+     than floating centred over it, and the days sit along it in the order
+     the map draws them, first at the leading edge and last at the trailing
+     one. The date marker on the strip still says exactly where the day
+     turns over; this says which days are on the board and what the weather
+     does on each. */
+  /* The spacer between two days carries `grow`, so with nothing else said
+     it takes all the slack and the last day sits at the trailing edge --
+     which is where it belongs when the alignment below cannot reach. Where
+     it can, the client gives that spacer an exact width instead, and
+     space-between would have gone on redistributing the slack around it. */
+  /* ...and the header itself, which is shrink-wrapped and centred over the
+     panel like everything else in that column. A band 639px wide over a
+     780px map cannot be a legend for it whatever its contents do. */
+  /* Which day of a week-long holiday this is goes the way the condition
+     and the alert lines go when the header is squeezed: it is an
+     explanation, and the NAME of the day is what has to survive. */
+  /* the alert lines are the first thing to go when the header is squeezed:
+     they are an explanation, and a squeezed header has no room to explain */
+  /* A tiny view (a quadrant, a half-horizontal on an OG panel) already
+     hides the date and the weather for want of room, which leaves a band of
+     paper carrying the mark and the word "Today" and nothing else. On a
+     quadrant that band is a third of the board. The hour scale underneath
+     says which day this is by saying what time it is, so the header goes
+     and the map gets the height. */
   .metro-wicon { width: 28px; height: 28px; }
   .metro-mark { width: 30px; height: 30px; }
   /* Concentric rings, sized to sit on the date's own line rather than to
@@ -221,7 +259,6 @@
   // 49 repeats of seventeen characters.
   var ROLE_ATTR = 'data-metro-role', OWNER_ATTR = 'data-metro-owner';
   var LEGEND = METRO.legend || [];
-  var metroDbgRepair = null;
   // HOW A LINE IS DRAWN IS THE FRONT END'S BUSINESS.
   //
   // The payload used to carry a stroke width, a dash pattern and a hue for
@@ -710,6 +747,7 @@
     // box and not the canvas's, because the header's height decided the
     // canvas's height and choosing one from the other oscillated forever
     // near a breakpoint.
+
     // geometry constants (device-scaled)
     var LINE_STEP = 20 * S, NODE_R = 6 * S, NODE_STROKE = 3 * S;
     var LINE_GAP = 6 * S, LANE_GAP = 12 * S, LANE_BASE = 14 * S + Math.min(24 * S, crossPx * 0.025), EDGE = 8 * S;
@@ -800,8 +838,13 @@
     // and a forecast icon is half again the height of an hour label. Sized
     // from the tallest thing on it rather than from the clock alone, or
     // the icons hang out of the band and into the first line's paper.
-    var stripIcon = hourH * 1.3;
-    var bandThick = (horizontal ? Math.max(hourH, stripIcon) : hourW) + 8 * S;
+    // The icon fits the band the clock already asked for, rather than the
+    // band growing to fit the icon. A thicker strip is not free: `bandLo`
+    // is where the map starts, so every line on the board moves down with
+    // it, and six fixtures came back with their geometry changed for the
+    // sake of four pixels of weather icon.
+    var stripIcon = hourH;
+    var bandThick = (horizontal ? hourH : hourW) + 8 * S;
     var bandC = bandThick / 2;        // centre of the strip, in cross units
     var bandLo = bandThick + 4 * S;   // first cross coordinate the map may use
     // ---- how many lines this canvas can actually carry -------------------
@@ -4847,7 +4890,6 @@
       // other it stops the search exactly where it matters, three sizes
       // before the one that would have fitted. A board scoring in the
       // thousands has not found its answer yet.
-
       if (ti > bestTier + 1 && bestQ < 400) break;
     }
     if (bestTier !== ti) attempt(tiers[bestTier]);
@@ -5349,6 +5391,52 @@
             if (worst >= before) return;
           }
         }
+        // A LINE THAT CANNOT WRITE ALL ITS NAMES WRITES WHAT IT CAN AND
+        // COUNTS THE REST.
+        //
+        // The repair pass moves a name that has somewhere to go. What is
+        // left after it are names with nowhere: seven of Work's events
+        // inside a few hours on an 800px board, each caption wider than the
+        // hour it belongs to. No amount of moving fixes that -- the axis is
+        // simply shorter than the words -- and the board's answer so far
+        // was to write them on top of each other, which loses BOTH names
+        // and says nothing about it.
+        //
+        // The board already has the honest answer at the ends of the axis:
+        // what it cannot draw, it counts. So a name with nowhere left to go
+        // is not drawn, and its line says how many it is holding back. The
+        // event itself does not vanish -- its dot and its end tick are on
+        // the line where they always were -- so what the count means is
+        // exactly "this line has two more stops than it has room to name".
+        //
+        // Dropped worst-first, and worst means the one written over the
+        // most other names: shedding it buys the most paper back. A tie
+        // goes to the WIDER name, which is the one taking the most room off
+        // the rest.
+        function shedCaptions(list, busyList) {
+          var movable = list.filter(function (e) { return !e._routeShared && !e._dropped; });
+          for (var pass = 0; pass < 12; pass++) {
+            var bad = collisions(movable);
+            if (!bad.length) break;
+            var tally = [];
+            bad.forEach(function (pr) {
+              [0, 1].forEach(function (k) {
+                var hit = null;
+                for (var i = 0; i < tally.length; i++) if (tally[i].e === pr[k]) hit = tally[i];
+                if (!hit) { hit = { e: pr[k], n: 0 }; tally.push(hit); }
+                hit.n++;
+              });
+            });
+            tally.sort(function (a, b) { return (b.n - a.n) || (b.e._textLen - a.e._textLen); });
+            var go = tally[0].e;
+            for (var i2 = busyList.length - 1; i2 >= 0; i2--) {
+              if (busyList[i2].of === go) busyList.splice(i2, 1);
+            }
+            go._capBoxes = null; go._capShed = true;
+            if (go._box && go._box.parentNode) go._box.parentNode.removeChild(go._box);
+            movable = movable.filter(function (e) { return e !== go; });
+          }
+        }
         function placeCaption(e) {
           // A CONVERGENCE'S NAME IS PLACED ALREADY, AND IT IS PINNED.
           //
@@ -5715,7 +5803,13 @@
             // same six pixels every caption keeps from every line.
             var depth = Math.abs(lim - here) - LINE_GAP;
             var list = [];
-            for (var k = 0; e._capOut + k * row + e._h <= depth; k++) list.push(e._capOut + k * row);
+            // Four of them, as there always were. Snapping the rungs into
+            // the corridor is about WHERE they fall, not how many: a deep
+            // corridor handed the search eight, and a caption that can step
+            // eight rows out steps away from the mark it belongs to. The
+            // x-quadrant came back with seven pairs of names on each other
+            // for exactly that reason.
+            for (var k = 0; list.length < 4 && e._capOut + k * row + e._h <= depth; k++) list.push(e._capOut + k * row);
             for (var k2 = Math.max(list.length, 0); k2 < 4; k2++) list.push(e._capOut + k2 * row);
             return list;
           }
@@ -5815,9 +5909,10 @@
           best.box.of = e; e._capBoxes = [best.box];
           busy.push(best.box);
         }
-        visible.forEach(function (e) { e._capBoxes = null; });
+        visible.forEach(function (e) { e._capBoxes = null; e._capShed = false; });
         shared.forEach(placeCaption);
         repairCaptions(shared, busy, placeCaption);
+        shedCaptions(shared, busy);
       }
 
       recomputeLineDists();
@@ -5829,7 +5924,6 @@
       // The run the board settled on, and the nights inside it, in minutes
       // and in axis px: a case asking whether the corridor really spans
       // 22:00 to 06:00 should not have to re-derive the scale to find out.
-      capRepair: metroDbgRepair,
       days: dayCount, rolling: !!ROLL,
       midnights: AXIS.boundaries.map(function (b) { return [b.min, Math.round(aFor(b.min))]; }),
       nights: NIGHTS.map(function (n) { return [n.from, n.to, Math.round(aFor(n.from)), Math.round(aFor(n.to))]; }),
@@ -6369,6 +6463,41 @@
         var nameXY = toXY(nameA, namesAbove ? nameC + nameOff : nameC - nameThick / 2);
         p._nameEl.style.left = nameXY[0] + 'px';
         p._nameEl.style.top = nameXY[1] + 'px';
+        // ...AND HOW MANY OF ITS STOPS IT COULD NOT NAME.
+        //
+        // Appended after the name has been measured and placed, so the
+        // count cannot change where the name sits or how many lines it
+        // wraps to: it is an annotation on the name, not part of it. The
+        // stops themselves are on the line either way -- this says only
+        // that two of them have no room for their words, which is the same
+        // answer the ends of the axis already give for the events that fall
+        // outside the window.
+        var shedHere = 0;
+        visible.forEach(function (e) { if (e._capShed && e._p === p) shedHere++; });
+        if (shedHere) {
+          var wasName = measure(p._nameEl);
+          var more = el('span', 'metro-capmore ' + quietText());
+          more.textContent = ' +' + shedHere;
+          p._nameEl.appendChild(more);
+          // The name was measured and placed without this, so left where it
+          // is the count grows into whatever the name was keeping clear of
+          // -- on a standing board, its own terminal bar, by ten pixels. It
+          // is an annotation on the name, so the NAME gives up the room:
+          // the whole thing steps back along the axis by exactly what the
+          // count added, and its far edge stays where it was placed. Where
+          // stepping back would take it off the board there is nowhere for
+          // the count to live, and the line goes back to saying nothing,
+          // which is what it said yesterday.
+          var nowName = measure(p._nameEl);
+          var grew = horizontal ? nowName.w - wasName.w : nowName.h - wasName.h;
+          var backTo = (horizontal ? nameXY[0] : nameXY[1]) - grew;
+          if (grew > 0 && backTo >= 0) {
+            if (horizontal) p._nameEl.style.left = backTo + 'px';
+            else p._nameEl.style.top = backTo + 'px';
+          } else if (grew > 0) {
+            p._nameEl.removeChild(more);
+          }
+        }
         if (p._routeEl) {
           // Flat, the row hangs under the name; standing up, beside it.
           // Both are "next along the cross axis", which is the direction a
@@ -8346,6 +8475,61 @@
     function takenAt(lo, hi) {
       return reserved.some(function (r) { return lo < r[1] && r[0] < hi; });
     }
+    // A DAY'S NAME BEGINS WHERE ITS DAY BEGINS.
+    //
+    // A row of names is a list; the same row slid along so each name starts
+    // over the stretch of axis it is about is a legend, and how much of the
+    // board is today becomes something you can see rather than something
+    // you work out from where the date marker fell.
+    //
+    // Their WIDTHS are not the day's width, which cannot work: an evening
+    // is a third of the axis and a date, an icon and two temperatures do
+    // not fit a third of an 800px panel at any size worth reading. Only
+    // where each name STARTS is aligned.
+    //
+    // It only reaches because a spent day has already given up its numbers
+    // (see the header). Measured with them still there, today's block ran
+    // past tomorrow's midnight on both panels and the row could not be
+    // aligned at all without deleting something worth keeping.
+    //
+    // Nothing here may change the row's HEIGHT: the header's height comes
+    // off the map, and the map has already been laid out against the height
+    // this row had a moment ago. So it is applied, measured, and taken
+    // straight back off again if the row grew by so much as a pixel.
+    function alignHeaderDays() {
+      if (!horizontal || !header || !AXIS.boundaries.length) return;
+      var row = header.querySelector('.metro-header-top');
+      if (!row) return;
+      var blocks = [], gaps = [];
+      row.querySelectorAll('.metro-day').forEach(function (n) { blocks.push(n); });
+      row.querySelectorAll('.metro-day-gap').forEach(function (n) { gaps.push(n); });
+      if (blocks.length < 2 || gaps.length < blocks.length - 1) return;
+      var was = row.getBoundingClientRect().height;
+      // The canvas's own zero, in this row's layout px: both rects are in
+      // device px, and everything else here is in layout px.
+      var rr = row.getBoundingClientRect(), cr = canvas.getBoundingClientRect();
+      var dx = (cr.left - rr.left) / Z;
+      function leftOf(n) { return (n.getBoundingClientRect().left - rr.left) / Z; }
+      var undo = [];
+      function set(n, prop, v) { undo.push([n, prop, n.style[prop]]); n.style[prop] = v; }
+      for (var i = 0; i < AXIS.boundaries.length && i + 1 < blocks.length; i++) {
+        var want = dx + toXY(aFor(AXIS.boundaries[i].min), bandLo)[0];
+        var move = want - leftOf(blocks[i + 1]);
+        var w = (gaps[i].getBoundingClientRect().width / Z) + move;
+        // Out of reach: the day before it is wider than its own stretch of
+        // board. Then it goes as close to its own midnight as it can get,
+        // which is hard up against the day before it -- on the 800x480
+        // panel that is six pixels past the boundary, and refusing to move
+        // at all over those six pixels left the name at the far end of the
+        // row instead, which is the one place it certainly does not belong.
+        if (w < 0) w = 0;
+        set(gaps[i], 'flexGrow', '0');
+        set(gaps[i], 'flexBasis', w + 'px');
+      }
+      if (row.getBoundingClientRect().height > was + 0.5) {
+        undo.forEach(function (u) { u[0].style[u[1]] = u[2]; });
+      }
+    }
     // WHICH DAY THIS IS, AND WHAT THE SKY IS DOING ON IT, on the strip
     // where the clock already lives.
     //
@@ -8371,8 +8555,12 @@
       forms.push({ date: d.date_label });
       if (d.weekday_short) forms.push({ date: d.weekday_short });
       for (var fi = 0; fi < forms.length; fi++) {
-        var box = el('span', 'metro-gen metro-daybadge flex flex--row flex--center-y gap--xsmall absolute');
-        var pill = el('span', 'metro-axis-note metro-pill metro-daybreak label label--small font--bold');
+        // The badge IS the day marker, so it wears the class: everything
+        // that looks for where a day turns over -- the suite included --
+        // reads the outermost element, and a marker whose name is buried on
+        // a child inside it is a marker nothing can find.
+        var box = el('span', 'metro-gen metro-daybadge metro-daybreak flex flex--row flex--center-y gap--xsmall absolute');
+        var pill = el('span', 'metro-axis-note metro-pill label label--small font--bold');
         pill.textContent = forms[fi].date;
         box.appendChild(pill);
         if (forms[fi].w) {
@@ -8449,22 +8637,42 @@
     // or over the overflow notes: whatever cannot fit falls back to the
     // short weekday and then gives way.
     //
-    // EVERY DAY ON THE BOARD NAMES ITSELF HERE, the one it opens on
-    // included. That used to be left to the header, and where the header
-    // said it the strip kept quiet so as not to answer the same question
-    // twice in the one place the clock badge also wants. There is no header
-    // now: this IS the header, and a day nobody names is a day the reader
-    // has to work out from the hours.
-    //
-    // Order matters. The day the board opens on is asked for first, at the
-    // leading edge, because the clock badge and the overflow count are
-    // going to want that same corner and a date is worth more than either;
-    // the days it crosses into follow at their own midnights.
-    var spentToday = !!(METRO.rolling && METRO.rolling.start_min >= 12 * 60);
-    dayBadge(DAY_RUN[0], axisStart + EDGE, spentToday);
-    AXIS.boundaries.forEach(function (b) {
-      dayBadge(DAY_RUN[b.day], aFor(b.min) + 3 * S, false);
-    });
+    // Nothing at all on a single-day board. There is one day, the header
+    // already says which, and a marker would be saying it twice.
+    if (AXIS.boundaries.length) {
+      var dayCls = 'metro-axis-note metro-daybreak label label--small font--bold text--black';
+      // The day the board OPENS on, which nothing else names now that the
+      // band is gone. Asked for first, at the leading edge, because the
+      // clock badge and the overflow count want that same corner and a date
+      // is worth more than either; a board read in the first hour of its
+      // own window still gives the corner to the clock and names only the
+      // day it crosses into.
+      var spentToday = !!(METRO.rolling && METRO.rolling.start_min >= 12 * 60);
+      dayBadge(DAY_RUN[0], axisStart + EDGE, spentToday);
+      AXIS.boundaries.forEach(function (b) {
+        // A BADGE, NOT A BARE DATE: the day it crosses into has its own
+        // weather, and that is a fact about a day rather than about a
+        // board, so it belongs beside that day's own name rather than in a
+        // header above both of them.
+        dayBadge(DAY_RUN[b.day], aFor(b.min) + 3 * S, false);
+      });
+      // THE DAY THE BOARD OPENS ON, but only where the header is not
+      // already saying it. On a full board it is: the date badge is the
+      // header's hard anchor, and a second copy of the same words at the
+      // head of the strip is the board answering a question it has just
+      // answered, in the one place the clock badge also wants. Where the
+      // header has been dropped for want of depth -- a quadrant, a half
+      // slot -- nothing else on the board names the first day, and then
+      // this is the only thing that says which day the left-hand half of a
+      // 36-hour scale belongs to.
+      //
+      // The clock badge still has first claim on that spot, so a board read
+      // in the first hour of its own window names only the day it crosses
+      // into. What time it is beats what day it started on, and the marker
+      // comes back on the next refresh that moves the badge along.
+      alignHeaderDays();
+
+    }
     if (earlier) axisNote([tr('earlier', earlier), '+' + earlier], axisStart + EDGE, 'start', 'metro-axis-note label label--small font--bold text--black');
     if (later + dropped) axisNote([tr('more', later + dropped), '+' + (later + dropped)], axisEnd - EDGE, 'end', 'metro-axis-note label label--small font--bold text--black');
     // Interchange capsules used to blank the hour under them, from when the
@@ -8490,7 +8698,15 @@
       // the strip with it
       if (reserved.some(function (r) { return overlaps(ext, r); })) continue;
       if (hourTaken.some(function (r) { return overlaps(ext, r); })) continue;
-      hourTaken.push([ext[0] - 2 * S, ext[1] + 2 * S]);
+      // SIX PIXELS, NOT TWO, BECAUSE THE PROBE IS NOT THE LABEL.
+      //
+      // The span booked here is the width of the PROBE ("00:00"), and a
+      // real label is a hair wider at some sizes -- so two hours booked two
+      // pixels apart came out touching by three. It never showed while the
+      // strip was under a header and the scale was a little smaller; take
+      // the band off the map, grow the canvas and with it the type, and six
+      // pairs of hours on a single-event board grazed each other.
+      hourTaken.push([ext[0] - 6 * S, ext[1] + 6 * S]);
       // no opaque background: the hour labels sit ON the strip, the way a
       // scale's numbers sit on its rule.
       var lab = el('span', 'metro-gen metro-hour label label--small font--bold text--black absolute');
