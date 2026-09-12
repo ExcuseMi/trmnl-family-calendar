@@ -521,31 +521,42 @@ only on the hand-written fallback; the real demo config declares its lines
 without a side or an offset and has always had its order computed. The board
 that was showing the bad order was the fallback, not the demo.
 
-### E27. A vertical through a caption is charged by area
+### E27. A vertical through a caption is charged by area -- FIXED
 
-`costAt` in the convergence caption pass charges every obstacle by overlap
+`costAt` in the convergence caption pass charged every obstacle by overlap
 AREA. That is right for a rail running along under a line of text and wrong
 for a vertical: a drop is thin BECAUSE it is a drop, so one slicing a name
-clean in half overlaps a couple of hundred square pixels and is charged like
-a graze, while a level rail lying harmlessly behind the same words costs
-five times as much for passing the whole width. "Family Dinner" on
-long-event-day sits in the well of its own line's detour with the left stem
-through the "1" of "18:30", and the search preferred that to every clear
-position because the sums said it was cheap. `HARD_DROP` (16px of padding
-round a vertical) is the existing compensation and it is the wrong currency:
-it buys distance from the drop, not a price for cutting a name.
+clean in half overlapped a couple of hundred square pixels and was charged
+like a graze, while a level rail lying harmlessly behind the same words cost
+five times as much for passing the whole width. The search kept choosing the
+cut, correctly by its own sums.
 
-MEASURED FIX, not yet shipped. Charging a drop by how much of the caption's
-HEIGHT it crosses, against the caption's own area
-(`cross * cross * boxArea * 1.5`), takes captions cut by a near-vertical rail
-from 2 to 1 across the fixture set and clears SIX known-issue boards. It also
-opens six new failures, mostly on OG, which is why it is here and not on
-main: `long-event-day/og` (two labels overlap, and a long event's caption
-lands on something), `long-event-day/x` and `five-lines/og` and
-`seven-lines/x` (a rail through a label), `crew-day/x-portrait` (two captions
-overlap standing up). The direction is right -- the count of REAL cuts halves
--- and the three OG boards it "broke" are level rails behind words, which
-rule 38 allows. What is left is to work through the six.
+Fixed by pricing a drop on how much of the caption's HEIGHT it crosses,
+against the caption's own area: `cross * cross * boxArea * 1.2`. Squared, so
+clipping a corner stays nearly free and a full cut costs more than the words
+are worth -- which is the truth, because a name with a rule through it is
+not a name. `HARD_DROP`, the 16px of padding round a vertical, stays as the
+distance it buys; it was never a price.
+
+The factor was swept against the real objective (captions cut by a
+NEAR-VERTICAL rail, told apart from level rails behind words, which rule 38
+allows): 0.8 gives 3, 1.0 gives 0, 1.2 gives 0, 1.5 gives 1, 2.0 gives 0.
+Baseline was 2. 1.2 sits in the stable middle and cost the fewest boards on
+the full suite.
+
+Horizontal only. Standing up a caption is placed by its COLUMN rather than
+by a standoff, and the charge there broke one portrait board while fixing
+another; there was never any evidence it helped in portrait, since the
+vertical-cut measurement is a landscape one.
+
+Six known-issue boards came off the list: caption walk-past on
+regroups/og, five-lines/x and crew-day/x, and a rail through a label on
+long-event-day/x, long-event-day/og and seven-lines/x. seven-lines/x stays
+a known WALK-PAST: correcting the price of a vertical bought it a position
+with no rail through the words, not one that also stays on its own side of
+every neighbour.
+
+612/632, 20 known, 0 failures. Was 606/632 with 26 known.
 
 - [ ] **D5. Small screens: collapse secondary metadata before geometry.**
   On a board like OG half-vertical with 6+ short events on one track, drop

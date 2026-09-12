@@ -376,6 +376,18 @@ Where the two disagree, this one is newer.
 
 ## 6. Which order the lines go in
 
+38a. **A rule THROUGH a name is not the same fault as a rail behind it.**
+    Rule 38 lets a line pass behind words because every caption carries a
+    paper outline and the words stay readable. That is about a rail running
+    ALONG under a line of text. A vertical crossing them at a right angle
+    cuts the name in half, and the placement search cannot be allowed to
+    treat the two alike -- which it did for as long as it priced obstacles
+    by overlap AREA, because a vertical is thin by definition and so scored
+    cheaper than the harmless case. A drop is charged by how much of the
+    caption's HEIGHT it crosses, squared, against the caption's own area: a
+    clipped corner is nearly free and a full cut costs more than the words
+    are worth.
+
 39. **Fewest crossings.** Every line sitting between two people who share an
     event is a line their lines must cross to reach each other, and since a
     shared event moves the trunks that crossing is real ink. The order with

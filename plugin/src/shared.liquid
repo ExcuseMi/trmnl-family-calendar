@@ -5246,7 +5246,7 @@
             var b = Math.min(axisEnd, a + stepA);
             var u0 = lineCAt(q, a), u1 = lineCAt(q, b);
             if (Math.abs(u1 - u0) > (b - a)) {
-              busy.push({ a0: a - HARD_DROP, a1: b + HARD_DROP, q: q,
+              busy.push({ a0: a - HARD_DROP, a1: b + HARD_DROP, q: q, drop: true,
                           c0: Math.min(u0, u1) - half, c1: Math.max(u0, u1) + half });
               continue;
             }
@@ -5303,6 +5303,35 @@
             if (b.a0 >= t.a1 || t.a0 >= b.a1 || b.c0 >= t.c1 || t.c0 >= b.c1) continue;
             var ov = (Math.min(b.a1, t.a1) - Math.max(b.a0, t.a0))
                    * (Math.min(b.c1, t.c1) - Math.max(b.c0, t.c0));
+            // A VERTICAL'S BADNESS IS NOT PROPORTIONAL TO ITS AREA, and
+            // that is the whole of this bug. Every other obstacle here is
+            // charged by how much of it the words cover, which is right for
+            // a rail running ALONG under a line of text: cover more of it,
+            // pay more. A vertical is thin BECAUSE it is a vertical, so a
+            // drop slicing a name clean in half overlaps a couple of
+            // hundred square pixels and is charged like a graze, while a
+            // level rail lying harmlessly behind the same words is charged
+            // five times as much for passing the whole width.
+            //
+            // "Family Dinner" on long-event-day is the case: it sat in the
+            // well of its own line's detour with the left-hand stem through
+            // the "1" of "18:30", and the search preferred that to every
+            // clear position on the board because the sums said it was
+            // cheap. Padding the block wider (HARD_DROP) was the existing
+            // compensation and it is the wrong currency -- it buys distance
+            // from the drop, not a price for cutting a name.
+            //
+            // So a drop is charged by how much of the caption's HEIGHT it
+            // crosses, against the caption's own area: cross it completely
+            // and the position costs more than the words are worth, which
+            // is the truth, because a name with a rule through it is not a
+            // name. Clip a corner and it is still cheap.
+            if (t.drop && horizontal) {
+              var cross = (Math.min(b.c1, t.c1) - Math.max(b.c0, t.c0))
+                / Math.max(1, b.c1 - b.c0);
+              cost += cross * cross * (b.a1 - b.a0) * (b.c1 - b.c0) * 1.2;
+              continue;
+            }
             // A caption over a caption is unreadable; a caption over a rail
             // is untidy, and every caption carries a paper outline so the
             // rail passes behind it. They are not worth the same.

@@ -32,12 +32,25 @@ module.exports = function (test, h) {
   // those three were measured on the whole suite; the one that ships costs
   // the fewest boards. See E24.
   const WHY24 = 'every position for this name is a walk-past, a pierce or a gap: E24';
+  //
+  // THREE CAME OFF THIS LIST WITH E27, which priced a vertical through a
+  // caption by how much of the NAME it cuts instead of by how many square
+  // pixels it covers. A drop is thin because it is a drop, so one slicing a
+  // name in half used to be charged like a graze while a level rail lying
+  // harmlessly behind the same words cost five times as much -- so the
+  // search kept choosing the cut. Correct the price and three of these
+  // boards find a position that was there all along.
   const KNOWN = new Set([
-    'five-lines/x-landscape', 'five-lines/og-landscape',
-    'crew-day/x-landscape', 'crew-day/og-landscape',
+    'five-lines/og-landscape',
+    'crew-day/og-landscape',
     'long-event-day/og-landscape',
+    // seven-lines is a WALK-PAST on both panels still. It came off the
+    // PIERCE list with E27 and not off this one: the two are different
+    // faults on the same crowded board, and correcting the price of a
+    // vertical bought it a position with no rail through the words, not one
+    // that also stays on its own side of every neighbour.
     'seven-lines/x-landscape', 'seven-lines/og-landscape',
-    'regroups/og-landscape', 'shared-long-event/og-landscape',
+    'shared-long-event/og-landscape',
   ]);
 
   // Where a line sits across the board at one point along the day. Sampled

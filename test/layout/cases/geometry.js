@@ -74,12 +74,14 @@ module.exports = function (test, h) {
   // decide which". Four orderings of those three were measured on the whole
   // suite; the one that ships costs the fewest boards. See E24.
   const WHY24 = 'every position for this name is a graze, a pierce or a gap: E24';
-  const PIERCE_KNOWN = { 'long-event-day': WHY24 };
-  // seven-lines is pierced on the ROOMY panel only, which is the opposite of
-  // the usual shape and worth saying so: the bigger board reaches a bigger
-  // text, and "Good News Everyone" at that size has no row beside its bundle
-  // that one of the bundle's own rails does not cross.
-  PIERCE_KNOWN_VIEW['seven-lines/x-landscape'] = WHY24;
+  //
+  // BOTH OF THESE CAME OFF WITH E27. long-event-day's "Family Dinner" sat in
+  // the well of its own line's detour with the left stem through the "1" of
+  // "18:30", and seven-lines' "Good News Everyone" the same, because a
+  // vertical was charged by the square pixels it covered and a vertical
+  // covers almost none. Priced by how much of the name it cuts, both boards
+  // find a position that was always available.
+  const PIERCE_KNOWN = {};
 
 
   const OVERLAP_TOL = 2;
