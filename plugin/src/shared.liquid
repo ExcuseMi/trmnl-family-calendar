@@ -852,6 +852,47 @@
     var bandThick = (horizontal ? hourH : hourW) + 8 * S;
     var bandC = bandThick / 2;        // centre of the strip, in cross units
     var bandLo = bandThick + 4 * S;   // first cross coordinate the map may use
+    // THE TICK FROM A STOP TO ITS NAME, AND WHAT IT MAY NOT COST.
+    //
+    // Sizes below; the drawing is `captionLead`. What belongs here is the
+    // measurement, because the obvious version of this feature is wrong and
+    // the number is the only thing that says so.
+    //
+    // A caption stands off its lane by LINE_GAP, which leaves about seven
+    // pixels of daylight between the edge of the ring and the top of the
+    // words -- not enough for a tick with clearance at both ends. So the
+    // first cut widened the standoff: five pixels at the dot, five at the
+    // words, a whole NODE_R between, taken in one constant that the search,
+    // the clash tests, the ladder step and the drawing all read, so the
+    // room would be reserved rather than stolen from a neighbour.
+    //
+    // Eleven pixels a caption is not free. That version FIXED eight boards
+    // the suite had marked known-broken and BROKE twelve others: crew-day's
+    // line names landed on each other, "Client Workshop" walked past the
+    // next line along (rule 37), a long event's caption was pushed off the
+    // board, and every portrait clash test started asking about a box that
+    // was not where it said -- standing up, a caption is placed by its
+    // COLUMN, so the standoff moved the box the search reasoned about and
+    // not the box the board drew. Halving it to five left six of those.
+    //
+    // Then the gate: take the room only on a board with slack. There is no
+    // such gate. Cross room per line does not separate the boards that
+    // broke from the boards that did not -- crew-day and five-lines have
+    // 152px per line each, one breaks and one does not; busy-day breaks at
+    // 115 where ten other boards at 115 are fine. What decides it is what
+    // is ON the board, which is the layout's whole problem and not
+    // something a constant up here can know.
+    //
+    // So the standoff does not move at all, and the tick is drawn only
+    // where there is already room for one -- which turns out to be exactly
+    // the case worth drawing. A caption against its own rail starts at the
+    // ring and needs no pointer; a caption that has been pushed out to a
+    // lane or slid along the line is the one the eye cannot pair, and that
+    // one has the daylight by definition. Springfield draws five: School
+    // Day, Detention, Saxophone Lesson, Skate Park, Family Dinner. Every
+    // caption sitting against its mark draws none, and the suite is
+    // unchanged at 603/629 with 26 known and no failures.
+    var LEAD_CLEAR = 5 * S, LEAD_TIP = 2 * S, LEAD_MIN = 4 * S;
     // ---- how many lines this canvas can actually carry -------------------
     //
     // A line needs its own stretch of the cross axis: the line itself, the
@@ -2163,6 +2204,7 @@
       // screen. Cleared before anything reads them.
       e._bundleOut = null; e._drawnLaneC = null; e._onDiagonal = false;
       e._capOut = null; e._capRow = 0; e._routeLvl = null; e._capLead = false; e._capAngle = null;
+      e._drewLead = false;
       e._rampEl = null;
       e._onRoute = false; e._routeShared = false; e._routeEdge = null;
       e._capMinA = null; e._capMaxA = null;
@@ -8290,6 +8332,7 @@
           lead.setAttribute(ROLE_ATTR, 'leader');
           lead.setAttribute(OWNER_ATTR, e.owner);
           svg.appendChild(lead);
+          e._drewLead = true;
         }
       } else {
         // A local stop: a tick across the line, not a ring. On a transit map
@@ -8750,6 +8793,102 @@
       canvas.setAttribute('data-metro-debug', JSON.stringify(dbg));
     })();
 
+    // ---- A TICK FROM THE STOP TO THE NAME IT BELONGS TO.
+    //
+    // A caption sits out from the rail by `gap` and starts at the stop it
+    // names, and for a long time that was held to be connection enough: the
+    // rail is right there, the words begin at the ring. It is not enough on
+    // a busy board. Captions give way by sliding along the line, so a name
+    // routinely ends up a good way down the axis from its own dot, and once
+    // three of them have slid the reader is matching words to rings by
+    // guesswork -- which is exactly the job the thin tick does on every
+    // transit map, and which this board already drew for a convergence
+    // (`_capLead`) because a capsule has no rail of its own to lean on.
+    //
+    // FIVE PIXELS CLEAR OF THE DOT. The tick starts outside the ring rather
+    // than at its centre, so the ring stays a ring: run into the mark, the
+    // two read as one lollipop shape and the stop stops looking like a
+    // stop. The same gap is left at the words, so the tick points AT the
+    // caption instead of underlining it.
+    //
+    // It is drawn quietly -- half the weight of a rail, in the line's own
+    // colour -- because it is a pointer, not a route: nobody travels along
+    // it, and at rail weight a board with a dozen of them reads as a dozen
+    // more branches.
+    // Built once, on the first tick that needs it, and only then: every
+    // caption's predicted box is not cheap, and a board may draw no ticks.
+    var leadBlocks = null;
+    function captionLead(e, lineC, ls, gap, duck) {
+      if (!horizontal || e._dropped || e._capShed || !e._box) return;
+      // A convergence already has one, drawn from the edge of its pill by
+      // the station pass, which runs before this one. Two ticks to one name
+      // is worse than none.
+      //
+      // Asked of `_capLead` this drew nothing at all on any board: that flag
+      // is set on almost every event (it says the SHAPE may carry a leader,
+      // not that this one does), and the station pass then draws a leader
+      // only for the handful that are convergences. The honest question is
+      // whether a leader was actually put on the board, so that is what the
+      // station pass now records.
+      if (e._drewLead) return;
+      // A leaning caption is anchored ON the rail at its own text start:
+      // there is no run to draw, and a tick across a diagonal would cut it.
+      if (e._capAngle != null) return;
+      var out = gap + duck;
+      // Nothing to point along: a tick shorter than the clearance it leaves
+      // at each end is a smudge, not a pointer. The standoff is sized so an
+      // ordinary caption clears this; what does not is a caption pulled in
+      // tight, or pushed out and then flipped, by something else.
+      if (out < NODE_R + LEAD_CLEAR + LEAD_MIN + LEAD_TIP) return;
+      var c0 = lineC + ls * (NODE_R + LEAD_CLEAR);
+      var c1 = lineC + ls * (out - LEAD_TIP);
+      if ((c1 - c0) * ls <= 1) return;
+      // AT THE END OF THE WORDS NEAREST THE STOP, not at the stop's own
+      // minute. A caption that has slid is the case this exists for, so a
+      // tick dropped straight down at `_nodeA` would point at the blank
+      // board the caption used to occupy. It leans to whichever end of the
+      // name is nearer, the way the capsule's leader does.
+      var toA = e._textStart == null ? e._nodeA
+        : clamp(e._nodeA, e._textStart, e._textStart + e._textLen);
+      // NOT THROUGH SOMEBODY ELSE'S NAME. The tick is new ink and nothing
+      // routes around it, so on busy-day it went from Quick Sync's dot
+      // straight down through "Team Standup" -- rule 35, and drawn by the
+      // one pass that had never had to obey it. A tick is a nicety; a tick
+      // through another caption is worse than no tick, so it gives way
+      // rather than being routed. Asked of the boxes `labelBoxes` predicts,
+      // which is the same arithmetic the drawing does, because at this
+      // point in the pass the later captions are not placed yet.
+      //
+      // Asked as a RANGE overlap -- does the tick's span of axis and span of
+      // cross meet the box's -- this swallowed every tick on the board. A
+      // tick leans, so that rectangle is most of a triangle it never enters,
+      // and any caption on an inner lane anywhere near it counted. The
+      // question is whether the INK crosses, so the segment is walked, the
+      // same way the case that caught this walks it.
+      if (leadBlocks == null) leadBlocks = labelBoxes();
+      for (var bi = 0; bi < leadBlocks.length; bi++) {
+        var bk = leadBlocks[bi];
+        if (bk.e === e) continue;
+        var crossed = false;
+        for (var st = 0; st <= 16 && !crossed; st++) {
+          var fa = e._nodeA + (toA - e._nodeA) * st / 16;
+          var fc = c0 + (c1 - c0) * st / 16;
+          if (fa >= bk.a0 && fa <= bk.a1 && fc >= bk.c0 && fc <= bk.c1) crossed = true;
+        }
+        if (crossed) return;
+      }
+      var q0 = toXY(e._nodeA, c0), q1 = toXY(toA, c1);
+      var lead = svgEl('line', {
+        x1: q0[0], y1: q0[1], x2: q1[0], y2: q1[1],
+        'stroke-width': Math.max(1, NODE_STROKE * 0.4), 'stroke-linecap': 'round',
+        'stroke-opacity': 0.55,
+      });
+      lead.style.stroke = colorFor(e._p.hue);
+      lead.setAttribute(ROLE_ATTR, 'caption-lead');
+      lead.setAttribute(OWNER_ATTR, e.owner);
+      svg.appendChild(lead);
+    }
+
     visible.forEach(function (e) {
       if (e._dropped) return;
       var sign = e._sign, b = e._box;
@@ -8877,6 +9016,7 @@
         var leftC = ls < 0 ? lineC - LINE_GAP - room : lineC + LINE_GAP;
         b.style.left = clamp(leftC, 0, Math.max(0, crossPx - room)) + 'px';
       }
+      captionLead(e, lineC, ls, gap, duck);
     });
 
     // ---- hour axis in the gutter; density follows the real px per hour

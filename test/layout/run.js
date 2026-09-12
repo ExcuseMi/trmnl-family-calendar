@@ -372,10 +372,25 @@ const REPORTER = `
     var rects = [];
     svg.querySelectorAll('rect, line[data-metro-role]').forEach(function (el) {
       var r = el.getBoundingClientRect();
-      rects.push(Object.assign(rel(r), {
+      var row = Object.assign(rel(r), {
         role: el.getAttribute('data-metro-role') || 'other',
         owner: el.getAttribute('data-metro-owner') || null
-      }));
+      });
+      // A LEANING LINE IS NOT ITS BOUNDING BOX. For anything upright the two
+      // are the same and a box test is the honest one; for a diagonal the
+      // box is most of a triangle the ink never enters, and a case asking
+      // "does this cross that" gets a yes from the empty corner. The caption
+      // ticks lean by design, so a line reports its ENDS as well and a case
+      // that cares can test the segment.
+      if (el.tagName.toLowerCase() === 'line') {
+        var m = el.getScreenCTM(), cr = canvas.getBoundingClientRect();
+        var pt = function (xa, ya) {
+          var x = parseFloat(el.getAttribute(xa)) || 0, y = parseFloat(el.getAttribute(ya)) || 0;
+          return [m.a * x + m.c * y + m.e - cr.left, m.b * x + m.d * y + m.f - cr.top];
+        };
+        row.ends = [pt('x1', 'y1'), pt('x2', 'y2')];
+      }
+      rects.push(row);
     });
     var circles = [];
     svg.querySelectorAll('circle').forEach(function (el) {

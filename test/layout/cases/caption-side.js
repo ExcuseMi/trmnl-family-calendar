@@ -88,4 +88,67 @@ module.exports = function (test, h) {
       }, KNOWN.has(f.name + '/' + vname) && { known: WHY24 });
     }
   }
+  // ---- THE TICK FROM A STOP TO A NAME THAT HAS TRAVELLED -----------------
+  //
+  // A caption against its own rail starts at the ring and needs no pointer.
+  // One pushed out to a lane, or slid along the line to find paper, is the
+  // one the eye cannot pair with a dot, and that is what the tick is for.
+  //
+  // This case exists because the first version of it drew NOTHING, on every
+  // board, and looked entirely correct doing so: it skipped any event with
+  // `_capLead` set, on the reading that such an event already gets a leader
+  // from the station pass. That flag is set on almost every event -- it
+  // means the SHAPE may carry a leader, not that this one does -- so the
+  // guard swallowed the lot. Nothing failed, no geometry moved, and the
+  // feature was simply absent. So the assertion is about ink on the board.
+  test('a caption that has travelled from its stop is ticked back to it', () => {
+    const rep = layout(fixtures.find((f) => f.name === 'five-lines'),
+      byName('x-landscape'));
+    const ticks = (rep.rects || []).filter((r) => r.role === 'caption-lead')
+      .concat((rep.painted || []).filter((p) => p.role === 'caption-lead' && false));
+    assert(ticks.length > 0,
+      'no caption carries a tick back to its stop on a board with lane captions');
+  });
+
+  test('a tick keeps its distance from the dot and from the words', () => {
+    // Five pixels at the ring, so the two do not read as one lollipop, and
+    // clear of the caption box, so it points AT the name instead of
+    // underlining it. Checked as overlap of the drawn boxes, which is what
+    // either failure would look like.
+    for (const vn of ['x-landscape', 'og-landscape']) {
+      const v = byName(vn);
+      for (const f of fixtures) {
+        let rep;
+        try { rep = layout(f, v); } catch (e) { continue; }
+        const ticks = (rep.rects || []).filter((r) => r.role === 'caption-lead');
+        if (!ticks.length) continue;
+        const dots = (rep.circles || []).filter((c) => c.role === 'stop' || c.role === 'station-ring')
+          .concat((rep.rects || []).filter((r) => r.role === 'stop' || r.role === 'stop-start'));
+        const caps = textLabels(rep).filter((l) => (' ' + l.cls + ' ').indexOf(' metro-label ') >= 0);
+        // The tick leans, so its bounding box is most of a triangle the ink
+        // never enters: asked as a box test this reported a tick "running
+        // into" Team Standup on busy-day, and the crossing was the empty
+        // corner. Segment against box is the question that was meant.
+        const segHitsBox = (p, q, b) => {
+          const steps = 24;
+          for (let i = 0; i <= steps; i++) {
+            const x = p[0] + (q[0] - p[0]) * i / steps;
+            const y = p[1] + (q[1] - p[1]) * i / steps;
+            if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return true;
+          }
+          return false;
+        };
+        for (const t of ticks) {
+          if (!t.ends) continue;
+          const [p, q] = t.ends;
+          for (const d of dots) {
+            assert(!segHitsBox(p, q, d), f.name + '/' + vn + ': a tick runs into a stop mark');
+          }
+          for (const c of caps) {
+            assert(!segHitsBox(p, q, c), f.name + '/' + vn + ': a tick runs into "' + c.text + '"');
+          }
+        }
+      }
+    }
+  });
 };

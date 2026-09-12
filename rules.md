@@ -314,6 +314,17 @@ Where the two disagree, this one is newer.
     slot nobody reserved, the pass finds none at any text size, and the tier
     loop, shown a board equally bad however small the words get, keeps the
     biggest ones.
+34g. **A name that has travelled is ticked back to its stop.** A caption
+    against its own rail begins at the ring and needs no pointer. One pushed
+    out to a lane, or slid along the line to find paper, is the one the eye
+    cannot pair with a dot, and it gets a thin tick in its line's own
+    colour: five pixels clear of the ring, so the two do not read as one
+    lollipop, and short of the words, so it points at the name rather than
+    underlining it. Only where the standoff already has room for one --
+    widening every caption to make room cost six boards and fixed five, and
+    no measure of how roomy a board is separates the two sets, because what
+    decides it is what is on the board. The tick gives way to any other
+    caption it would cross, because it is a nicety and rule 35 is not.
 34d. **A leader is a tick, not a tether.** Past about thirty pixels a stem
     stops pointing at anything -- the eye pairs the words with whatever rail
     is nearest, which by then is somebody else's. Charged steeply beyond
