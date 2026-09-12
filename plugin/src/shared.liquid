@@ -1009,6 +1009,17 @@
     // along the leading edge instead — the top when the board is lying
     // down, the near side when it is stood up — and the lines run the whole
     // depth of the map uninterrupted.
+    // ...AND THICK ENOUGH FOR WHAT ELSE IT CARRIES. The strip is the
+    // board's header now: it names each day and states that day's weather,
+    // and a forecast icon is half again the height of an hour label. Sized
+    // from the tallest thing on it rather than from the clock alone, or
+    // the icons hang out of the band and into the first line's paper.
+    // The icon fits the band the clock already asked for, rather than the
+    // band growing to fit the icon. A thicker strip is not free: `bandLo`
+    // is where the map starts, so every line on the board moves down with
+    // it, and six fixtures came back with their geometry changed for the
+    // sake of four pixels of weather icon.
+    var stripIcon = hourH;
     var bandThick = (horizontal ? hourH : hourW) + 8 * S;
     var bandC = bandThick / 2;        // centre of the strip, in cross units
     var bandLo = bandThick + 4 * S;   // first cross coordinate the map may use
@@ -5429,7 +5440,134 @@
           if (sa !== sb) return sa - sb;
           return capOrder ? b._nodeA - a._nodeA : a._nodeA - b._nodeA;
         });
-        shared.forEach(function (e) {
+        // WHOEVER WAS ASKED FIRST TOOK THE PAPER, AND THAT IS THE WHOLE BUG.
+        //
+        // Captions are placed one at a time, cheapest spot first, and a
+        // spot taken is taken: an eight o'clock meeting asked before an
+        // eleven o'clock one takes the paper the eleven o'clock one had no
+        // alternative to, and the eleven o'clock one is then written on top
+        // of it. Nothing in the pass can see that, because by the time the
+        // second name is placed the first is an obstacle like any other and
+        // the search is choosing the least bad of what is left.
+        //
+        // That is E19 and E20, and it is what has stopped both attempts to
+        // give this board more room: free some depth or some height, the
+        // tier loop reaches a bigger text, and the bigger text turns near
+        // misses into collisions faster than the extra room removes them.
+        //
+        // The fix is not a cleverer order -- every order is first-come for
+        // somebody. It is to LOOK AT THE BOARD AFTERWARDS. A name written
+        // over another is lifted off and asked again with the rest of the
+        // board standing, which is a question it was never asked the first
+        // time: the first time, half the board was not there yet.
+        //
+        // Bounded and strictly downhill. Each round re-places only the
+        // names that are actually in a collision, keeps the answer only if
+        // the board ends with fewer, and stops the moment a round buys
+        // nothing -- so it cannot oscillate and cannot make a board worse
+        // than the greedy pass left it.
+        function capBoxes(e) { return e._capBoxes || []; }
+        // TOUCHING COUNTS. The suite measures the drawn boxes and this
+        // measures the model's, and the two differ by a pixel here and
+        // there -- a caption that has been truncated, a leaning run
+        // described by three boxes. Counted with a two-pixel tolerance the
+        // repair called a board clean that came out with four names on each
+        // other; counted with none, what it fixes is what a reader sees.
+        function boxesHit(a, b) {
+          return a.a0 < b.a1 && b.a0 < a.a1 && a.c0 < b.c1 && b.c0 < a.c1;
+        }
+        function collisions(list) {
+          var bad = [];
+          for (var i = 0; i < list.length; i++) {
+            for (var j = i + 1; j < list.length; j++) {
+              var A = capBoxes(list[i]), B = capBoxes(list[j]);
+              var hit = false;
+              for (var x = 0; x < A.length && !hit; x++) {
+                for (var y = 0; y < B.length && !hit; y++) if (boxesHit(A[x], B[y])) hit = true;
+              }
+              if (hit) bad.push([list[i], list[j]]);
+            }
+          }
+          return bad;
+        }
+        function repairCaptions(list, busyList, place) {
+          // A convergence's name is pinned to its pill and is not ours to
+          // move; everything else on this list was searched for and can be
+          // searched for again.
+          var movable = list.filter(function (e) { return !e._routeShared && !e._dropped; });
+          if (movable.length < 2) return;
+          var worst = collisions(movable).length;
+          metroDbgRepair = [movable.length, worst, worst];
+          for (var round = 0; round < 6 && worst; round++) {
+            var before = worst, order = [];
+            collisions(movable).forEach(function (pr) {
+              if (order.indexOf(pr[1]) < 0) order.push(pr[1]);
+              if (order.indexOf(pr[0]) < 0) order.push(pr[0]);
+            });
+            order.forEach(function (e) {
+              function lift() {
+                // Off the board, so the search sees the paper it is actually
+                // competing for rather than its own words sitting in it.
+                for (var i = busyList.length - 1; i >= 0; i--) {
+                  if (busyList[i].of === e) busyList.splice(i, 1);
+                }
+                e._capBoxes = null; e._capAngle = null; e._capRun = null;
+              }
+              function restore(keep) {
+                for (var k = busyList.length - 1; k >= 0; k--) {
+                  if (busyList[k].of === e) busyList.splice(k, 1);
+                }
+                e._textStart = keep.at; e._capOut = keep.out; e._labelSign = keep.sign;
+                e._capAngle = keep.angle; e._capRun = keep.run; e._capBoxes = keep.boxes;
+                capBoxes(e).forEach(function (bx) { busyList.push(bx); });
+              }
+              var keep = { at: e._textStart, out: e._capOut, sign: e._labelSign,
+                           angle: e._capAngle, run: e._capRun, boxes: e._capBoxes };
+              lift();
+              place(e);
+              // Kept when it is no worse, not only when it is better: a
+              // name that steps aside for nothing this time is what lets
+              // the next one move somewhere at all, and the round as a
+              // whole still has to come out ahead or the loop stops.
+              var now = collisions(movable).length;
+              if (now <= worst) { worst = now; return; }
+              restore(keep);
+              // STILL NOWHERE. Then the name is too TALL for the paper
+              // rather than in the wrong place.
+              //
+              // A caption is two rows, its time over its title, and the
+              // corridor between two lines holds a whole number of them:
+              // eighty-four pixels of paper takes two captions of
+              // twenty-eight and five of fourteen. On a line with seven
+              // events that is the whole difference between a board that
+              // fits and a board with names on each other -- and it is
+              // exactly what the freed height bought, because with the room
+              // to keep the times the tier loop keeps them for every
+              // caption on the board at once.
+              //
+              // So the trade is made where it is owed: by the one caption
+              // that cannot be placed, not by every caption on the board.
+              // It gives up its time, which is the same thing a caption
+              // gives up when it is too WIDE for its lane, and tries again.
+              var tm = e._box && e._box.querySelector('.metro-time-tag');
+              if (!tm) return;
+              var before = tm.nextSibling, wasW = e._w, wasH = e._h, wasLen = e._textLen;
+              tm.remove();
+              var nb = measure(e._box);
+              e._w = nb.w; e._h = nb.h; e._textLen = horizontal ? e._w : e._h;
+              lift();
+              place(e);
+              if (collisions(movable).length < worst) { worst = collisions(movable).length; return; }
+              // Not even then: the time goes back and so does the name.
+              e._box.insertBefore(tm, before);
+              e._w = wasW; e._h = wasH; e._textLen = wasLen;
+              restore(keep);
+            });
+            metroDbgRepair[2] = worst;
+            if (worst >= before) return;
+          }
+        }
+        function placeCaption(e) {
           // A CONVERGENCE'S NAME IS PLACED ALREADY, AND IT IS PINNED.
           //
           // The corridor pass put it above the pill and across its middle,
@@ -5487,6 +5625,7 @@
             if (bestS) {
               e._textStart = bestS.at;
               e._capOut = bestS.out;
+              bestS.box.of = e; e._capBoxes = [bestS.box];
               busy.push(bestS.box);
             }
             return;
@@ -5724,7 +5863,8 @@
               e._capOut = bestA.out;
               e._capAngle = Math.atan(bestA.m) * 180 / Math.PI;
               e._capRun = bestA.run;
-              bestA.run.forEach(function (bx) { busy.push(bx); });
+              e._capBoxes = bestA.run;
+              bestA.run.forEach(function (bx) { bx.of = e; busy.push(bx); });
               return;
             }
           }
@@ -5758,7 +5898,51 @@
           // because it is cheap, and a board without one still has an
           // answer.
           var MAX_LEADER = 32 * S;
-          var outs = [e._capOut, e._capOut + row, e._capOut + row * 2, e._capOut + row * 3];
+          // THE RUNGS ARE THE ROWS THAT EXIST, NOT OFFSETS FROM A LINE.
+          //
+          // This was four steps of a label's height out from the rail,
+          // wherever they landed -- and on a board with lines a caption or
+          // three apart, where they landed was usually on somebody else's
+          // rail. Measured on busy-day at 800x480: every candidate position
+          // for "Client Workshop", at every rung, on both sides, crossed a
+          // line. The search was not choosing between a clean row and a
+          // dirty one, it was choosing which rail to write over, and the
+          // cost it was weighing was dominated by the paper bands of the
+          // lines rather than by the other captions.
+          //
+          // The paper between two lines is a CORRIDOR, and it holds a whole
+          // number of caption rows. Asked for those instead, every
+          // candidate is clear of the rails by construction and the search
+          // goes back to answering the question it is good at: which free
+          // row is nearest the mark this name belongs to.
+          //
+          // The old ladder stays on the end, beyond the corridor and
+          // charged as it always was. A caption whose corridor is too
+          // shallow for even one row still has to go somewhere, and a board
+          // with nowhere clean is a board where a stem over a rail beats a
+          // name over a name.
+          function rungOuts(awayDir) {
+            var here = e._routeEdge != null ? e._routeEdge : lineCAt(e._p, e._nodeA);
+            var lim = awayDir > 0 ? crossPx - EDGE : bandLo;
+            LEGEND.forEach(function (q) {
+              if (q === e._p) return;
+              var qc = lineCAt(q, e._nodeA);
+              if (awayDir > 0 ? (qc > here && qc < lim) : (qc < here && qc > lim)) lim = qc;
+            });
+            // ...less the paper that rail keeps for itself, which is the
+            // same six pixels every caption keeps from every line.
+            var depth = Math.abs(lim - here) - LINE_GAP;
+            var list = [];
+            // Four of them, as there always were. Snapping the rungs into
+            // the corridor is about WHERE they fall, not how many: a deep
+            // corridor handed the search eight, and a caption that can step
+            // eight rows out steps away from the mark it belongs to. The
+            // x-quadrant came back with seven pairs of names on each other
+            // for exactly that reason.
+            for (var k = 0; list.length < 4 && e._capOut + k * row + e._h <= depth; k++) list.push(e._capOut + k * row);
+            for (var k2 = Math.max(list.length, 0); k2 < 4; k2++) list.push(e._capOut + k2 * row);
+            return list;
+          }
           // SLIDING STOPS WHERE POINTING STOPS.
           //
           // Widening this to a full label-width and beyond did give the
@@ -5795,13 +5979,14 @@
             banSign = o._labelSign;
           });
           var base = e._nodeA + TEXT_PAD, best = null;
-          for (var oi = 0; oi < outs.length; oi++) {
-            for (var sg = 1; sg >= -1; sg -= 2) {
+          for (var sg = 1; sg >= -1; sg -= 2) {
+            var away = sg * e._sign;
+            if (banSign && away === banSign) continue;
+            var outs = rungOuts(away);
+            for (var oi = 0; oi < outs.length; oi++) {
               for (var si = 0; si < slides.length; si++) {
                 var at = base + slides[si];
                 if (at < axisStart + EDGE || at + e._textLen > axisEnd - EDGE) continue;
-                var away = sg * e._sign;
-                if (banSign && away === banSign) continue;
                 var c0 = away > 0 ? e._routeEdge + outs[oi] : e._routeEdge - outs[oi] - e._h;
                 // SIX PIXELS UNDER THE DESCENDERS. A label's measured
                 // height stops at the bottom of its box, and a rail drawn
@@ -5842,7 +6027,8 @@
             e._capOut = bestA.out;
             e._capAngle = Math.atan(bestA.m) * 180 / Math.PI;
             e._capRun = bestA.run;
-            bestA.run.forEach(function (bx) { busy.push(bx); });
+            e._capBoxes = bestA.run;
+            bestA.run.forEach(function (bx) { bx.of = e; busy.push(bx); });
             return;
           }
           if (!best) return;
@@ -5850,8 +6036,12 @@
           if (best.thru) capPierces++;
           e._capAngle = null; e._capRun = null;
           e._textStart = best.at; e._capOut = best.out; e._labelSign = best.sign;
+          best.box.of = e; e._capBoxes = [best.box];
           busy.push(best.box);
-        });
+        }
+        visible.forEach(function (e) { e._capBoxes = null; });
+        shared.forEach(placeCaption);
+        repairCaptions(shared, busy, placeCaption);
       }
 
       recomputeLineDists();
@@ -8434,6 +8624,67 @@
         undo.forEach(function (u) { u[0].style[u[1]] = u[2]; });
       }
     }
+    // WHICH DAY THIS IS, AND WHAT THE SKY IS DOING ON IT, on the strip
+    // where the clock already lives.
+    //
+    // This used to be a band of its own above the map: a logo, the word
+    // "Today", a date badge and a forecast, 58px deep on every panel -- an
+    // eighth of an 800x480 board and a fourteenth of an X. Four of the five
+    // things it did, the strip was already doing: what time it is now,
+    // which day each half of a 36-hour board belongs to, what has scrolled
+    // off either end, and where the scale changes rate. The fifth was the
+    // weather, and on a two-day board the weather is a fact about a DAY, so
+    // it belongs at that day's own end of the scale rather than in a row
+    // above both of them.
+    //
+    // Placed through the same reservation the hours and the clock use, so a
+    // badge cannot be written over a tick, and it gives way in a stated
+    // order when it will not fit: the forecast first, then the long date,
+    // then the short weekday, then the badge itself.
+    function dayBadge(d, a, spent) {
+      if (!d || !d.date_label) return null;
+      var w = spent ? null : d.weather;
+      var forms = [];
+      if (w && w.hi != null) forms.push({ date: d.date_label, w: w });
+      forms.push({ date: d.date_label });
+      if (d.weekday_short) forms.push({ date: d.weekday_short });
+      for (var fi = 0; fi < forms.length; fi++) {
+        // The badge IS the day marker, so it wears the class: everything
+        // that looks for where a day turns over -- the suite included --
+        // reads the outermost element, and a marker whose name is buried on
+        // a child inside it is a marker nothing can find.
+        var box = el('span', 'metro-gen metro-daybadge metro-daybreak flex flex--row flex--center-y gap--xsmall absolute');
+        var pill = el('span', 'metro-axis-note metro-pill label label--small font--bold');
+        pill.textContent = forms[fi].date;
+        box.appendChild(pill);
+        if (forms[fi].w) {
+          if (forms[fi].w.icon) {
+            var ic = el('img', 'image--adaptive');
+            ic.src = forms[fi].w.icon;
+            ic.style.width = stripIcon + 'px'; ic.style.height = stripIcon + 'px';
+            // Armed by hand, the way every other icon this script draws is:
+            // the framework only masks the adaptive icons it finds at load.
+            ic.style.setProperty('--framework-icon-src', 'url("' + forms[fi].w.icon + '")');
+            ic.setAttribute('data-adaptive', 'true');
+            box.appendChild(ic);
+          }
+          var tx = el('span', 'metro-hour label label--small font--bold text--black');
+          tx.textContent = Math.round(forms[fi].w.hi) + '\u00b0/' + Math.round(forms[fi].w.lo) + '\u00b0';
+          box.appendChild(tx);
+        }
+        canvas.appendChild(box);
+        var br = measure(box);
+        var len = horizontal ? br.w : br.h, thick = horizontal ? br.h : br.w;
+        var start = clamp(a, 0, axisPx - len);
+        var lo = start - 2 * S, hi = start + len + 2 * S;
+        if (takenAt(lo, hi)) { canvas.removeChild(box); continue; }
+        var xy = toXY(start, Math.max(0, bandC - thick / 2));
+        box.style.left = xy[0] + 'px'; box.style.top = xy[1] + 'px';
+        reserved.push([lo, hi]);
+        return box;
+      }
+      return null;
+    }
     function axisNote(text, a, align, cls) {
       var forms = Array.isArray(text) ? text : [text];
       // no text--black appended here: the "now" note is an inverted pill,
@@ -8485,10 +8736,11 @@
     if (AXIS.boundaries.length) {
       var dayCls = 'metro-axis-note metro-daybreak label label--small font--bold text--black';
       AXIS.boundaries.forEach(function (b) {
-        var d = DAY_RUN[b.day];
-        if (!d || !d.date_label) return;
-        axisNote([d.date_label, d.weekday_short || d.weekday_label],
-          aFor(b.min) + 3 * S, 'start', dayCls);
+        // A BADGE, NOT A BARE DATE: the day it crosses into has its own
+        // weather, and that is a fact about a day rather than about a
+        // board, so it belongs beside that day's own name rather than in a
+        // header above both of them.
+        dayBadge(DAY_RUN[b.day], aFor(b.min) + 3 * S, false);
       });
       // THE DAY THE BOARD OPENS ON, but only where the header is not
       // already saying it. On a full board it is: the date badge is the
