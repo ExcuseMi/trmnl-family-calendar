@@ -630,7 +630,36 @@ is open.
 
 
 - [ ] **E21. The solver reserves 80 to 160px more depth than the drawing
-  uses, so every board thinks it is fuller than it is.** Measured on four
+  uses, so every board thinks it is fuller than it is.**
+
+  MEASURED AGAIN after the caption rework, and the shape is narrower than
+  this entry first said. `data-metro-debug` now carries `why`: what each
+  track's band is made of. On every board, every track EXCEPT the last one on
+  its side asks for no rungs at all and costs eleven pixels; the last one
+  carries the whole side's ladder, because `_laneOwner` is whichever track is
+  outermost at that minute.
+
+  | board | last track | band | of which |
+  |---|---|---|---|
+  | five-lines / X | lis | 346 -> 470 | 124 |
+  | crew-day / X | bender | 242 -> 468 | 226 |
+  | seven-lines / OG | amy | 217 -> 405 | 188 |
+
+  That band is `start + (lanes - 1) * step + lineGap + maxLabelThick`: the
+  outermost rung occupied, at the thickest label on the board. The ink stops
+  about 99px short of it on average, so the outermost rung is reserved and not
+  used. The fix wants a feedback pass -- draw, measure the rung actually
+  reached, reserve to that, and keep the better board -- in the shape
+  `attemptOnce` already uses for the terminal bars.
+
+  THE BUDGET FOR THAT PASS IS NOT FREE, and the obvious place to take it from
+  does not give it up. `attempt` draws every tier twice, once with the
+  captions offered from each end of the day, purely to blunt the greedy pass
+  that E23 replaced. Removing it looked safe and cost five boards, so it goes
+  back: the order captions are OFFERED in is still the order the annealing
+  starts from, and on a board where the search cannot reach a clean answer the
+  starting point still decides which one it settles for.
+ Measured on four
   fixtures at both landscape sizes, comparing `needB` (what the cross solver
   reserved below the spine) with how far the drawing actually reaches:
 
