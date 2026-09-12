@@ -1655,23 +1655,14 @@ var ROLL_END_LATE_MIN = 1440 + 23 * 60;
 // window is counted at the leading edge as "+N earlier", which is an
 // affordance the board already draws.
 var ROLL_SPLIT_MIN = 16 * 60;
-// ...AND A SECOND ONE, LATE, THAT DOES NOT ASK WHETHER THE DAY WAS QUIET.
+// A SECOND FIXED HOUR WAS TRIED HERE AND WAS THE WRONG SHAPE OF ANSWER.
 //
-// Counting from four and never re-counting is what keeps a day to a small
-// number of shapes, and on a day with three or more things after four it also
-// means the board never reaches tomorrow at all. Measured on a real board at
-// ten to eight and again at eleven at night: every event on it had already
-// happened and it was still drawing only today, because the count taken at
-// four still said "busy".
-//
-// That is the hole the old "switch over at nine" setting was covering, and
-// removing that setting on the strength of a board that happened to be quiet
-// after four was a bad measurement. So there is a second boundary: past nine
-// the board reaches tomorrow whatever kind of day it has been. It keeps what
-// is left of tonight while it does, which is the whole difference from the
-// switch it replaces, and it is still a fixed hour rather than a count, so
-// the board has three shapes at most and changes between them twice.
-var ROLL_LATE_MIN = 21 * 60;
+// Counting from four and never re-counting meant a day with three or more
+// things after four never reached tomorrow at all, so an unconditional
+// boundary at nine was added to force it. That is guessing at what the count
+// could simply be asked: at a quarter past eight the same board still drew
+// only Saturday, because nine had not come round yet. The count is taken on
+// the hour now (see countFrom) and the guess is gone.
 
 // Civil date arithmetic, deliberately not epoch arithmetic: "the day after
 // the 30th" is a calendar question, and answering it by adding 86400
@@ -3158,12 +3149,35 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   // Before noon the boundary is the day's own start, which is what it has
   // always been: a morning board counts and draws the whole day, early
   // events included. From noon it is noon.
-  var rollFrom = nowMin >= ROLL_SPLIT_MIN ? ROLL_SPLIT_MIN : 0;
+  // THE COUNT IS TAKEN ON THE HOUR, AND THE WINDOW IS NOT.
+  //
+  // These were the same boundary and that was the mistake. Counting from four
+  // and never counting again keeps the board still, and it also makes the
+  // board blind: a Saturday with three things after four was still drawing
+  // only Saturday at a quarter past eight, with one of the three left and
+  // nothing said about Sunday. Seen twice on the real panel. A fixed second
+  // boundary at nine papered over it and was still wrong at 8:15.
+  //
+  // So they are separated. The COUNT is taken from the top of the current
+  // hour, so the board notices the evening emptying out; the WINDOW still
+  // moves exactly once, at four, so the board does not slide left under
+  // whoever is reading it. Counting more finely is safe here in a way that
+  // drawing more finely is not, and for a reason worth writing down: the set
+  // of events still to come only ever SHRINKS as the day goes on, so `quiet`
+  // can go from false to true and never back. The board gains tomorrow once,
+  // on an hour boundary, and cannot lose it again.
+  //
+  // The window may therefore draw more than the count counted -- at eight the
+  // count sees one event left and the window still opens at four, so the
+  // evening stays on the board. That direction is safe. The direction that is
+  // not is a board that counts itself quiet and then draws a morning it had
+  // decided to leave behind, which is what the two sharing a boundary was for.
+  var countFrom = nowMin >= ROLL_SPLIT_MIN ? Math.floor(nowMin / 60) * 60 : 0;
   var stillToCome = onDay.filter(function (e) {
-    return (e.endMin == null ? e.startMin : e.endMin) > dayLo + rollFrom;
+    return (e.endMin == null ? e.startMin : e.endMin) > dayLo + countFrom;
   });
-  var quiet = distinctEvents(stillToCome) <= QUIET_DAY_MAX_EVENTS;
-  var rolling = (quiet || nowMin >= ROLL_LATE_MIN) && days.length > 1;
+  var rollFrom = nowMin >= ROLL_SPLIT_MIN ? ROLL_SPLIT_MIN : 0;
+  var rolling = distinctEvents(stillToCome) <= QUIET_DAY_MAX_EVENTS && days.length > 1;
   // The window, in the shown day's own minutes. It starts at six unless the
   // day itself starts earlier, and ends at six the next evening unless
   // something kept is still running then: a window that cut an event it had

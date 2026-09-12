@@ -22,24 +22,31 @@ Where the two disagree, this one is newer.
    evening, because a day with one appointment left on it spends most of the
    board on hours nobody has anything in, and what is coming is the thing
    such a day still has to say. A busier one is the single day it always was.
-2a-i. **The board may change shape twice a day, at four in the afternoon and
-   at nine in the evening, and only by gaining tomorrow.** Neither the count
-   nor the window may be read from the clock continuously: the panel refreshes
-   every fifteen minutes and a board keyed to "now" slides every event left
-   four times an hour under whoever is reading it. So both are measured from
-   boundaries that move at fixed hours, and a day therefore has three shapes
-   at most, at hours anybody can predict.
+2a-i. **The board gains tomorrow once a day, on an hour, and never gives it
+   back.** The window may not be read from the clock continuously: the panel
+   refreshes every fifteen minutes and a board keyed to "now" slides every
+   event left four times an hour under whoever is reading it. So the window
+   moves exactly once, at four in the afternoon -- the day's own start until
+   then, four o'clock after that -- and nothing on the board slides.
 
-   The first boundary is four: the count of what is still to come is taken
-   from the day's own start until then, and from four o'clock after that. The
-   second is nine, and it does not ask whether the day was quiet -- past nine
-   the board reaches tomorrow whatever kind of day it has been. That is not a
-   second opinion about quietness, it is the answer to what counting-once
-   cannot see: a day with three or more things after four never reaches
-   tomorrow at all, and a real board was still drawing only Saturday at eleven
-   at night with every event on it already over. It KEEPS what is left of
-   tonight while it does, which is the whole difference from the "switch over
-   at nine" setting this replaced, and why that setting is gone. Four because noon is the middle of a working day and not of a
+   The COUNT is a different question and is taken on the hour. Sharing the
+   window's boundary made the board blind: counted once at four, a day with
+   three or more things after four never reached tomorrow at all, and a real
+   panel was still drawing only Saturday at a quarter past eight with one
+   event left on it. Taking the count more finely is safe in a way that
+   drawing more finely is not, and the reason is the whole rule: the set of
+   events still to come only ever SHRINKS, so the answer can go from "busy" to
+   "quiet" and never back. The board gains a day and cannot lose one.
+
+   The window may therefore draw more than the count counted, and that
+   direction is the safe one: at eight the count sees one event left and the
+   window still opens at four, so the evening stays on the board. The
+   direction that is not safe is a board that counts itself quiet and then
+   draws a morning it had decided to leave behind.
+
+   This is what the old "switch over at nine" setting was for, and why it is
+   gone: it reached tomorrow by DELETING today, at an hour that was wrong for
+   any day but the one it was tuned on. Four because noon is the middle of a working day and not of a
    family's: at 12:01 most of what a household does is still ahead of it.
    What falls before the window is not lost, it is counted at the leading
    edge as "+N earlier" -- on the same terms as the date marker, which is to
