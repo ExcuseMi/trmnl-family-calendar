@@ -2627,8 +2627,10 @@
     setStatus("previewStatus", "", "");
   }
   var templateCache = null;
-  // The plugin template is fetched once; its <script> (the layout engine) and <style> are
-  // reused verbatim, its header markup is mirrored below in JS (it is Liquid).
+  // The plugin template is fetched once; its <script> (the layout engine) and
+  // <style> are reused verbatim. Everything the board draws outside the map is
+  // drawn by that script now, so there is no longer any Liquid for the preview
+  // to mirror by hand -- which is what `07-header-mirror.js` used to watch.
   function loadTemplate() {
     if (templateCache) return Promise.resolve(templateCache);
     return realFetch("../plugin/src/shared.liquid").then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); }).then(function (src) {
@@ -2636,128 +2638,58 @@
       var script = src.slice(si + 8, src.indexOf("<\/script>", si));
       var st = src.indexOf("<style>");
       var style = src.slice(st + 7, src.indexOf("</style>", st));
-      // The plugin's mark, lifted out of the template rather than copied in
-      // here. It is static markup with no Liquid in it, so the preview can
-      // use the real thing and cannot drift from it.
-      var mk = src.indexOf("<svg class=\"metro-mark");
-      var mark = mk < 0 ? "" : src.slice(mk, src.indexOf("</svg>", mk) + 6);
-      templateCache = { script: script, style: style, mark: mark };
+      // The plugin's mark used to be lifted out of the template here, rather
+      // than copied in, so the preview drew the real one and could not drift
+      // from it. It went with the header band: the map has no logo on it and
+      // never did.
+      templateCache = { script: script, style: style };
       return templateCache;
     });
   }
-  // Mirrors the template's own header, element for element and class for
-  // class. It has to: the header eats depth the map does not get, so a
-  // preview whose header is a different height is previewing a different
-  // board. The two used to disagree in four ways at once (a window pill the
-  // template dropped, a swatch legend the board never draws, a flat row
-  // where the template stacks, and its own grey classes), which is exactly
-  // the drift `07-header-mirror.js` now fails on.
-  function renderHeader(metro, tpl) {
-    var dayOne = null;
-    var days0 = (metro.days && metro.days.length) ? metro.days : [{ date_label: metro.date_label, weather: metro.header_weather }];
-    var h = el("div", { class: "metro-header flex flex--col gap--xsmall px--3 py--2 flex-none"
-      + (days0.length > 1 ? " metro-header--days" : "") });
-    var days = days0;
-    var top = el("div", { class: "metro-header-top flex flex--row flex--center-y flex--wrap gap--medium"
-      + (days.length > 1 ? " metro-header-top--days" : "") });
-    h.appendChild(top);
-    if (tpl && tpl.mark) {
-      var holder = el("div", { html: tpl.mark });
-      if (holder.firstChild) top.appendChild(holder.firstChild);
-    }
-    // THE HEADER NAMES EVERY DAY THE BOARD DRAWS. A board that runs past
-    // midnight carries two days and a forecast each; one that does not has
-    // one day and comes out exactly as it did. Mirrors the template's loop,
-    // which is what 07-header-mirror.js compares class for class.
-    days.forEach(function (d, di) {
-      var day = el("span", { class: "metro-day flex flex--row flex--center-y gap--xsmall"
-        + (di ? " metro-day--next" : "") });
-      top.appendChild(day);
-      if (!di) {
-        // "Today" only when it is: a board set to tomorrow names the day.
-        day.appendChild(el("span", { class: "metro-title title title--large font--bold",
-          text: metro.title_word || (metro.i18n && metro.i18n.today) || "Today" }));
-        if (d.date_label) day.appendChild(el("span", { class: "metro-date metro-pill label label--base font--bold", text: d.date_label }));
-      } else if (d.date_label) {
-        day.appendChild(el("span", { class: "metro-date-next label label--base font--bold metro-quiet", text: d.date_label }));
-      }
-      if (!di) dayOne = day;
-      // A forecast is about a day that is still ahead: a board that has
-      // rolled past the afternoon gives up today's numbers, which already
-      // happened. Mirrors the template.
-      var spent = !!(metro.rolling && metro.rolling.start_min >= 720);
-      var dw = (di === 0 && spent) ? {} : (d.weather || {});
-      if (days.length === 1) day.appendChild(el("div", { class: "grow" }));
-      if (dw.hi) {
-        var wx = el("span", { class: "metro-weather flex flex--row flex--center-y gap--xsmall" });
-        if (dw.icon) wx.appendChild(el("img", { class: "metro-wicon image--adaptive", src: dw.icon, alt: "" }));
-        var temp = el("span", { class: "metro-temp title title--base" }, [String(dw.hi) + "\u00b0"]);
-        temp.appendChild(el("span", { class: "metro-quiet", text: " / " + dw.lo + "\u00b0" }));
-        wx.appendChild(temp);
-        wx.appendChild(el("span", { class: "metro-cond label label--small metro-quiet",
-          text: (dw.condition || "") + " \u00b7 " + String((metro.i18n && metro.i18n.rain_pct) || "{n}% rain").replace("{n}", dw.rain_chance) }));
-        day.appendChild(wx);
-      }
-      if (di < days.length - 1) top.appendChild(el("div", { class: "metro-day-gap grow" }));
-    });
-    // WHAT THE DAY IS, beside the date that says which day it is. A holiday
-    // has no hour and no owner, so it is neither on the scale nor at any
-    // line's head; the header is the one part of the board that already
-    // answers "what day is this". Mirrors the template's block, which is
-    // what 07-header-mirror.js compares class for class.
-    var holiday = (metro.holidays || [])[0];
-    if (holiday && dayOne) {
-      var holBox = el("span", { class: "metro-holiday flex flex--row flex--center-y gap--xsmall" });
-      var holRing = el("span", { html: '<svg class="metro-holiday-ring no-shrink" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="6" r="5"></circle><circle cx="6" cy="6" r="2.5"></circle></svg>' });
-      if (holRing.firstChild) holBox.appendChild(holRing.firstChild);
-      holBox.appendChild(el("span", { class: "metro-holiday-name label label--base font--bold", text: holiday.title }));
-      if (holiday.day_label) holBox.appendChild(el("span", { class: "metro-holiday-day label label--small metro-quiet", text: "\u00b7 " + holiday.day_label }));
-      top.appendChild(holBox);
-    }
-    top.appendChild(el("div", { class: "grow" }));
-    var w = metro.header_weather || {};
-    if (w.hi) {
-      var wx = el("span", { class: "metro-weather flex flex--row flex--center-y gap--xsmall" });
-      if (w.icon) wx.appendChild(el("img", { class: "metro-wicon image--adaptive", src: w.icon, alt: "" }));
-      var temp = el("span", { class: "metro-temp title title--base" }, [String(w.hi) + "°"]);
-      temp.appendChild(el("span", { class: "metro-quiet", text: " / " + w.lo + "°" }));
-      wx.appendChild(temp);
-      wx.appendChild(el("span", { class: "metro-cond label label--small metro-quiet", text: (w.condition || "") + " · " + String((metro.i18n && metro.i18n.rain_pct) || "{n}% rain").replace("{n}", w.rain_chance) }));
-      top.appendChild(wx);
-    }
-    // Two things the board cannot say for itself, and both of them are
-    // answers to "why does my board look like that": a feed that has been
-    // unreachable for hours, and a forecast replayed from the last good
-    // fetch. A config author pasting a URL that 404s wants to see this.
+  // WHAT THE BOARD SAYS OUTSIDE THE MAP, which is now almost nothing.
+  //
+  // There was a header band here, mirrored element for element and class for
+  // class from the template's Liquid: a mark, the word "Today", a date, a
+  // holiday and a forecast. It had to be mirrored because a header's height
+  // comes off the canvas, so a preview with a header of a different height was
+  // previewing a different board.
+  //
+  // The template has no band any more -- the hour strip is the header, and the
+  // layout script draws every part of it, which means the preview gets it free
+  // and exactly right for the first time. What is left is the two things the
+  // board cannot say for itself, which the template states under the map: a
+  // feed that has been unreachable for hours, and a forecast replayed from the
+  // last good fetch. A config author pasting a URL that 404s wants to see
+  // that, and it is the reason they are in this tool at all.
+  function renderAlerts(metro) {
+    var out = [];
     var down = metro.calendars_down || [];
     if (down.length) {
-      h.appendChild(el("div", { class: "metro-alerts label label--small metro-quiet",
+      out.push(el("div", { class: "metro-alerts label label--small metro-quiet px--3 flex-none",
         text: String((metro.i18n && metro.i18n.feed_down) || "{n} unavailable").replace("{n}", down.join(", ")) }));
     }
     if (metro.weather_stale) {
-      h.appendChild(el("div", { class: "metro-alerts label label--small metro-quiet",
+      out.push(el("div", { class: "metro-alerts label label--small metro-quiet px--3 flex-none",
         text: (metro.i18n && metro.i18n.weather_stale) || "Forecast may be out of date" }));
     }
-    // The swatch legend that used to sit here is gone. The board has no
-    // legend: every line is named at its own terminus, and the Lines
-    // section above already shows each line's swatch. In the preview it
-    // was a row of header the device never draws.
-    return h;
+    return out;
   }
   function drawMap(metro, dev) {
     return loadTemplate().then(function (tpl) {
       var inner = document.getElementById("stageInner");
       inner.innerHTML = "";
+      // The same order the template puts them in: a rule, the map, then the
+      // alert lines under it. They are under the map rather than over it
+      // because they are rare, they are prose, and the map is what the reader
+      // came for.
       var layout = el("div", { class: "layout layout--col gap--none metro-root" }, [
-        renderHeader(metro, tpl),
         el("div", { class: "divider divider--on-white flex-none" }),
         el("div", { class: "metro-canvas relative grow w--full" }, [(function () {
           var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
           svg.setAttribute("class", "metro-svg absolute"); svg.setAttribute("style", "inset:0;width:100%;height:100%;pointer-events:none;");
           return svg;
         })()]),
-        el("style", { text: tpl.style }),
-      ]);
+      ].concat(renderAlerts(metro), [el("style", { text: tpl.style })]));
       var view = el("div", { class: "view view--" + dev.view }, [layout]);
       var content = view;
       if (dev.mashup) {

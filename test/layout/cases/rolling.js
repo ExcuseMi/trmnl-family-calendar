@@ -22,7 +22,13 @@ module.exports = function (test, h) {
   const busy = fixtures.find((f) => f.name === 'busy-day');
 
   const hasCls = (l, c) => (' ' + l.cls + ' ').indexOf(' ' + c + ' ') >= 0;
+  // A DAYBREAK IS A MIDNIGHT THE BOARD CROSSES. The badge at the head of the
+  // axis is not one -- the board opens there, it did not cross into anything
+  // -- so it wears `metro-daybadge` without `metro-daybreak`, and a single-day
+  // board naming its own date is not naming a daybreak. `dayNames` is the
+  // other question: how many of the days on this board say which day they are.
   const daybreaks = (rep) => rep.labels.filter((l) => hasCls(l, 'metro-daybreak'));
+  const dayNames = (rep) => rep.labels.filter((l) => hasCls(l, 'metro-daybadge') || hasCls(l, 'metro-daybreak'));
   const nightMarks = (rep) => (rep.rects || []).filter((p) => p.role === 'night');
   const midnightMarks = (rep) => (rep.rects || []).filter((p) => p.role === 'midnight');
 
@@ -106,8 +112,8 @@ module.exports = function (test, h) {
       (' ' + i.cls + ' ').indexOf(' metro-date ') >= 0 && i.shown);
     if (shown) { assert(true); return; }             // this slot kept its header after all
     if (!rep.debug.midnights.length) { assert(true); return; }  // and this one fell back to one day
-    assert(daybreaks(rep).length >= 2, 'a headerless two-day board named '
-      + daybreaks(rep).length + ' of its days');
+    assert(dayNames(rep).length >= 2, 'a headerless two-day board named '
+      + dayNames(rep).length + ' of its days');
   });
 
   test('the night corridor covers ten at night to six in the morning', () => {

@@ -27,7 +27,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { execFileSync } = require('child_process');
+const { execFileSync, execFile } = require('child_process');
 
 const ROOT = path.join(__dirname, '../..');
 const PLUGIN = path.join(ROOT, 'plugin');
@@ -266,6 +266,31 @@ function swapMetro(html, metro) {
 // ONE coordinate space — screen px relative to the canvas — so label boxes
 // and SVG geometry can be compared directly without worrying about the
 // framework's own zoom factor.
+// A THROWN LAYOUT IS NOT A BOARD, AND IT LOOKS EXACTLY LIKE ONE.
+//
+// The reporter below runs on its own timer, so it reports whatever is in the
+// DOM whether the layout finished or not. A script that threw half way
+// through leaves a board with its rails drawn and its badges missing, and
+// every case reads that as a board that chose not to draw them: plausible,
+// self-consistent, and wrong. Removing the header band left a reference to
+// it in `alignHeaderDays`, which threw on every board with a day boundary in
+// it, and the suite reported five unrelated-looking failures rather than one.
+//
+// So the page keeps a list of anything that threw, the report carries it, and
+// a render that carries one is an error rather than a result. Installed in
+// the head, before the framework and the layout are parsed.
+const ERRTRAP = `
+<script>
+window.__metroErrors = [];
+window.addEventListener('error', function (e) {
+  window.__metroErrors.push(String((e && e.message) || e) +
+    (e && e.filename ? ' (' + e.filename + ':' + e.lineno + ')' : ''));
+});
+window.addEventListener('unhandledrejection', function (e) {
+  window.__metroErrors.push('unhandled rejection: ' + String((e && e.reason) || e));
+});
+</script>
+`;
 const REPORTER = `
 <script>
 (function () {
@@ -415,21 +440,31 @@ const REPORTER = `
     // everything else: every element in it carrying a metro- class, with
     // whether it is actually shown, because the header hides parts of
     // itself by class as the view gets smaller.
-    var headerEl = document.querySelector('.metro-header');
-    var head = null;
-    if (headerEl) {
+    function partsOf(el) {
+      if (!el) return null;
       var items = [];
-      headerEl.querySelectorAll('[class]').forEach(function (n) {
+      el.querySelectorAll('[class]').forEach(function (n) {
         var cls = String(n.className && n.className.baseVal != null ? n.className.baseVal : n.className);
         if (cls.indexOf('metro-') < 0) return;
         var hr = n.getBoundingClientRect();
         items.push(Object.assign(rel(hr), { cls: cls, text: (n.textContent || '').trim(),
           shown: !!(hr.width && hr.height) }));
       });
-      var hrect = headerEl.getBoundingClientRect();
-      head = { shown: getComputedStyle(headerEl).display !== 'none',
-        h: hrect.height, w: hrect.width, items: items };
+      var er = el.getBoundingClientRect();
+      return Object.assign(rel(er), { shown: getComputedStyle(el).display !== 'none',
+        h: er.height, w: er.width, items: items });
     }
+    var head = partsOf(document.querySelector('.metro-header'));
+    // THE DAY BADGE IS WHERE THE HEADER'S WORDS WENT, and like the header it
+    // says more than one thing, so a case needs its PARTS rather than the one
+    // run-together string \`labels\` reports for it: which day this is, what
+    // the day is (a holiday belongs to the day, not to any line), and what
+    // the sky is doing. It gives parts up as the axis runs out, so each one
+    // carries whether it is actually drawn.
+    var badges = [];
+    document.querySelectorAll('.metro-daybadge').forEach(function (n) {
+      badges.push(partsOf(n));
+    });
     var root = document.querySelector('.metro-root');
     // The slot the board is given: .view when the framework wraps one (a
     // mashup slot takes its box from --full-w/--full-h there), else the
@@ -459,18 +494,28 @@ const REPORTER = `
       root: rel(root.getBoundingClientRect()), view: rel(viewEl.getBoundingClientRect()),
       boardBg: bgOf(canvas), banner: banner,
       debug: dbg, labels: labels, paths: paths, rects: rects, painted: painted, overlays: overlays,
-      header: head,
+      header: head, badges: badges, errors: (window.__metroErrors || []).slice(0, 8),
       circles: circles.concat(shapeMarkers)
     });
     document.body.appendChild(out);
   }
-  // the layout debounces at 60ms and re-runs on load/fonts; give it room to
-  // settle, then require the debug attribute to be present before reporting
-  var tries = 0;
+  // WAIT FOR THE BOARD TO STOP REDRAWING, not for a fixed delay.
+  //
+  // The layout debounces at 60ms and re-runs on load, on fonts, and whenever
+  // its own text metrics move -- which is how it corrects a first pass laid
+  // out in the fallback face. A report taken a fixed 250ms after the first
+  // run catches whichever of those happened to have landed, so the same board
+  // reported differently on different runs and the suite blamed the layout.
+  // So: require the debug attribute, then require the run count to stand
+  // still for 400ms before reading anything.
+  var tries = 0, seen = -1, still = 0;
   (function wait() {
-    if (++tries > 60) { report(); return; }
+    if (++tries > 120) { report(); return; }
     if (!canvas.getAttribute('data-metro-debug')) return setTimeout(wait, 50);
-    setTimeout(report, 250);
+    var runs = window.__metroRuns || 0;
+    if (runs !== seen) { seen = runs; still = 0; } else { still++; }
+    if (still < 4) return setTimeout(wait, 100);
+    report();
   })();
 })();
 </script>
@@ -500,17 +545,43 @@ function pageFor(metro, screenClasses, slot, liquidExtra, page) {
     html = html.replace('</head>', '<style>.screen{--full-w:' + slot.w + 'px !important;'
       + '--full-h:' + slot.h + 'px !important}</style></head>');
   }
+  html = html.replace('</head>', ERRTRAP + '</head>');
   return html.replace('</body>', REPORTER + '</body>');
 }
 
 // ---------------------------------------------------------------- rendering
 
+// WHERE HEADLESS CHROMIUM LEAVES ITS SCRATCH PROFILES, AND WHY THEY ARE SWEPT
+// RATHER THAN REDIRECTED.
+//
+// Chromium makes a scratch profile per launch and leaves it behind: thirty-two
+// thousand of them had accumulated under CHROME_PROFILES at about 670KB each,
+// twenty-two gigabytes of a fifty-six gigabyte disk, none of them ever read
+// again. The obvious fix -- give each render its own --user-data-dir inside
+// this run's temp directory -- makes every launch a FIRST run, and a first run
+// on this box hangs for over a hundred seconds on a page with three words in
+// it. So the profiles stay where Chromium wants them, sharing the state that
+// makes a launch cheap, and the run sweeps the ones it left on the way out.
+const CHROME_PROFILES = path.join(os.homedir(), '.cache', 'google-chrome-for-testing-headless');
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'metro-layout-'));
 let renderSeq = 0;
 
 // What the run spent, printed as one line at the end. A suite this slow
 // gets optimised by guess unless it says where the time went.
-const spent = { renders: 0, renderMs: 0, hits: 0, disk: 0, builds: 0, buildMs: 0 };
+// Everything under it that this run is responsible for -- which is everything,
+// since nothing else on the box launches this binary. Swept at the end rather
+// than as we go: a profile in use by a render still running must not vanish
+// underneath it.
+function sweepChromeProfiles() {
+  try {
+    for (const n of fs.readdirSync(CHROME_PROFILES)) {
+      if (!/^scoped_dir/.test(n)) continue;
+      try { fs.rmSync(path.join(CHROME_PROFILES, n), { recursive: true, force: true }); } catch (e) {}
+    }
+  } catch (e) { /* no such directory is the state we wanted anyway */ }
+}
+
+const spent = { renders: 0, renderMs: 0, hits: 0, disk: 0, builds: 0, buildMs: 0, warmMs: 0, warmers: 0 };
 
 // Renders that survive the process, keyed on the EXACT bytes about to be
 // rendered plus the window they are rendered into. That key is the whole
@@ -554,9 +625,16 @@ function render(metro, viewport, liquidExtra) {
     + '|' + (viewport.slot ? viewport.slot.w + 'x' + viewport.slot.h : 'full') + '|'
     + '|' + (viewport.page || 'full') + '|'
     + crypto.createHash('sha1').update(JSON.stringify(metro) + '|' + JSON.stringify(liquidExtra || null)).digest('hex');
+  if (!contentCache.has(key)) asked.set(key, [metro, viewport, liquidExtra || null]);
   if (contentCache.has(key)) spent.hits++;
   else contentCache.set(key, renderUncached(metro, viewport, liquidExtra));
-  return contentCache.get(key);
+  const rep = contentCache.get(key);
+  // Checked here rather than in renderUncached so a cached report cannot
+  // smuggle a thrown layout past on the second case that asks for it.
+  if (rep.errors && rep.errors.length) {
+    throw new Error('the layout threw: ' + rep.errors.join(' | '));
+  }
+  return rep;
 }
 
 function renderUncached(metro, viewport, liquidExtra) {
@@ -573,7 +651,8 @@ function renderUncached(metro, viewport, liquidExtra) {
       return hit;
     } catch (e) { /* not cached, or half-written: render it */ }
   }
-  const file = path.join(tmpDir, 'page' + (renderSeq++) + '.html');
+  const seq = renderSeq++;
+  const file = path.join(tmpDir, 'page' + seq + '.html');
   fs.writeFileSync(file, html);
   const t0 = Date.now();
   const dom = execFileSync(CHROME, [
@@ -690,13 +769,125 @@ for (const file of fs.readdirSync(path.join(__dirname, 'cases')).sort()) {
   require(path.join(__dirname, 'cases', file))(test, helpers);
 }
 
+// WARM THE CACHE ON EVERY CORE, because the suite can only read it on one.
+//
+// Each case calls `layout()` synchronously, so a render is one Chromium
+// launched with execFileSync and waited for: on a five-core box the load
+// average during a full run was 0.95, with four cores idle and the wall clock
+// entirely decided by how many cold renders the run needed. The reports are
+// content-addressed on disk, so they can be produced in any order by anyone.
+//
+// So before the cases start, the (fixture x viewport) matrix -- which is most
+// of what a run asks for -- is rendered by a pool of workers, and the serial
+// pass that follows reads their files. A viewport a case builds for itself is
+// not in the matrix and still renders serially, which is a handful per run.
+function renderAsync(metro, viewport, liquidExtra) {
+  const html = pageFor(metro, viewport.classes, viewport.slot, liquidExtra, viewport.page);
+  const disk = path.join(REPORT_CACHE, crypto.createHash('sha1')
+    .update(html + '|' + viewport.w + 'x' + viewport.h + '|' + CHROME).digest('hex') + '.json');
+  if (fs.existsSync(disk)) return Promise.resolve();
+  const seq = renderSeq++;
+  const file = path.join(tmpDir, 'warm' + seq + '.html');
+  fs.writeFileSync(file, html);
+  return new Promise((resolve) => {
+    execFile(CHROME, [
+      '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+      '--window-size=' + viewport.w + ',' + viewport.h,
+      '--virtual-time-budget=8000', '--dump-dom', 'file://' + file,
+    ], { encoding: 'utf-8', maxBuffer: 256 * 1024 * 1024, timeout: 120000 }, (err, dom) => {
+      // A warm-up that fails is not a failure: the case that needs it will
+      // render it again serially and report properly.
+      if (err || !dom) return resolve();
+      const m = dom.match(/<script type="application\/json" id="metro-report">([\s\S]*?)<\/script>/);
+      if (!m) return resolve();
+      try {
+        const rep = JSON.parse(m[1]);
+        if (!rep.debug) return resolve();
+        fs.mkdirSync(REPORT_CACHE, { recursive: true });
+        const part = disk + '.' + process.pid + '.' + (renderSeq++) + '.part';
+        fs.writeFileSync(part, JSON.stringify(rep));
+        fs.renameSync(part, disk);
+      } catch (e) { /* a cache that cannot be written is not an error */ }
+      resolve();
+    });
+  });
+}
+
+// WHAT THE LAST RUN ACTUALLY ASKED FOR, which is a better list than any
+// matrix written here can be.
+//
+// The matrix (every fixture at every shared viewport) is most of a run and not
+// all of it: the bit-depth cases ask for three more screens per fixture, the
+// small-view cases for six slots, the holiday cases for a board with a holiday
+// on it. Those were left to render one at a time while four cores sat idle.
+//
+// So a run writes down every (payload, viewport) pair it asked for, and the
+// next run warms exactly those. The list survives a source change -- it names
+// boards, not bytes -- while the report cache does not, which is precisely the
+// case that hurts: a run right after an edit to the layout.
+const WARM_LIST = path.join(CACHE, 'asked.json');
+const asked = new Map();
+function rememberAsked() {
+  try {
+    const out = [];
+    for (const v of asked.values()) out.push({ metro: v[0], viewport: v[1], extra: v[2] });
+    fs.mkdirSync(CACHE, { recursive: true });
+    fs.writeFileSync(WARM_LIST + '.part', JSON.stringify(out));
+    fs.renameSync(WARM_LIST + '.part', WARM_LIST);
+  } catch (e) { /* a list that cannot be written only costs the next run time */ }
+}
+
+async function prewarm() {
+  if (CACHE_OFF) return;
+  let jobs = [];
+  try {
+    for (const j of JSON.parse(fs.readFileSync(WARM_LIST, 'utf-8'))) {
+      jobs.push([j.metro, j.viewport, j.extra]);
+    }
+  } catch (e) { /* no list yet: fall back to the matrix below */ }
+  if (!jobs.length) {
+    const fx = require('./fixtures');
+    for (const f of fx) for (const v of VIEWPORTS) jobs.push([f.metro, v, null]);
+  }
+  // HOW MANY WORKERS, and it is bounded by MEMORY rather than by cores.
+  //
+  // Chromium is the whole cost here and each launch is its own process, so
+  // this wants a worker per core -- but a headless Chromium rendering one of
+  // these boards peaks around a gigabyte, and four of them alongside the
+  // serial pass had the run killed for want of memory. So: a worker per core
+  // bar this one, capped by how much memory is actually free, and never fewer
+  // than one.
+  const perWorkerMb = 1400;
+  const freeMb = os.freemem() / (1024 * 1024);
+  const byMemory = Math.floor((freeMb - 2048) / perWorkerMb);
+  // METRO_WARMERS overrides both, for a box under pressure from something
+  // else: 0 turns the warming off and leaves the serial pass to it.
+  const asked2 = process.env.METRO_WARMERS;
+  const N = asked2 != null ? Math.max(0, parseInt(asked2, 10) || 0)
+    : Math.max(1, Math.min(jobs.length, (os.cpus().length || 2) - 1, byMemory));
+  if (!N) return;
+  let next = 0;
+  const t0 = Date.now();
+  await Promise.all(Array.from({ length: N }, async () => {
+    while (next < jobs.length) {
+      const j = jobs[next++];
+      try { await renderAsync(j[0], j[1], j[2] || null); } catch (e) { /* see above */ }
+    }
+  }));
+  spent.warmMs = Date.now() - t0;
+  spent.warmers = N;
+}
+
 (async function main() {
   let pass = 0, fail = 0, known = 0;
   const only = process.argv[2];
+  await prewarm();
   for (const t of tests) {
     if (only && t.name.indexOf(only) < 0) continue;
     let err = null;
+    const tt0 = Date.now();
     try { await t.fn(); } catch (e) { err = e; }
+    t.ms = Date.now() - tt0;
     if (t.known && err) {
       console.log('≈ ' + t.name + '\n    known: ' + t.known + '\n    ' + (err.message || err));
       known++;
@@ -712,10 +903,21 @@ for (const file of fs.readdirSync(path.join(__dirname, 'cases')).sort()) {
     }
   }
   console.log('\n' + pass + '/' + (pass + known + fail) + ' passed, ' + known + ' known issue(s), ' + fail + ' failure(s)');
+  if (process.env.METRO_TIMES) {
+    const slow = tests.filter((t) => t.ms != null).sort((a, b) => b.ms - a.ms).slice(0, 25);
+    console.log('\nslowest cases:');
+    for (const t of slow) console.log('  ' + (t.ms / 1000).toFixed(1) + 's  ' + t.name);
+    const total = tests.reduce((n, t) => n + (t.ms || 0), 0);
+    console.log('  ' + (total / 1000).toFixed(1) + 's in case bodies altogether');
+  }
   console.log(spent.renders + ' render(s) ' + (spent.renderMs / 1000).toFixed(1) + 's, '
     + spent.disk + ' from cache, ' + spent.hits + ' repeated, '
     + spent.builds + ' build(s) ' + (spent.buildMs / 1000).toFixed(1) + 's'
+    + (spent.warmers ? ', warmed on ' + spent.warmers + ' worker(s) '
+       + (spent.warmMs / 1000).toFixed(1) + 's' : '')
     + (CACHE_OFF ? ' (cache off)' : ''));
+  rememberAsked();
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+  sweepChromeProfiles();
   process.exit(fail ? 1 : 0);
 })();

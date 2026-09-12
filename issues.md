@@ -512,6 +512,123 @@ is open.
 
 ## E. New features
 
+- [ ] **E24. On a crowded line, every position for some name is a graze, a
+  pierce or a gap, and the prices only decide which.** Six boards out of the
+  layout suite's sixty-odd end this way, and they are pinned known against
+  this entry.
+
+  The caption assignment (E23) scores three faults against each other: a pair
+  of names that TOUCH (0.3 of a name's area, plus the area they actually
+  cover), a rail drawn THROUGH the words (0.4), and a name NOT DRAWN at all
+  (0.35, and a line's head counts it as "+2"). All four orderings were
+  measured on the whole suite:
+
+  | shed | pierce | boards failing |
+  |---|---|---|
+  | 0.35 | 0.4 flat | **6** (kept) |
+  | 0.35 | by length | 8 |
+  | 0.35 | 0.5 + length | 10, and the sheds it bought put a "+2" at a line's head on that line's own rail |
+  | 0.50 | 0.4 flat | 8, the sheds gone and the pierces up |
+
+  Grading a pierce by how much of the name it crosses is the obvious idea and
+  it measured worse twice, in both directions: by length alone a six-pixel
+  graze came out cheaper than stepping out one rung; with a fixed part dear
+  enough to fix that, the fixed part passed what not drawing the name costs.
+
+  So this is not a tuning problem, and the remaining six are not going to be
+  priced away. What would actually fix them is more ROOM -- which is E21, the
+  eighty to a hundred and sixty pixels of depth the solver reserves and the
+  drawing never uses. A caption pass with another corridor to put a name in
+  does not have to choose between three bad answers.
+
+
+- [x] **E23. The captions were placed by the strategy the literature calls
+  the weakest.** This is the same root cause E19 and E20 each name at the end
+  of their own write-ups, so both are closed by it.
+
+  Point-feature label placement is a named problem. Christensen, Marks and
+  Shieber measured the algorithm families against each other in 1995 and
+  simulated annealing beat greedy and gradient descent by a wide margin; every
+  JavaScript library that does this well implements that result (D3-Labeler,
+  d3fc-label-layout's annealing strategy, kevinschaul/avoid-overlap,
+  marcusand/label-locator). What this board was doing was d3fc's OTHER two
+  strategies stacked: greedy insertion, then `removeOverlaps`, which that
+  library's own documentation calls the weakest of the three it offers. The
+  repair pass on top was hill climbing that kept an answer merely NO WORSE, so
+  it wandered sideways and finished wherever the last round left it.
+
+  Now: candidates enumerated per name against the fixed obstacles only (forty
+  of them -- two sides, four rungs, five slides), the whole board scored as one
+  number, and the assignment searched by moving one name at a time with
+  Metropolis acceptance under a cooling temperature. Two departures from the
+  libraries, both because a board is not a chart: the candidates are discrete,
+  so a move picks another rung rather than nudging x and y; and the walk keeps
+  the best board it ever saw rather than where it stopped, which is what makes
+  it safe to run at all -- it starts from the greedy answer and cannot come out
+  worse than the pass it replaces.
+
+  Not drawing a name and giving up a name's time row are candidates in the same
+  search rather than passes afterwards that cannot be undone. And a pair of
+  names that TOUCH pay a flat charge as well as the area they cover: priced by
+  area alone a three-pixel graze cost a hundredth of what shedding costs, so
+  the search kept both names and took the graze -- correct by its own
+  arithmetic and wrong by the only measure that counts.
+
+  Two things found on the way, both worth keeping written down. The old repair
+  pass re-placed a caption WITHOUT restoring `_capOut`, so each failed attempt
+  moved the rung ladder's base further out: the second ask was a different
+  question from the first. And the pass ran twice per attempt, once from each
+  end of the day, purely to blunt the order dependence -- which the assignment
+  removes, so that could go if the render cost ever matters.
+
+  A CONVERGENCE'S NAME IS IN THE SAME SEARCH, which took three measured steps
+  to get right and is the clearest statement of what this entry is about.
+  Pinned above its pill and placed FIRST, it took the paper and a solo event
+  with nowhere else was written over it. Given a search of its own and still
+  placed first, it moved to clean paper and landed on a name that was already
+  there, because it could not ask that name to shift: two boards, measured.
+  In the assignment with everything else, what makes it a convergence's name
+  is price rather than privilege -- the centred spot free, sliding cheap,
+  standing off dearer, the far side of the bundle dearer still, not drawn at
+  all three times what any other name costs. Two more faults fell out of
+  giving it a real search: it had never been charged for a rail through its
+  own words (`runCrosses` excuses a shared event's own members, rightly, for
+  rule 37's question and wrongly for this one), and it had never been charged
+  for sliding off the pill it names -- "Lunch with Alex" ended ninety pixels
+  before its own event began.
+
+
+- [x] **E22. The board was laid out against a font it was not drawing in.**
+  Every number in the layout engine is a measurement, and the first (usually
+  only) layout run measured every label in the FALLBACK face. Proved by
+  stashing the engine's own measurement on each hour label and comparing it
+  with the drawn rect: 34 against 38 on an OG panel, 36.3 against 42.3 on an
+  X. Twelve to seventeen per cent, everywhere, on every board.
+
+  `document.fonts.ready` was supposed to cover this and cannot. It resolves
+  once the fonts that are PENDING have loaded, and a face nothing has asked
+  for yet is not pending, so on a cold page it resolves before the board has
+  drawn a word. The first run then measures in the fallback, requests the real
+  face BY measuring, and the real face lands afterwards. Nothing re-ran:
+  `load` had already fired, and the resize observer sees no resize because the
+  canvas did not change size, only its text.
+
+  It surfaced three ways at once and none of them looked like one bug: hour
+  labels booked clear of each other came out touching by two or three pixels,
+  the first and last hours hung off the ends of the canvas, and captions the
+  assignment had proved clean came out grazing. Each was plausible on its own,
+  which is why it survived so long behind other explanations.
+
+  Fixed by watching the board's own text: a probe in a label's classes is
+  measured after each run and again over the second that follows, and the
+  board is laid out again if its width moves. That also covers a stylesheet
+  arriving late and the framework's engines restyling afterwards, which are
+  the same fault and equally silent. The suite now waits for the run count to
+  stand still instead of reporting a fixed 250ms after the first pass -- it
+  had been reporting whichever pass happened to have landed, which is why the
+  same board reported differently on different runs.
+
+
 - [ ] **E21. The solver reserves 80 to 160px more depth than the drawing
   uses, so every board thinks it is fuller than it is.** Measured on four
   fixtures at both landscape sizes, comparing `needB` (what the cross solver
@@ -604,8 +721,12 @@ is open.
     Deciding at the first tier and deciding at the winning tier gave
     different boards, and neither matched a straight re-run.
 
-- [ ] **E20. Captions walk past a neighbouring rail, so they read as
-  somebody else's.** `rules.md` rule 37: "A caption may not walk past another
+- [x] **E20. Captions walk past a neighbouring rail, so they read as
+  somebody else's.** Closed by E23: the walk-past is priced in the caption
+  search (`runCrosses` asks the rule's own question -- is another line's rail
+  between the words and the line they name) and in the attempt score beside
+  it. Every board the suite had marked known against this entry now passes.
+  The analysis below stands, and its last paragraph is what E23 did. `rules.md` rule 37: "A caption may not walk past another
   line to find room. A name on the far side of somebody else's rail reads as
   theirs." Nothing checked it. The rule-check skill found it by eye on a
   rendered board: "Skate Park" belongs to Bart, whose dot and end tick carry
@@ -806,10 +927,13 @@ is open.
   label) gets worse, and that is the price. Rules 27 and 28 need amending
   and two new rules writing; the full wording is in the plan.
 
-- [ ] **E14b. Two boards still reuse a drop column at a morning convergence.**
+- [ ] **E14b. Three boards now reuse a drop column at a morning convergence.**
   `five-lines` turns Bart and Lisa 1px apart leaving the school run;
-  `crew-day` gives Amy and Fry the same column leaving the delivery. Both are
-  pinned known in `test/layout/cases/fan-out.js`.
+  `crew-day` gives Amy and Fry the same column leaving the delivery; and
+  `regroups` turns Marge and Homer 3px apart, which appeared when the header
+  band came off and every line on the board moved. The first two are pinned
+  known in `test/layout/cases/fan-out.js`; the third is the same defect on a
+  board that had been missing it by a few pixels.
 
   Not the run home, which is fixed: these lines have most of the day still to
   come, so the hold they are leaving is not their last and the stagger that

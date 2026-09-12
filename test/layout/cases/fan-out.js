@@ -39,6 +39,11 @@ module.exports = function (test, h) {
   const KNOWN = {
     'five-lines': 'bar and lis turn 1px apart leaving the school run: E15',
     'crew-day': 'amy and fry share a column leaving the delivery: E15',
+    // The third board to show it, and it showed it by MOVING: taking the
+    // header band off the map shifted every line on every board, and marge
+    // and homer -- who had been missing each other by a few pixels here --
+    // landed on the same column. Same defect, same entry.
+    'regroups': 'mar and hom turn 4px apart leaving the morning hold: E14b',
   };
 
   // Every near-vertical RUN a line draws, by owner.
