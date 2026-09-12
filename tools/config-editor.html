@@ -2653,9 +2653,11 @@
   // where the template stacks, and its own grey classes), which is exactly
   // the drift `07-header-mirror.js` now fails on.
   function renderHeader(metro, tpl) {
-    var h = el("div", { class: "metro-header flex flex--col gap--xsmall px--3 py--2 flex-none" });
     var dayOne = null;
-    var days = (metro.days && metro.days.length) ? metro.days : [{ date_label: metro.date_label, weather: metro.header_weather }];
+    var days0 = (metro.days && metro.days.length) ? metro.days : [{ date_label: metro.date_label, weather: metro.header_weather }];
+    var h = el("div", { class: "metro-header flex flex--col gap--xsmall px--3 py--2 flex-none"
+      + (days0.length > 1 ? " metro-header--days" : "") });
+    var days = days0;
     var top = el("div", { class: "metro-header-top flex flex--row flex--center-y flex--wrap gap--medium"
       + (days.length > 1 ? " metro-header-top--days" : "") });
     h.appendChild(top);
@@ -2680,7 +2682,11 @@
         day.appendChild(el("span", { class: "metro-date-next label label--base font--bold metro-quiet", text: d.date_label }));
       }
       if (!di) dayOne = day;
-      var dw = d.weather || {};
+      // A forecast is about a day that is still ahead: a board that has
+      // rolled past the afternoon gives up today's numbers, which already
+      // happened. Mirrors the template.
+      var spent = !!(metro.rolling && metro.rolling.start_min >= 720);
+      var dw = (di === 0 && spent) ? {} : (d.weather || {});
       if (days.length === 1) day.appendChild(el("div", { class: "grow" }));
       if (dw.hi) {
         var wx = el("span", { class: "metro-weather flex flex--row flex--center-y gap--xsmall" });
@@ -2692,7 +2698,7 @@
           text: (dw.condition || "") + " \u00b7 " + String((metro.i18n && metro.i18n.rain_pct) || "{n}% rain").replace("{n}", dw.rain_chance) }));
         day.appendChild(wx);
       }
-      if (di < days.length - 1) top.appendChild(el("div", { class: "grow" }));
+      if (di < days.length - 1) top.appendChild(el("div", { class: "metro-day-gap grow" }));
     });
     // WHAT THE DAY IS, beside the date that says which day it is. A holiday
     // has no hour and no owner, so it is neither on the scale nor at any
