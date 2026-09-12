@@ -543,11 +543,25 @@ is open.
   offered than exists), and the crowding that E20's captions are walking past
   each other to escape.
 
-  Not a tuning fix. Either the reservation is measured from what will
-  actually be drawn, which means the caption pass has to run before the
-  solver rather than after it, or the solver re-solves once the real lane
-  usage is known. Both are real work; the measurements above are the place to
-  start.
+  TRIED: the re-solve, and it changes nothing. `laneCap`, the downward twin
+  of `laneFloor`: draw once, count the lanes each line actually used, cap the
+  demand at that and solve again, keeping the tighter board only if it scores
+  better. Reserved-versus-drawn came out IDENTICAL on all eight boards, and
+  it cost one new overlap on regroups/og-landscape. Reverted.
+
+  What that rules out is the obvious reading of the table above. The drawing
+  does use the lanes it asks for, so the gap is not unused lanes. Part of it
+  is legitimate reserve that is never drawn into: `needOf` adds the edge
+  margin and half a name's height, which is about 18px of the 80 on
+  five-lines/og. The rest, roughly one and a half lanes' worth, is the depth
+  a lane is charged versus the ink that ends up in it -- every lane is
+  charged `maxLabelThick`, the thickest label anywhere on the board, whatever
+  is actually in that lane.
+
+  So the next thing to measure is per-lane thickness against
+  `maxLabelThick`, not lane counts. If that is where it goes, the fix is to
+  charge a lane for what it holds rather than for the board's worst case, and
+  that is inside `buildSide`'s `extent`.
 
 - [ ] **E20. Captions walk past a neighbouring rail, so they read as
   somebody else's.** `rules.md` rule 37: "A caption may not walk past another
