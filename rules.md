@@ -277,6 +277,20 @@ Where the two disagree, this one is newer.
     Never by starting the move early to buy runway. A line leaving an
     interchange before the event ends says the person left early, and the
     board would be lying about the one thing it exists to state.
+29g. **A 90 that could be a 45 for free becomes one.** The angles are not
+    interchangeable (29a) and a 90 has to be earned: by arriving at a
+    convergence, or by there genuinely being something in the way, or by the
+    runway genuinely running out. Where none of those is true any more once
+    everything else is placed, the move takes the 45 it should have had.
+    This is a RECLAIM, not a preference. Rule 13 already governs the forward
+    decision -- do not turn square to make room -- and this covers the case
+    that rule cannot see: a move squared against a condition that was true
+    when it was decided and is not true of the finished board. The commonest
+    is a line squared to avoid crossing a neighbour's BASELINE while that
+    neighbour was itself up in a corridor and its baseline was empty.
+    Nothing may move to make this possible. Not the labels, not the other
+    lines, not the minute the move starts or ends: if taking the 45 disturbs
+    anything at all, the 90 stands.
 29d. **A 45 may not cross another line's baseline.** A 45 that changes lane
     inside the gap between two lines is a lane change; a 45 that travels
     ACROSS a line runs alongside it at a shallow converging angle for its
@@ -565,6 +579,19 @@ Known gaps, so nobody reads this as a description of a board that exists:
 - **16/17** is newly written and newly implemented; the clearance it keeps is
   a fixed fraction of a line step rather than anything measured against the
   events that need the space.
+- **29g** is stated and NOT implemented, deliberately. It was built and
+  measured: the two-pass version works and finds real cases (65 moves on
+  five-lines alone were squared against a rail that was not there), and it
+  changes nothing on any board -- 49 boards, every fixture on all three
+  viewports, vertical and 45 shares identical to the decimal place. Every one
+  of those 65 is also a convergence move, so 29f keeps it square, correctly,
+  and most boards have no level change to soften at all. It was reverted
+  rather than shipped because it costs a full second computation of every
+  span on every render and buys nothing today. E28 in `issues.md` has the
+  measurements and the non-obvious part of the mechanism (it cannot be done
+  in one pass: asking where another line is calls that line's own span
+  solver, which asks back, and the board never draws). Rebuild it if 29f
+  changes or a board turns up with level changes that are not convergences.
 - **E10** in `issues.md`: an event during a diagonal run should be a mark on
   the run, not a branch drawn beside it. Tried once, reverted. Rule 24 makes
   it matter more: where the gate leaves no 45, the branch takes a right
