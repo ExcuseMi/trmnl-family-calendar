@@ -50,27 +50,11 @@ custom_fields:
   field_type: select
   name: Show
   group: The Day
-  description: 'Which day the board draws. The last one is what a screen on a wall usually wants: by the evening, the day you need to see is the one you are getting up to.'
+  description: 'Which day the board draws. Today is what a screen on a wall usually wants: it reaches tomorrow by itself from four in the afternoon, keeping whatever is left of tonight, which is what the old "from the evening on" setting was for and could only do by throwing tonight away.'
   options:
   - Today: today
   - Tomorrow: tomorrow
-  - Today, then tomorrow from the evening on: auto
   default: today
-  optional: true
-  conditional_validation:
-  - when: today
-    hidden:
-    - switch_hour
-  - when: tomorrow
-    hidden:
-    - switch_hour
-- keyname: switch_hour
-  field_type: number
-  name: Switch Over At
-  group: The Day
-  description: 'The hour the board moves on to tomorrow''s timetable, on a 24-hour clock, so 21 is nine in the evening. Late on purpose: the evening is when a board on a wall is read most, and an early switch throws away dinner and everything after it while people are still standing in front of it. Anything outside 0 to 23, or left blank, is read as 21.'
-  placeholder: '21'
-  default: 21
   optional: true
 - keyname: rolling_view
   field_type: select

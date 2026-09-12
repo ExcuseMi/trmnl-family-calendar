@@ -123,18 +123,26 @@ module.exports = function (test, h) {
     });
   });
 
-  test('a field that applies to one choice only is hidden under the others', async () => {
-    // Switch Over At is the case in hand: it means nothing unless Show is
-    // set to switch over, and a form that asks for an hour it will not
-    // read looks broken rather than irrelevant.
+  test('a setting the board no longer reads is not still asked for', async () => {
+    // "Switch Over At" was the case this started as: an hour that meant
+    // nothing unless Show was set to switch over, hidden under the other two
+    // choices so the form did not ask for something it would not read.
+    //
+    // The setting it belonged to is gone. The rolling window reaches tomorrow
+    // from four in the afternoon and keeps what is left of tonight, which is
+    // what switching over was trying to buy and could only get by throwing
+    // the evening away. So the strongest version of this case is now that
+    // NEITHER is still on the form: a settings page that offers a choice the
+    // transform ignores is worse than one that offers nothing.
     const show = BY_KEY.show_day;
     assert(show, 'no show_day setting at all');
-    const hides = show.options.filter((o) =>
-      show.conditions.some((c) => c.when === o && c.hidden.indexOf('switch_hour') >= 0));
-    assertEqual(hides.sort(), ['today', 'tomorrow'],
-      'Switch Over At should be hidden on every Show option but the one it belongs to');
-    assert(show.options.indexOf('auto') >= 0 && hides.indexOf('auto') < 0,
-      'the switch-over option must be the one that KEEPS the hour field');
+    assertEqual(show.options.sort(), ['today', 'tomorrow'],
+      'Show offers a choice the transform no longer reads');
+    assert(!BY_KEY.switch_hour, 'Switch Over At is still on the form with nothing to switch');
+    const src = require('fs').readFileSync(
+      require('path').join(__dirname, '../../../plugin/src/transform.js'), 'utf-8');
+    assert(src.indexOf("cf(input, 'switch_hour')") < 0,
+      'the transform still reads an hour the form no longer asks for');
   });
 
   test('turning the alert banner off takes its thresholds with it', async () => {
