@@ -62,6 +62,15 @@ Where the two disagree, this one is newer.
    corridor is the mark and the express HATCH stands off: two hatches over
    one stretch of time say two different things are happening to it.
 
+   A speed mark runs PARALLEL TO ITS RAIL or it is not drawn. Its angle is
+   the chord between its two ends, which is the rail's own angle only while
+   the rail is straight between them; over an elbow it is the average of the
+   diagonal and the flat, so the mark sits beside the ramp pointing
+   somewhere the line is not going, which is the one thing a speed mark must
+   not do. The rail is sampled across the mark's span and a mark that bows
+   is skipped, leaving a small gap at each corner: "this stretch runs fast"
+   is a statement about a run, and a corner is not one.
+
    The marks go ON TOP of the rails, not under them. Built with the rest of
    the express marking, which happens before the trunks are drawn, they were
    appended in place and every rail, ramp and car went on over them. On a
@@ -83,6 +92,30 @@ Where the two disagree, this one is newer.
    ink; a speed mark is a fact about a LINE, drawn in that line's own
    colour beside its own rail. Only the hatch would be saying it twice --
    same ink, same strip, same minutes.
+2b-i. **A squeezed night is fewer strokes, not more.** The corridor's
+   infill was placed at a pitch, which caps the COUNT but not the density: a
+   rolling board compresses eight hours of night into about eighty pixels,
+   five hairlines land a thumb apart, the midnight bar lands on top of one
+   of them, and what the reader sees is six vertical rules bunched together
+   and asks what they are. Below about a hundred and twenty pixels the
+   infill is placed by fraction instead, so the count stops growing as the
+   compression tightens, and no stroke is drawn where the midnight bar
+   already is: two marks in one place are one thicker mark, and this is
+   meant to be the quieter of the two. Not cut to the two edges alone --
+   that was tried, and two verticals a thumb apart with a board between them
+   read as two separate rules rather than as a zone.
+2a-ii. **A board too small for the run gives up the far end, not the run.**
+   "A day is better than a run nobody can read" is true, and it was read as
+   "so fall back to the day" -- but the fallback is not A day, it is DAY
+   ZERO, and the whole reason a board is rolling is that day zero is spent.
+   A quadrant at half past nine at night drew Saturday midnight to midnight
+   with every event already over. So the window shrinks instead: it keeps
+   its start and gives up the far end a borrowed event at a time, then gives
+   up the spent start too and opens at the night, and only a panel that can
+   read none of those falls back to the day. Giving up the start is not what
+   2a-i forbids: that rule is about the start moving with the CLOCK, four
+   times an hour, under whoever is reading. This moves with the PANEL, so a
+   given slot shows the same board all evening.
 2c. **Each day names itself on the hour strip, and the strip is the
    header.** An hour label says only the time, and "09:00" on a 36-hour
    board is two different mornings, so the day a midnight opens is written

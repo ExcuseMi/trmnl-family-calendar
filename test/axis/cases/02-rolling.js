@@ -58,14 +58,46 @@ module.exports = function (test, h) {
       'the corridor ran off the head of the board: ' + JSON.stringify(m.nights));
   });
 
-  test('a board too small for the run draws the day instead', () => {
-    // The rolling view is a way of using room a quiet day is not using. On
-    // a panel with no room to give it is not an improvement, it is a
-    // 36-hour board with an unreadable hour.
+  test('a board too small for the run gives up the far end, not the run', () => {
+    // THIS CASE USED TO ASSERT THE BUG. "A day is better than a run nobody
+    // can read" is true, and it was read as "so fall back to the day" --
+    // but the fallback is not A day, it is DAY ZERO, and the whole reason a
+    // board is rolling is that day zero is spent. A quadrant at half past
+    // nine at night drew Saturday midnight to midnight with every event on
+    // it already over: no Sunday, nothing still to come, a board reporting
+    // the past. The full view beside it rolled correctly, which is what
+    // made it read as "quadrants are broken".
+    //
+    // So the window shrinks instead of collapsing. It keeps its start and
+    // gives up the far end a borrowed event at a time; failing that it
+    // gives up the spent start too and opens at the night. Every step is
+    // still forward-looking, which the day never was.
     const m = fit({ axisPx: 180, days: 2, content: QUIET, window: WIN });
-    assertEqual([m.winStart, m.winEnd], [0, DAY], 'a tiny board kept the 36-hour window');
-    assertEqual(m.boundaries, [], 'and it drew a midnight it has no second day for');
-    assertEqual(m.nights, [], 'and a night corridor with no night in the board');
+    assert(m.winEnd > DAY, 'a small board gave up tomorrow, which is the whole point of rolling');
+    assertEqual(m.boundaries.map((b) => b.min), [DAY], 'it kept the run but lost the midnight in it');
+    assert(m.winStart >= DAY - 120,
+      'it kept spent hours it had no room for: opened at ' + m.winStart);
+  });
+
+  test('what it gives up, it gives up in order', () => {
+    // Widest first: the whole window while it fits, then a shorter tail on
+    // tomorrow, then tonight's spent hours, and only on a panel that can
+    // read none of those, the day. Asserted as a ladder because each rung
+    // is a different answer and the order between them is the rule.
+    const seen = [2000, 900, 500, 300, 180, 120]
+      .map((px) => fit({ axisPx: px, days: 2, content: QUIET, window: WIN }))
+      .map((m) => [m.winStart, m.winEnd]);
+    for (const [from, to] of seen.slice(0, 3)) {
+      assertEqual([from, to], [WIN.from, WIN.to], 'a roomy board did not draw the window as asked');
+    }
+    // the tight ones opened later than the window asked, and still reached
+    // into tomorrow
+    for (const [from, to] of seen.slice(3, 5)) {
+      assert(from > WIN.from && to > DAY,
+        'a tight board did not shorten the window: ' + from + '..' + to);
+    }
+    // and the one that can read nothing falls back to the day
+    assertEqual(seen[5], [0, DAY], 'a board too small for any run did not fall back');
   });
 
   test('a borrowed day with nothing on it is not worth the axis', () => {

@@ -1167,13 +1167,87 @@
       // All this does is clip the same compression profile to those minutes
       // and say whether what comes out is READABLE.
       //
-      // Two ways it says no, and both fall back to the ordinary single-day
-      // board. A 36-hour window on a small panel can leave an hour narrower
-      // than a short meeting's own two marks, and a day is better than a
-      // run nobody can read. And a borrowed day with nothing on it inside
-      // the window is the "empty last day" case the day counter already
-      // refuses: a shorter board with a night stuck on the end.
+      // Two ways it says no. A borrowed day with nothing on it inside the
+      // window is the "empty last day" case the day counter already
+      // refuses: a shorter board with a night stuck on the end. And a
+      // 36-hour window on a small panel can leave an hour narrower than a
+      // short meeting's own two marks.
+      //
+      // THE SECOND ONE USED TO GIVE UP THE WHOLE WINDOW, and that was
+      // wrong in a way nothing caught, because what it fell back to was
+      // never examined. "A day is better than a run nobody can read" is
+      // true; the fallback is not a day, it is DAY ZERO -- and the whole
+      // reason a board is rolling is that day zero is spent. On a quadrant
+      // at half past nine at night the panel showed Saturday from midnight
+      // to midnight with every event on it already over: no Sunday, nothing
+      // still to come, a board reporting the past. The full view beside it
+      // rolled correctly, which is what made it read as "quadrants are
+      // broken" rather than as this.
+      //
+      // So the window SHRINKS instead of collapsing. It always keeps its
+      // start, because that is the boundary rule 2a-i says may not move
+      // under the reader, and gives up the far end a borrowed event at a
+      // time until what is left is readable. A board showing tonight and
+      // the first half of tomorrow is worth more than one showing a day
+      // that is over, and every step of the shrink is still forward-looking.
+      // Only if even the shortest forward window will not read does it fall
+      // back to the day counter.
       function windowed(k, win, content, axisPx) {
+        var ends = [win.to];
+        // The far end may stop after any borrowed event, latest first. Each
+        // is padded so the event that ends the board is not flush with its
+        // edge, and clamped inside the window as asked.
+        var lastMid = Math.floor(win.to / DAY) * DAY;
+        var afterMid = [];
+        for (var ci = 0; ci < content.length; ci++) {
+          var ce = content[ci].end_min;
+          if (ce > lastMid && ce < win.to) afterMid.push(ce);
+        }
+        afterMid.sort(function (a, b) { return b - a; });
+        for (var ai = 0; ai < afterMid.length; ai++) {
+          var cand = Math.min(win.to, afterMid[ai] + (k.contentPad || 30));
+          if (cand > win.from && ends.indexOf(cand) < 0) ends.push(cand);
+        }
+        for (var ei = 0; ei < ends.length; ei++) {
+          var got = windowFit(k, { from: win.from, to: ends[ei] }, content, axisPx);
+          if (got) return got;
+        }
+        // LAST RESORT: GIVE UP TODAY, WHICH IS SPENT ANYWAY.
+        //
+        // The smallest slots cannot read any forward window at all -- a
+        // quadrant asked to hold this evening AND the compressed night AND
+        // tomorrow has about thirty pixels an hour, and the floor is
+        // forty-seven. Falling through from here lands on the day counter,
+        // which starts at day zero, and day zero at half past nine at night
+        // is a board with nothing on it that has not happened.
+        //
+        // Between a spent day and tomorrow, tomorrow is the board. This is
+        // the one place the window may give up its start, and it is not the
+        // thing rule 2a-i forbids: that rule is about the start moving with
+        // the CLOCK, four times an hour, sliding events under whoever is
+        // reading. This moves with the PANEL, so a given slot shows the same
+        // board all evening -- and it only ever happens on a board the
+        // transform has already found quiet, where what is given up is a
+        // day whose events are behind it.
+        // It opens at the start of the NIGHT, not at the midnight itself.
+        // A window beginning a minute before midnight technically carries
+        // the boundary the run needs, and draws a one-minute sliver of
+        // today with a date badge in it, which is a worse lie than the
+        // spent day. Two hours of compressed night in front of tomorrow is
+        // the honest picture and reads as one: it is night, here is
+        // tomorrow.
+        var mid = Math.floor(win.to / DAY) * DAY;
+        var lateFrom = Math.max(win.from, mid - (k.nightBefore == null ? 120 : k.nightBefore));
+        if (mid > lateFrom) {
+          for (var fi = 0; fi < ends.length; fi++) {
+            if (ends[fi] <= mid) continue;
+            var late = windowFit(k, { from: lateFrom, to: ends[fi] }, content, axisPx);
+            if (late) return late;
+          }
+        }
+        return null;
+      }
+      function windowFit(k, win, content, axisPx) {
         var count = Math.ceil(win.to / DAY);
         var segs = [];
         segmentsFor(k, count, content).forEach(function (s) {
@@ -6471,10 +6545,54 @@
           LEGEND.forEach(function (p) {
             var w = Math.max(2, p.line_width) * S * weightScale;
             var cA = lineCAt(p, sx), cB = lineCAt(p, sx + lineLen);
+            // NOT ACROSS AN ELBOW.
+            //
+            // The mark's angle is the chord between its two ends, which is
+            // the rail's own angle only while the rail is straight between
+            // them. Over a corner it is the average of the diagonal and the
+            // flat, so the mark comes out parallel to neither and sits
+            // beside the ramp at a visibly wrong angle -- which is the one
+            // thing a speed mark must not do, since its whole job is to
+            // point the way the line is going.
+            //
+            // Straightness is measured rather than assumed: the rail is
+            // sampled across the mark's own span and compared with the
+            // chord. A pixel of bow is nothing; more than that and the mark
+            // is skipped, which leaves a small gap at each corner and is
+            // the honest answer, because "this stretch runs fast" is a
+            // statement about a run and a corner is not one.
+            var bowed = false;
+            for (var bk = 1; bk < 4; bk++) {
+              var ba = sx + lineLen * bk / 4;
+              var want = cA + (cB - cA) * bk / 4;
+              if (Math.abs(lineCAt(p, ba) - want) > 1 * S) { bowed = true; break; }
+            }
+            if (bowed) return;
             var slope = (cB - cA) / lineLen, len = Math.sqrt(1 + slope * slope);
             var nA = -slope / len, nC = 1 / len;     // the normal, in (axis, cross)
+            // HOW FAR OFF THE RAIL. Three and a half pixels put the mark
+            // close enough to its rail that on a compressed stretch, where
+            // the whole point is that everything is squeezed, the rail and
+            // its two marks read as one thick smear rather than as a line
+            // with speed on it.
+            //
+            // It is pushed out to six, and then clamped to a share of the
+            // real gap to the next rail along, sampled here rather than
+            // assumed: this is drawn on the busiest stretch of the board,
+            // where lines converge, and a mark that keeps its nominal
+            // distance while its neighbour closes in ends up nearer
+            // somebody else's rail than its own. Nothing is reserved for
+            // this -- it is ink finding room in the gap that exists, which
+            // is why it can be changed without costing a board anywhere.
+            var near = Infinity;
+            LEGEND.forEach(function (q) {
+              if (q === p) return;
+              near = Math.min(near, Math.abs(lineCAt(q, sx + lineLen / 2) - (cA + cB) / 2));
+            });
+            var want = w / 2 + 6 * S;
+            var room = isFinite(near) ? Math.max(w / 2 + 2 * S, near * 0.38) : want;
             [-1, 1].forEach(function (sd) {
-              var off = sd * (w / 2 + 3.5 * S);
+              var off = sd * Math.min(want, room);
               var s0 = toXY(sx + off * nA, cA + off * nC);
               var s1 = toXY(sx + lineLen + off * nA, cB + off * nC);
               var sl = svgEl('line', { x1: s0[0], y1: s0[1], x2: s1[0], y2: s1[1],
@@ -6537,7 +6655,36 @@
         // the corridor actually turned out and floored so a night that is
         // NOT compressed (somebody is out at two in the morning) does not
         // spread its strokes out into unrelated verticals.
+        //
+        // AND ON A SQUEEZED NIGHT, NONE AT ALL. The pitch is a share of the
+        // corridor's own width, which keeps the count down but not the
+        // DENSITY: a rolling board compresses eight hours of night into
+        // about eighty pixels, so five hairlines land thirty-six pixels
+        // apart, the midnight bar lands on top of one of them, and what the
+        // reader sees is six vertical rules bunched in a hand's width -- a
+        // picket fence, which is exactly what the pitch above was written
+        // to avoid, arrived at from the other direction.
+        //
+        // Cutting to the two edges alone was the first answer and it goes
+        // too far: the suite holds that a corridor of two strokes is a pair
+        // of rules, not a zone, and that is right -- two verticals a
+        // thumb's width apart with a board between them read as two
+        // separate marks. What a squeezed night needs is FEWER strokes, not
+        // none: the edges, and a stroke or two between them placed by
+        // fraction rather than by pitch, so the count stops growing as the
+        // compression tightens.
         var pitch = clamp((a1 - a0) / 4, 12 * S, 24 * S);
+        var tight = (a1 - a0) < 120 * S;
+        // and never one where the midnight bar already is: two marks in the
+        // same place are one thicker mark, and this one is meant to be the
+        // quieter of the two
+        var midA = AXIS.boundaries.map(function (b) { return aFor(b.min); });
+        function clearOfMidnight(at) {
+          for (var mi = 0; mi < midA.length; mi++) {
+            if (Math.abs(at - midA[mi]) < 6 * S) return false;
+          }
+          return true;
+        }
         // The two EDGES carry more ink than the strokes between them, so the
         // corridor has a start and an end rather than being a handful of
         // verticals that happen to be near midnight. It is the same job the
@@ -6552,7 +6699,16 @@
           hl.setAttribute(ROLE_ATTR, 'night');
           svg.appendChild(hl);
         }
-        for (var x = a0 + pitch; x < a1 - pitch * 0.4; x += pitch) night(x, false);
+        if (tight) {
+          [1 / 3, 2 / 3].forEach(function (f) {
+            var x = a0 + (a1 - a0) * f;
+            if (clearOfMidnight(x)) night(x, false);
+          });
+        } else {
+          for (var x = a0 + pitch; x < a1 - pitch * 0.4; x += pitch) {
+            if (clearOfMidnight(x)) night(x, false);
+          }
+        }
         night(a0, true);
         night(a1, true);
       });
