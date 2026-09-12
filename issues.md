@@ -512,6 +512,43 @@ is open.
 
 ## E. New features
 
+- [ ] **E21. The solver reserves 80 to 160px more depth than the drawing
+  uses, so every board thinks it is fuller than it is.** Measured on four
+  fixtures at both landscape sizes, comparing `needB` (what the cross solver
+  reserved below the spine) with how far the drawing actually reaches:
+
+  | board | reserved | drawn | wasted |
+  |---|---|---|---|
+  | five-lines / OG | 249 | 169 | 80 |
+  | seven-lines / OG | 367 | 208 | 159 |
+  | busy-day / X | 571 | 466 | 105 |
+  | long-event-day / X | 567 | 468 | 99 |
+
+  `needOf` is `max(extent, extent + nameH/2) + edge`, and `extent` comes from
+  `buildSide`: `start + (nLanes - 1) * step + lineGap + maxLabelThick`. It
+  assumes every allocated lane is occupied at the thickest label the board
+  carries. Most are not: an event drawn as a mark on its own line needs no
+  rung at all, so the lanes are reserved and then not used.
+
+  The empty strip at the bottom of the OG board is the visible half of this.
+  The expensive half is invisible: `fits()` compares that inflated need
+  against the room, so the board trims lanes it did not need to trim, packs
+  when it did not need to pack, and the tier loop then scores a crowded board
+  and steps the text down. The 800x480 demo board draws five lines in the top
+  half, stacks its captions in three lanes underneath and leaves about 150px
+  of canvas empty, while reporting itself packed.
+
+  Worth suspecting behind: the small text on boards with obvious room (the
+  tier loop sees a full board), some of E19's caption pressure (less room
+  offered than exists), and the crowding that E20's captions are walking past
+  each other to escape.
+
+  Not a tuning fix. Either the reservation is measured from what will
+  actually be drawn, which means the caption pass has to run before the
+  solver rather than after it, or the solver re-solves once the real lane
+  usage is known. Both are real work; the measurements above are the place to
+  start.
+
 - [ ] **E20. Captions walk past a neighbouring rail, so they read as
   somebody else's.** `rules.md` rule 37: "A caption may not walk past another
   line to find room. A name on the far side of somebody else's rail reads as
