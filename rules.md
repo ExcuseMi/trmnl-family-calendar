@@ -233,6 +233,25 @@ Where the two disagree, this one is newer.
     doing anything. Making everything a 90 says every adjustment is an
     event; making everything a 45 turns a four-band move into a diagonal
     across the whole afternoon.
+29c. **A convergence takes the 90 by preference, not by defeat.** 29b reads
+    as though the right angle into a family event were a compromise the
+    arithmetic forced, and measuring the board makes it sound worse than it
+    is: about a third of all track ink is vertical and under three per cent
+    is at 45. Nearly every one of those right angles is a line arriving at a
+    shared event or leaving one, and that is the mark 29a says a 90 IS.
+
+    It is also what we would choose with the room to spare. A long diagonal
+    into a family event eats an hour of axis on the way in, and it takes the
+    captions with it: every name along that stretch is pushed together, and
+    the shallower the approach the harder the line is to follow with an eye,
+    because it spends the whole run between two rows instead of on one.
+    Straight in, turn, arrive is less true to how the day felt and easier to
+    read, and easier to read wins. Where a 45 WOULD fit into a convergence,
+    it is still not automatically the better mark.
+
+    This does not license the 90 anywhere else. Rule 13 stands: outside a
+    convergence, a move that cannot pay for its 45 holds short instead of
+    turning square.
 29b. **45 by default, 90 when the day runs out.** A 45 costs one pixel of
     axis for every pixel it climbs, so whether it is available is
     arithmetic, not preference: where the remaining runway is shorter than
