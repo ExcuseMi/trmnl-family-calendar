@@ -211,6 +211,26 @@ module.exports = function (test, h) {
       + ' and the temperature starts at ' + Math.round(wx[0].x));
   });
 
+  test('a rolling board states the borrowed day\'s holiday on its own badge', () => {
+    // THE CASE E25 WAS OPENED FOR. A rolling board draws tomorrow's
+    // appointments; if tomorrow is Boxing Day it has to say so, and it has to
+    // say it beside TOMORROW's date rather than beside today's, or the board
+    // has declared the wrong day a holiday.
+    const roll = fixtures.find((f) => f.name === 'rolling-quiet');
+    if (!roll) return;                       // no two-day fixture to ask with
+    const rep = layout(withHoliday(roll, [
+      { title: 'Boxing Day', day: 1, day_index: 0, day_span: 1, day_label: null },
+    ]), ROOMY);
+    const badges = rep.badges || [];
+    assert(badges.length >= 2, 'this board should carry a badge for each of its days');
+    const named = badges.map((b) => (b.items || [])
+      .filter((i) => (' ' + i.cls + ' ').indexOf(' metro-holiday-name ') >= 0)
+      .map((i) => i.text));
+    assertEqual(named[0], [], 'the opening day claimed the borrowed day\'s holiday');
+    assertEqual(named[1], ['Boxing Day'],
+      'the borrowed day did not say what day it is: ' + JSON.stringify(named));
+  });
+
   test('a board with no holiday says nothing about one', () => {
     const rep = layout(busy, ROOMY);
     assertEqual(badgeItems(rep, 'metro-holiday').length, 0,

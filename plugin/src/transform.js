@@ -746,15 +746,27 @@ function buildMetro(lines, events, weatherMilestones, headerWeather, nowMin, win
     // enumerating it is not, so the first wins: the first feed listed,
     // which is the one order the config author controls.
     holidays: (function (list, st) {
-      var seen = {}, out = [];
+      // ONE NAME PER DAY, not one name per board. The cap used to be one
+      // outright, from when a board drew one day; a rolling board draws two
+      // and each of them gets to say what it is. Two names on ONE day is
+      // still refused -- that came out as "Christmas D" and "School Holid",
+      // each cut mid word -- so the seen-set is keyed on the day as well as
+      // the title, and a day that carries two keeps the first feed listed.
+      var seen = {}, perDay = {}, out = [];
       (list || []).forEach(function (h) {
-        var key = String(h.title == null ? '' : h.title).trim().toLowerCase();
-        if (!key || seen[key]) return;
+        var day = Math.max(0, h.day || 0);
+        var key = day + '\u0000' + String(h.title == null ? '' : h.title).trim().toLowerCase();
+        if (key.length <= 2 || seen[key]) return;
         seen[key] = true;
+        if (perDay[day]) return;
+        perDay[day] = true;
         var span = Math.max(1, h.span || 1);
         var ix = Math.min(span - 1, Math.max(0, h.index || 0));
         out.push({
           title: h.title,
+          // which day of the board it is about: 0 is the day the board opens
+          // on, 1 the day a rolling board reached into
+          day: day,
           day_index: ix,
           day_span: span,
           // Composed and translated HERE, the way the service alert's text
@@ -764,7 +776,7 @@ function buildMetro(lines, events, weatherMilestones, headerWeather, nowMin, win
           day_label: span > 1 ? fmt(tr(st, 'holiday_day'), { n: ix + 1, m: span }) : null,
         });
       });
-      return out.slice(0, 1);
+      return out.slice(0, 2);
     })((extra && extra.holidays) || [], (extra && extra.strings) || I18N.en),
     // TWO LISTS, NOT ONE MIXED ONE.
     //
@@ -1643,6 +1655,23 @@ var ROLL_END_LATE_MIN = 1440 + 23 * 60;
 // window is counted at the leading edge as "+N earlier", which is an
 // affordance the board already draws.
 var ROLL_SPLIT_MIN = 16 * 60;
+// ...AND A SECOND ONE, LATE, THAT DOES NOT ASK WHETHER THE DAY WAS QUIET.
+//
+// Counting from four and never re-counting is what keeps a day to a small
+// number of shapes, and on a day with three or more things after four it also
+// means the board never reaches tomorrow at all. Measured on a real board at
+// ten to eight and again at eleven at night: every event on it had already
+// happened and it was still drawing only today, because the count taken at
+// four still said "busy".
+//
+// That is the hole the old "switch over at nine" setting was covering, and
+// removing that setting on the strength of a board that happened to be quiet
+// after four was a bad measurement. So there is a second boundary: past nine
+// the board reaches tomorrow whatever kind of day it has been. It keeps what
+// is left of tonight while it does, which is the whole difference from the
+// switch it replaces, and it is still a fixed hour rather than a count, so
+// the board has three shapes at most and changes between them twice.
+var ROLL_LATE_MIN = 21 * 60;
 
 // Civil date arithmetic, deliberately not epoch arithmetic: "the day after
 // the 30th" is a calendar question, and answering it by adding 86400
@@ -3133,7 +3162,8 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
   var stillToCome = onDay.filter(function (e) {
     return (e.endMin == null ? e.startMin : e.endMin) > dayLo + rollFrom;
   });
-  var rolling = distinctEvents(stillToCome) <= QUIET_DAY_MAX_EVENTS && days.length > 1;
+  var quiet = distinctEvents(stillToCome) <= QUIET_DAY_MAX_EVENTS;
+  var rolling = (quiet || nowMin >= ROLL_LATE_MIN) && days.length > 1;
   // The window, in the shown day's own minutes. It starts at six unless the
   // day itself starts earlier, and ends at six the next evening unless
   // something kept is still running then: a window that cut an event it had
@@ -3193,10 +3223,19 @@ async function buildFromConfig(input, parsed, weather, extra, state) {
     winTo = Math.min(2880, Math.ceil(winTo / 60) * 60);
   }
   allDayEvents = allDayEvents.filter(function (e) { return (e.day || 0) === 0; });
-  // A holiday is a fact about ONE day, so the board states it only on that
-  // day: Christmas is not Christmas Eve's business, and a board set to
-  // tomorrow has to be able to say that tomorrow is the holiday.
-  holidays = holidays.filter(function (h) { return (h.day || 0) === 0; });
+  // A HOLIDAY IS A FACT ABOUT ONE DAY, AND THE BOARD MAY BE DRAWING TWO.
+  //
+  // Christmas is not Christmas Eve's business, so a holiday is stated on its
+  // own day and nowhere else. That used to mean day zero and only day zero,
+  // which was right while the board drew exactly one day and the reader could
+  // pick which. A rolling board reaches into tomorrow and draws tomorrow's
+  // appointments, and said nothing about tomorrow being Boxing Day -- it drew
+  // the meetings and left out the one fact that explains them.
+  //
+  // So the borrowed day's holiday travels too, carrying the day it belongs to
+  // so the badge for that day can state it (rule 59) and the other one does
+  // not. Still one name per day, never two (rule 63).
+  holidays = holidays.filter(function (h) { return (h.day || 0) <= (rolling ? 1 : 0); });
 
   events = mergeAcrossLines(events);
   linkMerged(events);

@@ -18,8 +18,10 @@
 // minutes, so neither the count nor the window may be read from the clock
 // continuously: everything would slide left four times an hour. So the
 // boundary both are measured from moves exactly once a day, at four in the
-// afternoon, and a day therefore has two shapes at most. The case that pins
-// that down is 'a day has two shapes at most, and it changes at four'.
+// afternoon, and a second at nine in the evening that does not ask whether the
+// day was quiet. A day therefore has three shapes at most. The case that pins
+// that down is 'a day has three shapes at most, and it changes at four and at
+// nine'.
 
 module.exports = function (test, h) {
   const { runTransform, icsWithEvents, okText, baseInput, assert, assertEqual } = h;
@@ -221,20 +223,25 @@ module.exports = function (test, h) {
       + JSON.stringify(r.legend.map((t) => t.name)));
   });
 
-  test('a day has two shapes at most, and it changes at four', async () => {
-    // THE STABILITY CASE, AS THE RULE NOW STANDS. A board keyed to the
-    // clock would lose events as the day went on, stretch itself the
-    // moment the count dropped, and rearrange under whoever was reading
-    // it -- an e-ink panel refreshes every fifteen minutes, so the window
-    // would slide four times an hour.
+  test('a day has three shapes at most, and it changes at four and at nine', async () => {
+    // THE STABILITY CASE, AS THE RULE NOW STANDS. A board keyed to the clock
+    // would lose events as the day went on, stretch itself the moment the
+    // count dropped, and rearrange under whoever was reading it -- an e-ink
+    // panel refreshes every fifteen minutes, so the window would slide four
+    // times an hour.
     //
-    // What it does instead is count from a boundary that moves exactly
-    // once, at four in the afternoon. So a day has two shapes at most: one
-    // that every hour before four agrees on, one that every hour after it
-    // agrees on. That is what this pins down, in both directions -- a
-    // board that changed at any other hour, or twice, or continuously,
-    // fails it just as a board that never changed used to fail the old
-    // version of this test.
+    // What it does instead is change at FIXED HOURS, and there are two of
+    // them. At four the count of what is still to come is taken and a quiet
+    // day borrows tomorrow. At nine the board reaches tomorrow whatever kind
+    // of day it has been -- because counting from four and never re-counting
+    // means a day with three or more things after four never reaches tomorrow
+    // at all, and a real board was still drawing only today at eleven at
+    // night with every event on it already over.
+    //
+    // So a day has three shapes at most: one every hour before four agrees
+    // on, one every hour between four and nine agrees on, and one every hour
+    // after nine agrees on. A board that changed at any other hour, or
+    // continuously, fails this.
     const rows = [
       ['20260909', '0900', '0915', 'Standup'],
       ['20260909', '1100', '1200', 'Workshop'],
@@ -250,21 +257,56 @@ module.exports = function (test, h) {
       }))).data;
       return r.days.length + ' day(s) ' + JSON.stringify(r.rolling);
     }
-    const before = [], after = [];
+    const before = [], mid = [], late = [];
     for (const hh of ['0015', '0700', '1215', '1545']) before.push({ at: hh, shape: await shapeAt(hh) });
-    for (const hh of ['1600', '1815', '2030', '2345']) after.push({ at: hh, shape: await shapeAt(hh) });
+    for (const hh of ['1600', '1815', '2045']) mid.push({ at: hh, shape: await shapeAt(hh) });
+    for (const hh of ['2100', '2230', '2345']) late.push({ at: hh, shape: await shapeAt(hh) });
     const show = (l) => l.map((s) => s.at + ' ' + s.shape).join(' | ');
     assertEqual([...new Set(before.map((s) => s.shape))].length, 1,
       'the board changed shape before four: ' + show(before));
-    assertEqual([...new Set(after.map((s) => s.shape))].length, 1,
-      'the board changed shape after four: ' + show(after));
-    // ...and the one change it is allowed is the one it makes: this day is
-    // three events until the afternoon is over and one after it, so it
-    // borrows tomorrow at four and not before.
+    assertEqual([...new Set(mid.map((s) => s.shape))].length, 1,
+      'the board changed shape between four and nine: ' + show(mid));
+    assertEqual([...new Set(late.map((s) => s.shape))].length, 1,
+      'the board changed shape after nine: ' + show(late));
+    // This day is three events until the afternoon is over and one after it,
+    // so it borrows tomorrow at four and not before.
     assertEqual(before[0].shape.indexOf('null') > 0, true,
       'a day with three things still to come should not borrow: ' + show(before));
-    assertEqual(after[0].shape.indexOf('null') > 0, false,
-      'a day with one thing left should borrow tomorrow: ' + show(after));
+    assertEqual(mid[0].shape.indexOf('null') > 0, false,
+      'a day with one thing left should borrow tomorrow: ' + show(mid));
+  });
+
+  test('a busy evening still reaches tomorrow, at nine', async () => {
+    // THE CASE THAT WAS MISSING, AND IT COST A WRONG ANSWER ON A REAL BOARD.
+    // The count is taken at four and never re-taken, so a day with three or
+    // more things after four was still drawing only today at eleven at night,
+    // with every event on it already over. Counting more often would have the
+    // board rearranging under a reader; a second fixed hour does not.
+    const rows = [
+      ['20260909', '0900', '1000', 'Book Club'],
+      ['20260909', '1400', '1500', 'Reactor Core Check'],
+      ['20260909', '1700', '1800', 'Skate Park'],
+      ['20260909', '1900', '2000', 'Moe\'s Tavern'],
+      ['20260909', '1930', '2030', 'Family Dinner'],
+      ['20260910', '1000', '1100', 'Sunday Swim'],
+    ];
+    const at = async (hh) => {
+      const when = Date.parse('2026-09-09T' + hh + ':00Z');
+      return (await runTransform(net(feed(rows)), when).run(baseInput(when, {
+        use_demo_data: 'false', lat_lon: '51.05,3.72',
+        config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
+      }))).data;
+    };
+    const evening = await at('19:50');
+    assertEqual(evening.rolling, null,
+      'the board reached tomorrow while three things were still happening tonight');
+
+    const night = await at('23:00');
+    assert(night.rolling, 'a busy day never reached tomorrow, all night');
+    const titles = night.events.map((e) => e.title);
+    assert(titles.indexOf('Sunday Swim') >= 0, 'tomorrow never arrived: ' + JSON.stringify(titles));
+    assert(titles.indexOf('Family Dinner') >= 0,
+      'tonight was thrown away to get there, which is the thing this replaced');
   });
 
   test('the sky of the day after is on the board, and only the part of it that is', async () => {

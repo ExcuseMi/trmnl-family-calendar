@@ -183,16 +183,21 @@
      be a mark in its own right: this one is punctuation in front of a
      name, not a station on a map. */
   .metro-holiday-ring { width: 14px; height: 14px; }
-  /* THE HEADER IS ONE ROW, and its height comes off the map. A name long
-     enough pushed the weather onto a second line and took 85px of canvas
-     with it, which is exactly the cost this whole shape exists to avoid,
-     so the holiday is what gives way: a third of the row at most, and a
-     name longer than that is cut rather than wrapped. The ordinal never
-     breaks either -- "Day 5 of 14" set over two lines made the header
-     taller for four characters. */
-  .metro-holiday { min-width: 0; max-width: 34%; }
-  .metro-holiday-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .metro-holiday-day { white-space: nowrap; }
+  /* A NAME TOO LONG FOR THE BADGE IS DROPPED, NOT CUT.
+     This was a third of the row at most, with the overflow clipped: the
+     holiday sat in a header band the width of the board, where a third of it
+     was generous and cutting a long name was better than pushing the weather
+     onto a second line and taking 85px of canvas with it.
+     The badge is not a row. It is shrink-wrapped and absolutely placed, so a
+     percentage resolves against something much smaller and "Boxing Day" came
+     out as "Boxing Da". It does not need the clamp either: the badge is
+     measured before it is drawn and gives way in a stated order when it will
+     not fit its stretch of axis (see dayBadge), so a name too long to fit
+     costs the badge its ordinal, then its forecast, then the name -- each of
+     them whole. Nothing on the strip is ever half a word.
+     Neither wraps: a badge is one row, and the row's depth is the map's. */
+  .metro-holiday { min-width: 0; }
+  .metro-holiday-name, .metro-holiday-day { white-space: nowrap; }
   /* A solid ink badge with the text knocked out of it. On e-ink this is the
      highest-contrast mark available, and it gives the header two fixed
      anchors — what day it is, and how much of it is on screen — that read at
@@ -8923,13 +8928,24 @@
     function dayBadge(d, a, spent, room, breaks) {
       if (!d || !d.date_label) return null;
       var w = spent ? null : d.weather;
-      // transform hands over at most one, and it is a fact about the day the
-      // board opens on -- day_index and day_span say where TODAY falls in the
-      // holiday's own range -- so it belongs to the run's first day and to no
-      // other. A second name came out as "Christmas D" and "School Holid",
-      // each cut mid word, which is why the payload caps the list at one.
-      var hol = (d === DAY_RUN[0] && METRO.holidays && METRO.holidays.length)
-        ? METRO.holidays[0] : null;
+      // A HOLIDAY BELONGS TO A DAY, AND THE BOARD MAY BE DRAWING TWO.
+      //
+      // This took the first holiday in the payload and gave it to the run's
+      // first day, which was right while a holiday could only ever be about
+      // the day the board opened on. A rolling board reaches into tomorrow
+      // and draws tomorrow's appointments, so tomorrow can be the holiday --
+      // and then the badge that names tomorrow is the one that has to say so,
+      // not this one.
+      //
+      // `day` is which day of the board it is about: 0 the day the board
+      // opens on, 1 the day a rolling board reached into. transform sends at
+      // most one per day (rule 63): two names on one badge came out as
+      // "Christmas D" and "School Holid", each cut mid word.
+      var myDay = DAY_RUN.indexOf(d);
+      var hol = null;
+      (METRO.holidays || []).forEach(function (h) {
+        if (!hol && (h.day || 0) === myDay) hol = h;
+      });
       var forms = [];
       if (hol && hol.day_label) {
         if (w && w.hi != null) forms.push({ date: d.date_label, hol: hol, ord: true, w: w });
