@@ -1856,6 +1856,9 @@
     function sideKeyAt(p, a) { var q = posAt(p, a); return q ? q.sideKey : p._sideKey; }
     function signAt(p, a) { var q = posAt(p, a); return q ? q.sign : p._sign; }
     function distAt(p, a) { var q = posAt(p, a); return q ? q.dist : p._dist; }
+    // where a line is ACROSS the board, signed from the spine, which is the
+    // one reading that compares two lines on opposite sides of it
+    function cAt(p, a) { return signAt(p, a) * distAt(p, a); }
     function bandKeyAt(p, a) { var q = posAt(p, a); return q ? q.bandKey : p.key; }
     // How far this line has moved from where it started, at this point on
     // the axis. Eased, so the exchange is a curve rather than a corner:
@@ -2356,6 +2359,13 @@
     // keeps the best by score, so this joins that: 0 places from the start
     // of the day, 1 from the end.
     var capOrder = 0;
+    // Whether the paper above a bundle is booked and its rung given back.
+    // Decided by drawing the board both ways at the first text size and
+    // keeping the better score, because which is better is a fact about the
+    // day: a board whose convergences are its only rung customers gets its
+    // whole ladder back, and one whose captions were living in that ladder's
+    // slack loses more than it gains.
+    var bookingOn = true, lastOv = 0, lastPierce = 0;
     // An interchange is drawn as a heavy bar straight down the board at one
     // minute: the capsule across the lines, then the spur dropping from it
     // to its own lane. WHICH lanes that bar crosses is not known until the
@@ -2904,6 +2914,21 @@
         // solver reserves on the inward side is still the ROOM that makes
         // that possible; this just stops the ladder handing it out.
         if (e._onTrack) return;
+        // ...and neither does a convergence with paper booked above its
+        // bundle. It is drawn as a corridor between its members' own rails,
+        // so a rung is no more use to it than it is to a mark -- and made to
+        // take one it does worse than waste it: it takes the inner rung, the
+        // event that really needed a rail is pushed a rung further out, and
+        // the ladder the solver then has to size is one nobody stands on.
+        // Its rail is its own line, closed up with the others, so that is
+        // what it is told: a null here reads as "not on the board" to every
+        // pass that cuts one rail round another, and the tick at the end of
+        // a shared long event went with it.
+        if (e._capBooked) {
+          e._lane = null; e._elbow = null; e._diagFrom = null;
+          e._laneDist = distAt(e._p, e._nodeA);
+          return;
+        }
         var best = null;
         // a backward branch (label before its ring) reads out of order, so
         // it's only on the table when a forward label can't fit before the
@@ -3023,6 +3048,12 @@
       lastPlaceCapOver = 0;
       evs.forEach(function (e) {
         if (e._dropped || e._onTrack) return;   // no rung taken, none to count
+        // ...nor a convergence whose name has paper of its own booked above
+        // the bundle (see planCorridorRoom). It is drawn as a corridor
+        // between its members' own rails and never stands on a rung, so
+        // counting one here is how a board comes to reserve a ladder it does
+        // not draw and then calls itself full.
+        if (e._capBooked) return;
         used = Math.max(used, e._lane + 1);
         if (e._crossing) lastPlaceCrossings++;
         // A label that could only be fitted by writing over a name already
@@ -3797,6 +3828,58 @@
       demand[p.key] = Math.max(want, mine ? 1 : 0, laneFloor[p.key] || 0);
     });
     }
+
+    // A CONVERGENCE PAYS FOR ITS OWN NAME, AND THEN ITS RUNG IS WASTE.
+    //
+    // `sharedCount` above says a bundle's caption is the one thing the lane
+    // grid cannot see, and everything downstream is built round that: a
+    // corridor is planned after the lanes are handed out, its name goes
+    // above the bundle where no rung reaches, and a track in a corridor
+    // keeps all its rungs outward in case one of them is needed for it.
+    //
+    // What that bought was depth nobody drew in. Every solo event is a mark
+    // on its own line now, so a convergence is the only thing left that asks
+    // for a rung, and a convergence drawn as a corridor never stands on the
+    // one it asked for. seven-lines on the 800x480 panel built a four-rung
+    // ladder reaching 348px from the spine and stopped drawing at 208:
+    // three lines crammed into the top 60% of the board with the bottom 40%
+    // blank, at the smallest text on the ladder, because `fits` was
+    // comparing the room against a ladder made of nothing.
+    //
+    // Freeing every convergence's rung is worse, and measurably: six boards
+    // came out with names written over each other and seven with a rail
+    // through a name, because the rung WAS paying for the caption, in the
+    // wrong place and at the wrong size.
+    //
+    // The ones that can be freed safely are the ones that pay for the words
+    // themselves. A bundle closing up leaves the paper its top member
+    // vacated -- half the group's span, less half the fan -- and where that
+    // is more than the name needs, the name already has somewhere to go and
+    // the rung is pure waste. Where it is less, the paper has to come from
+    // somewhere, and that somewhere was the rung.
+    function planCorridorRoom() {
+      visible.forEach(function (e) { e._capBooked = false; });
+      if (!bookingOn) return;
+      visible.forEach(function (e) {
+        if (e._dropped || !e._involved || e._involved.length < 2) return;
+        if (e._noBooking) return;   // drawn as a bundle once; it really does want a rung
+        var mem = e._involved.slice().sort(function (a, b) {
+          return cAt(a, e._nodeA) - cAt(b, e._nodeA);
+        });
+        var top = mem[0], bot = mem[mem.length - 1];
+        // The pitch is the one `buildTrunks` closes the bundle to, at full
+        // weight, which is the tightest it is ever drawn and so the most
+        // paper this can claim has been freed.
+        var pitch = Math.max(2, top.line_width || 2) * S + Math.max(LINE_GAP * 0.65, 6 * S);
+        var freed = (cAt(bot, e._nodeA) - cAt(top, e._nodeA)) / 2 - (mem.length - 1) * pitch / 2;
+        // The leader, the words, and six pixels of paper above them: the
+        // same allowance the caption is drawn with.
+        var need = LINE_GAP * 1.5 + NODE_R * 1.6 + maxLabelThick + 6 * S;
+        if (freed < need) return;
+        e._capBooked = true;
+      });
+    }
+    planCorridorRoom();
     measureDemand();
 
     // pass 2: hand the whole thing to the solver, then write its answer
@@ -4141,6 +4224,29 @@
     // only be placed against them. Both have to happen before the counting
     // below or the counting is of a board that was never drawn.
     buildTrunks();
+    // A CONVERGENCE THAT DID NOT GET ITS CORRIDOR WANTS ITS RUNG BACK.
+    //
+    // `planCorridorRoom` books the paper above a bundle and takes the rung
+    // away on the strength of it, which is right for fifty-two of the
+    // fifty-four convergences these fixtures draw. The other two are drawn
+    // as a BUNDLE -- a member was already in a hold at that minute, so the
+    // lines could not close -- and a bundle does hang off a rung. Predicting
+    // which is which from the sizes would be another estimate to be wrong
+    // about, so it is simply looked at: the trunks are built, and any
+    // convergence that came out a bundle hands its booking back and the
+    // board is solved and drawn once more with the rung restored.
+    (function settleBundles() {
+      var lost = visible.filter(function (e) {
+        return e._capBooked && !e._routeShared && !e._dropped;
+      });
+      if (!lost.length) return;
+      lost.forEach(function (e) { e._capBooked = false; e._noBooking = true; });
+      measureDemand({ A: corridorBlocks('A'), B: corridorBlocks('B') });
+      var re = solveCross(null);
+      if (!re) return;
+      cross = re; applyCross(); recomputeLineDists(); placeBoth();
+      buildTrunks();
+    })();
     placeOnLineCaptions();
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0, adrift = 0;
@@ -4230,6 +4336,9 @@
     // `labelOverlaps` subsumes what `capClashes` counted and sees the rest
     // of the board besides, so the pass's own tally is not added again.
     var _ov = labelOverlaps();
+    // Kept for the one caller that has to compare two boards on this alone:
+    // buying depth is never worth a name written over another one.
+    lastOv = _ov; lastPierce = barPierces() + capPierces;
     return dropped * 1000 + (packedFallback ? 300 : 0) + lost
       + (adrift + _ov) * 120
       + (crossings + barPierces() + capPierces) * 40 + slides * 15 + backwards * 10;
@@ -4830,20 +4939,50 @@
     // layout; the largest tier with the best quality wins (ties go to the
     // bigger text).
     var bestTier = null, bestQ = Infinity;
-    for (var ti = 0; ti < tiers.length; ti++) {
-      var q = attempt(tiers[ti]);
-      if (q < bestQ) { bestQ = q; bestTier = ti; }
-      if (q === 0) break;
-      // Two smaller steps without improvement, and STOP ONLY IF the board
-      // it settled on is actually good. The early exit is there so a clean
-      // board does not grind through four more sizes for nothing; applied
-      // to a board that is still carrying seven names written over each
-      // other it stops the search exactly where it matters, three sizes
-      // before the one that would have fitted. A board scoring in the
-      // thousands has not found its answer yet.
-      if (ti > bestTier + 1 && bestQ < 400) break;
+    function runTiers() {
+      bestTier = null; bestQ = Infinity;
+      var ti;
+      for (ti = 0; ti < tiers.length; ti++) {
+        var q = attempt(tiers[ti]);
+        if (q < bestQ) { bestQ = q; bestTier = ti; }
+        if (q === 0) break;
+        // Two smaller steps without improvement, and STOP ONLY IF the board
+        // it settled on is actually good. The early exit is there so a clean
+        // board does not grind through four more sizes for nothing; applied
+        // to a board that is still carrying seven names written over each
+        // other it stops the search exactly where it matters, three sizes
+        // before the one that would have fitted. A board scoring in the
+        // thousands has not found its answer yet.
+        if (ti > bestTier + 1 && bestQ < 400) break;
+      }
+      if (bestTier !== ti) attempt(tiers[bestTier]);
     }
-    if (bestTier !== ti) attempt(tiers[bestTier]);
+    runTiers();
+    // IS THE FREED LADDER WORTH IT: ASKED ON THE BOARD THAT WON.
+    //
+    // Handing a track's ladder back is most of the depth on a board whose
+    // convergences were its only rung customers, and a loss on one whose
+    // captions were quietly living in that ladder's slack. Neither is
+    // knowable from the sizes, so both boards are drawn and the better one
+    // kept -- at the text size the search settled on, not at the first one
+    // it tried.
+    if (visible.some(function (e) { return e._involved && e._involved.length > 1; })) {
+      var qBooked = bestQ, ovBooked = lastOv, pierceBooked = lastPierce, tierBooked = bestTier;
+      bookingOn = false;
+      var qPlain = attempt(tiers[tierBooked]);
+      // Depth is worth having and it is not worth a name written over
+      // another name, or a rail drawn through one: the freed board has to be
+      // at least as clean as the one that paid for its ladder, and score no
+      // worse.
+      if (ovBooked <= lastOv && pierceBooked <= lastPierce && qBooked <= qPlain) {
+        bookingOn = true;
+        bestQ = attempt(tiers[tierBooked]);
+      } else {
+        // The plain board is the better one, and it may well want a
+        // different text size than the booked search chose.
+        runTiers();
+      }
+    }
     // The routes for the board that was actually chosen. Everything below
     // reads where the lines really go, which is not knowable from inside an
     // attempt: an attempt is handed the routes the PREVIOUS one left behind.
