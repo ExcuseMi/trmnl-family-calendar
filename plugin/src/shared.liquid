@@ -41,164 +41,45 @@
 
 <div class="layout layout--col gap--none metro-root">
 
-  <div class="metro-header flex flex--col gap--xsmall px--3 py--2 flex-none{% if data.days.size > 1 %} metro-header--days{% endif %}">
-    <div class="metro-header-top flex flex--row flex--center-y flex--wrap gap--medium{% if data.days.size > 1 %} metro-header-top--days{% endif %}">
-      <!-- The plugin's mark, inlined because the device renders this template
-           on its own and cannot fetch repo files. Keep in step with
-           assets/icon.svg: same geometry, same single-fill structure; the
-           mask id is namespaced so a mashup rendering several views cannot
-           collide on it.
-           Drawn in the theme's own ink rather than in the brand orange. The
-           panels are 1-bit and 4-bit greyscale: #e05b44 has a luma right on
-           the middle, so it dithered to a 50% checkerboard and the mark came
-           out as noise at every size it is drawn at. It is also the one
-           thing on a dark board that would have stayed light. -->
-      <svg class="metro-mark no-shrink" viewBox="0 0 512 512" role="img" aria-label="Metro Calendar" fill="currentColor">
-        <mask id="metro-mark-cut">
-          <rect width="512" height="512" fill="#fff"/>
-          <g stroke="#000" stroke-width="38" stroke-linecap="round" fill="none">
-            <path d="M96 160 H416"/>
-            <path d="M96 256 H416" stroke-dasharray="60 52"/>
-            <path d="M96 352 H416" stroke-dasharray="1 76"/>
-            <path d="M320 160 V352" stroke-width="26" stroke-dasharray="26 34"/>
-          </g>
-          <g fill="#000"><circle cx="320" cy="160" r="52"/><circle cx="320" cy="256" r="52"/><circle cx="320" cy="352" r="52"/></g>
-          <g fill="#fff"><circle cx="320" cy="160" r="22"/><circle cx="320" cy="256" r="22"/><circle cx="320" cy="352" r="22"/></g>
-        </mask>
-        <circle cx="256" cy="256" r="240" mask="url(#metro-mark-cut)"/>
-      </svg>
-      {%- comment -%}
-        THE HEADER NAMES EVERY DAY THE BOARD DRAWS, NOT THE FIRST ONE.
-
-        It used to say "Today" and one date while the map ran on past
-        midnight into a second day, and it carried ONE forecast: a board
-        showing Thursday's events under Wednesday's rain, with nothing in
-        the header admitting Thursday was there at all. The hour strip
-        marks where the day turns over, which is where that belongs, but a
-        marker on a scale says WHERE the boundary is, not what the board
-        covers or what the weather will be either side of it.
-
-        So the header is a row of days, one per day in the run, in the same
-        order the map draws them: today at the left, tomorrow at the right,
-        which makes the row a legend for the two halves of the board
-        underneath it. A single-day board has one day in the run and comes
-        out exactly as it always did -- the grow that pushed its weather to
-        the right edge is inside that day's block, where it belongs, rather
-        than between blocks.
-
-        Only the FIRST day gets the title word and the ink pill. "Today" is
-        a statement about one of them, and two ink badges side by side
-        compete for the job of being the header's anchor -- the same reason
-        a holiday is not a second pill.
-      {%- endcomment -%}
-      {%- comment -%}
-        A FORECAST IS ABOUT A DAY THAT IS STILL AHEAD.
-        A board that has rolled past the afternoon is showing a day whose
-        high and low already happened: "18 / 11 Clear" for a Wednesday read
-        at six in the evening is a fact about this morning, taking the width
-        of the day that matters from the day that does not. So the first
-        day keeps its name and gives up its numbers, and the only forecast
-        on the header is the one somebody can still act on.
-        A quiet MORNING that borrowed tomorrow keeps both: that day is still
-        ahead of the reader, which is the whole reason it is on the board.
-      {%- endcomment -%}
-      {%- assign spent_today = false -%}
-      {%- if data.rolling and data.rolling.start_min >= 720 -%}{%- assign spent_today = true -%}{%- endif -%}
-      {%- for d in data.days -%}
-      <span class="metro-day flex flex--row flex--center-y gap--xsmall{% unless forloop.first %} metro-day--next{% endunless %}">
-        {%- if forloop.first -%}
-          <span class="metro-title title title--large font--bold">{% if data.title_word %}{{ data.title_word }}{% else %}{{ data.i18n.today | default: "Today" }}{% endif %}</span>
-          {% if d.date_label %}<span class="metro-date metro-pill label label--base font--bold">{{ d.date_label }}</span>{% endif %}
-        {%- else -%}
-          {% if d.date_label %}<span class="metro-date-next label label--base font--bold metro-quiet">{{ d.date_label }}</span>{% endif %}
-        {%- endif -%}
-      {%- comment -%}
-        WHAT THE DAY IS, beside the date that says which day it is.
-
-        A public holiday is not one person's state. It has no hour, so the
-        hour scale is the wrong place for it and drawing it there prints
-        the board's own window back as the holiday's hours; it has no
-        owner, so a line's head is the wrong place for it and puts a whole
-        country's Christmas against whoever the rules happened to route it
-        to; and a line of its own is the worst of the three, because a line
-        costs a band of the cross axis and a holiday is not a person.
-
-        The header already answers "what day is this", it is the one part
-        of the board that costs the map no depth it was using, and on a day
-        with no holiday this is nothing at all. Deliberately not a second
-        pill: the date is the header's one hard anchor and two ink badges
-        side by side compete for that job. The rings are rule 28's
-        landmark, the same mark the line heads use for an all-day event.
-
-        It rides with the date, which means it goes when the date goes: a
-        panel too small for a header is a panel that has already given up
-        saying which day it is, and inventing a second place for a holiday
-        to live would be inventing a second thing to keep in step.
-      {%- endcomment -%}
-      {%- assign holiday = data.holidays | first -%}
-      {% if holiday and forloop.first %}
-        <span class="metro-holiday flex flex--row flex--center-y gap--xsmall">
-          <svg class="metro-holiday-ring no-shrink" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="6" r="5"></circle><circle cx="6" cy="6" r="2.5"></circle></svg>
-          <span class="metro-holiday-name label label--base font--bold">{{ holiday.title }}</span>
-          {%- if holiday.day_label %}<span class="metro-holiday-day label label--small metro-quiet">&middot; {{ holiday.day_label }}</span>{% endif -%}
-        </span>
-      {% endif %}
-      {%- comment -%}
-        The window the board covers ("06:00 23:00") used to be stated as a
-        pill here. The hour scale directly below says the same thing and
-        says it in the right place, so the pill was a second answer to a
-        question nobody had asked. window_label still travels in the
-        payload: the smaller views have no scale to read it off.
-      {%- endcomment -%}
-        {%- comment -%}
-          A day's own forecast, beside the day it belongs to. The single-day
-          board keeps the weather at the right edge because this grow is
-          inside the one block there is; a two-day board puts each day's
-          weather with its date and separates the blocks instead.
-        {%- endcomment -%}
-        {% if data.days.size == 1 %}<div class="grow"></div>{% endif %}
-        {% assign show_weather = true %}
-        {% if forloop.first and spent_today %}{% assign show_weather = false %}{% endif %}
-        {% if d.weather.hi and show_weather %}
-          <span class="metro-weather flex flex--row flex--center-y gap--xsmall">
-            {% if d.weather.icon %}<img class="metro-wicon image--adaptive" src="{{ d.weather.icon }}">{% endif %}
-            <span class="metro-temp title title--base">{{ d.weather.hi }}&deg;<span class="metro-quiet"> / {{ d.weather.lo }}&deg;</span></span>
-            {% assign rain_pct = data.i18n.rain_pct | default: "{n}% rain" | replace: "{n}", d.weather.rain_chance %}
-            <span class="metro-cond label label--small metro-quiet">{{ d.weather.condition }} &middot; {{ rain_pct }}</span>
-          </span>
-        {% endif %}
-      </span>
-      {%- unless forloop.last -%}<div class="metro-day-gap grow"></div>{%- endunless -%}
-      {%- endfor -%}
-    </div>
-    {%- comment -%}
-      Two things the board cannot say for itself. A line missing because its
-      feed has been unreachable for hours looks exactly like a line whose
-      owner has nothing on today, and a forecast replayed from the last
-      good fetch looks exactly like a fresh one. Both are stated here
-      rather than guessed at from a gap in the map.
-    {%- endcomment -%}
-    {% if data.calendars_down and data.calendars_down.size > 0 %}
-      {%- comment -%}
-        Built with assign, not written inline: a "{n}" placeholder inside an
-        output tag ends the tag early and takes the whole template with it.
-      {%- endcomment -%}
-      {%- assign down_names = data.calendars_down | join: ", " -%}
-      {%- assign feed_down_tpl = data.i18n.feed_down | default: "{n} unavailable" -%}
-      {%- assign feed_down_msg = feed_down_tpl | replace: "{n}", down_names -%}
-      <div class="metro-alerts label label--small metro-quiet">{{ feed_down_msg }}</div>
-    {% endif %}
-    {% if data.weather_stale %}
-      <div class="metro-alerts label label--small metro-quiet">{{ data.i18n.weather_stale | default: "Forecast may be out of date" }}</div>
-    {% endif %}
-  </div>
-
+  {%- comment -%}
+    THE STRIP IS THE HEADER.
+    There was a band above the map here: a logo, the word "Today", a date
+    badge and a forecast, 58px deep on every panel -- an eighth of an
+    800x480 board and a fourteenth of an X, taken off the map on every
+    render. Four of the five things it did, the hour strip was already
+    doing: what time it is now, which day each half of a 36-hour board
+    belongs to, what has scrolled off either end, and where the scale
+    changes rate. The fifth was the weather, and on a two-day board the
+    weather is a fact about a DAY, so it belongs at that day's own end of
+    the scale rather than in a row above both of them. `dayBadge` draws all
+    of it now, through the same reservation the hours and the clock use.
+    The board already knew how to do without this band: every slot too
+    shallow to spare it has been dropping it for as long as there have been
+    slots, and the strip has been naming the day there ever since.
+  {%- endcomment -%}
+  {%- comment -%}
+    Two things the board cannot say for itself, and the one part of the old
+    header that had nowhere else to go. A line missing because its feed has
+    been unreachable for hours looks exactly like a line whose owner has
+    nothing on today, and a forecast replayed from the last good fetch looks
+    exactly like a fresh one. Under the map rather than over it: they are
+    rare, they are prose, and the map is what the reader came for.
+  {%- endcomment -%}
   <div class="divider divider--on-white flex-none"></div>
 
   <div class="metro-canvas relative grow w--full">
     <svg class="metro-svg absolute"></svg>
   </div>
 
+  {% if data.calendars_down and data.calendars_down.size > 0 %}
+    {%- assign down_names = data.calendars_down | join: ", " -%}
+    {%- assign feed_down_tpl = data.i18n.feed_down | default: "{n} unavailable" -%}
+    {%- assign feed_down_msg = feed_down_tpl | replace: "{n}", down_names -%}
+    <div class="metro-alerts label label--small metro-quiet px--3 flex-none">{{ feed_down_msg }}</div>
+  {% endif %}
+  {% if data.weather_stale %}
+    <div class="metro-alerts label label--small metro-quiet px--3 flex-none">{{ data.i18n.weather_stale | default: "Forecast may be out of date" }}</div>
+  {% endif %}
   {%- comment -%}
     The service banner. A sibling of the canvas rather than a band reserved
     inside it: the canvas is the flex child that grows, so a footer here
@@ -252,69 +133,18 @@
      lane ladder is built out of. */
   .metro-label { line-height: 1.05; }
   .metro-hour, .metro-axis-note { white-space: nowrap; }
-  .metro-header--compact .metro-window, .metro-header--compact .metro-cond { display: none; }
-  /* A SECOND DAY COSTS THE ROW WHAT THE CONDITION WAS SPENDING.
-     The header is one row and its height comes off the map, so a two-day
-     header that wraps has taken a band of canvas to say something the
-     board was already saying. The condition text is the first thing to go,
-     the same way it goes when the header is squeezed: "Rain - 80% rain"
-     twice over is most of the width and the numbers beside it carry the
-     day anyway. Kept where there is genuinely room, which is the large
-     header on a panel like the X. */
-  .metro-header-top--days .metro-cond { display: none; }
-  .metro-header--large .metro-header-top--days .metro-cond { display: inline; }
-  /* A row of days is a legend for the axis below it, so it starts where the
-     axis starts rather than being centred over the panel. The header is a
-     column that centres what it holds, and a row shrink-wrapped to its own
-     words cannot line up with anything: it takes the full width first, and
-     then its contents are free to sit where the axis puts them. */
-  /* A DAY'S NAME OVER ITS OWN STRETCH OF AXIS, as far as that can be had.
-     Their WIDTHS cannot be the day's width -- an evening is a third of the
-     axis and "Thu 10 Sep 21/13 Rain - 80% rain" does not fit a third of an
-     800px panel at any size worth reading -- and their STARTS cannot be
-     the day's start either: measured on a real board, aligning them meant
-     deleting today's forecast to make room, which is trading information
-     for tidiness the wrong way round.
-     What is left is worth having on its own. The row spans the map rather
-     than floating centred over it, and the days sit along it in the order
-     the map draws them, first at the leading edge and last at the trailing
-     one. The date marker on the strip still says exactly where the day
-     turns over; this says which days are on the board and what the weather
-     does on each. */
-  /* The spacer between two days carries `grow`, so with nothing else said
-     it takes all the slack and the last day sits at the trailing edge --
-     which is where it belongs when the alignment below cannot reach. Where
-     it can, the client gives that spacer an exact width instead, and
-     space-between would have gone on redistributing the slack around it. */
-  .metro-header-top--days { justify-content: flex-start; align-self: stretch; }
-  /* ...and the header itself, which is shrink-wrapped and centred over the
-     panel like everything else in that column. A band 639px wide over a
-     780px map cannot be a legend for it whatever its contents do. */
-  .metro-header--days { align-self: stretch; }
-  /* Which day of a week-long holiday this is goes the way the condition
-     and the alert lines go when the header is squeezed: it is an
-     explanation, and the NAME of the day is what has to survive. */
-  .metro-header--compact .metro-holiday-day { display: none; }
-  /* the alert lines are the first thing to go when the header is squeezed:
-     they are an explanation, and a squeezed header has no room to explain */
-  .metro-header--compact .metro-alerts { display: none; }
-  /* A tiny view (a quadrant, a half-horizontal on an OG panel) already
-     hides the date and the weather for want of room, which leaves a band of
-     paper carrying the mark and the word "Today" and nothing else. On a
-     quadrant that band is a third of the board. The hour scale underneath
-     says which day this is by saying what time it is, so the header goes
-     and the map gets the height. */
-  .metro-header--none { display: none; }
+  /* WHAT THE STRIP DROPS FIRST when a day's badge will not fit beside the
+     clock: the forecast, then the long date, then the short weekday, then
+     the badge itself. The ladder is in `dayBadge`; what is here is only
+     that a badge is one line and never wraps, because the strip's depth is
+     measured before anything is written on it. */
+  .metro-daybadge { white-space: nowrap; }
   .metro-wicon { width: 28px; height: 28px; }
   .metro-mark { width: 30px; height: 30px; }
-  .metro-header--large .metro-mark { width: 42px; height: 42px; }
-  .metro-header--tiny .metro-mark { width: 22px; height: 22px; }
-  .metro-header--large .metro-wicon { width: 40px; height: 40px; }
   /* Concentric rings, sized to sit on the date's own line rather than to
      be a mark in its own right: this one is punctuation in front of a
      name, not a station on a map. */
   .metro-holiday-ring { width: 14px; height: 14px; }
-  .metro-header--large .metro-holiday-ring { width: 18px; height: 18px; }
   /* THE HEADER IS ONE ROW, and its height comes off the map. A name long
      enough pushed the weather onto a second line and took 85px of canvas
      with it, which is exactly the cost this whole shape exists to avoid,
@@ -383,7 +213,6 @@
   var ROOT = SCRIPT && SCRIPT.parentElement ? SCRIPT.parentElement : document;
   var canvas = ROOT.querySelector('.metro-canvas');
   var svg = ROOT.querySelector('.metro-svg');
-  var header = ROOT.querySelector('.metro-header');
   if (!canvas || !svg) return;
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
@@ -874,56 +703,12 @@
     isHorizontal = horizontal;
     var axisPx = horizontal ? W : H, crossPx = horizontal ? H : W;
 
-    // Header density follows the whole view, not the view name (a TRMNL X
-    // quadrant is bigger than an OG full screen) — and specifically NOT the
-    // canvas. The header sits above the canvas in a column, so its own
-    // height decides how much is left for the canvas: choosing the header
-    // size from the canvas size is a feedback loop, and near a breakpoint it
-    // oscillates forever (a compact header frees height, which asks for a
-    // large header, which takes the height back). The view's own box does
-    // not move when the header changes, so measuring that settles.
-    if (header) {
-      var vr = ROOT && ROOT.getBoundingClientRect ? ROOT.getBoundingClientRect() : rect;
-      var vW = (vr.width || rect.width) / Z, vH = (vr.height || rect.height) / Z;
-      var compact = vW < 640 * S || vH < 340 * S, tiny = vW < 430 * S || vH < 230 * S, large = vW >= 900 * S && vH >= 600 * S;
-      // A view too shallow to carry a header AND a map. A half-horizontal
-      // slot on an OG panel is 800x240: wide enough to escape `tiny`, and
-      // still spending a fifth of its height on a band that says "Today".
-      // The map wants that height more than the word does.
-      //
-      // A PIXEL COUNT IS THE WRONG TEST FOR THIS, and it took an X to show
-      // it. Every slot on an 800x480 panel is under 300px deep and dropped
-      // its header; not one slot on an X is, so a half-horizontal there
-      // (1040x390) and a quadrant (520x390) both kept a band saying
-      // "Today" while having half the panel's depth to spend on a map.
-      // What decides it is not how many pixels the slot got but how much
-      // of the PANEL it got: at half the depth or less it is a slot in a
-      // mashup, the panel says elsewhere what day it is, and the map wants
-      // the band back. Measured off the screen element itself, so a device
-      // this code has never heard of is judged the same way.
-      // Both sides in the same units, which took a wrong answer to notice:
-      // a bounding rect is in DEVICE pixels (the framework's zoom is baked
-      // into it) and clientHeight is in css px (it is not). Dividing both
-      // by Z made an X quadrant look like nine tenths of its panel.
-      var panel = ROOT && ROOT.closest ? ROOT.closest('.screen') : null;
-      var panelH = panel && panel.clientHeight ? panel.clientHeight : 0;
-      var slotShare = panelH > 0 ? vH / panelH : 1;
-      var headerless = tiny || vH < 300 * S || slotShare <= 0.55;
-      header.classList.toggle('metro-header--compact', compact);
-      header.classList.toggle('metro-header--tiny', tiny);
-      header.classList.toggle('metro-header--none', headerless);
-      header.classList.toggle('metro-header--large', large);
-      function swap(sel, cls) { var n = header.querySelector(sel); if (n) n.className = n.className.replace(/(^|\s)(title|label)--[a-z]+/g, '') + ' ' + cls; }
-      swap('.metro-title', tiny ? 'title--small' : compact ? 'title--base' : 'title--xlarge');
-      swap('.metro-date', large ? 'label--large' : 'label--base');
-      // The holiday is the same kind of statement about the day that the
-      // date is, so it steps with the date rather than on a ladder of its
-      // own.
-      swap('.metro-holiday-name', large ? 'label--large' : 'label--base');
-      swap('.metro-temp', large ? 'title--large' : compact ? 'title--small' : 'title--base');
-      swap('.metro-cond', large ? 'label--base' : 'label--small');
-    }
-
+    // The band that used to sit above the canvas is gone: the strip is the
+    // header now (see dayBadge). With it went the whole business of picking
+    // a header size from the view's own box -- which had to be the view's
+    // box and not the canvas's, because the header's height decided the
+    // canvas's height and choosing one from the other oscillated forever
+    // near a breakpoint.
     // geometry constants (device-scaled)
     var LINE_STEP = 20 * S, NODE_R = 6 * S, NODE_STROKE = 3 * S;
     var LINE_GAP = 6 * S, LANE_GAP = 12 * S, LANE_BASE = 14 * S + Math.min(24 * S, crossPx * 0.025), EDGE = 8 * S;
@@ -1009,7 +794,13 @@
     // along the leading edge instead — the top when the board is lying
     // down, the near side when it is stood up — and the lines run the whole
     // depth of the map uninterrupted.
-    var bandThick = (horizontal ? hourH : hourW) + 8 * S;
+    // ...AND THICK ENOUGH FOR WHAT ELSE IT CARRIES. The strip is the
+    // board's header now: it names each day and states that day's weather,
+    // and a forecast icon is half again the height of an hour label. Sized
+    // from the tallest thing on it rather than from the clock alone, or
+    // the icons hang out of the band and into the first line's paper.
+    var stripIcon = hourH * 1.3;
+    var bandThick = (horizontal ? Math.max(hourH, stripIcon) : hourW) + 8 * S;
     var bandC = bandThick / 2;        // centre of the strip, in cross units
     var bandLo = bandThick + 4 * S;   // first cross coordinate the map may use
     // ---- how many lines this canvas can actually carry -------------------
@@ -5055,6 +4846,7 @@
       // other it stops the search exactly where it matters, three sizes
       // before the one that would have fitted. A board scoring in the
       // thousands has not found its answer yet.
+
       if (ti > bestTier + 1 && bestQ < 400) break;
     }
     if (bestTier !== ti) attempt(tiers[bestTier]);
@@ -8379,60 +8171,62 @@
     function takenAt(lo, hi) {
       return reserved.some(function (r) { return lo < r[1] && r[0] < hi; });
     }
-    // A DAY'S NAME BEGINS WHERE ITS DAY BEGINS.
+    // WHICH DAY THIS IS, AND WHAT THE SKY IS DOING ON IT, on the strip
+    // where the clock already lives.
     //
-    // A row of names is a list; the same row slid along so each name starts
-    // over the stretch of axis it is about is a legend, and how much of the
-    // board is today becomes something you can see rather than something
-    // you work out from where the date marker fell.
+    // This used to be a band of its own above the map: a logo, the word
+    // "Today", a date badge and a forecast, 58px deep on every panel -- an
+    // eighth of an 800x480 board and a fourteenth of an X. Four of the five
+    // things it did, the strip was already doing: what time it is now,
+    // which day each half of a 36-hour board belongs to, what has scrolled
+    // off either end, and where the scale changes rate. The fifth was the
+    // weather, and on a two-day board the weather is a fact about a DAY, so
+    // it belongs at that day's own end of the scale rather than in a row
+    // above both of them.
     //
-    // Their WIDTHS are not the day's width, which cannot work: an evening
-    // is a third of the axis and a date, an icon and two temperatures do
-    // not fit a third of an 800px panel at any size worth reading. Only
-    // where each name STARTS is aligned.
-    //
-    // It only reaches because a spent day has already given up its numbers
-    // (see the header). Measured with them still there, today's block ran
-    // past tomorrow's midnight on both panels and the row could not be
-    // aligned at all without deleting something worth keeping.
-    //
-    // Nothing here may change the row's HEIGHT: the header's height comes
-    // off the map, and the map has already been laid out against the height
-    // this row had a moment ago. So it is applied, measured, and taken
-    // straight back off again if the row grew by so much as a pixel.
-    function alignHeaderDays() {
-      if (!horizontal || !header || !AXIS.boundaries.length) return;
-      var row = header.querySelector('.metro-header-top');
-      if (!row) return;
-      var blocks = [], gaps = [];
-      row.querySelectorAll('.metro-day').forEach(function (n) { blocks.push(n); });
-      row.querySelectorAll('.metro-day-gap').forEach(function (n) { gaps.push(n); });
-      if (blocks.length < 2 || gaps.length < blocks.length - 1) return;
-      var was = row.getBoundingClientRect().height;
-      // The canvas's own zero, in this row's layout px: both rects are in
-      // device px, and everything else here is in layout px.
-      var rr = row.getBoundingClientRect(), cr = canvas.getBoundingClientRect();
-      var dx = (cr.left - rr.left) / Z;
-      function leftOf(n) { return (n.getBoundingClientRect().left - rr.left) / Z; }
-      var undo = [];
-      function set(n, prop, v) { undo.push([n, prop, n.style[prop]]); n.style[prop] = v; }
-      for (var i = 0; i < AXIS.boundaries.length && i + 1 < blocks.length; i++) {
-        var want = dx + toXY(aFor(AXIS.boundaries[i].min), bandLo)[0];
-        var move = want - leftOf(blocks[i + 1]);
-        var w = (gaps[i].getBoundingClientRect().width / Z) + move;
-        // Out of reach: the day before it is wider than its own stretch of
-        // board. Then it goes as close to its own midnight as it can get,
-        // which is hard up against the day before it -- on the 800x480
-        // panel that is six pixels past the boundary, and refusing to move
-        // at all over those six pixels left the name at the far end of the
-        // row instead, which is the one place it certainly does not belong.
-        if (w < 0) w = 0;
-        set(gaps[i], 'flexGrow', '0');
-        set(gaps[i], 'flexBasis', w + 'px');
+    // Placed through the same reservation the hours and the clock use, so a
+    // badge cannot be written over a tick, and it gives way in a stated
+    // order when it will not fit: the forecast first, then the long date,
+    // then the short weekday, then the badge itself.
+    function dayBadge(d, a, spent) {
+      if (!d || !d.date_label) return null;
+      var w = spent ? null : d.weather;
+      var forms = [];
+      if (w && w.hi != null) forms.push({ date: d.date_label, w: w });
+      forms.push({ date: d.date_label });
+      if (d.weekday_short) forms.push({ date: d.weekday_short });
+      for (var fi = 0; fi < forms.length; fi++) {
+        var box = el('span', 'metro-gen metro-daybadge flex flex--row flex--center-y gap--xsmall absolute');
+        var pill = el('span', 'metro-axis-note metro-pill metro-daybreak label label--small font--bold');
+        pill.textContent = forms[fi].date;
+        box.appendChild(pill);
+        if (forms[fi].w) {
+          if (forms[fi].w.icon) {
+            var ic = el('img', 'image--adaptive');
+            ic.src = forms[fi].w.icon;
+            ic.style.width = stripIcon + 'px'; ic.style.height = stripIcon + 'px';
+            // Armed by hand, the way every other icon this script draws is:
+            // the framework only masks the adaptive icons it finds at load.
+            ic.style.setProperty('--framework-icon-src', 'url("' + forms[fi].w.icon + '")');
+            ic.setAttribute('data-adaptive', 'true');
+            box.appendChild(ic);
+          }
+          var tx = el('span', 'metro-hour label label--small font--bold text--black');
+          tx.textContent = Math.round(forms[fi].w.hi) + '\u00b0/' + Math.round(forms[fi].w.lo) + '\u00b0';
+          box.appendChild(tx);
+        }
+        canvas.appendChild(box);
+        var br = measure(box);
+        var len = horizontal ? br.w : br.h, thick = horizontal ? br.h : br.w;
+        var start = clamp(a, 0, axisPx - len);
+        var lo = start - 2 * S, hi = start + len + 2 * S;
+        if (takenAt(lo, hi)) { canvas.removeChild(box); continue; }
+        var xy = toXY(start, Math.max(0, bandC - thick / 2));
+        box.style.left = xy[0] + 'px'; box.style.top = xy[1] + 'px';
+        reserved.push([lo, hi]);
+        return box;
       }
-      if (row.getBoundingClientRect().height > was + 0.5) {
-        undo.forEach(function (u) { u[0].style[u[1]] = u[2]; });
-      }
+      return null;
     }
     function axisNote(text, a, align, cls) {
       var forms = Array.isArray(text) ? text : [text];
@@ -8480,38 +8274,22 @@
     // or over the overflow notes: whatever cannot fit falls back to the
     // short weekday and then gives way.
     //
-    // Nothing at all on a single-day board. There is one day, the header
-    // already says which, and a marker would be saying it twice.
-    if (AXIS.boundaries.length) {
-      var dayCls = 'metro-axis-note metro-daybreak label label--small font--bold text--black';
-      AXIS.boundaries.forEach(function (b) {
-        var d = DAY_RUN[b.day];
-        if (!d || !d.date_label) return;
-        axisNote([d.date_label, d.weekday_short || d.weekday_label],
-          aFor(b.min) + 3 * S, 'start', dayCls);
-      });
-      // THE DAY THE BOARD OPENS ON, but only where the header is not
-      // already saying it. On a full board it is: the date badge is the
-      // header's hard anchor, and a second copy of the same words at the
-      // head of the strip is the board answering a question it has just
-      // answered, in the one place the clock badge also wants. Where the
-      // header has been dropped for want of depth -- a quadrant, a half
-      // slot -- nothing else on the board names the first day, and then
-      // this is the only thing that says which day the left-hand half of a
-      // 36-hour scale belongs to.
-      //
-      // The clock badge still has first claim on that spot, so a board read
-      // in the first hour of its own window names only the day it crosses
-      // into. What time it is beats what day it started on, and the marker
-      // comes back on the next refresh that moves the badge along.
-      alignHeaderDays();
-      var datePill = ROOT.querySelector('.metro-date');
-      var d0 = DAY_RUN[0];
-      if (d0 && d0.date_label && !(datePill && datePill.offsetWidth > 0)) {
-        axisNote([d0.date_label, d0.weekday_short || d0.weekday_label],
-          axisStart + EDGE, 'start', dayCls);
-      }
-    }
+    // EVERY DAY ON THE BOARD NAMES ITSELF HERE, the one it opens on
+    // included. That used to be left to the header, and where the header
+    // said it the strip kept quiet so as not to answer the same question
+    // twice in the one place the clock badge also wants. There is no header
+    // now: this IS the header, and a day nobody names is a day the reader
+    // has to work out from the hours.
+    //
+    // Order matters. The day the board opens on is asked for first, at the
+    // leading edge, because the clock badge and the overflow count are
+    // going to want that same corner and a date is worth more than either;
+    // the days it crosses into follow at their own midnights.
+    var spentToday = !!(METRO.rolling && METRO.rolling.start_min >= 12 * 60);
+    dayBadge(DAY_RUN[0], axisStart + EDGE, spentToday);
+    AXIS.boundaries.forEach(function (b) {
+      dayBadge(DAY_RUN[b.day], aFor(b.min) + 3 * S, false);
+    });
     if (earlier) axisNote([tr('earlier', earlier), '+' + earlier], axisStart + EDGE, 'start', 'metro-axis-note label label--small font--bold text--black');
     if (later + dropped) axisNote([tr('more', later + dropped), '+' + (later + dropped)], axisEnd - EDGE, 'end', 'metro-axis-note label label--small font--bold text--black');
     // Interchange capsules used to blank the hour under them, from when the
