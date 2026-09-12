@@ -59,8 +59,19 @@ Where the two disagree, this one is newer.
    board, with more ink on its two edges than between them, so a reader can
    see how much of a two-day board is night. Where the night and a
    compressed stretch are the same hours -- which is usually -- the
-   corridor is the mark and the express hatch stands off: two hatches over
+   corridor is the mark and the express HATCH stands off: two hatches over
    one stretch of time say two different things are happening to it.
+
+   The hatch, and only the hatch. The speed marks run straight through a
+   night, and standing them off it too was a real fault for as long as
+   rolling boards have existed: on a 36-hour board the night IS the
+   compression, so a board with thirteen compressed hours carried six
+   strokes, all of them at the far left, and rule 2's "drawn on the lines"
+   was not being kept anywhere. The two marks are not the same sentence.
+   The corridor is a fact about the TIME, drawn once, behind everything, in
+   ink; a speed mark is a fact about a LINE, drawn in that line's own
+   colour beside its own rail. Only the hatch would be saying it twice --
+   same ink, same strip, same minutes.
 2c. **Each day names itself on the hour strip, and the strip is the
    header.** An hour label says only the time, and "09:00" on a 36-hour
    board is two different mornings, so the day a midnight opens is written

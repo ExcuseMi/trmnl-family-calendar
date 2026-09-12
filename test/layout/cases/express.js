@@ -53,6 +53,41 @@ module.exports = function (test, h) {
     }
   });
 
+  test('a line that runs at speed is marked at speed, wherever the compression is', () => {
+    // Rule 2: the change of rate is drawn on the hour strip AND on the lines.
+    //
+    // On a single-day board the compression is the quiet ends, and this was
+    // never in doubt. On a rolling board it is the NIGHT: a quiet day borrows
+    // the next one, the board covers 36 hours, and eight of them are a
+    // corridor squeezed into seventy pixels. The speed marks used to stand
+    // off a night the way the hatch does, which on that board meant three
+    // lines ran flat and unmarked through the whole of the compression --
+    // six strokes on the board, all of them at the far left. Nothing failed:
+    // the marks were still being drawn, just nowhere near the hours that
+    // were compressed.
+    //
+    // So this asks the question the count cannot: over the stretch that IS
+    // the compression on this board, is every line marked?
+    const roll = fixtures.find((f) => f.name === 'rolling-quiet');
+    const rep = layout(roll, ROOMY);
+    const Z = rep.debug.Z || 1;
+    const nights = rep.debug.nights || [];
+    assert(nights.length > 0, 'the rolling board has no night to check the marks against');
+    const [, , nx0, nx1] = nights[0];
+    const from = nx0 * Z, to = nx1 * Z;
+
+    const owners = {};
+    for (const r of rep.rects) {
+      if (r.role !== 'speed') continue;
+      if (r.x + r.w < from || r.x > to) continue;
+      owners[r.owner] = (owners[r.owner] || 0) + 1;
+    }
+    for (const p of roll.metro.legend || []) {
+      assert(owners[p.key] > 0,
+        p.key + ' runs through the compressed night with no speed mark on it');
+    }
+  });
+
   test('events still land at their own times', () => {
     const rep = layout(full, ROOMY);
     // the 09:00 standup's marks must sit at the 09:00 label, not somewhere

@@ -6384,14 +6384,26 @@
         // horizontal dashes beside a line running at 45 degrees: the one
         // thing a speed mark cannot do is point somewhere other than the way
         // the thing is going.
+        // THROUGH THE CORRIDOR TOO, which is the opposite of what this did.
+        // The marks used to stand off a night the way the hatch does, on the
+        // grounds that the corridor already says the scale is running fast
+        // there. That held while a night was a slice of a one-day board and
+        // the compression was mostly the quiet ends. It stopped holding the
+        // moment a quiet day started borrowing the next one: on a 36-hour
+        // board the night IS the compression, and standing off it left three
+        // lines running flat and unmarked through thirteen compressed hours
+        // with six strokes on the whole board. The rule says the change of
+        // rate is drawn on the lines, and it was not being drawn anywhere.
+        //
+        // The two marks are not the same sentence. The corridor is a fact
+        // about the TIME -- these hours are night -- drawn once, behind
+        // everything, in ink. A speed mark is a fact about a LINE, drawn in
+        // that line's own colour beside its own rail. Rule 2b stands the
+        // HATCH off a night, and the hatch is the one that would be saying
+        // it twice: it is the same ink, on the same strip, over the same
+        // minutes.
         var lineLen = 11 * S, pitch = 17 * S;
-        var nightA = NIGHTS.map(function (n) { return [aFor(n.from), aFor(n.to)]; });
         for (var sx = a0 + 6 * S; sx < a1 - lineLen - 4 * S; sx += pitch) {
-          // Not through the corridor. The night says the scale is running
-          // fast there already, and a speed mark on top of it is the same
-          // sentence twice over a stretch that is mostly hatch.
-          var sxA = sx;
-          if (nightA.some(function (r) { return sxA + lineLen > r[0] && sxA < r[1]; })) continue;
           LEGEND.forEach(function (p) {
             var w = Math.max(2, p.line_width) * S * weightScale;
             var cA = lineCAt(p, sx), cB = lineCAt(p, sx + lineLen);
