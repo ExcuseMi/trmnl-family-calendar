@@ -2653,24 +2653,60 @@
   // where the template stacks, and its own grey classes), which is exactly
   // the drift `07-header-mirror.js` now fails on.
   function renderHeader(metro, tpl) {
-    var h = el("div", { class: "metro-header flex flex--col gap--xsmall px--3 py--2 flex-none" });
-    var top = el("div", { class: "metro-header-top flex flex--row flex--center-y flex--wrap gap--medium" });
+    var dayOne = null;
+    var days0 = (metro.days && metro.days.length) ? metro.days : [{ date_label: metro.date_label, weather: metro.header_weather }];
+    var h = el("div", { class: "metro-header flex flex--col gap--xsmall px--3 py--2 flex-none"
+      + (days0.length > 1 ? " metro-header--days" : "") });
+    var days = days0;
+    var top = el("div", { class: "metro-header-top flex flex--row flex--center-y flex--wrap gap--medium"
+      + (days.length > 1 ? " metro-header-top--days" : "") });
     h.appendChild(top);
     if (tpl && tpl.mark) {
       var holder = el("div", { html: tpl.mark });
       if (holder.firstChild) top.appendChild(holder.firstChild);
     }
-    // "Today" only when it is: a board set to tomorrow names the day.
-    top.appendChild(el("span", { class: "metro-title title title--large font--bold",
-      text: metro.title_word || (metro.i18n && metro.i18n.today) || "Today" }));
-    if (metro.date_label) top.appendChild(el("span", { class: "metro-date metro-pill label label--base font--bold", text: metro.date_label }));
+    // THE HEADER NAMES EVERY DAY THE BOARD DRAWS. A board that runs past
+    // midnight carries two days and a forecast each; one that does not has
+    // one day and comes out exactly as it did. Mirrors the template's loop,
+    // which is what 07-header-mirror.js compares class for class.
+    days.forEach(function (d, di) {
+      var day = el("span", { class: "metro-day flex flex--row flex--center-y gap--xsmall"
+        + (di ? " metro-day--next" : "") });
+      top.appendChild(day);
+      if (!di) {
+        // "Today" only when it is: a board set to tomorrow names the day.
+        day.appendChild(el("span", { class: "metro-title title title--large font--bold",
+          text: metro.title_word || (metro.i18n && metro.i18n.today) || "Today" }));
+        if (d.date_label) day.appendChild(el("span", { class: "metro-date metro-pill label label--base font--bold", text: d.date_label }));
+      } else if (d.date_label) {
+        day.appendChild(el("span", { class: "metro-date-next label label--base font--bold metro-quiet", text: d.date_label }));
+      }
+      if (!di) dayOne = day;
+      // A forecast is about a day that is still ahead: a board that has
+      // rolled past the afternoon gives up today's numbers, which already
+      // happened. Mirrors the template.
+      var spent = !!(metro.rolling && metro.rolling.start_min >= 720);
+      var dw = (di === 0 && spent) ? {} : (d.weather || {});
+      if (days.length === 1) day.appendChild(el("div", { class: "grow" }));
+      if (dw.hi) {
+        var wx = el("span", { class: "metro-weather flex flex--row flex--center-y gap--xsmall" });
+        if (dw.icon) wx.appendChild(el("img", { class: "metro-wicon image--adaptive", src: dw.icon, alt: "" }));
+        var temp = el("span", { class: "metro-temp title title--base" }, [String(dw.hi) + "\u00b0"]);
+        temp.appendChild(el("span", { class: "metro-quiet", text: " / " + dw.lo + "\u00b0" }));
+        wx.appendChild(temp);
+        wx.appendChild(el("span", { class: "metro-cond label label--small metro-quiet",
+          text: (dw.condition || "") + " \u00b7 " + String((metro.i18n && metro.i18n.rain_pct) || "{n}% rain").replace("{n}", dw.rain_chance) }));
+        day.appendChild(wx);
+      }
+      if (di < days.length - 1) top.appendChild(el("div", { class: "metro-day-gap grow" }));
+    });
     // WHAT THE DAY IS, beside the date that says which day it is. A holiday
     // has no hour and no owner, so it is neither on the scale nor at any
     // line's head; the header is the one part of the board that already
     // answers "what day is this". Mirrors the template's block, which is
     // what 07-header-mirror.js compares class for class.
     var holiday = (metro.holidays || [])[0];
-    if (holiday) {
+    if (holiday && dayOne) {
       var holBox = el("span", { class: "metro-holiday flex flex--row flex--center-y gap--xsmall" });
       var holRing = el("span", { html: '<svg class="metro-holiday-ring no-shrink" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="6" r="5"></circle><circle cx="6" cy="6" r="2.5"></circle></svg>' });
       if (holRing.firstChild) holBox.appendChild(holRing.firstChild);

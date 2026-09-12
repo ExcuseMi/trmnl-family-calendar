@@ -6,6 +6,13 @@
 // away: on a panel this size three days of a family's week is three columns
 // of an hour each, and what a wall calendar is for is the day you are in.
 //
+// One exception, and it has a file of its own (cases/rolling.js): a day with
+// almost nothing on it borrows the next one, so the run becomes two days and
+// the payload carries a window into it. Every case here is about WHICH day
+// is drawn and how it is rebased, which is a different question, so they run
+// with that stretch switched off rather than with days busy enough to avoid
+// it by accident.
+//
 // What stayed is the day MODEL, because it is right for its own reasons.
 // Transform gathers today and tomorrow, and every minute it works in is
 // absolute across that pair: 09:00 tomorrow is 1980, not 540. That is what
@@ -38,7 +45,7 @@ module.exports = function (test, h) {
   }
   function input(fields) {
     return baseInput(NOW, Object.assign({
-      use_demo_data: 'false', lat_lon: '51.05,3.72',
+      use_demo_data: 'false', lat_lon: '51.05,3.72', rolling_view: 'one',
       config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
     }, fields || {}));
   }
@@ -138,7 +145,7 @@ module.exports = function (test, h) {
       const when = at(nowIso);
       const r = await runTransform(net(ics), when).run(
         baseInput(when, Object.assign({
-          use_demo_data: 'false', lat_lon: '51.05,3.72',
+          use_demo_data: 'false', lat_lon: '51.05,3.72', rolling_view: 'one',
           config_json: JSON.stringify({ calendars: [{ url: 'https://example.com/a.ics', name: 'Cal' }] }),
         }, fields)));
       return r.data.events.map((i) => i.title);

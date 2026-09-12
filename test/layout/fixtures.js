@@ -440,8 +440,45 @@ const threeDay = Object.assign(base({
   day_start_min: 0, day_end_min: 4320,
 });
 
+// A QUIET DAY THAT BORROWED THE NEXT ONE.
+//
+// Two events today is a board that is mostly empty paper, so transform
+// sends two days and a window into them: six this morning through to six
+// tomorrow evening. This is the shape nothing else here has -- a midnight
+// inside the board, a night either side of it, and events on both days
+// which have to land at their own day's time -- and it is the only fixture
+// whose payload carries `rolling`.
+const ROLL_LINES = [
+  track('alex', 'Alex', 'left', 'black', -10, 4, 'solid'),
+  track('sam', 'Sam', 'right', 'green-40', 10, 3, 'dashed'),
+  track('kids', 'Kids', 'right', 'purple-40', 20, 3, 'dotted'),
+];
+const rollingQuiet = Object.assign(base({
+  now_min: 560,
+  legend: ROLL_LINES,
+  date_label: 'Sat 12 Sep',
+  events: [
+    ev('Swim Training', 'alex', 600, 690, { track_width: 4 }),
+    ev('Book Club', 'sam', 1140, 1230, { side: 'right', hue: 'green-40', track_style: 'dashed', track_offset: 10 }),
+    // tomorrow, on the same number line: 09:00 tomorrow is 1980
+    ev('Parkrun', 'alex', 1980, 2040, { track_width: 4 }),
+    ev('Brunch With Kim', 'sam', 2130, 2220, { side: 'right', hue: 'green-40', track_style: 'dashed', track_offset: 10 }),
+    ev('Football Match', 'kids', 2280, 2400, { side: 'right', hue: 'purple-40', track_style: 'dotted', track_offset: 20 }),
+  ],
+}), {
+  days: [
+    { index: 0, start_min: 0, end_min: 1440, date_label: 'Sat 12 Sep', weekday_label: 'Saturday',
+      weekday_short: 'Sat', weather: { hi: 19, lo: 11, condition: 'Cloudy', rain_chance: 20, icon: '' } },
+    { index: 1, start_min: 1440, end_min: 2880, date_label: 'Sun 13 Sep', weekday_label: 'Sunday',
+      weekday_short: 'Sun', weather: { hi: 22, lo: 12, condition: 'Rain', rain_chance: 40, icon: '' } },
+  ],
+  rolling: { start_min: 6 * 60, end_min: 1440 + 18 * 60 },
+  day_start_min: 6 * 60, day_end_min: 1440 + 18 * 60,
+});
+
 module.exports = [
   { name: 'busy-day', metro: busyDay },
+  { name: 'rolling-quiet', metro: rollingQuiet },
   { name: 'all-day-every-track', metro: allDayEveryTrack },
   { name: 'long-event-day', metro: longEventDay },
   { name: 'quiet-day', metro: quietDay },

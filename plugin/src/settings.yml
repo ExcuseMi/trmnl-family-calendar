@@ -72,6 +72,16 @@ custom_fields:
   placeholder: '21'
   default: 21
   optional: true
+- keyname: rolling_view
+  field_type: select
+  name: Quiet Days
+  group: The Day
+  description: 'What to draw when there is almost nothing left of the day. Stretch runs the board on past midnight, through to six the following evening, so a day with one appointment left still says something about what is coming; it happens by itself when two events or fewer remain and never on a busier board. Counted over the whole day until four in the afternoon and from four o''clock after that, so the board changes shape at most once a day and never while somebody is reading it. One day draws the day alone, whatever is on it.'
+  options:
+  - Stretch a quiet day into tomorrow: stretch
+  - Always one day: one
+  default: stretch
+  optional: true
 - keyname: time_format
   field_type: select
   name: Time Format

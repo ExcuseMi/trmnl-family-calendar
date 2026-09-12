@@ -41,6 +41,8 @@ function consts(over) {
     expressRate: 0.22,    // what a quiet minute is worth against a busy one
     minPxPerHour: 46,     // below this an hour cannot be read on a single-day board
     minPxPerHourRun: 26,  // a run is allowed tighter: the lane carries the label, not the hour
+    nightBefore: 2 * 60,  // the night starts at ten
+    nightAfter: 6 * 60,   // and ends at six
   }, over || {});
 }
 
