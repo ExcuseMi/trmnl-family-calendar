@@ -62,6 +62,17 @@ Where the two disagree, this one is newer.
    corridor is the mark and the express HATCH stands off: two hatches over
    one stretch of time say two different things are happening to it.
 
+   The marks go ON TOP of the rails, not under them. Built with the rest of
+   the express marking, which happens before the trunks are drawn, they were
+   appended in place and every rail, ramp and car went on over them. On a
+   quiet stretch that is invisible because there is nothing over them; on
+   the stretch this marking is FOR there is everything, because a rolling
+   board squeezes the compressed hours into a couple of hundred pixels that
+   every line converges through and every car is parked in. Sixty marks in
+   the document, correctly placed, four visible pixels between them. They
+   still go under the stations and the cars: a speed mark is about the line,
+   a ring or a car is about a person.
+
    The hatch, and only the hatch. The speed marks run straight through a
    night, and standing them off it too was a real fault for as long as
    rolling boards have existed: on a 36-hour board the night IS the
@@ -324,7 +335,11 @@ Where the two disagree, this one is newer.
     widening every caption to make room cost six boards and fixed five, and
     no measure of how roomy a board is separates the two sets, because what
     decides it is what is on the board. The tick gives way to any other
-    caption it would cross, because it is a nicety and rule 35 is not.
+    caption it would cross, because it is a nicety and rule 35 is not. Its
+    LEAN is capped at half the name's own width -- rule 34e's own limit,
+    scaled to the name because the slide is -- so it never becomes a shallow
+    diagonal running parallel to the rails. Straight out across the board it
+    may go as far as it likes: what stops pointing is travel along the axis.
 34d. **A leader is a tick, not a tether.** Past about thirty pixels a stem
     stops pointing at anything -- the eye pairs the words with whatever rail
     is nearest, which by then is somebody else's. Charged steeply beyond

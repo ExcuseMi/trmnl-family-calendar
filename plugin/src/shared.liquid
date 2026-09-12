@@ -892,7 +892,7 @@
     // Day, Detention, Saxophone Lesson, Skate Park, Family Dinner. Every
     // caption sitting against its mark draws none, and the suite is
     // unchanged at 603/629 with 26 known and no failures.
-    var LEAD_CLEAR = 5 * S, LEAD_TIP = 2 * S, LEAD_MIN = 4 * S;
+    var LEAD_CLEAR = 5 * S, LEAD_TIP = 2 * S, LEAD_MIN = 4 * S, LEAD_LEAN = 30 * S;
     // ---- how many lines this canvas can actually carry -------------------
     //
     // A line needs its own stretch of the cross axis: the line itself, the
@@ -6388,6 +6388,23 @@
     // the map, because what is compressed is the TIME, and the strip is
     // where time is drawn; hatching the whole board would say the events
     // in it were somehow different.
+    // ON TOP OF THE RAILS, NOT UNDER THEM.
+    //
+    // These are built here, with the rest of the express marking, and hung
+    // on the board further down once the trunks are drawn. Appended in
+    // place they went on before every rail, every ramp and every car, and
+    // on a quiet stretch that is fine -- there is nothing over them. On the
+    // stretch this marking is FOR there is everything: a rolling board
+    // squeezes thirteen compressed hours into about a hundred and eighty
+    // pixels, every line is converging through it, and at the hour the
+    // board is drawn every car is parked in it. Sixty marks were in the
+    // document, correctly placed, and perhaps four pixels of one of them
+    // was visible; the device showed none at all.
+    //
+    // They still go UNDER the stations and the cars. A speed mark is about
+    // the line, and a ring or a car is about a person: covering one of
+    // those to say "this stretch is quick" is the wrong way round.
+    var speedMarks = [];
     (function drawExpressStretches() {
       if (!horizontal) return;
       AXIS.segments.forEach(function (sg) {
@@ -6465,7 +6482,7 @@
               sl.style.stroke = colorFor(p.hue);
               sl.setAttribute(ROLE_ATTR, 'speed');
               sl.setAttribute(OWNER_ATTR, p.key);
-              svg.appendChild(sl);
+              speedMarks.push(sl);
             });
           });
         }
@@ -8131,6 +8148,9 @@
       if (bundled(e)) drawSharedBundle(e);
     });
 
+    // the express marking, lifted over the rails now they are drawn
+    speedMarks.forEach(function (sl) { svg.appendChild(sl); });
+
     // ---- stations (rings / interchange capsules) on top of the lines
     visible.forEach(function (e) {
       if (e._dropped) return;
@@ -8850,6 +8870,30 @@
       // name is nearer, the way the capsule's leader does.
       var toA = e._textStart == null ? e._nodeA
         : clamp(e._nodeA, e._textStart, e._textStart + e._textLen);
+      // AND IT MAY NOT LEAN FAR. Rule 34d: past about thirty pixels a stem
+      // stops pointing at anything, because the eye pairs the words with
+      // whatever rail is nearest and by then that is somebody else's. The
+      // first cut of this drew a 273px tick on crew-day -- a shallow
+      // diagonal most of a screen long, which is not a pointer, it is a
+      // rail nobody can travel.
+      //
+      // The limit is on the LEAN, not on the length. Straight out across
+      // the board a tick stays legible however far it goes: a lane is 45px
+      // out on a roomy panel and the tick to it is perpendicular and
+      // unambiguous. What stops pointing is travel ALONG the axis, where
+      // the tick starts running parallel to the rails and reads as one. So
+      // the cross run is free and the axis run is capped, and a caption
+      // that has slid further than that gets no tick -- a line pointing
+      // confidently at the wrong stop is worse than none at all.
+      //
+      // HALF THE NAME'S OWN WIDTH, which is not a number invented here:
+      // rule 34e already sets it as how far a caption may slide along its
+      // line and still name something, "the same limit rule 35 calls
+      // adrift". A tick that spans a legitimate slide is pointing at a name
+      // that is legitimately placed. A flat 30px was tried first and took
+      // out every tick on five-lines along with crew-day's 273px one --
+      // the limit has to scale with the name, because the slide does.
+      if (Math.abs(toA - e._nodeA) > Math.max(LEAD_LEAN, e._textLen * 0.5)) return;
       // NOT THROUGH SOMEBODY ELSE'S NAME. The tick is new ink and nothing
       // routes around it, so on busy-day it went from Quick Sync's dot
       // straight down through "Team Standup" -- rule 35, and drawn by the
