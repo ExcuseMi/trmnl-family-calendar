@@ -438,8 +438,6 @@ it, which is where somebody changing that code will be standing.
 
 ## C. Settings
 
-- [ ] **C1. Move the demo settings into a Developer group.**
-
 ## D. Robustness
 
 - [ ] **D5. Small screens: collapse secondary metadata before geometry.**
@@ -886,6 +884,7 @@ One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 - A12. A junction drew its own main line twice to get a fillet out of it
 - A14. Line names overlapped because a zero-height measurement disabled the column
 - A20. The shed count is part of the name block, not an annotation stuck on after
+- C1. The demo settings are in a Developer group, and the suite says so
 - A1. Tracks squashed into a third of the board
 - A2. Line names sitting on their own rails
 - A3. Station captions collide
