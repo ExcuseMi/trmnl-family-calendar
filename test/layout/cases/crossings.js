@@ -8,7 +8,7 @@
 // from affinities summed over the whole day (`affinityChain` in
 // transform.js), and there are days no single order can draw.
 //
-// This is the measuring stick for A18. It asserts the count on a board
+// This is the measuring stick for the weave. It asserts the count on a board
 // built to be unsatisfiable, so that when a line can change level the
 // number moves and this test says so.
 
@@ -76,7 +76,7 @@ module.exports = function (test, h) {
   const byName = (n) => VIEWPORTS.find((v) => v.name === n);
 
   test('the day no single order can draw is drawn by swapping two lines once', () => {
-    // A18. Alex and Sam exchange places at teatime, so the morning's
+    // Alex and Sam exchange places at teatime, so the morning's
     // pairings and the evening's are both adjacent, and the price is the
     // one crossing they make passing through each other.
     const f = fixtures.find((x) => x.name === 'regroups');
@@ -103,9 +103,10 @@ module.exports = function (test, h) {
     // cannot be laid along a line without breaking one of its links.
     //
     // So the morning is clean and every evening event crosses the parent it
-    // is not with. FOUR is the price of deciding the order once. A18 would
-    // pay ONE instead, swapping Alex and Sam at teatime, and when it lands
-    // this test should read one and say what it cost.
+    // is not with. FOUR is the price of deciding the order once, and it is
+    // the number the weave is worth measuring against: the test above reads
+    // the same board weave-aware and finds none, at the cost of the single
+    // crossing the two lines make passing through each other.
     const f = fixtures.find((x) => x.name === 'regroups');
     assert(f, 'the regroups fixture is gone; it is the only board here that is unsatisfiable');
     // forcedCrossings reads the bands, which is where each line STARTS the

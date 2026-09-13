@@ -1,6 +1,6 @@
 'use strict';
 
-// A18: one pair of neighbours exchanging places partway through the day.
+// One pair of neighbours exchanging places partway through the day.
 //
 // A crossing is an ORDERING fault: a shared event crosses a line when that
 // line sits between two of its participants and is not one of them. The

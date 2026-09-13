@@ -228,7 +228,7 @@ module.exports = function (test, h) {
     // sides, and the gap between them is the one place a same-side rule
     // cannot reach: each stands half a pitch off the spine, so the pair is
     // closer together than any other pair on the board. Two lines
-    // exchanging places there (A18) need it widened, and the only lever is
+    // exchanging places there (the weave) need it widened, and the only lever is
     // how far each side holds its first line off the middle.
     const b = board(['a:1', 'b:1'], ['c:1', 'd:1'], { depth: 900 });
     const plain = solve(b);

@@ -217,7 +217,7 @@ const doubleBooked = base({
   ],
 });
 
-// THE DAY THAT NO SINGLE ORDER CAN DRAW (A18).
+// THE DAY THAT NO SINGLE ORDER CAN DRAW, which is what the weave is for.
 //
 // Marge takes Bart to school and Homer drops Lisa at band practice; after
 // school they swap, and it is Marge who has Lisa at the jazz club and over

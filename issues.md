@@ -170,17 +170,36 @@ it, which is where somebody changing that code will be standing.
   immediately dive out again for the School Day siding at 08:30. The return
   is drawn, costs two ramps and a crossing, and says nothing: nobody went
   home for those thirty minutes.
-  Two halves, and they want doing in this order.
-  **Ordering.** The machinery is already there and is simply not being told
-  about time. `registry.link(names, weight)` takes a weight and
-  `affinityChain` lays the tracks out as one chain, strongest link first,
-  so the board order genuinely optimises for who belongs beside whom. But
-  `linkMerged` adds a flat 1 per shared event, so two people sharing the
-  school run at 08:00 and the school day at 08:30 count exactly as much as
-  two people sharing one thing at opposite ends of the day. Weight a link
-  by how close in time the shared things are, so consecutive ones pull
-  harder. One function, and it is declared as affinity rather than baked
-  into the drawing.
+  Two halves. The second is the one that is left.
+
+  **Ordering: BUILT, MEASURED, NOT KEPT.** The ask was to weight a link by
+  how close in time the shared things are, so two people who do the school
+  run at eight and the school day at half past pull harder than two who meet
+  at breakfast and again at bedtime. Built exactly that -- a share is worth
+  one, and one more when it starts before the last one has been over for as
+  long as a short event lasts (`SECONDARY_THRESHOLD_MIN`, which is the
+  board's own answer to "a thing you could do").
+
+  It cannot bind, and the reason is that this entry was written against
+  `affinityChain` while the ordering is decided by `bestOrder`. That tries
+  EVERY order, up to eight lines, and picks on crossings first, then
+  `crossLoad` (the ink a trunk has to cross to reach the middle), and only
+  then on affinity. Two of those separate nearly every board before affinity
+  is asked. Measured on a four-line board where one line has three partners
+  and only two sides, so one partner has to be given up: same order with the
+  weighting and without. Measured again on a NINE-line board, where
+  `bestOrder` gives up and the chain really is the order: same order both
+  ways. The weighting makes the right pair the strongest link rather than
+  the luckiest, and the board it draws is the one it already drew.
+
+  What the title actually asks for is not a tie-break at all: "so they don't
+  have far to go" is a TRAVEL term, and nothing in the score measures travel
+  -- `interference` counts strangers inside a corridor and `crossLoad`
+  counts ink crossed on the way to the middle, and a board can be equal on
+  both while one of them makes everybody climb twice as far. Adding an
+  objective ahead of crossings is not a patch to the affinity map; it is the
+  score A19 asks for, with travel as one of its terms. Do it there.
+
   **Connecting through.** When the gap between two of a track's own
   commitments is too small to return into, run the rail straight from one
   to the next instead of rejoining the trunk and leaving again.
@@ -241,66 +260,6 @@ it, which is where somebody changing that code will be standing.
   so the two are competing for one piece of board and only the solver can
   referee. Landing them apart means the second one re-opens the first.
 
-- [ ] **A18. A line's cross position is decided once for the whole day, so
-  the order that suits the morning has to do for the evening too.** The
-  orchestrator should be able to MOVE a track between events when that
-  buys fewer crossings than leaving it where it is.
-  Where it stands: `affinityChain` picks one order for the board, from
-  affinities summed over the whole day, and the cross solver gives each
-  track a single `_dist`. Two people who share the school run at 08:00 and
-  nothing else are adjacent at 18:00 as well, and everybody who meets
-  anybody later reaches them by crossing whoever sits in between.
-  The drawing is ALREADY capable of this and nothing else is. `lineCAt(p,
-  a)` is a function of the axis position, not a constant, and is documented
-  as the single source of truth for where a line is: sidings move a line to
-  a different cross position for a span and back, and every ring, tick and
-  caption follows because they all ask it. A permanent change of level is
-  the same move without the return. What does not exist is a solver that
-  CHOOSES to make one.
-  The shape of the answer is a known one. Take each event time as a layer,
-  order the lines within each layer, and minimise the crossings between
-  consecutive layers: the median/barycentre sweep of layered graph drawing,
-  refined by adjacent swaps. It is arithmetic, so it belongs in a pure
-  model beside `CrossSolver` with `test/cross` counting crossings on the
-  demo boards before any of it is drawn. Measure first: if the count does
-  not fall on real boards, the idea is wrong and costs nothing.
-  Three constraints, or it makes the map worse than it is:
-  1. **Moving is itself a crossing.** A line cannot pass another without
-     crossing it, so the objective is not zero crossings but the fewest
-     weighted ones: one now to avoid three later is a win, one now to avoid
-     one later is churn.
-  2. **A line has to stay followable.** What a transit map is FOR is
-     tracing one line with a finger. Allow a change only where the line is
-     already leaving its baseline for an event, never mid-run, and cap the
-     changes per line per day at one or two. A line that wanders is worse
-     than a crossing.
-  3. **The name is at the terminus.** A line that ends the day at a
-     different level is named at a level it is no longer on, so this needs
-     the name at both ends, or a bullet where it settles.
-  **The board that makes the case, measured.** `regroups` in the layout
-  fixtures: two parents and two children who regroup after school. Alex
-  takes Ben and Sam takes Ivy in the morning; in the evening Alex has Ivy
-  at football and homework while Sam has Ben at swimming and a bedtime
-  story. Every one of those is a shared event and every one wants its two
-  lines adjacent, and they cannot all have it: the four pairings form a
-  CYCLE (Alex-Ben, Ben-Sam, Sam-Ivy, Ivy-Alex), and a cycle cannot be laid
-  along a line without breaking one of its links.
-  So the morning is clean and every evening event reaches past the parent
-  it is not with. `cases/crossings.js` counts it off the drawn board and
-  asserts the number: FOUR, all of them after teatime, plus two pierced
-  labels that come with them (marked known in geometry.js). One swap at
-  teatime pays ONE instead: the morning wants Alex-Ben and Sam-Ivy
-  adjacent, the evening wants Alex-Ivy and Sam-Ben, and those two orders
-  differ by exchanging one adjacent pair.
-  That is the whole argument in one board. When a line can change level,
-  this test should read one crossing instead of four and the two known
-  markers should come off, and the suite will say so.
-  After A15 and A17: those two decide how the cross-axis budget is spent,
-  and this changes what "adjacent" means over the day, so doing it first
-  means solving the same argument twice. It also subsumes the ordering half
-  of A16, which weights the one-shot chain by how close in time a shared
-  event is; that is this problem with a single layer.
-
 - [ ] **A19. The orchestrator should SCORE boards, not just produce one.**
   The frame the four above are all inside. Asked for: fewest crossings,
   efficient use of the depth without cramping, every label legible and
@@ -310,10 +269,9 @@ it, which is where somebody changing that code will be standing.
   count, order from `affinityChain`, three passes of the cross solver,
   lanes, labels, and the bundles drawn last out of whatever is left. Each
   pass commits and the ones after it live with the result. A17 (a bundle
-  that cannot ask for room) and A18 (an order fixed for the whole day) are
-  both that same shape of bug, and each is being written as its own patch
-  because there is nothing that can say "this board is better than that
-  one".
+  that cannot ask for room) is that shape of bug, and it is written as its
+  own patch because there is nothing that can say "this board is better
+  than that one".
   **Build the score first, on its own.** It is the cheap half and it is
   useful immediately: `test/layout/run.js` already extracts labels, paths,
   rects and a debug dump of the bands out of a rendered board, so a scorer
@@ -865,6 +823,7 @@ One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 - A20. The shed count is part of the name block, not an annotation stuck on after
 - P1. A solo event during a shared one: 26a, and nobody is in two places
 - P3. A late arrival joins the corridor, and the capsule spans who is in it
+- A18. WITHDRAWN: one order and the weave, not a position per event
 - C1. The demo settings are in a Developer group, and the suite says so
 - A1. Tracks squashed into a third of the board
 - A2. Line names sitting on their own rails

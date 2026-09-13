@@ -3647,7 +3647,7 @@
           // the middle than the half-pitch: that is what widens the gap
           // ACROSS the spine, which no same-side pair can reach. It is the
           // only way to give two lines on opposite sides room to exchange
-          // places (A18) rather than cross in a slot narrower than either
+          // places (the weave) rather than cross in a slot narrower than either
           // of them is wide.
           acc += Math.max(gap, rungRoom(k, t, inN, stepPx), markRoom(k, t),
                           i ? 0 : (opts.minFirst || 0));
@@ -3980,7 +3980,7 @@
       // at a FIXED pitch. Through solve() the freed depth is immediately
       // spent on lane pitch and separation, which grows the other side, so
       // the invariant is invisible there.
-      // ---- A18: the weave ------------------------------------------
+      // ---- the weave -----------------------------------------------
       //
       // A crossing is an ORDERING fault, not a drawing one: a shared event
       // crosses a line when that line sits between two of its participants
@@ -4293,7 +4293,7 @@
     }
     applyCross();
 
-    // ---- A18: the weave --------------------------------------------
+    // ---- the weave ------------------------------------------------
     //
     // One pair of neighbours exchange places partway through the day, when
     // that is strictly cheaper than standing still. The solver decides
