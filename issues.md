@@ -272,13 +272,30 @@ it, which is where somebody changing that code will be standing.
   that cannot ask for room) is that shape of bug, and it is written as its
   own patch because there is nothing that can say "this board is better
   than that one".
-  **Build the score first, on its own.** It is the cheap half and it is
-  useful immediately: `test/layout/run.js` already extracts labels, paths,
-  rects and a debug dump of the bands out of a rendered board, so a scorer
-  consumes a report that exists rather than a new measurement path. With
-  it, every argument in this file stops being two screenshots and a
-  judgement and becomes a number on the demo boards across every view.
-  Do NOT start with the search.
+  **The RENDERED score is BUILT** (`test/layout/score.js`), and `node
+  run.js` prints it as a table beside the pass/fail, out of the renders the
+  cases already made: no second harness and no second minute. Faults
+  (dropped, shed, overlapping, pierced) are counted separately from terms
+  (crossings, cramp, spread, travel) and a board with any fault is reported
+  INFEASIBLE rather than cheap. `cases/score.js` pins the contract: every
+  board scores, twice the same, and feasibility never disagrees with the
+  faults.
+
+  Three things it taught on the way. A crossing cannot be counted
+  geometrically -- everybody dives into a convergence and back out, so a
+  board with one shared event and four lines reads five crossings with
+  nothing wrong with it; the ordering count this suite already had is the
+  right one, and it now lives in `score.js` so the case and the score share
+  one definition. A total compares two arrangements of ONE board: travel and
+  cramp are pixels, and the same day reads 179 on an X panel and 84 on an OG
+  one with nothing better about either. And the scorer independently finds
+  the pierce on crew-day that was marked known this week, which is the first
+  time an argument in this file has been settled by arithmetic.
+
+  **Still to do, in this order.** CALIBRATE the weights against boards
+  already judged by eye -- the cramped five-line board in A17 against the
+  same day drawn roomy -- because the four weights in there now are
+  placeholders and say so. Then the MODEL score, and only then the search.
   **Feasibility is not a penalty term.** "Every label legible, everything
   visible" has to be a test a board passes or fails, because as a weighted
   cost the optimiser will happily buy fewer crossings with a hidden label,

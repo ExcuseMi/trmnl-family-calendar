@@ -935,6 +935,36 @@ async function prewarm() {
     const total = tests.reduce((n, t) => n + (t.ms || 0), 0);
     console.log('  ' + (total / 1000).toFixed(1) + 's in case bodies altogether');
   }
+  // ---- WHAT EACH BOARD COSTS (A19) --------------------------------
+  //
+  // Printed beside the pass/fail because it is a by-product of the same
+  // renders: every board and view here has already been drawn and cached by
+  // the cases above, so the table is arithmetic on reports that exist. A
+  // board that FAILS feasibility is not scored against the others -- "every
+  // label legible, everything visible" is a question, not a term -- so its
+  // faults are printed instead of its total.
+  if (!only) {
+    const { scoreBoard } = require('./score');
+    const rows = [];
+    for (const f of helpers.fixtures) {
+      for (const vname of ['x-landscape', 'og-landscape']) {
+        const v = VIEWPORTS.find((x) => x.name === vname);
+        let rep;
+        try { rep = layout(f, v); } catch (e) { continue; }
+        rows.push(Object.assign({ board: f.name + '/' + vname }, scoreBoard(rep, f, deepestIntrusion)));
+      }
+    }
+    console.log('\nwhat each board costs (A19: terms are measured, weights are not calibrated)');
+    console.log('  board                            cross  cramp  spread  travel   total');
+    for (const r of rows) {
+      const t = r.terms;
+      const why = Object.keys(r.faults).filter((k) => r.faults[k]).map((k) => r.faults[k] + ' ' + k);
+      console.log('  ' + r.board.padEnd(32)
+        + String(t.crossings).padStart(5) + String(t.cramp).padStart(7)
+        + String(t.spread).padStart(8) + String(t.travel).padStart(8)
+        + (r.feasible ? String(r.total).padStart(8) : '   INFEASIBLE: ' + why.join(', ')));
+    }
+  }
   console.log(spent.renders + ' render(s) ' + (spent.renderMs / 1000).toFixed(1) + 's, '
     + spent.disk + ' from cache, ' + spent.hits + ' repeated, '
     + spent.builds + ' build(s) ' + (spent.buildMs / 1000).toFixed(1) + 's'
