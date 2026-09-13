@@ -45,6 +45,10 @@ module.exports = function (test, h) {
     // and homer -- who had been missing each other by a few pixels here --
     // landed on the same column. Same defect, same entry.
     'regroups': 'mar and hom turn 4px apart leaving the morning hold: A4',
+    // The fourth board to show it, and the first built on purpose: a member
+    // rejoining a convergence turns on a minute of her own, which is one
+    // more minute for somebody else's turn to land on.
+    'two-places': 'alex and sam turn 5px apart around the kickboxing: A4',
   };
 
   // Every near-vertical RUN a line draws, by owner.

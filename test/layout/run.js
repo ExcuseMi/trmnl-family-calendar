@@ -748,6 +748,10 @@ function eventsIn(rep) { return (rep.debug.events || []).map((e) => ({
   // question, a mark answers with an elbow of zero and looks adrift by the
   // width of the board.
   mark: e[15] === 'mark',
+  // whether its name is on the board, and whose line it is: both read off
+  // the same dump so a case can ask about a caption that was shed, one that
+  // was silently not drawn, and which track a solo event belongs to.
+  cap: e[16], owner: e[17],
   // A CONVERGENCE IS THE THIRD SHAPE. It has no elbow, because it has no
   // rail of its own -- it is a bundle of other people's rails arriving in
   // one place -- and its name is pinned above the pill. Asked where its

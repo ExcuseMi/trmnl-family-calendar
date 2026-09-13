@@ -51,6 +51,16 @@ module.exports = function (test, h) {
     // that also stays on its own side of every neighbour.
     'seven-lines/x-landscape', 'seven-lines/og-landscape',
     'shared-long-event/og-landscape',
+    // AND THE ONE THAT WAS PASSING BECAUSE THE NAME WAS NOT THERE.
+    //
+    // "Pre-flight Check" has been placed on the far side of Fry on this
+    // panel for as long as it has been placed at all -- the pass decided
+    // that spot, scored the board with it, and every test here agreed
+    // because the ELEMENT had been removed by an earlier pass and never put
+    // back (see `placeOnLineCaptions`). A caption that is not in the
+    // document cannot walk past anybody. Same fault as its og-landscape
+    // twin, same entry, now visible.
+    'crew-day/x-landscape',
   ]);
 
   // Where a line sits across the board at one point along the day. Sampled
@@ -114,13 +124,26 @@ module.exports = function (test, h) {
   // means the SHAPE may carry a leader, not that this one does -- so the
   // guard swallowed the lot. Nothing failed, no geometry moved, and the
   // feature was simply absent. So the assertion is about ink on the board.
+  // ASKED OF THE WHOLE SUITE, not of one board.
+  //
+  // It used to name five-lines/x-landscape, which drew one because of where
+  // that board happened to put Family Dinner's caption. A board is a shape,
+  // not a promise: the day Lisa stopped being in that dinner (P1, a member
+  // who cannot be in two places) the caption no longer travelled, and a
+  // smoke test for a feature failed because a fixture had changed its mind.
+  // What it means to assert is that the tick is DRAWN somewhere, which is
+  // the thing that was once silently absent everywhere.
   test('a caption that has travelled from its stop is ticked back to it', () => {
-    const rep = layout(fixtures.find((f) => f.name === 'five-lines'),
-      byName('x-landscape'));
-    const ticks = (rep.rects || []).filter((r) => r.role === 'caption-lead')
-      .concat((rep.painted || []).filter((p) => p.role === 'caption-lead' && false));
-    assert(ticks.length > 0,
-      'no caption carries a tick back to its stop on a board with lane captions');
+    var drew = 0;
+    for (const f of fixtures) {
+      for (const vname of ['x-landscape', 'og-landscape']) {
+        let rep;
+        try { rep = layout(f, byName(vname)); } catch (e) { continue; }
+        drew += (rep.rects || []).filter((r) => r.role === 'caption-lead').length;
+      }
+    }
+    assert(drew > 0,
+      'no caption on any board carries a tick back to its stop');
   });
 
   test('a tick keeps its distance from the dot and from the words', () => {

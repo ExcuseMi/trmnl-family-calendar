@@ -207,9 +207,26 @@ Where the two disagree, this one is newer.
     free at that minute -- one of them is already converging elsewhere. A
     siding is not a reason: being on Spring Break has never stopped anybody
     having dinner.
+26a. **Nobody is in two places.** A convergence is a claim about where
+    somebody is, so a member with something of their own inside it is held
+    only for the part they are free for. She rides the corridor, comes out
+    of it when her own appointment starts, and climbs back in if the absence
+    and the return are each long enough to be drawn -- rule 13's arithmetic,
+    the same as everywhere else. Where there is no free stretch at the START
+    she is not a member at all: the capsule is drawn at the event's own
+    minute, across the lines that are in it then, and a line that is
+    somewhere else at that minute cannot be one of them. Her own event then
+    draws on her own rail, which is also what makes it drawable -- inside a
+    corridor there is no rail to hang it off.
+    Not rule 26's fallback, which would cost the other three their drawing
+    for one person's appointment. What cannot be drawn is one line's
+    membership, so that is what gives way.
 27. **Four hours or more is a siding**, decided from the clock. Every long
     block in every demo calendar is a school day, a shift, a desk booking or a
-    delivery, and nothing under four hours is.
+    delivery, and nothing under four hours is. A siding is a STATE and 26a
+    does not apply to it in either direction: being at school all day has
+    never stopped anybody having an assembly at ten, and a desk booking from
+    nine to five has never stopped anybody having lunch.
 28. **The vocabulary of marks is fixed, and it is sized, not filled.** A
     small paper-filled dot is a stop the line calls at; a tick across the
     rail is where it stops being there; a larger paper-filled ring is an

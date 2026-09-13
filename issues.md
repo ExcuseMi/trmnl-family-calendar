@@ -16,26 +16,23 @@ it, which is where somebody changing that code will be standing.
 
 ## P. Next
 
-- [ ] **P1. A solo event during a shared one puts a person in two places.**
-  Zwemmen, two till five, all four of them in the corridor. Charlotte also
-  has her own appointment from three till five, and the board draws both:
-  her line stays in the family corridor AND her own event is drawn. She
-  cannot be at both, and the drawing says she is.
+- [ ] **P3. A member who joins a convergence LATE is not drawn as joining
+  it at all.** 26a asks whether a member is free at the event's own minute,
+  because that is when the capsule is drawn and it spans the lines that are
+  in it then. A line that is somewhere else at that minute is therefore not
+  a member -- which is right for somebody who is away for the whole of it,
+  and throws away a real attendance for somebody who arrives for the second
+  half.
 
-  She should LEAVE. A convergence is a claim about where somebody is, and
-  the moment they have something of their own that overlaps it, the claim is
-  false for them. The line should come out of the corridor when the solo
-  event starts and sit outside it, which is also what makes the solo event
-  drawable at all: it needs a rail of its own to hang off, and inside a
-  corridor there is none.
+  Two boards in the suite: Lisa's Mensa Meeting (18:30-19:30) covers the
+  first half hour of the Family Dinner she is at until eight, and on
+  `seven-lines` Amy's Scooter Service runs half an hour into the Crew
+  Debrief. Both are drawn as not attending at all.
 
-  Decide before building. Does she rejoin afterwards if the shared event is
-  still running, or is the convergence over for her? Where the overlap is
-  total there is nothing to rejoin -- is she in the convergence at all, and
-  should the capsule still span her row? Rule 26 already says a convergence
-  falls back to a bundle when a member cannot be free; this is a second
-  reason a member cannot be free, so it may be that mechanism rather than a
-  new one.
+  What it needs is a capsule that spans the members present when it is
+  drawn rather than every member, and a rail that joins the corridor
+  partway. The capsule's extent comes from `want`, which is every member's
+  level, so this is a change to how the pill is sized rather than to 26a.
 
 ---
 
@@ -884,6 +881,7 @@ One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 - A12. A junction drew its own main line twice to get a fillet out of it
 - A14. Line names overlapped because a zero-height measurement disabled the column
 - A20. The shed count is part of the name block, not an annotation stuck on after
+- P1. A solo event during a shared one: 26a, and nobody is in two places
 - C1. The demo settings are in a Developer group, and the suite says so
 - A1. Tracks squashed into a third of the board
 - A2. Line names sitting on their own rails

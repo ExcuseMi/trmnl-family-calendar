@@ -2446,7 +2446,130 @@
       }
     });
     }
+    // ---- P1: NOBODY IS IN TWO PLACES ---------------------------------
+    //
+    // A convergence is a claim about where somebody is. The moment one of
+    // its members has something of their own that overlaps it, the claim is
+    // false for them -- and the board was drawing both: Charlotte's line
+    // stayed in the corridor for the whole swim AND her own appointment was
+    // drawn as a stop on the rail she was riding.
+    //
+    // So a member is held only for the part of the event they are actually
+    // free for, and the shape of that is a WINDOW, not a flag:
+    //
+    //   she leaves       her own thing starts inside the shared one, so her
+    //                    hold ends there and her line comes out
+    //   she rejoins      it ends while the shared one is still running and
+    //                    there is room to draw the return, so she gets a
+    //                    second hold (rule 13's arithmetic decides "room",
+    //                    the same as everywhere else: a gap too short to
+    //                    turn in twice is a dip that says nothing)
+    //   she is not in it at all
+    //                    there is no free stretch at the START, so there is
+    //                    nothing for the capsule to span her row for. The
+    //                    capsule names the members who are there (28a) and
+    //                    her own event draws on her own rail, which is also
+    //                    what makes it drawable: inside a corridor there is
+    //                    no rail to hang it off.
+    //
+    // A late arrival is the same answer as the last one and for the same
+    // reason: the capsule is drawn at the event's own minute, across the
+    // lines that are in it then, and a line that is somewhere else at that
+    // minute cannot be one of them.
+    //
+    // NOT rule 26's fallback. That turns the whole convergence into a
+    // bundle when one member cannot be free, which costs the other three
+    // their drawing for one person's appointment. What cannot be drawn here
+    // is one line's membership, so that is what gives way.
+    var metroDbgLeft = [];
+    function freeWindows() {
+      metroDbgLeft = [];
+      // How long a stretch of corridor has to be to be worth drawing: a
+      // ramp in, something flat to read as a stay, a ramp out.
+      var MIN_STAY = CORNER * 4;
+      visible.forEach(function (e) {
+        e._memberFrom = null; e._memberTo = null; e._memberAgain = null;
+      });
+      visible.forEach(function (e) {
+        if (e._dropped || !e._involved || e._involved.length < 2) return;
+        // A SIDING IS NOT A CLAIM ABOUT WHERE SOMEBODY IS STANDING.
+        //
+        // Rule 27: four hours or more is a state rather than a place --
+        // Spring Break, a desk booking, a school day. The convergence code
+        // already says this about staying a bundle, and it is the same
+        // sentence here: being at school all day has never stopped anybody
+        // having an assembly at ten, and a member who steps out of a state
+        // for an hour has not contradicted it. Without this the suite lost
+        // four capsules in one run: every long shared event on the board
+        // had a member with something of their own inside it, which is
+        // what a long shared event IS.
+        if (runTooLongForAShelf(e)) return;
+        var keep = [], holds = {};
+        e._involved.forEach(function (q) {
+          // everything ELSE this line is at, on its own, inside this event
+          var busy = [];
+          visible.forEach(function (o) {
+            if (o === e || o._dropped || !(o.end_min > o.start_min)) return;
+            if (!o._involved || o._involved.length > 1 || o._involved[0] !== q) return;
+            // ...and a state of her own is no more a place than a shared
+            // one is: a desk booking from nine to five does not mean she
+            // cannot have lunch with Alex at twelve. Rule 27 both ways
+            // round, which is the sentence above and the one the bundle
+            // fallback already uses.
+            if (runTooLongForAShelf(o)) return;
+            if (o._endA <= e._nodeA || o._nodeA >= e._endA) return;
+            busy.push([Math.max(o._nodeA, e._nodeA), Math.min(o._endA, e._endA)]);
+          });
+          if (!busy.length) { keep.push(q); return; }
+          busy.sort(function (a, b) { return a[0] - b[0]; });
+          // the free stretches between them, in order
+          var free = [], at = e._nodeA;
+          busy.forEach(function (b) {
+            if (b[0] - at > 0.5) free.push([at, b[0]]);
+            at = Math.max(at, b[1]);
+          });
+          if (e._endA - at > 0.5) free.push([at, e._endA]);
+          // She has to be there when the capsule is drawn, and for long
+          // enough to read as being there.
+          if (!free.length || free[0][0] > e._nodeA + 0.5 || free[0][1] - free[0][0] < MIN_STAY) return;
+          var h = { from: free[0][0], to: free[0][1], again: null };
+          // ...AND BACK, IF BOTH THE ABSENCE AND THE RETURN CAN BE DRAWN.
+          //
+          // Both, and the absence is the one that was missed first: two
+          // holds at one level with a gap between them are not a line that
+          // left. The pass that fills a gap will not spend a detour it has
+          // no room for (rule 13), so it holds the level straight through,
+          // and an hour at the hairdresser came out as an unbroken hour in
+          // the pool. Her absence is a stay at her OWN line and is given a
+          // hold of its own below; what it needs is what any stay needs,
+          // which is room to be one.
+          //
+          // Where there is not room, she stays out for the rest of it. The
+          // board saying she left at three and did not come back is wrong
+          // about an hour; saying she was there all afternoon is wrong
+          // about where she was, which is the thing this rule is for.
+          for (var i = 1; i < free.length; i++) {
+            if (free[i][0] - h.to < MIN_STAY) continue;
+            if (free[i][1] - free[i][0] >= MIN_STAY) { h.again = free[i]; break; }
+          }
+          holds[q.key] = h;
+          keep.push(q);
+        });
+        e._involved.forEach(function (q) {
+          if (keep.indexOf(q) < 0) metroDbgLeft.push([e.title, q.key, 'out']);
+          else if (holds[q.key]) metroDbgLeft.push([e.title, q.key, holds[q.key].again ? 'rejoins' : 'leaves']);
+        });
+        if (keep.length !== e._involved.length) {
+          // Down to one, and it is not a convergence at all any more: an
+          // event one person is at is one person's event.
+          e._involved = keep.length ? keep : [e._p];
+          if (keep.length && keep.indexOf(e._p) < 0) e._p = keep[0];
+        }
+        e._memberHold = holds;
+      });
+    }
     staticFacts();
+    freeWindows();
 
     // Where a branch leaves its owner's line and where it merges back. Both
     // are read off the track distances, which the band layout re-solves on
@@ -4898,13 +5021,44 @@
         var STAGGER = CORNER * 2.2;
         want.forEach(function (w) {
           var keep = (w.q._route || []).slice();
-          keep.push({ a0: e._nodeA, a1: e._endA, lvl: w.lvl, shared: true,
-                      lead: w.rank * STAGGER, trail: w.rank * STAGGER,
-                      rank: w.rank, step: STAGGER,
-                      // how far the LAST of them is staggered, so a run home
-                      // with little axis left can shrink the whole fan in
-                      // proportion instead of clamping ranks onto each other
-                      trailMax: (want.length - 1) * STAGGER });
+          // ONE HOLD PER STRETCH THIS MEMBER IS ACTUALLY FREE FOR (P1).
+          //
+          // Normally that is the whole event and this is one hold from its
+          // start to its end, as it always was. Where the member has
+          // something of their own inside it, `freeWindows` has worked out
+          // when they leave and whether they come back, and each stretch is
+          // its own hold at the same level: the line rides the corridor,
+          // drops out of it at its own appointment, and climbs back in if
+          // there is room to draw that.
+          var win = (e._memberHold && e._memberHold[w.q.key]) || null;
+          var spans = win ? [[win.from, win.to]] : [[e._nodeA, e._endA]];
+          if (win && win.again) {
+            // Her absence, as a stay on her own line. Said explicitly
+            // rather than left as a gap between two holds at the corridor's
+            // level: a gap is filled by the detour pass, which will not
+            // spend two crossings on a stretch this short and would hold
+            // her in the corridor through the whole of it.
+            keep.push({ a0: win.to, a1: win.again[0], lvl: 0, home: true });
+            spans.push(win.again);
+          }
+          spans.forEach(function (sp, ix) {
+            keep.push({ a0: sp[0], a1: sp[1], lvl: w.lvl, shared: true,
+                        // A siding is a state, not a place (rule 27), and
+                        // nothing may conclude from a hold at one that this
+                        // line was standing somewhere at that minute.
+                        state: runTooLongForAShelf(e),
+                        // The stagger is about several lines turning on one
+                        // minute, which is true of the arrival and of the
+                        // departure the whole group makes. A member coming
+                        // back later turns on a minute of her own, so she
+                        // takes her turn where it is: rank zero.
+                        lead: ix ? 0 : w.rank * STAGGER, trail: ix ? 0 : w.rank * STAGGER,
+                        rank: ix ? 0 : w.rank, step: STAGGER,
+                        // how far the LAST of them is staggered, so a run home
+                        // with little axis left can shrink the whole fan in
+                        // proportion instead of clamping ranks onto each other
+                        trailMax: (want.length - 1) * STAGGER });
+          });
           keep.sort(function (a, b) { return a.a0 - b.a0; });
           w.q._route = keep;
           w.q._octs = null;                       // the spans are memoised off it
@@ -5985,7 +6139,20 @@
               if (e3._box && e3._box.parentNode) e3._box.parentNode.removeChild(e3._box);
               continue;
             }
+            // BACK ON THE BOARD, IF A PREVIOUS PASS TOOK IT OFF.
+            //
+            // Shedding removes the element. This pass runs again after the
+            // tier loop, against final trunks, and it clears `_capShed`
+            // before it starts -- so a name shed by one pass and kept by
+            // the next was written to an element that is no longer in the
+            // document. The name simply was not there, and because the pass
+            // that kept it had cleared the flag, the line's head did not
+            // count it either: a stop with no name and nothing saying so.
+            // Found on a board where a member leaves a convergence, which
+            // is the first thing to make one pass disagree with the next
+            // about which names fit.
             var c2 = cands[i][pick[i]];
+            if (e3._box && !e3._box.parentNode) canvas.appendChild(e3._box);
             e3._capAngle = c2.angle; e3._capRun = c2.run;
             if (c2.edge != null) e3._routeEdge = c2.edge;
             e3._textStart = c2.at; e3._capOut = c2.out; e3._labelSign = c2.sign;
@@ -6728,7 +6895,7 @@
       if (took) recomputeLineDists();
       metroDbgReclaim = [cand, took, blockOwn, blockCap, blockLine, blockName];
     }
-    function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._lineDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA), e._routeShared ? 'shared' : e._onTrack ? 'mark' : 'shelf']; }); }
+    function eventsDump() { return visible.map(function (e) { return [e.title, e._sideKey, e._dropped ? 'DROP' : 'ok', e._lane, e._dir, Math.round(e._nodeA), Math.round(e._elbow || 0), Math.round(e._textStart || 0), Math.round(e._textLen), Math.round(e._lineDist), e._merge ? 'merge' : 'stub', Math.round(e._diagFrom || 0), Math.round(e._laneDist || 0), e._sign, Math.round(e._endA), e._routeShared ? 'shared' : e._onTrack ? 'mark' : 'shelf', e._capShed ? 'shed' : (e._box && e._box.parentNode ? 'drawn' : 'gone'), e._p && e._p.key]; }); }
     canvas.setAttribute('data-metro-debug', JSON.stringify({
       W: W, H: H, S: S, Z: Z, horizontal: horizontal,
       corner: CORNER, minDiag: MIN_DIAG, win: [dayFrom, dayTo],
@@ -6740,6 +6907,7 @@
       // of those got their 45 back, and what stopped the rest -- the line's
       // own furniture, another line, or a name
       reclaim: metroDbgReclaim,
+      left: metroDbgLeft,
       nameFit: metroDbgNameFit,
       // WHERE EACH LINE ACTUALLY GOES, which `events` cannot say: a hold
       // is a stretch of somebody else's day this line is spending at
@@ -6754,7 +6922,7 @@
         LEGEND.forEach(function (p) {
           o[p.key] = (p._route || []).map(function (h) {
             return [Math.round(h.a0), Math.round(h.a1), Math.round(h.lvl),
-                    h.shared ? 'sh' : h.home ? 'home' : '?',
+                    h.shared ? (h.state ? 'state' : 'sh') : h.home ? 'home' : '?',
                     Math.round(h.lead || 0), Math.round(h.trail || 0),
                     h.rank == null ? -1 : h.rank];
           });

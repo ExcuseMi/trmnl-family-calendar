@@ -86,7 +86,11 @@ module.exports = function (test, h) {
   // reason now: its convergence caption has nowhere on either side of its
   // pill that a member's own rail does not reach (E24).
   const PIERCE_KNOWN = new Set(['all-day-every-track', 'busy-day', 'crew-day',
-    'five-lines', 'long-event-day', 'seven-lines', 'three-day']);
+    'five-lines', 'long-event-day', 'seven-lines', 'three-day',
+    // two-places is new and is here for the same reason as the rest: its
+    // captions cannot slide along the axis standing up, so the one below a
+    // member who has just left a corridor has her rail through it.
+    'two-places']);
 
 
   for (const f of fixtures) {

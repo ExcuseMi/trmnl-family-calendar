@@ -476,6 +476,34 @@ const rollingQuiet = Object.assign(base({
   day_start_min: 6 * 60, day_end_min: 1440 + 18 * 60,
 });
 
+// NOBODY IS IN TWO PLACES (P1). Reported off a real board: four of them at
+// the pool from two till five, and one of them also has her own appointment
+// from three till five, so the drawing had her line in the family corridor
+// AND her own event marked on the rail she was riding.
+//
+// Three shapes in one fixture, because the rule has three answers:
+//   Zwemmen        she is there from two and leaves at three  (a clipped hold)
+//   Kickboksen     she leaves at six and is back by seven      (two holds and
+//                  a stay of her own in between)
+//   Kapper         her own thing covers the whole of Pilates   (not a member
+//                  at all, and the capsule does not span her row)
+const twoPlaces = base({
+  events: [
+    ev('Zwemmen', 'work', 840, 1020, { location: 'City Pool', co_owners: ['alex', 'sam', 'kids'],
+      side: 'left', hue: 'black', track_width: 4, track_offset: -10 }),
+    ev('Wimperextensions', 'kids', 900, 1020, { side: 'right', hue: 'purple-40',
+      track_style: 'dotted', track_offset: 30 }),
+    ev('Kickboksen', 'alex', 1080, 1260, { co_owners: ['sam'], side: 'right', hue: 'orange-40',
+      track_offset: 10 }),
+    ev('Kapper', 'sam', 1140, 1200, { side: 'right', hue: 'green-40',
+      track_style: 'dashed', track_offset: 20 }),
+    ev('Pilates', 'work', 600, 660, { co_owners: ['kids'], side: 'left', hue: 'black',
+      track_width: 4, track_offset: -10 }),
+    ev('Tandarts', 'kids', 600, 660, { side: 'right', hue: 'purple-40',
+      track_style: 'dotted', track_offset: 30 }),
+  ],
+});
+
 module.exports = [
   { name: 'busy-day', metro: busyDay },
   { name: 'rolling-quiet', metro: rollingQuiet },
@@ -493,4 +521,5 @@ module.exports = [
   { name: 'seven-lines', metro: sevenLines },
   { name: 'moment-day', metro: momentDay },
   { name: 'three-day', metro: threeDay },
+  { name: 'two-places', metro: twoPlaces },
 ];
