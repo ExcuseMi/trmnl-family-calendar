@@ -241,6 +241,31 @@ function travel(rep) {
   return Math.round(sum);
 }
 
+// WHAT THE BOARD GAVE UP TO FIT, which is where the cramping went.
+//
+// "Score each gap against what it has to hold" is the obvious term and it
+// reads zero on nearly every board, because a rendered board has already
+// degraded until its labels fit: it steps the text down a tier, then drops
+// the time rows, then sheds a name. Measured on the pair A19 names -- the
+// same day with the alert banner up and without -- cramp FALLS as the room
+// falls, because the squeezed board gave something up instead.
+//
+// So the rendered score counts what was surrendered. Cramp stays, because
+// it is the right term for a MODEL score, where a candidate has not
+// degraded yet and A17's `need` is exactly this number; here it is the
+// exception rather than the measure.
+//
+// The tiers are the list in shared.liquid's `CLASSES`, largest first.
+const TIERS = ['title title--xlarge', 'title title--large', 'title title--base',
+               'title title--small', 'label label--small'];
+function give(rep) {
+  const tier = Math.max(0, TIERS.indexOf(String(rep.debug.titleClass)));
+  const caps = (rep.labels || []).filter((l) => isLabel(l));
+  // a caption whose time row was given up to make it fit
+  const timeless = caps.filter((l) => !/\d{1,2}[:.]\d{2}/.test(l.text)).length;
+  return { tier, timeless };
+}
+
 function scoreBoard(rep, f, deepest) {
   const ls = boxes(rep);
   let overlap = 0;
@@ -266,14 +291,20 @@ function scoreBoard(rep, f, deepest) {
     ? Math.round(Math.sqrt(spare.reduce((a, b) => a + (b - mean) * (b - mean), 0) / spare.length))
     : 0;
   const faults = { dropped, shed, overlap, pierce: pierced.length };
-  const terms = { crossings: forcedCrossingsWeaveAware(f, rep).length, cramp: Math.round(cramp), spread, travel: travel(rep) };
+  const g = give(rep);
+  const terms = { crossings: forcedCrossingsWeaveAware(f, rep).length,
+                  tier: g.tier, timeless: g.timeless,
+                  cramp: Math.round(cramp), spread, travel: travel(rep) };
   return {
     feasible: !dropped && !shed && !overlap && !pierced.length,
     faults,
     terms,
     // NOT CALIBRATED. The terms are the work; the weights are the next
     // question, and A19 says which board pair should answer it.
-    total: Math.round(terms.crossings * 40 + terms.cramp * 2 + terms.spread + terms.travel / 40),
+    // STILL NOT CALIBRATED, and now for a stated reason: the pair A19
+    // names to calibrate against does not reproduce. See the entry.
+    total: Math.round(terms.crossings * 40 + terms.tier * 20 + terms.timeless * 6
+                      + terms.cramp * 2 + terms.spread + terms.travel / 40),
   };
 }
 

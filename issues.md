@@ -229,6 +229,14 @@ it, which is where somebody changing that code will be standing.
   board draws it on top of the lines.** Reported off a five-line board with
   the alert banner up: the bundle rails and their captions sit across
   Marge, Bart and Lisa, and the line names are down on their own rails.
+  LOOK AT IT AGAIN FIRST. That board was rendered for A19's calibration --
+  `five-lines`, OG panel, the same alert banner -- and nothing is drawn on
+  top of anything: the corridor is a corridor, the capsule spans its own
+  members, and every caption is clear. "The line names are down on their own
+  rails" is the head-column mode, which A21 changed for a different reason.
+  Either the panel it was reported from is not this one, or the board has
+  moved under the report the way A7's and A10's did. The fix below is still
+  the right fix IF the picture is still there.
   The bundle already knows exactly what it needs. `drawSharedBundle`
   computes `need = block + 2 * LINE_GAP`, where the block is the rails plus
   the caption that hangs off them, then hunts for the widest gap between
@@ -292,10 +300,27 @@ it, which is where somebody changing that code will be standing.
   the pierce on crew-day that was marked known this week, which is the first
   time an argument in this file has been settled by arithmetic.
 
-  **Still to do, in this order.** CALIBRATE the weights against boards
-  already judged by eye -- the cramped five-line board in A17 against the
-  same day drawn roomy -- because the four weights in there now are
-  placeholders and say so. Then the MODEL score, and only then the search.
+  **Calibration was attempted and the pair it names does not reproduce.**
+  Rendered `five-lines` on an OG panel with the alert banner up and without
+  -- the same day, the same panel, twenty pixels less depth -- and the
+  squeezed board is the BETTER one by eye: it keeps a time on all but one of
+  its captions and fills its height, while the roomy board spends the room
+  on bigger text, drops five time rows and leaves a third of the canvas
+  empty. Nothing is drawn on top of anything on either. The score agrees
+  with the eye (133 against 174); it is the premise that has moved.
+
+  That taught the terms rather than the weights, which is the more useful
+  half. "Score each gap against what it has to hold" reads ZERO on nearly
+  every rendered board, because a board that cannot fit its labels does not
+  cramp them: it steps the text down a tier, then gives up the time rows,
+  then sheds a name. Cramp is the right term for a MODEL score, where a
+  candidate has not degraded yet; on a rendered board what has to be counted
+  is what was surrendered, so `tier` and `timeless` are terms now and the
+  table shows the trade a squeezed board makes rather than hiding it.
+
+  **Still to do, in this order.** A pair that DOES reproduce, to calibrate
+  against -- and A17 needs looking at first, since its picture is where the
+  premise came from. Then the MODEL score, and only then the search.
   **Feasibility is not a penalty term.** "Every label legible, everything
   visible" has to be a test a board passes or fails, because as a weighted
   cost the optimiser will happily buy fewer crossings with a hidden label,

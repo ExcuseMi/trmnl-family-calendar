@@ -955,12 +955,13 @@ async function prewarm() {
       }
     }
     console.log('\nwhat each board costs (A19: terms are measured, weights are not calibrated)');
-    console.log('  board                            cross  cramp  spread  travel   total');
+    console.log('  board                            cross  tier  noTime  cramp  spread  travel   total');
     for (const r of rows) {
       const t = r.terms;
       const why = Object.keys(r.faults).filter((k) => r.faults[k]).map((k) => r.faults[k] + ' ' + k);
       console.log('  ' + r.board.padEnd(32)
-        + String(t.crossings).padStart(5) + String(t.cramp).padStart(7)
+        + String(t.crossings).padStart(5) + String(t.tier).padStart(6)
+        + String(t.timeless).padStart(8) + String(t.cramp).padStart(7)
         + String(t.spread).padStart(8) + String(t.travel).padStart(8)
         + (r.feasible ? String(r.total).padStart(8) : '   INFEASIBLE: ' + why.join(', ')));
     }
