@@ -95,27 +95,12 @@ it, which is where somebody changing that code will be standing.
   each other.** With the car no longer a solid block the junction reads, but
   the branch still leaves tangent to the corner rather than out of it, and a
   spike of the flat rail pokes out from under the kink.
-
-- [ ] **A12. A junction redraws a stretch of the main line it does not
-  need to, and the copy does not register with the original.** Reported off
-  a zoomed junction: the trunk is visibly drawn twice for the length of the
-  lead-in, so the casing's paper stripe steps sideways where the copy takes
-  over and the elbow gets a notch out of it.
-  The lead-in is `trunkSlice(p, aFrom - dir * RAMP_LEAD, aFrom)` in
-  `rampOut`: two corner radii of the trunk, copied into the branch's own
-  path so that the departure becomes an INTERIOR vertex and `roundedPath`
-  fillets it. That is its only job. Everything else about it is an attempt
-  to make the copy invisible: it is drawn in the trunk's stroke, at the
-  trunk's real breakpoints (so it lies on a station kink rather than flat
-  across it) and with its dash phase offset by `trunkLenAt` so the rungs
-  fall on the trunk's own. Three things that have to agree exactly, on a
-  stretch that carries no information, to hide something the reader was
-  never meant to see. When any of them is off by a pixel the line reads as
-  doubled.
-  A fillet does not actually need a vertex to be interior: the corner can
-  be built as its own arc from a point ON the trunk, and then the branch
-  starts where it leaves and nothing is redrawn. Worth doing before A10,
-  which is the same elbow seen from the other side.
+  A12 has been done since this was written and it is the same elbow from the
+  other side: the lead-in is now the fillet and nothing more, and the
+  departure's halo no longer lies on the line it is leaving. Look again
+  before building anything -- on `moment-day`, the only board in the suite
+  with a 45 degree departure, what is left is a small nick of paper just
+  past the divergence.
 
 - [ ] **A15. A track should carry events on BOTH sides of its line.**
   Every lane a track owns sits OUTWARD of it, so a line at the edge of the
@@ -911,6 +896,7 @@ One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 - P2. The 45 reclaim runs after the captions now, and takes nothing (29g)
 - A7. The backwards branch on an X quadrant, looked at on a real quadrant
 - A8. A line's name and the first caption of the day wanted the same paper
+- A12. A junction drew its own main line twice to get a fillet out of it
 - A1. Tracks squashed into a third of the board
 - A2. Line names sitting on their own rails
 - A3. Station captions collide

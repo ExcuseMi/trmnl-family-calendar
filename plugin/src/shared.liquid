@@ -599,7 +599,10 @@
   // gives it its texture. The overlay is an exact copy of the same geometry,
   // so it follows every bend without being computed twice; it carries no
   // data-metro-role, because it is not a line — it is a hole in one.
-  function paintLine(node, p, S, parent, phase) {
+  // `haloSkip` is [how far along this path the paper halo should not be
+  // drawn at the start, how far from the end]. Only a departure uses it,
+  // and the reason is in `drawRamp`.
+  function paintLine(node, p, S, parent, phase, haloSkip) {
     // AN OVERPASS HALO, SO A CROSSING READS AS ONE LINE OVER ANOTHER.
     //
     // Two rails meeting at a right angle with no halo make a junction: four
@@ -631,7 +634,7 @@
     // always was. Read off the path's own points, since that is the thing
     // being drawn and nothing else here knows its shape.
     var dAttr = node.getAttribute('d') || '';
-    var ys = [], mY;
+    var ys = [], mY, haloEl = null;
     (dAttr.match(/-?\d+\.?\d*[ ,]-?\d+\.?\d*/g) || []).forEach(function (pair) {
       var v = pair.split(/[ ,]/);
       if (v.length === 2) ys.push(parseFloat(isHorizontal ? v[1] : v[0]));
@@ -653,9 +656,21 @@
       halo.style.stroke = PAPER;
       halo.style.fill = 'none';
       parent.appendChild(halo);
+      haloEl = halo;
     }
     styleStroke(node, p, S);
     parent.appendChild(node);
+    // ...and now that the path is in the document and can be asked how long
+    // it is, the part of the halo that lies along the line this one is
+    // leaving is taken out of it. Dash 0 (nothing), gap `skip`, the rest of
+    // the path, then a gap long enough to swallow the far end: a dash
+    // pattern is the only way to say "not here" about part of one stroke.
+    if (haloEl && haloSkip && (haloSkip[0] > 0 || haloSkip[1] > 0) && node.getTotalLength) {
+      var haloLen = node.getTotalLength();
+      var haloRun = Math.max(0, haloLen - haloSkip[0] - haloSkip[1]);
+      haloEl.setAttribute('stroke-dasharray',
+        '0 ' + haloSkip[0] + ' ' + haloRun + ' ' + (haloSkip[1] + haloLen));
+    }
     var t = treatmentFor(p.line_style, S, p.line_width);
     if (!t) return node;
     node.setAttribute('stroke-width', p.line_width * S * weightScale + t.widen * weightScale);
@@ -704,7 +719,17 @@
       var A = pts[i - 1], P = pts[i], B = pts[i + 1];
       var la = Math.hypot(P[0] - A[0], P[1] - A[1]), lb = Math.hypot(B[0] - P[0], B[1] - P[1]);
       var want = Array.isArray(r) ? (r[i - 1] == null ? r[r.length - 1] : r[i - 1]) : r;
-      var rr = Math.min(want, la / 2, lb / 2);
+      // HALF A SEGMENT EACH, BECAUSE THE CORNER AT THE OTHER END OF IT
+      // WANTS THE OTHER HALF -- and an END segment has no corner at its far
+      // end to share with. Taking half of one anyway is what made a
+      // junction redraw a stretch of its own main line: the branch's
+      // lead-in had to be twice the radius for the fillet to come out full
+      // size, and the half the fillet did not use was drawn straight along
+      // the trunk, in the trunk's own stroke, hiding by agreeing with it
+      // exactly. It did not always agree.
+      var maxA = i === 1 ? la : la / 2;
+      var maxB = i === pts.length - 2 ? lb : lb / 2;
+      var rr = Math.min(want, maxA, maxB);
       if (rr <= 0.5) { d += ' L' + P[0] + ',' + P[1]; continue; }
       var p1 = [P[0] + (A[0] - P[0]) / la * rr, P[1] + (A[1] - P[1]) / la * rr];
       var p2 = [P[0] + (B[0] - P[0]) / lb * rr, P[1] + (B[1] - P[1]) / lb * rr];
@@ -7689,6 +7714,19 @@
     // means roundedPath sees both corners at once, so they get equal radius
     // instead of the second being clamped to half the first.
     var RAMP_LEAD = 2 * CORNER;
+    // ...AND THE LEAD-IN IS EXACTLY THE FILLET, WITH NO STRAIGHT BEFORE IT.
+    //
+    // At two corners the fillet used one of them and the other was drawn as
+    // line along the trunk: the same stretch of main line drawn twice, in
+    // the same stroke, at the same breakpoints, with the dash phase offset
+    // to match -- three things that have to agree exactly to hide something
+    // the reader was never meant to see, and where any of them was a pixel
+    // out the line read as doubled and the casing's paper stripe stepped
+    // sideways. At one corner the fillet consumes the whole lead (see
+    // `roundedPath`: an end segment may give a corner all of itself), so
+    // what is drawn on top of the trunk is the start of an arc that is
+    // tangent to it and leaves immediately.
+    var RAMP_TUCK = CORNER;
 
     // How far along its own drawn path a track is when it reaches axis
     // position `a`. Measured on the real element, so siding kinks and the
@@ -7800,13 +7838,28 @@
       if (!(period > 0) || len == null) return null;
       return ((len % period) + period) % period;
     }
-    function drawRamp(p, pts, phaseA, role, owner) {
+    // `tuck` is how much of each end of this path lies along the trunk it
+    // leaves (and rejoins): the fillet, and nothing more.
+    //
+    // THE HALO DOES NOT START ON THE LINE THIS RAIL IS LEAVING.
+    //
+    // A turning path gets a band of paper under it so a crossing reads as
+    // one line over another. A departure is not a crossing -- it is the
+    // same line -- and the halo laid over its own trunk takes a bite out of
+    // it. That went unseen while the lead-in was two corners long, because
+    // the lead-in's own INK was drawn back over the bite and refilled it:
+    // the doubled stretch of trunk this entry is about was load-bearing,
+    // which is why cutting it to the fillet alone put a notch in the line
+    // where the halo now started. So the halo skips the tuck at each end,
+    // and what lies over the trunk is an arc tangent to it, in the trunk's
+    // own stroke and dash phase, leaving immediately.
+    function drawRamp(p, pts, phaseA, role, owner, tuck) {
       var path = svgEl('path', { d: roundedPath(pts.map(function (q) { return toXY(q[0], q[1]); }), CORNER) });
       path.setAttribute(ROLE_ATTR, role);
       path.setAttribute(OWNER_ATTR, owner);
       // The lead-in lies ON the trunk, so its rungs have to fall on the
       // trunk's own — ask the trunk how far along itself the ramp starts.
-      paintLine(path, p, S, svg, phaseA == null ? null : phaseAfter(p, trunkLenAt(p, phaseA)));
+      paintLine(path, p, S, svg, phaseA == null ? null : phaseAfter(p, trunkLenAt(p, phaseA)), tuck);
       return path;
     }
 
@@ -7908,8 +7961,14 @@
       if (Math.abs(dep - aElbow) < 0.5) {
         return [[aElbow, lineCAt(p, aElbow)], [aElbow, laneC], [tail, laneC]];
       }
-      return trunkSlice(p, clamp(dep - dir * RAMP_LEAD, axisStart, axisEnd), dep)
+      // ONLY THIS RETURN CARRIES A TUCK. The others start at the elbow or
+      // at the ring, so nothing of them lies along the trunk, and a halo
+      // skipped at the start of one of those would be a halo missing
+      // exactly where a vertical drop crosses whatever is under it.
+      var out = trunkSlice(p, clamp(dep - dir * RAMP_TUCK, axisStart, axisEnd), dep)
         .concat([[aElbow, laneC], [tail, laneC]]);
+      out.tuck = RAMP_TUCK;
+      return out;
     }
     // WHERE A RAIL MAY LEAVE ITS OWN LINE AND STILL ARRIVE AT 45 DEGREES.
     //
@@ -8235,12 +8294,13 @@
         var sorted = g.members.slice().sort(function (a, b) { return a._elbow - b._elbow; });
         var head = sorted[0];
         head._ownRamp = true;
-        var headPhaseA = head._diagFrom - head._dir * RAMP_LEAD;
+        var headPhaseA = head._diagFrom - head._dir * RAMP_TUCK;
         // the end the tail runs TOWARD: forward branches stop at the group's
         // far end, backward ones at its near end
-        head._rampEl = drawRamp(p, rampOut(p, groupShared ? head._nodeA : head._diagFrom, head._elbow, laneC, head._dir, groupShared,
-                                           head._dir > 0 ? g.to : g.from),
-                 groupShared ? null : headPhaseA, 'fork', head._laneOwner);
+        var headPts = rampOut(p, groupShared ? head._nodeA : head._diagFrom, head._elbow, laneC,
+                              head._dir, groupShared, head._dir > 0 ? g.to : g.from);
+        head._rampEl = drawRamp(p, headPts, groupShared ? null : headPhaseA, 'fork', head._laneOwner,
+                                headPts.tuck ? [headPts.tuck, 0] : null);
         // the spine picks the rungs up where the ramp's tail left them
         var headLen = head._rampEl.getTotalLength ? head._rampEl.getTotalLength() : null;
         var headStart = trunkLenAt(p, headPhaseA);
@@ -8289,10 +8349,11 @@
       // taken from the trunk at the departure — the lead-in there is the
       // longer of the two trunk overlays and the one an eye follows into
       // the bend.
-      var loop = trunkSlice(p, e._diagFrom - e._dir * RAMP_LEAD, e._diagFrom)
+      var loop = trunkSlice(p, e._diagFrom - e._dir * RAMP_TUCK, e._diagFrom)
         .concat([[e._elbow, laneC], [e._lineTo, laneC]],
-                trunkSlice(p, e._mergeAt, e._mergeAt + e._dir * RAMP_LEAD));
-      e._rampEl = drawRamp(p, loop, e._diagFrom - e._dir * RAMP_LEAD, 'branch', p.key);
+                trunkSlice(p, e._mergeAt, e._mergeAt + e._dir * RAMP_TUCK));
+      e._rampEl = drawRamp(p, loop, e._diagFrom - e._dir * RAMP_TUCK, 'branch', p.key,
+                           [RAMP_TUCK, RAMP_TUCK]);
     });
 
     // ---- a shared event: one vertical branch down per line, side by side
