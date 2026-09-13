@@ -4357,6 +4357,7 @@
     // below or the counting is of a board that was never drawn.
     buildTrunks();
     placeOnLineCaptions();
+    placeHeadNames();
     dropped = 0;
     var crossings = 0, slides = 0, backwards = 0, adrift = 0;
     visible.forEach(function (e) {
@@ -5213,6 +5214,7 @@
     visible.forEach(function (e) { if (e._dropped) e._box.remove(); });
     buildTrunks();
     placeOnLineCaptions();
+    placeHeadNames();
     reclaimDiagonals();
 
     // CALLED ONCE PER ATTEMPT, not once at the end.
@@ -6570,13 +6572,8 @@
       // AND THE NAMES AT THE HEADS OF THE LINES.
       //
       // Those are not in `labelBoxes` -- they belong to lines, not events --
-      // and they are not placed until the drawing, which is after this. So
-      // they are reserved rather than read: a box at the head of the axis,
-      // as wide as the name and a name's height either side of the line it
-      // labels, because whether it ends up above its line or under it is
-      // decided down there. Without this a softened rail climbed straight
-      // through "Marge" on five-lines, which is the one name on the board
-      // that cannot move out of the way and cannot be dropped.
+      // but `placeHeadNames` has run by now, so each one is a box that has
+      // been decided rather than a box predicted from the line it labels.
       //
       // The name at the FOOT is reserved too, and it took a measurement to
       // see why. That one gives itself up when there is no gap for it, so
@@ -6588,10 +6585,11 @@
       // two failures, and a name that had every right to be where it was.
       LEGEND.forEach(function (q) {
         if (!q._nameW) return;
+        if (q._nameA0 != null) {
+          rails.push({ e: { _p: q }, a0: q._nameA0 - LINE_GAP, a1: q._nameA1 + LINE_GAP,
+                       c0: q._nameC0 - LINE_GAP, c1: q._nameC1 + LINE_GAP });
+        }
         var pad = q._nameH + LINE_GAP;
-        var h0 = axisStart - 2 * S, h1 = axisStart + q._nameW + HEAD_CLEAR;
-        var hc = lineCAt(q, (h0 + h1) / 2);
-        rails.push({ e: { _p: q }, a0: h0, a1: h1, c0: hc - pad, c1: hc + pad });
         var tc = spreadCFor(q);
         rails.push({ e: { _p: q }, a0: axisEnd - NODE_R - 6 * S - q._nameW, a1: axisEnd,
                      c0: tc - pad, c1: tc + pad });
@@ -7167,7 +7165,175 @@
     // neighbour's — "Lisa" and "Marge" came out as one word. Sat ON its own
     // line instead it is exactly as tall as the gap allows, and its paper
     // outline masks the line behind it.
-    (function decideNamePlacement() {
+    // WHERE EVERY LINE'S NAME GOES, DECIDED BEFORE THE CAPTIONS ARE PLACED.
+    //
+    // A name at the head of a line is the one label on this board that
+    // cannot move out of anybody's way and cannot be dropped: it says whose
+    // line this is. It used to be placed in the drawing, after every
+    // caption had already taken its spot, so the caption search had no idea
+    // it was coming and on four quadrant boards a name was written across
+    // the first event of the day. Nothing was wrong with either placement;
+    // they had never been introduced.
+    //
+    // Everything it needs is settled by the time the trunks are built --
+    // where each line runs, how far apart the bands ended up, how much room
+    // there is above a rail for words -- and the only thing it wanted the
+    // drawing for was to be last. So it runs here instead, and what it
+    // decides goes into the caption pass's obstacles as a fact about the
+    // board, the way a rail is.
+    //
+    // The `+2` a shed caption adds to a name is still appended in the
+    // drawing, because how many names were shed is not known until they
+    // have been placed. That is safe: the count makes the name grow to the
+    // LEFT, keeping its far edge where this pass put it, so the box below
+    // is still the box the captions were routed around.
+    var placedNames = [];
+    function placeHeadNames() {
+      if (!LEGEND.length || !fan) return;
+      decideNamePlacement();
+      fitNameLines();
+      placedNames = [];
+      // Every caption already on the board, read once: `labelBoxes` walks
+      // every event and each name asks about it three times.
+      var capBoxes = null;
+      function leadBoxes() { if (!capBoxes) capBoxes = labelBoxes(); return capBoxes; }
+      LEGEND.slice().sort(function (a, b) { return lightness(b) - lightness(a); }).forEach(function (p) {
+        var c = spineC + p._c;
+        var spreadC = spreadCFor(p);
+        var d = fan.dir, edge = d > 0 ? 0 : axisPx;
+        var nameEnd = edge + d * (namesAbove ? 4 * S : 2 * S + (horizontal ? p._nameW : p._nameH) + HEAD_CLEAR);
+        // Place along the axis and across the cross-axis, whichever way
+        // round those are. This was written as left=axis / top=cross, which
+        // is only true horizontally — in vertical mode every line's name
+        // landed in a stack in the middle of the map instead of at the head
+        // of its own line.
+        var nameLen = horizontal ? p._nameW : p._nameH;
+        var nameThick = horizontal ? p._nameH : p._nameW;
+        // Sitting ON the line's start bar, just above it: the name labels
+        // the head of the line rather than floating in a column beside it,
+        // and it costs the day no width.
+        // Standing up, the lines are close enough together across the map
+        // that a name shifted clear of its own line runs into its
+        // neighbour's, so there it keeps the head-of-the-line column and
+        // stays centred. Lying down there is room above.
+        // The terminal bar is drawn with a ROUND cap, so it reaches half a
+        // stroke past the NODE_R it nominally spans, in both directions.
+        // Measured as if it stopped at NODE_R, the name was set hard against
+        // it and the bar cut into the first letter: "Crew" read as "|Crew"
+        // and "Leela" as "[Leela" on a board where five of seven names were
+        // clipped that way.
+        var capHalf = (p.line_width + 1) * S / 2;
+        var nameA = namesAbove
+          ? (d > 0 ? nameEnd + capHalf + 2 * S : axisPx - nameEnd - capHalf - 2 * S - nameLen)
+          : (d > 0 ? 2 * S : axisPx - 2 * S - nameLen);
+        // Off the line where it REALLY is under the name, not off its flat
+        // baseline: a track that begins inside one of its own all-day
+        // sidings starts raised, and measured from the baseline the name
+        // sat where the line now was and got a stroke through it. Sampled
+        // ACROSS the name's whole width, taking the closest the line comes —
+        // one reading at the middle still let a siding ramp climb into the
+        // name's far end.
+        var nameC = spreadC;
+        if (namesAbove) {
+          for (var ni = 0; ni <= 8; ni++) {
+            var lc = lineCAt(p, nameA + nameLen * (ni / 8));
+            if (lc < nameC) nameC = lc;
+          }
+        }
+        // Above the line by default, but never INTO the time strip: the
+        // track nearest it sits close enough that its name landed among the
+        // hours. Where it would, the name goes UNDER its own line instead —
+        // still touching the line it names, and the only other place
+        // nothing else uses at the head of the map.
+        // Three places a name can go, in order of preference: above its
+        // line, under it, or centred on it behind its own paper outline.
+        // Above is right when the room is there; the other two exist
+        // because at the head of the map the room often is not.
+        var nameOff = -(nameThick + NODE_R + capHalf + 2 * S);
+        if (namesAbove) {
+          // Never onto the NEIGHBOUR'S rail. A name set above its line
+          // needs the gap above that line to hold it, and one gap on the
+          // board is not a band's worth: each side's innermost track sits
+          // half a pitch off the spine, so those two are neighbours with
+          // nothing between them, and "Marge" was set hard against the
+          // bottom of Homer's rail and read as underlining it.
+          var railAt = function (dir) {
+            var edge = dir < 0 ? -Infinity : Infinity;
+            LEGEND.forEach(function (q) {
+              if (q === p) return;
+              var qc = lineCAt(q, nameA + nameLen / 2);
+              var qh = q.line_width * S * weightScale / 2 + 7 * S;
+              if (dir < 0 && qc < nameC && qc + qh > edge) edge = qc + qh;
+              if (dir > 0 && qc > nameC && qc - qh < edge) edge = qc - qh;
+            });
+            return edge;
+          };
+          // Never into the time strip either: the track nearest it sits
+          // close enough that its name landed among the hours.
+          var offClear = function (off) {
+            return nameC + off >= bandLo
+              && nameC + off >= railAt(-1)
+              && nameC + off + nameThick <= railAt(1);
+          };
+          // And never on another line's NAME. The outermost line's name is
+          // pushed under its own rail by the time strip while its
+          // neighbour's is set above its rail, and the two met in the gap
+          // between them: "Deliveries" written across "Crew". Each name
+          // only has to clear the ones already placed.
+          var offFree = function (off) {
+            var c0 = nameC + off, c1 = c0 + nameThick;
+            return !placedNames.some(function (q) {
+              return nameA < q.a1 && nameA + nameLen > q.a0 && c0 < q.c1 && c1 > q.c0;
+            });
+          };
+          // AND NEVER ON A CAPTION, WHERE THERE IS A CHOICE.
+          //
+          // A name has three places it can go and a caption has one: the
+          // words belong to an event at a minute, and the pass that placed
+          // them has already spent the board's paper getting them next to
+          // the right rails. So where two of them want the same paper at
+          // the head of the map, the name is the one that moves.
+          //
+          // Asked here rather than the other way round for the same reason.
+          // Making the name an obstacle to the CAPTIONS was built and
+          // measured: hard, the og-landscape boards shed two captions and
+          // six cases went red; soft, the overlaps went up instead. The
+          // head of a tight panel has no room to give, and this costs it
+          // none -- the name takes whichever of its three homes is free.
+          var offCap = function (off) {
+            var c0 = nameC + off, c1 = c0 + nameThick;
+            return !leadBoxes().some(function (bx) {
+              return nameA < bx.a1 && nameA + nameLen > bx.a0 && c0 < bx.c1 && c1 > bx.c0;
+            });
+          };
+          var tries = [nameOff, NODE_R + capHalf + 2 * S, -nameThick / 2];
+          var pick = null;
+          for (var ti = 0; ti < tries.length; ti++) {
+            if (offClear(tries[ti]) && offFree(tries[ti]) && offCap(tries[ti])) { pick = tries[ti]; break; }
+          }
+          if (pick === null) {
+            for (var ti2 = 0; ti2 < tries.length; ti2++) {
+              if (offClear(tries[ti2]) && offFree(tries[ti2])) { pick = tries[ti2]; break; }
+            }
+          }
+          if (pick === null) {
+            for (var tj = 0; tj < tries.length; tj++) {
+              if (offClear(tries[tj])) { pick = tries[tj]; break; }
+            }
+          }
+          nameOff = pick === null ? -nameThick / 2 : pick;
+        }
+        // the axis this name occupies, so the car can keep off it: before
+        // the day's first event the car sits at the head of the line, which
+        // is exactly where the name is
+        p._nameA0 = nameA; p._nameA1 = nameA + nameLen;
+        p._nameC0 = namesAbove ? nameC + nameOff : nameC - nameThick / 2;
+        p._nameC1 = p._nameC0 + nameThick;
+        placedNames.push({ a0: nameA, a1: nameA + nameLen, c0: p._nameC0, c1: p._nameC1 });
+      });
+    }
+    function decideNamePlacement() {
+      namesAbove = horizontal;
       if (!horizontal || LEGEND.length < 2) return;
       var thick = 0, minPitch = Infinity;
       LEGEND.forEach(function (p) { thick = Math.max(thick, p._nameH1); });
@@ -7179,7 +7345,7 @@
       var cs = LEGEND.map(function (q) { return q._c; }).sort(function (a, b) { return a - b; });
       for (var i = 1; i < cs.length; i++) minPitch = Math.min(minPitch, cs[i] - cs[i - 1]);
       if (minPitch < thick + NODE_R + 4 * S) namesAbove = false;
-    })();
+    }
 
     // How many lines each name actually gets. Built at three, but a
     // three-line name only belongs above its rail if the gap above that rail
@@ -7188,7 +7354,7 @@
     // given as many lines as the room above it allows, and a name that
     // cannot have even one there falls back to a single line on the rail,
     // masked by its own paper outline, exactly as before wrapping existed.
-    (function fitNameLines() {
+    function fitNameLines() {
       if (!horizontal || !LEGEND.length) return;
       var cs = LEGEND.map(function (q) { return { c: spineC + q._c, w: q.line_width * S * weightScale / 2 }; })
         .sort(function (a, b) { return a.c - b.c; });
@@ -7209,7 +7375,7 @@
         // enough to hold both.
         if (p._routeH) p._nameH += p._routeH;
       });
-    })();
+    }
 
 
     // ONE HOLIDAY, NOT THREE. Where several lines share an all-day title
@@ -7253,7 +7419,6 @@
     // before this, and the names still take each other into account in the
     // order they are drawn -- which name yields to which changes, and that
     // is a tie-break, not a rule.
-    var placedNames = [];
     function lightness(q) {
       var m = /gray-(\d+)/.exec(q.hue || '');
       return m ? parseInt(m[1], 10) : 0;
@@ -7354,107 +7519,18 @@
         // terminus: the "|Crew" failure the flat views already fixed,
         // arriving by the other route. See `nameCol`, which reserves the
         // same distance so the fan still starts after the column.
+        // where the leg starts: after the words when the name is in a
+        // column at the head, just clear of the terminus bar when it is
+        // above its own rail. The same expression `placeHeadNames` uses to
+        // decide where the words go, and for the same reason.
         var nameEnd = edge + d * (namesAbove ? 4 * S : 2 * S + (horizontal ? p._nameW : p._nameH) + HEAD_CLEAR);
         var fanStart = edge + d * fan.len;
         var merge = fanStart + d * Math.abs(spreadC - c);
-        // Place along the axis and across the cross-axis, whichever way
-        // round those are. This was written as left=axis / top=cross, which
-        // is only true horizontally — in vertical mode every line's name
-        // landed in a stack in the middle of the map instead of at the head
-        // of its own line.
+        // Where `placeHeadNames` put it, which is the only place it is
+        // decided: this loop draws the name, it does not choose for it.
         var nameLen = horizontal ? p._nameW : p._nameH;
         var nameThick = horizontal ? p._nameH : p._nameW;
-        // Sitting ON the line's start bar, just above it: the name labels
-        // the head of the line rather than floating in a column beside it,
-        // and it costs the day no width.
-        // Standing up, the lines are close enough together across the map
-        // that a name shifted clear of its own line runs into its
-        // neighbour's, so there it keeps the head-of-the-line column and
-        // stays centred. Lying down there is room above.
-        // The terminal bar is drawn with a ROUND cap, so it reaches half a
-        // stroke past the NODE_R it nominally spans, in both directions.
-        // Measured as if it stopped at NODE_R, the name was set hard against
-        // it and the bar cut into the first letter: "Crew" read as "|Crew"
-        // and "Leela" as "[Leela" on a board where five of seven names were
-        // clipped that way.
-        var capHalf = (p.line_width + 1) * S / 2;
-        var nameA = namesAbove
-          ? (d > 0 ? nameEnd + capHalf + 2 * S : axisPx - nameEnd - capHalf - 2 * S - nameLen)
-          : (d > 0 ? 2 * S : axisPx - 2 * S - nameLen);
-        // Off the line where it REALLY is under the name, not off its flat
-        // baseline: a track that begins inside one of its own all-day
-        // sidings starts raised, and measured from the baseline the name
-        // sat where the line now was and got a stroke through it. Sampled
-        // ACROSS the name's whole width, taking the closest the line comes —
-        // one reading at the middle still let a siding ramp climb into the
-        // name's far end.
-        var nameC = spreadC;
-        if (namesAbove) {
-          for (var ni = 0; ni <= 8; ni++) {
-            var lc = lineCAt(p, nameA + nameLen * (ni / 8));
-            if (lc < nameC) nameC = lc;
-          }
-        }
-        // Above the line by default, but never INTO the time strip: the
-        // track nearest it sits close enough that its name landed among the
-        // hours. Where it would, the name goes UNDER its own line instead —
-        // still touching the line it names, and the only other place
-        // nothing else uses at the head of the map.
-        // Three places a name can go, in order of preference: above its
-        // line, under it, or centred on it behind its own paper outline.
-        // Above is right when the room is there; the other two exist
-        // because at the head of the map the room often is not.
-        var nameOff = -(nameThick + NODE_R + capHalf + 2 * S);
-        if (namesAbove) {
-          // Never onto the NEIGHBOUR'S rail. A name set above its line
-          // needs the gap above that line to hold it, and one gap on the
-          // board is not a band's worth: each side's innermost track sits
-          // half a pitch off the spine, so those two are neighbours with
-          // nothing between them, and "Marge" was set hard against the
-          // bottom of Homer's rail and read as underlining it.
-          var railAt = function (dir) {
-            var edge = dir < 0 ? -Infinity : Infinity;
-            LEGEND.forEach(function (q) {
-              if (q === p) return;
-              var qc = lineCAt(q, nameA + nameLen / 2);
-              var qh = q.line_width * S * weightScale / 2 + 7 * S;
-              if (dir < 0 && qc < nameC && qc + qh > edge) edge = qc + qh;
-              if (dir > 0 && qc > nameC && qc - qh < edge) edge = qc - qh;
-            });
-            return edge;
-          };
-          // Never into the time strip either: the track nearest it sits
-          // close enough that its name landed among the hours.
-          var offClear = function (off) {
-            return nameC + off >= bandLo
-              && nameC + off >= railAt(-1)
-              && nameC + off + nameThick <= railAt(1);
-          };
-          // And never on another line's NAME. The outermost line's name is
-          // pushed under its own rail by the time strip while its
-          // neighbour's is set above its rail, and the two met in the gap
-          // between them: "Deliveries" written across "Crew". Each name
-          // only has to clear the ones already placed.
-          var offFree = function (off) {
-            var c0 = nameC + off, c1 = c0 + nameThick;
-            return !placedNames.some(function (q) {
-              return nameA < q.a1 && nameA + nameLen > q.a0 && c0 < q.c1 && c1 > q.c0;
-            });
-          };
-          var tries = [nameOff, NODE_R + capHalf + 2 * S, -nameThick / 2];
-          var pick = null;
-          for (var ti = 0; ti < tries.length; ti++) {
-            if (offClear(tries[ti]) && offFree(tries[ti])) { pick = tries[ti]; break; }
-          }
-          if (pick === null) {
-            for (var tj = 0; tj < tries.length; tj++) {
-              if (offClear(tries[tj])) { pick = tries[tj]; break; }
-            }
-          }
-          nameOff = pick === null ? -nameThick / 2 : pick;
-        }
-        // centred ON the line when there is no room above it
-        var nameXY = toXY(nameA, namesAbove ? nameC + nameOff : nameC - nameThick / 2);
+        var nameXY = toXY(p._nameA0, p._nameC0);
         p._nameEl.style.left = nameXY[0] + 'px';
         p._nameEl.style.top = nameXY[1] + 'px';
         tailName(p, spreadC, nameThick);
@@ -7514,13 +7590,6 @@
             p._routeEl.style.top = nameXY[1] + 'px';
           }
         }
-        // the axis this name occupies, so the car can keep off it: before
-        // the day's first event the car sits at the head of the line, which
-        // is exactly where the name is
-        p._nameA0 = nameA; p._nameA1 = nameA + nameLen;
-        p._nameC0 = namesAbove ? nameC + nameOff : nameC - nameThick / 2;
-        p._nameC1 = p._nameC0 + nameThick;
-        placedNames.push({ a0: nameA, a1: nameA + nameLen, c0: p._nameC0, c1: p._nameC1 });
         var far = d > 0 ? axisEnd : axisStart;
         var legPts = trunkPath(c, p._sign, Math.min(merge, far), Math.max(merge, far), p);
         if (d < 0) legPts = legPts.slice().reverse();

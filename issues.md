@@ -78,9 +78,18 @@ it, which is where somebody changing that code will be standing.
   ("13 between two abutting holds"), which is this entry seen from the
   rules' side; whatever fixes one closes the other.
 
-- [ ] **A8. A long wrapped track name overlaps the first event label.**
-  Known, carried over: "Demo - Planet / Express Crew" touches "07:30 - 08:15
-  Bender: Bend Some Girders". The name is not an obstacle to label placement.
+- [ ] **A14. Two line NAMES overlap each other on the tightest slots.**
+  Found while closing A8, measuring every view rather than the two landscape
+  ones the suite checks: `regroups` and `seven-lines` on an X quadrant, and
+  `five-lines` and `seven-lines` on an X half-horizontal, each put one
+  name's last few pixels through another's, by about four pixels of height.
+
+  A name set ABOVE its own rail already refuses a spot another name has
+  taken (`offFree`), and this is the case where all three of its spots are
+  taken: the lines are a name's height apart or less, so above its own rail
+  IS its neighbour's row. Either the names have to be told about each other
+  before any of them is placed rather than one at a time, or the board has
+  to admit it cannot name five lines in 390px and drop to the head column.
 
 - [ ] **A10. A branch and a station ramp meeting at the same minute graze
   each other.** With the car no longer a solid block the junction reads, but
@@ -901,6 +910,7 @@ One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 
 - P2. The 45 reclaim runs after the captions now, and takes nothing (29g)
 - A7. The backwards branch on an X quadrant, looked at on a real quadrant
+- A8. A line's name and the first caption of the day wanted the same paper
 - A1. Tracks squashed into a third of the board
 - A2. Line names sitting on their own rails
 - A3. Station captions collide
