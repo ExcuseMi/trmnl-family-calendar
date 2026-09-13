@@ -78,17 +78,6 @@ it, which is where somebody changing that code will be standing.
   ("13 between two abutting holds"), which is this entry seen from the
   rules' side; whatever fixes one closes the other.
 
-- [ ] **A20. A shed count is written over its own terminus slash in the
-  head-column mode.** Where the names sit in a column at the head rather
-  than above their rails, a name starts two pixels from the edge and the
-  `+N` a shed caption appends grows it to the right. The name is supposed to
-  step back by what the count added and keep its far edge, and from two
-  pixels there is nowhere to step back to, so "Marge +1" runs into the slash
-  that starts her line. Visible on `five-lines` at an X half-horizontal.
-  `placeHeadNames` runs after the captions now, so how many were shed IS
-  known before the name is measured: the count could be part of the block
-  rather than an annotation added to it afterwards.
-
 - [ ] **A10. A branch and a station ramp meeting at the same minute graze
   each other.** With the car no longer a solid block the junction reads, but
   the branch still leaves tangent to the corner rather than out of it, and a
@@ -896,6 +885,7 @@ One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 - A8. A line's name and the first caption of the day wanted the same paper
 - A12. A junction drew its own main line twice to get a fillet out of it
 - A14. Line names overlapped because a zero-height measurement disabled the column
+- A20. The shed count is part of the name block, not an annotation stuck on after
 - A1. Tracks squashed into a third of the board
 - A2. Line names sitting on their own rails
 - A3. Station captions collide

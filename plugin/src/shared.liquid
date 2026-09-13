@@ -7281,8 +7281,46 @@
         p._nameH1 = measure(n).h;
       });
     }
+    // HOW MANY OF ITS STOPS THIS LINE COULD NOT NAME, part of the block
+    // rather than an annotation stuck on afterwards.
+    //
+    // The count used to be appended in the drawing, after the name had been
+    // measured and placed, so the name gave the room back by stepping the
+    // whole block along the axis and keeping its far edge. From two pixels
+    // off the edge -- which is where a name in the head column starts --
+    // there is nowhere to step back to, and "Marge +1" was written over the
+    // slash that starts her line.
+    //
+    // This pass runs after the captions now, so how many were shed is known
+    // before anything measures anything: the count goes in first and every
+    // measurement below is of the block as it will be drawn. Rebuilt each
+    // time, because an attempt that sheds nothing must not inherit the last
+    // one's count.
+    function fitNameCount() {
+      LEGEND.forEach(function (p) {
+        if (p._moreEl && p._moreEl.parentNode) p._moreEl.parentNode.removeChild(p._moreEl);
+        p._moreEl = null;
+        var shed = 0;
+        visible.forEach(function (e) { if (e._capShed && !e._dropped && e._p === p) shed++; });
+        if (!shed || !p._nameEl) return;
+        var was = measure(p._nameEl);
+        var more = el('span', 'metro-capmore ' + quietText());
+        more.textContent = ' +' + shed;
+        p._nameEl.appendChild(more);
+        p._moreEl = more;
+        // ...and the block is that much bigger. Lying down `fitNameLines`
+        // measures the whole thing again below and this is only an interim
+        // answer; standing up nothing else measures it at all, and without
+        // this the line's own terminal bar was placed clear of a name that
+        // was shorter than the one drawn -- ten pixels of "+1" over the bar.
+        var now = measure(p._nameEl);
+        if (horizontal) p._nameW += now.w - was.w;
+        else p._nameH += now.h - was.h;
+      });
+    }
     function placeHeadNames() {
       if (!LEGEND.length || !fan) return;
+      fitNameCount();
       fitNameSize();
       decideNamePlacement();
       fitNameLines();
@@ -7674,41 +7712,6 @@
         // that two of them have no room for their words, which is the same
         // answer the ends of the axis already give for the events that fall
         // outside the window.
-        var shedHere = 0;
-        visible.forEach(function (e) { if (e._capShed && e._p === p) shedHere++; });
-        if (shedHere) {
-          var wasName = measure(p._nameEl);
-          var more = el('span', 'metro-capmore ' + quietText());
-          more.textContent = ' +' + shedHere;
-          p._nameEl.appendChild(more);
-          // The name was measured and placed without this, so left where it
-          // is the count grows into whatever the name was keeping clear of
-          // -- on a standing board, its own terminal bar, by ten pixels. It
-          // is an annotation on the name, so the NAME gives up the room:
-          // the whole thing steps back along the axis by exactly what the
-          // count added, and its far edge stays where it was placed. Where
-          // stepping back would take it off the board there is nowhere for
-          // the count to live, and the line goes back to saying nothing,
-          // which is what it said yesterday.
-          var nowName = measure(p._nameEl);
-          var grew = horizontal ? nowName.w - wasName.w : nowName.h - wasName.h;
-          var backTo = (horizontal ? nameXY[0] : nameXY[1]) - grew;
-          if (grew > 0 && backTo >= 0) {
-            if (horizontal) p._nameEl.style.left = backTo + 'px';
-            else p._nameEl.style.top = backTo + 'px';
-          } else if (grew > 0 && !horizontal) {
-            // Standing up, a name runs ALONG its line and the next thing
-            // after it is that line's own terminal bar, so a count with
-            // nowhere to step back to would be written on the bar. Lying
-            // down, the name sits in a column at the head of the board with
-            // paper of its own after it, and there is nothing there to hit --
-            // which matters, because dropping the count is the one thing
-            // this must not do. The whole point of shedding a name is that
-            // the board says so; a shed name AND no count is just a missing
-            // name, which is what the board did before any of this.
-            p._nameEl.removeChild(more);
-          }
-        }
         if (p._routeEl) {
           // Flat, the row hangs under the name; standing up, beside it.
           // Both are "next along the cross axis", which is the direction a
