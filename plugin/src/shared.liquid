@@ -1430,12 +1430,6 @@
       // line it belongs to.
       if (horizontal) {
         n.style.maxWidth = nameMax + 'px';
-        // Measured on ONE line as well, because that is what decides
-        // whether names go above their lines at all: the answer must not
-        // change just because a name is long enough to wrap.
-        clampLines(n, 1);
-        p._nameH1 = measure(n).h;
-        clampLines(n, 3);
       } else {
         // Standing up, the lines are only a track-step apart across the map
         // while the names are words wide, so laid flat they pile into each
@@ -1449,6 +1443,22 @@
         n.style.overflow = 'hidden';
       }
       canvas.appendChild(n);
+      // MEASURED ONCE IT IS ON THE BOARD, which is the whole of a defect
+      // that had disabled a mode of this drawing since it was written.
+      //
+      // The height of the name on ONE line is what decides whether names go
+      // above their rails at all -- the answer must not change just because
+      // a name is long enough to wrap -- and it was read before the element
+      // had been appended, so `getBoundingClientRect` answered zero. Zero is
+      // shorter than any gap, so every flat board decided there was room
+      // above and the head-column fallback never ran once. What it was there
+      // to prevent is what a half-horizontal slot does today: five lines
+      // twenty pixels apart with twenty-two pixel names stacked on them.
+      if (horizontal) {
+        clampLines(n, 1);
+        p._nameH1 = measure(n).h;
+        clampLines(n, 3);
+      }
       var m = measure(n);
       p._nameEl = n; p._nameW = m.w; p._nameH = m.h;
       if (p._nameH1 == null) p._nameH1 = m.h;
@@ -2565,7 +2575,7 @@
     // the loop's "is this tier better" question answered no to all of them.
     // The scoring changes that followed were being made against a number
     // nobody was computing.
-    var capClashes = 0, capPierces = 0, metroDbgCaps = null, metroDbgWhy = null, metroDbgReclaim = null;
+    var capClashes = 0, capPierces = 0, metroDbgCaps = null, metroDbgWhy = null, metroDbgReclaim = null, metroDbgNameFit = null;
     // Which tracks were found to need the gap beside their own line. Empty
     // on the first solve, because it can only be answered by a board that
     // has been drawn; `settleSides` fills it in and solves again.
@@ -6730,6 +6740,7 @@
       // of those got their 45 back, and what stopped the rest -- the line's
       // own furniture, another line, or a name
       reclaim: metroDbgReclaim,
+      nameFit: metroDbgNameFit,
       // WHERE EACH LINE ACTUALLY GOES, which `events` cannot say: a hold
       // is a stretch of somebody else's day this line is spending at
       // another level, and a span is the move between two of them. Both
@@ -6747,6 +6758,21 @@
                     Math.round(h.lead || 0), Math.round(h.trail || 0),
                     h.rank == null ? -1 : h.rank];
           });
+        });
+        return o;
+      })(),
+      // Where each line's own name ended up, and how tall the board thinks
+      // that block is: [a0, a1, c0, c1, the line's own c there]. The block
+      // is the name PLUS its route row, which is why it can be half again
+      // the height of the words.
+      names: (function () {
+        var o = {};
+        LEGEND.forEach(function (p) {
+          if (p._nameA0 == null) return;
+          o[p.key] = [Math.round(p._nameA0), Math.round(p._nameA1), Math.round(p._nameC0),
+                      Math.round(p._nameC1), Math.round(lineCAt(p, p._nameA0)),
+                      Math.round(p._nameH1), Math.round(p._nameH), Math.round(p._c),
+                      (p._nameEl && p._nameEl.className.indexOf('small') >= 0) ? 'sm' : 'bs'];
         });
         return o;
       })(),
@@ -7213,8 +7239,51 @@
     // LEFT, keeping its far edge where this pass put it, so the box below
     // is still the box the captions were routed around.
     var placedNames = [];
+    // A SIZE DOWN WHERE THE ROWS ARE CLOSER TOGETHER THAN THE WORDS ARE
+    // TALL.
+    //
+    // The note where these are built says it about standing boards: there
+    // the names run along their lines a track-step apart, so a size up and
+    // neighbouring names touch. A half-horizontal slot is the same board
+    // lying down. Five lines in 390px come out twenty pixels apart and the
+    // words are twenty-two tall, so "Homer" and "Marge" overlapped whatever
+    // either of them did about it -- measured by pricing all three offsets
+    // for every name at once and finding every combination equally bad.
+    //
+    // Every name on the board steps down together, because four names at
+    // one size and one at another reads as a mistake rather than as a fit.
+    function fitNameSize() {
+      if (!horizontal || LEGEND.length < 2) return;
+      // DECIDED FROM THE SIZE THE NAMES WERE BUILT AT, always, because the
+      // answer changes what it is asked about: step them down and the
+      // question "do they fit" is being put about smaller words, which says
+      // yes, which steps them back up. The first version of this oscillated
+      // between the two sizes, once per attempt, and settled on whichever
+      // one the last attempt happened to leave behind.
+      var tall = 0, minPitch = Infinity;
+      LEGEND.forEach(function (q) {
+        if (q._nameH1base == null) q._nameH1base = q._nameH1;
+        tall = Math.max(tall, q._nameH1base);
+      });
+      var cs = LEGEND.map(function (q) { return q._c; }).sort(function (a, b) { return a - b; });
+      for (var i = 1; i < cs.length; i++) minPitch = Math.min(minPitch, cs[i] - cs[i - 1]);
+      var want = minPitch < tall + 2 * S ? 'label--small' : 'label--base';
+      metroDbgNameFit = [Math.round(minPitch), Math.round(tall), want, LEGEND.length];
+      var other = want === 'label--small' ? 'label--base' : 'label--small';
+      LEGEND.forEach(function (p) {
+        var n = p._nameEl;
+        if (!n || n.className.indexOf(want) >= 0) return;
+        n.className = n.className.replace(other, want);
+        // `_nameH1` is the height of the name on ONE line and it is what
+        // decides whether names go above their rails at all, so it is
+        // re-read here rather than left at the size the board was built in.
+        clampLines(n, 1);
+        p._nameH1 = measure(n).h;
+      });
+    }
     function placeHeadNames() {
       if (!LEGEND.length || !fan) return;
+      fitNameSize();
       decideNamePlacement();
       fitNameLines();
       placedNames = [];
@@ -7222,6 +7291,7 @@
       // every event and each name asks about it three times.
       var capBoxes = null;
       function leadBoxes() { if (!capBoxes) capBoxes = labelBoxes(); return capBoxes; }
+      var jobs = [];
       LEGEND.slice().sort(function (a, b) { return lightness(b) - lightness(a); }).forEach(function (p) {
         var c = spineC + p._c;
         var spreadC = spreadCFor(p);
@@ -7275,6 +7345,9 @@
         // Above is right when the room is there; the other two exist
         // because at the head of the map the room often is not.
         var nameOff = -(nameThick + NODE_R + capHalf + 2 * S);
+        // Standing up, or lying down on a board too tight for names above
+        // their rails, there is one place and no choice to make.
+        var cands = [{ off: -nameThick / 2, cost: 0 }];
         if (namesAbove) {
           // Never onto the NEIGHBOUR'S rail. A name set above its line
           // needs the gap above that line to hold it, and one gap on the
@@ -7300,17 +7373,6 @@
               && nameC + off >= railAt(-1)
               && nameC + off + nameThick <= railAt(1);
           };
-          // And never on another line's NAME. The outermost line's name is
-          // pushed under its own rail by the time strip while its
-          // neighbour's is set above its rail, and the two met in the gap
-          // between them: "Deliveries" written across "Crew". Each name
-          // only has to clear the ones already placed.
-          var offFree = function (off) {
-            var c0 = nameC + off, c1 = c0 + nameThick;
-            return !placedNames.some(function (q) {
-              return nameA < q.a1 && nameA + nameLen > q.a0 && c0 < q.c1 && c1 > q.c0;
-            });
-          };
           // AND NEVER ON A CAPTION, WHERE THERE IS A CHOICE.
           //
           // A name has three places it can go and a caption has one: the
@@ -7331,31 +7393,75 @@
               return nameA < bx.a1 && nameA + nameLen > bx.a0 && c0 < bx.c1 && c1 > bx.c0;
             });
           };
-          var tries = [nameOff, NODE_R + capHalf + 2 * S, -nameThick / 2];
-          var pick = null;
-          for (var ti = 0; ti < tries.length; ti++) {
-            if (offClear(tries[ti]) && offFree(tries[ti]) && offCap(tries[ti])) { pick = tries[ti]; break; }
-          }
-          if (pick === null) {
-            for (var ti2 = 0; ti2 < tries.length; ti2++) {
-              if (offClear(tries[ti2]) && offFree(tries[ti2])) { pick = tries[ti2]; break; }
-            }
-          }
-          if (pick === null) {
-            for (var tj = 0; tj < tries.length; tj++) {
-              if (offClear(tries[tj])) { pick = tries[tj]; break; }
-            }
-          }
-          nameOff = pick === null ? -nameThick / 2 : pick;
+          // WHAT EACH OF THE THREE COSTS, before anybody else is asked.
+          // The order of preference, then the two things that are about
+          // this name alone: a rail or the time strip through it, and a
+          // caption under it. Which one it actually takes is settled with
+          // every other name at once, below.
+          cands = [nameOff, NODE_R + capHalf + 2 * S, -nameThick / 2].map(function (off, ix) {
+            return { off: off, cost: ix * 3 + (offClear(off) ? 0 : 100) + (offCap(off) ? 0 : 8) };
+          });
         }
         // the axis this name occupies, so the car can keep off it: before
         // the day's first event the car sits at the head of the line, which
         // is exactly where the name is
-        p._nameA0 = nameA; p._nameA1 = nameA + nameLen;
-        p._nameC0 = namesAbove ? nameC + nameOff : nameC - nameThick / 2;
-        p._nameC1 = p._nameC0 + nameThick;
-        placedNames.push({ a0: nameA, a1: nameA + nameLen, c0: p._nameC0, c1: p._nameC1 });
+        jobs.push({ p: p, a0: nameA, a1: nameA + nameLen, thick: nameThick,
+                    base: namesAbove ? nameC : nameC, cands: cands });
       });
+      chooseNamePlaces(jobs);
+      jobs.forEach(function (j) {
+        j.p._nameA0 = j.a0; j.p._nameA1 = j.a1;
+        j.p._nameC0 = j.base + j.off;
+        j.p._nameC1 = j.p._nameC0 + j.thick;
+        placedNames.push({ a0: j.a0, a1: j.a1, c0: j.p._nameC0, c1: j.p._nameC1 });
+      });
+    }
+    // ALL OF THE NAMES AT ONCE, RATHER THAN ONE AFTER ANOTHER.
+    //
+    // Each name used to take the first of its three homes that was free of
+    // the rails, of the names ALREADY placed, and of the captions -- so the
+    // first name asked took the best spot and the last one asked lived with
+    // what was left. On a slot where the lines are a name's height apart
+    // that is the difference between four names in their own rows and two
+    // of them through each other: `five-lines` and `seven-lines` on an X
+    // half-horizontal, `regroups` on a quadrant, about four pixels each.
+    //
+    // A name cannot be moved along the axis and cannot be dropped, so there
+    // is nothing to search except which of three offsets each one takes.
+    // Three to the power of the lines on the board is a few hundred boards
+    // to price rather than a search, and pricing them all removes the order
+    // dependence completely -- which is the same answer E23 reached for the
+    // captions, at a size where the exhaustive version is honest.
+    function chooseNamePlaces(jobs) {
+      var n = jobs.length, total = 1, i;
+      for (i = 0; i < n; i++) total *= jobs[i].cands.length;
+      var pick = new Array(n), best = null, bestCost = Infinity;
+      // A board with more lines than this cannot draw them anyway; the
+      // guard is here so an unexpected one falls back rather than hangs.
+      if (total > 60000) { jobs.forEach(function (j) { j.off = j.cands[0].off; }); return; }
+      for (var code = 0; code < total; code++) {
+        var rest = code, cost = 0;
+        for (i = 0; i < n; i++) {
+          var m = jobs[i].cands.length;
+          pick[i] = rest % m; rest = (rest - pick[i]) / m;
+          cost += jobs[i].cands[pick[i]].cost;
+        }
+        if (cost >= bestCost) continue;        // overlaps only add to it
+        for (var a = 0; a < n && cost < bestCost; a++) {
+          var ja = jobs[a], ca = ja.base + ja.cands[pick[a]].off;
+          for (var b = a + 1; b < n; b++) {
+            var jb = jobs[b], cb = jb.base + jb.cands[pick[b]].off;
+            if (ja.a0 >= jb.a1 || jb.a0 >= ja.a1) continue;
+            if (ca >= cb + jb.thick || cb >= ca + ja.thick) continue;
+            // A name over a name is worth more than any preference and
+            // less than a rail drawn through one: the first is unreadable,
+            // the second is a name that is not there at all.
+            cost += 40;
+          }
+        }
+        if (cost < bestCost) { bestCost = cost; best = pick.slice(); }
+      }
+      for (i = 0; i < n; i++) jobs[i].off = jobs[i].cands[best ? best[i] : 0].off;
     }
     function decideNamePlacement() {
       namesAbove = horizontal;

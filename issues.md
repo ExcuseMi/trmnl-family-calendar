@@ -78,18 +78,16 @@ it, which is where somebody changing that code will be standing.
   ("13 between two abutting holds"), which is this entry seen from the
   rules' side; whatever fixes one closes the other.
 
-- [ ] **A14. Two line NAMES overlap each other on the tightest slots.**
-  Found while closing A8, measuring every view rather than the two landscape
-  ones the suite checks: `regroups` and `seven-lines` on an X quadrant, and
-  `five-lines` and `seven-lines` on an X half-horizontal, each put one
-  name's last few pixels through another's, by about four pixels of height.
-
-  A name set ABOVE its own rail already refuses a spot another name has
-  taken (`offFree`), and this is the case where all three of its spots are
-  taken: the lines are a name's height apart or less, so above its own rail
-  IS its neighbour's row. Either the names have to be told about each other
-  before any of them is placed rather than one at a time, or the board has
-  to admit it cannot name five lines in 390px and drop to the head column.
+- [ ] **A20. A shed count is written over its own terminus slash in the
+  head-column mode.** Where the names sit in a column at the head rather
+  than above their rails, a name starts two pixels from the edge and the
+  `+N` a shed caption appends grows it to the right. The name is supposed to
+  step back by what the count added and keep its far edge, and from two
+  pixels there is nowhere to step back to, so "Marge +1" runs into the slash
+  that starts her line. Visible on `five-lines` at an X half-horizontal.
+  `placeHeadNames` runs after the captions now, so how many were shed IS
+  known before the name is measured: the count could be part of the block
+  rather than an annotation added to it afterwards.
 
 - [ ] **A10. A branch and a station ramp meeting at the same minute graze
   each other.** With the car no longer a solid block the junction reads, but
@@ -897,6 +895,7 @@ One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 - A7. The backwards branch on an X quadrant, looked at on a real quadrant
 - A8. A line's name and the first caption of the day wanted the same paper
 - A12. A junction drew its own main line twice to get a fillet out of it
+- A14. Line names overlapped because a zero-height measurement disabled the column
 - A1. Tracks squashed into a third of the board
 - A2. Line names sitting on their own rails
 - A3. Station captions collide
