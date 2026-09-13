@@ -836,7 +836,8 @@ One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 - A7. The backwards branch on an X quadrant, looked at on a real quadrant
 - A8. A line's name and the first caption of the day wanted the same paper
 - A12. A junction drew its own main line twice to get a fillet out of it
-- A14. Line names overlapped because a zero-height measurement disabled the column
+- A21. Line names overlapped: a zero-height measurement had disabled the head
+  column (committed as "A14", which was already the cross-axis solver's number)
 - A20. The shed count is part of the name block, not an annotation stuck on after
 - P1. A solo event during a shared one: 26a, and nobody is in two places
 - P3. A late arrival joins the corridor, and the capsule spans who is in it
