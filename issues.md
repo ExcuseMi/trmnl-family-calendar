@@ -16,24 +16,6 @@ it, which is where somebody changing that code will be standing.
 
 ## P. Next
 
-- [ ] **P3. A member who joins a convergence LATE is not drawn as joining
-  it at all.** 26a asks whether a member is free at the event's own minute,
-  because that is when the capsule is drawn and it spans the lines that are
-  in it then. A line that is somewhere else at that minute is therefore not
-  a member -- which is right for somebody who is away for the whole of it,
-  and throws away a real attendance for somebody who arrives for the second
-  half.
-
-  Two boards in the suite: Lisa's Mensa Meeting (18:30-19:30) covers the
-  first half hour of the Family Dinner she is at until eight, and on
-  `seven-lines` Amy's Scooter Service runs half an hour into the Crew
-  Debrief. Both are drawn as not attending at all.
-
-  What it needs is a capsule that spans the members present when it is
-  drawn rather than every member, and a rail that joins the corridor
-  partway. The capsule's extent comes from `want`, which is every member's
-  level, so this is a change to how the pill is sized rather than to 26a.
-
 ---
 
 ## A. The board is wrong right now
@@ -882,6 +864,7 @@ One line each; the reasoning is in the code, in `rules.md`, or in the commit.
 - A14. Line names overlapped because a zero-height measurement disabled the column
 - A20. The shed count is part of the name block, not an annotation stuck on after
 - P1. A solo event during a shared one: 26a, and nobody is in two places
+- P3. A late arrival joins the corridor, and the capsule spans who is in it
 - C1. The demo settings are in a Developer group, and the suite says so
 - A1. Tracks squashed into a third of the board
 - A2. Line names sitting on their own rails

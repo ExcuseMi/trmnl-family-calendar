@@ -212,12 +212,17 @@ Where the two disagree, this one is newer.
     only for the part they are free for. She rides the corridor, comes out
     of it when her own appointment starts, and climbs back in if the absence
     and the return are each long enough to be drawn -- rule 13's arithmetic,
-    the same as everywhere else. Where there is no free stretch at the START
-    she is not a member at all: the capsule is drawn at the event's own
-    minute, across the lines that are in it then, and a line that is
-    somewhere else at that minute cannot be one of them. Her own event then
-    draws on her own rail, which is also what makes it drawable -- inside a
-    corridor there is no rail to hang it off.
+    the same as everywhere else. Somebody whose own appointment covers the
+    start ARRIVES LATE, and joins the corridor where she is free: a line
+    joining a shared run partway is a thing a map draws. What the capsule
+    may not do is span her row before she is in it -- it is set down at the
+    event's own minute, across the lines that are in it then -- and each
+    member is read inside its own stretch, so one who has left is not
+    followed by the pill either.
+    Where no stretch is long enough to be drawn as a stay -- a corner in, a
+    corner out, and a corner of flat between them -- she is not a member at
+    all, and her own event draws on her own rail. That is also what makes it
+    drawable: inside a corridor there is no rail to hang it off.
     Not rule 26's fallback, which would cost the other three their drawing
     for one person's appointment. What cannot be drawn is one line's
     membership, so that is what gives way.

@@ -487,6 +487,9 @@ const rollingQuiet = Object.assign(base({
 //                  a stay of her own in between)
 //   Kapper         her own thing covers the whole of Pilates   (not a member
 //                  at all, and the capsule does not span her row)
+//   Kookles        the physio runs into the first half hour of it (she joins
+//                  LATE: the capsule spans the one line that is there when it
+//                  is drawn, and hers leans in afterwards)
 const twoPlaces = base({
   events: [
     ev('Zwemmen', 'work', 840, 1020, { location: 'City Pool', co_owners: ['alex', 'sam', 'kids'],
@@ -501,6 +504,10 @@ const twoPlaces = base({
       track_width: 4, track_offset: -10 }),
     ev('Tandarts', 'kids', 600, 660, { side: 'right', hue: 'purple-40',
       track_style: 'dotted', track_offset: 30 }),
+    ev('Kookles', 'work', 420, 570, { co_owners: ['sam'], side: 'left', hue: 'black',
+      track_width: 4, track_offset: -10 }),
+    ev('Fysio', 'sam', 400, 450, { side: 'right', hue: 'green-40',
+      track_style: 'dashed', track_offset: 20 }),
   ],
 });
 

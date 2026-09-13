@@ -65,5 +65,34 @@ module.exports = function (test, h) {
       'sam should come back to Kickboksen after the hairdresser: ' + JSON.stringify(left));
     assert(says('Pilates', 'kids', 'out'),
       'kids is at the dentist for the whole of Pilates and is not in it: ' + JSON.stringify(left));
+    assert(says('Kookles', 'sam', 'late'),
+      'sam is at the physio for the start of Kookles and joins it late: ' + JSON.stringify(left));
+  });
+
+  // ...and the capsule is the half of 26a that is about the DRAWING: it is
+  // set down at the event's own minute, so it spans the lines that are in it
+  // then. A pill reaching a row before that line has arrived is the same
+  // untruth as a line held in a corridor it has left.
+  test('a capsule spans the members who are in it when it is drawn', () => {
+    const rep = layout(fixtures.find((f) => f.name === 'two-places'), byName('x-landscape'));
+    const Z = (rep.debug.Z || 1);
+    const late = h.eventsIn(rep).find((e) => e.title === 'Kookles');
+    assert(late, 'the fixture should still carry a late arrival');
+    // where sam's rail is while she is still at the physio, and where the
+    // capsule reaches at the minute Kookles starts
+    const rail = {};
+    for (const p of rep.paths) {
+      if (p.role !== 'track' || !p.owner) continue;
+      for (const q of p.pts) {
+        if (Math.abs(q[0] / Z - late.nodeA) < 2) rail[p.owner] = q[1] / Z;
+      }
+    }
+    const caps = (rep.rects || []).filter((r) => r.role === 'capsule'
+      && Math.abs(r.x / Z + r.w / Z / 2 - late.nodeA) < 12);
+    assert(caps.length === 1, 'expected one capsule at the start of Kookles, found ' + caps.length);
+    const c0 = caps[0].y / Z, c1 = (caps[0].y + caps[0].h) / Z;
+    assert(rail.sam == null || rail.sam < c0 - 2 || rail.sam > c1 + 2,
+      'the capsule reaches sam\'s row at ' + Math.round(rail.sam)
+      + ' while she is still at the physio (capsule ' + Math.round(c0) + '-' + Math.round(c1) + ')');
   });
 };

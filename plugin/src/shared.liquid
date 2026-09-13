@@ -2486,7 +2486,7 @@
       metroDbgLeft = [];
       // How long a stretch of corridor has to be to be worth drawing: a
       // ramp in, something flat to read as a stay, a ramp out.
-      var MIN_STAY = CORNER * 4;
+      var MIN_STAY = CORNER * 3;
       visible.forEach(function (e) {
         e._memberFrom = null; e._memberTo = null; e._memberAgain = null;
       });
@@ -2529,10 +2529,19 @@
             at = Math.max(at, b[1]);
           });
           if (e._endA - at > 0.5) free.push([at, e._endA]);
-          // She has to be there when the capsule is drawn, and for long
-          // enough to read as being there.
-          if (!free.length || free[0][0] > e._nodeA + 0.5 || free[0][1] - free[0][0] < MIN_STAY) return;
-          var h = { from: free[0][0], to: free[0][1], again: null };
+          // The first stretch long enough to read as being there. It does
+          // not have to be the first minute of the event: somebody whose
+          // own appointment covers the start ARRIVES LATE, and a line that
+          // joins a shared run partway is a line joining, which is a thing
+          // a map can draw (P3). What the capsule may not do is span her
+          // row before she is in it, and that is `pillMembers` below.
+          var first = -1;
+          for (var fi = 0; fi < free.length; fi++) {
+            if (free[fi][1] - free[fi][0] >= MIN_STAY) { first = fi; break; }
+          }
+          if (first < 0) return;   // no stretch worth drawing: not a member at all
+          var h = { from: free[first][0], to: free[first][1], again: null,
+                    late: free[first][0] > e._nodeA + 0.5 };
           // ...AND BACK, IF BOTH THE ABSENCE AND THE RETURN CAN BE DRAWN.
           //
           // Both, and the absence is the one that was missed first: two
@@ -2548,7 +2557,7 @@
           // board saying she left at three and did not come back is wrong
           // about an hour; saying she was there all afternoon is wrong
           // about where she was, which is the thing this rule is for.
-          for (var i = 1; i < free.length; i++) {
+          for (var i = first + 1; i < free.length; i++) {
             if (free[i][0] - h.to < MIN_STAY) continue;
             if (free[i][1] - free[i][0] >= MIN_STAY) { h.again = free[i]; break; }
           }
@@ -2557,7 +2566,10 @@
         });
         e._involved.forEach(function (q) {
           if (keep.indexOf(q) < 0) metroDbgLeft.push([e.title, q.key, 'out']);
-          else if (holds[q.key]) metroDbgLeft.push([e.title, q.key, holds[q.key].again ? 'rejoins' : 'leaves']);
+          else if (holds[q.key]) {
+            metroDbgLeft.push([e.title, q.key, holds[q.key].late ? 'late'
+              : holds[q.key].again ? 'rejoins' : 'leaves']);
+          }
         });
         if (keep.length !== e._involved.length) {
           // Down to one, and it is not a convergence at all any more: an
@@ -2567,6 +2579,32 @@
         }
         e._memberHold = holds;
       });
+    }
+    // WHO THE CAPSULE SPANS, and where each of them is while it is drawn.
+    //
+    // The capsule is drawn at the event's own minute, so it spans the lines
+    // that are in it THEN: a member who arrives late joins the corridor
+    // further along, the way a line joins a shared run on any map, and a
+    // pill reaching her row before she is in it would be the same untruth
+    // this rule exists to remove.
+    //
+    // And each member is read inside its OWN hold rather than at one minute
+    // for all of them. The middle of a hold is the honest sample -- the
+    // level is constant across it and the middle is past the ramp at both
+    // ends -- but the holds are no longer the same stretch for everybody:
+    // sampled at the middle of the EVENT, a member who has already left is
+    // read wherever she has got to, and the pill stretches after her.
+    function pillMembers(e) {
+      return (e._involved || []).filter(function (q) {
+        var w = e._memberHold && e._memberHold[q.key];
+        return !w || w.from <= e._nodeA + 0.5;
+      });
+    }
+    function memberC(e, q) {
+      if (!(e.end_min > e.start_min)) return lineCAt(q, e._nodeA);
+      var w = (e._memberHold && e._memberHold[q.key]) || null;
+      var a0 = w ? w.from : e._nodeA, a1 = w ? w.to : e._endA;
+      return lineCAt(q, (a0 + a1) / 2);
     }
     staticFacts();
     freeWindows();
@@ -2698,7 +2736,7 @@
     // the loop's "is this tier better" question answered no to all of them.
     // The scoring changes that followed were being made against a number
     // nobody was computing.
-    var capClashes = 0, capPierces = 0, metroDbgCaps = null, metroDbgWhy = null, metroDbgReclaim = null, metroDbgNameFit = null;
+    var capClashes = 0, capPierces = 0, metroDbgCaps = null, metroDbgWhy = null, metroDbgReclaim = null;
     // Which tracks were found to need the gap beside their own line. Empty
     // on the first solve, because it can only be answered by a board that
     // has been drawn; `settleSides` fills it in and solves again.
@@ -6907,15 +6945,14 @@
       // of those got their 45 back, and what stopped the rest -- the line's
       // own furniture, another line, or a name
       reclaim: metroDbgReclaim,
+      // rule 26a: which members could not be in two places, and what the
+      // board did about each -- left partway, came back, joined late, or was
+      // not in it at all
       left: metroDbgLeft,
-      nameFit: metroDbgNameFit,
-      // WHERE EACH LINE ACTUALLY GOES, which `events` cannot say: a hold
-      // is a stretch of somebody else's day this line is spending at
-      // another level, and a span is the move between two of them. Both
-      // are here because the defects in this machinery are all differences
-      // between what a line was ASKED to do and what it drew -- a stagger
-      // that had no axis to happen in, a span that came back backwards --
-      // and neither is visible in the picture or in the events.
+      // WHERE EACH LINE ACTUALLY GOES, which `events` cannot say: a hold is a
+      // stretch of somebody else's day this line is spending at another
+      // level, and the defects in this machinery are all differences between
+      // what a line was asked to do and what it drew.
       // A hold: [a0, a1, level, kind, lead, trail, rank].
       routes: (function () {
         var o = {};
@@ -6929,38 +6966,6 @@
         });
         return o;
       })(),
-      // Where each line's own name ended up, and how tall the board thinks
-      // that block is: [a0, a1, c0, c1, the line's own c there]. The block
-      // is the name PLUS its route row, which is why it can be half again
-      // the height of the words.
-      names: (function () {
-        var o = {};
-        LEGEND.forEach(function (p) {
-          if (p._nameA0 == null) return;
-          o[p.key] = [Math.round(p._nameA0), Math.round(p._nameA1), Math.round(p._nameC0),
-                      Math.round(p._nameC1), Math.round(lineCAt(p, p._nameA0)),
-                      Math.round(p._nameH1), Math.round(p._nameH), Math.round(p._c),
-                      (p._nameEl && p._nameEl.className.indexOf('small') >= 0) ? 'sm' : 'bs'];
-        });
-        return o;
-      })(),
-      // ...and the transition that lands on each of them: [i, a0, run, from, by].
-      spans: (function () {
-        var o = {};
-        LEGEND.forEach(function (p) {
-          if (!p._route) return;
-          var a = [];
-          for (var i = 0; i <= p._route.length; i++) {
-            var sp = routeSpan(p, i);
-            a.push([i, Math.round(sp.a0), Math.round(sp.R), Math.round(sp.base), Math.round(sp.d)]);
-          }
-          o[p.key] = a;
-        });
-        return o;
-      })(),
-      // The run the board settled on, and the nights inside it, in minutes
-      // and in axis px: a case asking whether the corridor really spans
-      // 22:00 to 06:00 should not have to re-derive the scale to find out.
       days: dayCount, rolling: !!ROLL,
       midnights: AXIS.boundaries.map(function (b) { return [b.min, Math.round(aFor(b.min))]; }),
       nights: NIGHTS.map(function (n) { return [n.from, n.to, Math.round(aFor(n.from)), Math.round(aFor(n.to))]; }),
@@ -7436,7 +7441,6 @@
       var cs = LEGEND.map(function (q) { return q._c; }).sort(function (a, b) { return a - b; });
       for (var i = 1; i < cs.length; i++) minPitch = Math.min(minPitch, cs[i] - cs[i - 1]);
       var want = minPitch < tall + 2 * S ? 'label--small' : 'label--base';
-      metroDbgNameFit = [Math.round(minPitch), Math.round(tall), want, LEGEND.length];
       var other = want === 'label--small' ? 'label--base' : 'label--small';
       LEGEND.forEach(function (p) {
         var n = p._nameEl;
@@ -9125,8 +9129,14 @@
         // the ramp at both ends however short the event is. The capsule
         // still sits at `_nodeA` along the axis -- when it starts is right;
         // only where it sits across the board was wrong.
+        // WHO IS IN IT WHEN IT IS DRAWN, and where each of them is while
+        // their own hold has them there. See `pillMembers`: a member who
+        // arrives late is not spanned, and one who has already left is read
+        // inside the stretch she was there for rather than wherever she has
+        // got to by the middle of the event.
+        var mem = pillMembers(e);
         var capAt = e.end_min > e.start_min ? (e._nodeA + e._endA) / 2 : e._nodeA;
-        var cs = e._involved.map(function (q) { return lineCAt(q, capAt); });
+        var cs = mem.map(function (q) { return memberC(e, q); });
         var lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
         // A thin tie between the lines with a ring on each, rather than one
         // solid capsule spanning them: now that each track has its own band
@@ -9253,14 +9263,14 @@
         // dotted stripe down a pill that was perfectly clear without them.
         var spansOutsider = false;
         LEGEND.forEach(function (q) {
-          if (spansOutsider || e._involved.indexOf(q) >= 0) return;
+          if (spansOutsider || mem.indexOf(q) >= 0) return;
           var qc = lineCAt(q, capAt);
           if (qc > lo + 0.5 && qc < hi - 0.5) spansOutsider = true;
         });
-        if (spansOutsider && e._involved.length > 1) {
+        if (spansOutsider && mem.length > 1) {
           var memR = Math.max(1.4 * S, capR * 0.28);
-          e._involved.forEach(function (q) {
-            var mc = lineCAt(q, capAt);
+          mem.forEach(function (q) {
+            var mc = memberC(e, q);
             var mxy = toXY(e._nodeA, mc);
             var dot = svgEl('circle', { cx: mxy[0], cy: mxy[1], r: memR });
             dot.style.fill = INK; dot.style.stroke = 'none';
@@ -9670,8 +9680,7 @@
         // The same sample the capsule itself uses: this reserves the paper
         // the capsule will occupy, so reading the lines at a different
         // minute would book a box the drawing never fills.
-        var capAt = e.end_min > e.start_min ? (e._nodeA + e._endA) / 2 : e._nodeA;
-        var cs = e._involved.map(function (q) { return lineCAt(q, capAt); });
+        var cs = pillMembers(e).map(function (q) { return memberC(e, q); });
         var lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
         var r = NODE_R * 1.15 + 3 * S;
         caps.push({ e: e, a0: e._nodeA - r, a1: e._nodeA + r, c0: lo - r, c1: hi + r });
